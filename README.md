@@ -36,4 +36,4 @@ Please read the [`CONSOLES.md`](CONSOLES.md) file for supported consoles, their 
 
 ## Add Cover Art
 - [OPL Manager](https://oplmanager.com/site/)
-- [OPL PC Tools:](https://github.com/brainstream/OPL-PC-Tools)
+- [OPL PC Tools](https://github.com/brainstream/OPL-PC-Tools)
