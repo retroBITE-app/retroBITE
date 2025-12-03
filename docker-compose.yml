@@ -1,0 +1,23 @@
+services:
+  retrobite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: retrobite
+    env_file:
+      - .env
+    restart: on-failure
+    network_mode: host
+    volumes:
+      - ./games:/games
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    
+    # Optional: if you prefer bridge network instead of host
+    # ports:
+    #   - "139:139"     # SMB
+    #   - "445:445"     # SMB
+    #   - "20:20"       # FTP data
+    #   - "21:21"       # FTP control
+    #   - "21100-21110:21100-21110"  # FTP passive ports
