@@ -35,5 +35,6 @@ Please read the [`CONSOLES.md`](CONSOLES.md) file for supported consoles, their 
 - **Ubuntu 22.04** - Base image
 
 ## Add Cover Art
-- [OPL Manager](https://oplmanager.com/site/)
-- [OPL PC Tools](https://github.com/brainstream/OPL-PC-Tools)
+- [OPL Manager](https://oplmanager.com/site/) GUI (Winows)
+- [OPL PC Tools](https://github.com/brainstream/OPL-PC-Tools) GUI (Winows/Linux)
+- [PS2 Game Manager](https://github.com/dheison0/ps2-game-manager) CLI (Go)
