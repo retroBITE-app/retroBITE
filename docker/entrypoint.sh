@@ -7,7 +7,7 @@ PASS=${PASS:-retrobite}
 HOST_IP=${HOST_IP:-}
 
 echo "===================================="
-echo "==  retroBITE Server Starting...  =="
+echo "======  retroBITE Starting..  ======"
 echo "===================================="
 
 # Create Samba user if it doesn't exist
@@ -26,7 +26,7 @@ fi
 echo "$USER:$PASS" | chpasswd
 
 # Ensure FTP user has access to games directory
-usermod -aG nogroup "$USER" 2>/dev/null || true
+usermod -aG users,nogroup "$USER" 2>/dev/null || true
 
 # Configure FTP passive mode IP if provided
 if [ -n "$HOST_IP" ]; then
@@ -35,8 +35,8 @@ if [ -n "$HOST_IP" ]; then
 fi
 
 # Ensure games directory has correct permissions
-chmod 777 /games
-chown nobody:nogroup /games
+chown -R :users /games
+chmod -R 775 /games
 
 # Get the container's IP address
 CONTAINER_IP=$(hostname -I | awk '{print $1}')

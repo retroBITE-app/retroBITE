@@ -38,3 +38,7 @@ Please read the [`CONSOLES.md`](CONSOLES.md) file for supported consoles, their 
 - [OPL Manager](https://oplmanager.com/site/) GUI (Winows)
 - [OPL PC Tools](https://github.com/brainstream/OPL-PC-Tools) GUI (Winows/Linux)
 - [PS2 Game Manager](https://github.com/dheison0/ps2-game-manager) CLI (Go)
+
+## Big thanks to 
+
+- [libretro](https://github.com/libretro/retroarch-assets/tree/master/xmb/retrosystem/png) for reto console assets
