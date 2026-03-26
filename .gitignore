@@ -3,5 +3,16 @@
 *.tmp
 *.swp
 *~
+CLAUDE.md
+.vscode/
 
 games/
+
+# Web
+web/vendor/
+web/node_modules/
+web/public/build/
+web/database/*.db
+web/database/*.db-shm
+web/database/*.db-wal
+web/storage/
