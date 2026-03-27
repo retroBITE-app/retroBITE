@@ -16,12 +16,3 @@ CREATE TABLE IF NOT EXISTS settings (
     value      TEXT    NOT NULL,
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
-
--- Web UI authentication — separate from the Samba/FTP USER/PASS env vars
-CREATE TABLE IF NOT EXISTS web_users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    username      TEXT    NOT NULL UNIQUE,
-    password_hash TEXT    NOT NULL,
-    role          TEXT    NOT NULL DEFAULT 'viewer',
-    created_at    INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-);

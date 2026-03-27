@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3'
 import { ref } from 'vue'
-import PageHeader from '../../Components/PageHeader.vue'
+import { formatSize } from '@/Helpers/format'
+import PageHeader from '@/Components/PageHeader.vue'
+import FileUploader from '@/Components/FileUploader.vue'
 
 const props = defineProps<{
   console: string
@@ -9,6 +11,7 @@ const props = defineProps<{
   games: Array<{ file_name: string; title?: string; file_size?: number; region?: string }>
   extensions: { files: string[]; bios: string[] }
   type: string | null
+  uploadDirs: Array<{ value: string; label: string }>
 }>()
 
 const scanning = ref(false)
@@ -21,12 +24,6 @@ const filters = [
 
 function setFilter(type: string | null) {
   router.get(`/consoles/${props.console}`, type ? { type } : {}, { preserveScroll: true })
-}
-
-function formatSize(bytes?: number): string {
-  if (!bytes) return '—'
-  const gb = bytes / 1024 / 1024 / 1024
-  return gb >= 1 ? `${gb.toFixed(2)} GB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 function scan() {
@@ -50,13 +47,22 @@ function scan() {
         </div>
       </template>
       <template #actions>
-        <button
-          @click="scan"
-          :disabled="scanning"
-          class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {{ scanning ? 'Scanning…' : 'Scan directory' }}
-        </button>
+        <div class="flex items-center gap-2">
+          <FileUploader
+            :console="props.console"
+            :console-name="meta.name"
+            :accepted-extensions="[...new Set([...extensions.files, ...extensions.bios])]"
+            :upload-dirs="uploadDirs"
+            @done="router.reload()"
+          />
+          <button
+            @click="scan"
+            :disabled="scanning"
+            class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ scanning ? 'Scanning…' : 'Scan directory' }}
+          </button>
+        </div>
       </template>
     </PageHeader>
 
@@ -75,7 +81,7 @@ function scan() {
 
     <!-- Empty state -->
     <div v-if="games.length === 0" class="rounded-lg border border-dashed border-zinc-700 p-12 text-center">
-      <p class="text-zinc-500 text-sm">No games found. Try scanning the directory.</p>
+      <p class="text-zinc-500 text-sm">No files found. Try scanning the directory.</p>
     </div>
 
     <!-- Game list -->

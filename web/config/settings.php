@@ -4,16 +4,27 @@ declare(strict_types=1);
 
 use Illuminate\Support\Arr;
 
-$base = dirname(__DIR__);
+$base      = dirname(__DIR__);
+$storage   = $base . '/storage';
+$public    = $base . '/public';
+$database  = $base . '/database';
+$resources = $base . '/resources';
 
 return [
-    'db_path'         => Arr::get($_ENV, 'DB_PATH', $base . '/database/retrobite.db'),
-    'games_path'      => $base . '/storage/games',
     'app_debug'       => (bool) Arr::get($_ENV, 'APP_DEBUG', true),
 
-    // Internal paths
+    // Root paths
     'root_path'       => $base,
-    'migrations_path' => $base . '/database/migrations',
-    'views_path'      => $base . '/resources/views',
-    'image_path'      => $base . '/public/images',
+    'storage_path'    => $storage,
+    'public_path'     => $public,
+    'database_path'   => $database,
+    'resources_path'  => $resources,
+
+    // Extensible paths
+    'views_path'      => $resources . '/views',
+    'image_path'      => $public    . '/images',
+    'tmp_path'        => $storage   . '/tmp',
+    'games_path'      => $storage   . '/games',
+    'migrations_path' => $database  . '/migrations',
+    'db_path'         => Arr::get($_ENV, 'DB_PATH', $database . '/retrobite.db'),
 ];

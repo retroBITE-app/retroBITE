@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 use Illuminate\Container\Container;
 
-$container = new Container;
+$container      = new Container;
+$base           = dirname(__DIR__) . '/app';
+$allowedDirs    = ['Controllers', 'Repositories', 'Services'];
 
-$base = dirname(__DIR__) . '/app';
-
-foreach (['Controllers', 'Repositories'] as $dir) {
+foreach ($allowedDirs as $dir) {
     foreach (glob("{$base}/{$dir}/*.php") as $file) {
         $class = 'App\\' . $dir . '\\' . basename($file, '.php');
         $container->singleton($class);

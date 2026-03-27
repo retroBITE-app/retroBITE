@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ConsoleCard from '../Components/ConsoleCard.vue'
+import ConsoleCard from '@/Components/ConsoleCard.vue'
 
 defineProps<{
   consoles: Array<{

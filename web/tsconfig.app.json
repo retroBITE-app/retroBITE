@@ -4,7 +4,7 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["resources/*"]
+      "@/*": ["resources/js/*"]
     }
   },
   "include": ["resources/js/**/*", "resources/js/**/*.vue"]

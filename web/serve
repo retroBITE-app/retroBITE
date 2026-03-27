@@ -54,7 +54,12 @@ echo -e "Press ${BOLD}Ctrl+C${RESET} to stop"
 echo ""
 
 # Start PHP built-in server
-php -S "0.0.0.0:${PHP_PORT}" -t public public/index.php 2>&1 \
+php \
+    -d upload_max_filesize=60M \
+    -d post_max_size=70M \
+    -d max_execution_time=0 \
+    -S "0.0.0.0:${PHP_PORT}" -t public public/index.php \
+    2>&1 \
     | while IFS= read -r line; do echo -e "${CYAN}[php]${RESET}  $line"; done &
 
 # Start Vite HMR server

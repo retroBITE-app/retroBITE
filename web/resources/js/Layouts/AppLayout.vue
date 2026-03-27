@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import AppSidebar from '../Components/AppSidebar.vue'
+import AppSidebar from '@/Components/AppSidebar.vue'
 </script>
 
 <template>

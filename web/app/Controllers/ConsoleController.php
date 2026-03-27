@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Inertia\Inertia;
 use App\Repositories\GameRepository;
+use App\Services\FilesystemService;
 use App\Models\Game;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -16,8 +17,10 @@ class ConsoleController
 {
     private static array $KNOWN_CONSOLES = [];
 
-    public function __construct(private GameRepository $games)
-    {
+    public function __construct(
+        private GameRepository $games,
+        private FilesystemService $filesystem,
+    ) {
         self::$KNOWN_CONSOLES = array_keys(config('consoles'));
     }
 
@@ -71,12 +74,21 @@ class ConsoleController
 
         $games = $this->games->allForConsole($console, $filterExts, $type);
 
+        $folder     = config("consoles.{$console}.folder");
+        $subfolders = config("consoles.{$console}.subfolders", []);
+        $uploadDirs = [['value' => '', 'label' => $folder . '/']];
+
+        foreach ($subfolders as $sub) {
+            $uploadDirs[] = ['value' => $sub, 'label' => $folder . '/' . $sub . '/'];
+        }
+
         return Inertia::render($response, 'Consoles/Show', [
             'console'    => $console,
             'meta'       => config("consoles.{$console}"),
             'games'      => $games,
             'extensions' => $extensions,
             'type'       => $type,
+            'uploadDirs' => $uploadDirs,
         ]);
     }
 
@@ -91,34 +103,89 @@ class ConsoleController
             return $response->withStatus(404);
         }
 
-        $dir          = config('settings.games_path') . '/' . $console;
-        $extensions   = config("consoles.{$console}.file_extensions", []);
-        $excludeFiles = config("consoles.{$console}.exclude_files", []);
-
-        if (!is_dir($dir)) {
-            return $response->withStatus(404);
-        }
-
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS)
-        );
-
-        foreach ($iterator as $file) {
-            if (!$file->isFile()) {
-                continue;
-            }
-
-            if (in_array($file->getFilename(), $excludeFiles, true)) {
-                continue;
-            }
-
-            if (!in_array(strtolower($file->getExtension()), $extensions, true)) {
-                continue;
-            }
-
+        foreach ($this->filesystem->scanConsoleDir($console) as $file) {
             $this->games->upsert($console, $file->getFilename(), $file->getPathname(), $file->getSize());
         }
 
         return Inertia::redirect($response, '/consoles/' . $console);
+    }
+
+    /**
+     * Receive a single chunk of a file upload
+     */
+    public function uploadChunk(Request $request, Response $response, array $args): Response
+    {
+        $this->filesystem->purgeAbandonedUploads();
+
+        $console = Arr::get($args, 'console');
+        if (!in_array($console, self::$KNOWN_CONSOLES, true)) {
+            return $this->jsonError($response, 'Unknown console', 404);
+        }
+
+        $body = $request->getParsedBody() ?? [];
+
+        $uploadId    = (string) Arr::get($body, 'upload_id', '');
+        $filename    = (string) Arr::get($body, 'filename', '');
+        $fileSize    = (int)    Arr::get($body, 'file_size', -1);
+        $subfolder   = (string) Arr::get($body, 'subfolder', '');
+        $chunkIndex  = (int)    Arr::get($body, 'chunk_index', -1);
+        $totalChunks = (int)    Arr::get($body, 'total_chunks', -1);
+
+        // Validate upload_id (UUID v4 — goes into filesystem path)
+        if (!preg_match('/^[0-9a-f\-]{36}$/', $uploadId)) {
+            return $this->jsonError($response, 'Invalid upload_id', 422);
+        }
+
+        // Sanitise filename and validate extension
+        $filename = basename($filename);
+        if ($filename === '' || $filename === '.') {
+            return $this->jsonError($response, 'Invalid filename', 422);
+        }
+        $ext     = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $allowed = array_merge(
+            config("consoles.{$console}.file_extensions", []),
+            config("consoles.{$console}.bios_extensions", [])
+        );
+        if (!in_array($ext, $allowed, true)) {
+            return $this->jsonError($response, 'File type not allowed for this console', 422);
+        }
+
+        // Validate subfolder (alphanumeric + dash + underscore only — goes into filesystem path)
+        if ($subfolder !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $subfolder)) {
+            return $this->jsonError($response, 'Invalid subfolder', 422);
+        }
+
+        // Validate numeric fields
+        if ($fileSize < 0 || $chunkIndex < 0 || $totalChunks < 1 || $chunkIndex >= $totalChunks) {
+            return $this->jsonError($response, 'Invalid chunk metadata', 422);
+        }
+
+        // Get uploaded chunk
+        $files = $request->getUploadedFiles();
+        if (!isset($files['chunk'])) {
+            return $this->jsonError($response, 'Missing chunk', 422);
+        }
+
+        $this->filesystem->writeChunk($uploadId, $chunkIndex, $files['chunk']);
+
+        // Intermediate chunk — just acknowledge
+        if ($chunkIndex < $totalChunks - 1) {
+            $response->getBody()->write(json_encode(['status' => 'received', 'chunk' => $chunkIndex]));
+            return $response->withHeader('Content-Type', 'application/json');
+        }
+
+        // Final chunk — reassemble and register in DB
+        $destPath = $this->filesystem->resolvePath($console, $filename, $subfolder);
+        $this->filesystem->assembleFile($uploadId, $totalChunks, $destPath);
+        $this->games->upsert($console, $filename, $destPath, $fileSize);
+
+        $response->getBody()->write(json_encode(['status' => 'complete']));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    private function jsonError(Response $response, string $message, int $status): Response
+    {
+        $response->getBody()->write(json_encode(['error' => $message]));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
     }
 }

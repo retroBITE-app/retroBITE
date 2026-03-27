@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [tailwindcss(), vue()],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./resources', import.meta.url)),
+      '@': fileURLToPath(new URL('./resources/js', import.meta.url)),
     },
   },
   build: {

@@ -6,6 +6,7 @@
         "php": "^8.3",
         "illuminate/database": "^11.0",
         "illuminate/support": "^11.0",
+        "monolog/monolog": "^3.10",
         "slim/psr7": "^1.7",
         "slim/slim": "^4.14",
         "symfony/var-dumper": "^7.0"
@@ -15,7 +16,8 @@
             "App\\": "app/"
         },
         "files": [
-            "app/Helpers/config.php"
+            "app/Helpers/config.php",
+            "app/Helpers/logger.php"
         ]
     },
     "config": {
