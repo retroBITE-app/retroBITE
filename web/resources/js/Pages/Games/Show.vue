@@ -126,13 +126,12 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 
             <div class="flex items-center gap-3">
               <img :src="game.logo_url" :alt="game.title ?? game.file_name" class="w-30" />
+              <div v-if="game.title">
+                <p class="text-zinc-100 text-xl font-semibold">{{ game.title }}</p>
+                <p class="text-zinc-500 text-sm mt-0.5 font-mono">{{ game.file_name }}</p>
+              </div>
+              <p v-else class="text-zinc-100 text-2xl font-semibold font-mono">{{ game.file_name }}</p>
             </div>
-
-            <div v-if="game.title">
-              <p class="text-zinc-100 text-xl font-semibold">{{ game.title }}</p>
-              <p class="text-zinc-500 text-sm mt-0.5 font-mono">{{ game.file_name }}</p>
-            </div>
-            <p v-else class="text-zinc-100 text-2xl font-semibold font-mono">{{ game.file_name }}</p>
 
             <!-- badges -->
             <div class="flex gap-2">
