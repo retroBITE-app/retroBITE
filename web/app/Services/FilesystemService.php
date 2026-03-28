@@ -75,6 +75,20 @@ class FilesystemService
     }
 
     /**
+     * Create a console directory (and optional subfolder) on disk.
+     */
+    public function createDir(string $console, string $subfolder): void
+    {
+        $gamesPath = config('settings.games_path');
+        $folder    = config("consoles.{$console}.folder");
+        $dir       = $gamesPath . '/' . $folder . ($subfolder !== '' ? '/' . $subfolder : '');
+
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+    }
+
+    /**
      * Reassemble ordered .part files into the destination path, then clean up the temp dir.
      */
     public function assembleFile(string $uploadId, int $totalChunks, string $destPath): void

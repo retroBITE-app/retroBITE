@@ -13,3 +13,4 @@ $app->get('/consoles/{console}', [ConsoleController::class, 'show']);
 $app->get('/consoles/{console}/{game}', [GameController::class, 'show']);
 $app->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
 $app->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);
+$app->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);

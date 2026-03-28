@@ -4,10 +4,11 @@ import { ref } from 'vue'
 import { formatSize } from '@/Helpers/format'
 import PageHeader from '@/Components/PageHeader.vue'
 import FileUploader from '@/Components/FileUploader.vue'
+import CreateDirectory from '@/Components/CreateDirectory.vue'
 
 const props = defineProps<{
   console: string
-  meta: { name: string; icon: string; file_icon: string }
+  meta: { name: string; icon: string; file_icon: string; folder: string }
   games: Array<{ file_name: string; title?: string; file_size?: number; region?: string }>
   extensions: { files: string[]; bios: string[] }
   type: string
@@ -48,6 +49,13 @@ function scan() {
       </template>
       <template #actions>
         <div class="flex items-center gap-2">
+          <CreateDirectory
+            :console="props.console"
+            :console-name="meta.name"
+            :folder="meta.folder"
+            :dirs="uploadDirs"
+            @done="router.reload()"
+          />
           <FileUploader
             :console="props.console"
             :console-name="meta.name"

@@ -40,11 +40,14 @@ class ConsoleController
 
         $consoles = Collection::make(config('consoles'))
             ->map(fn(array $meta, string $key) => [
-                'key'       => $key,
-                'name'      => Arr::get($meta, 'name'),
-                'icon'      => Arr::get($meta, 'icon'),
-                'gameCount' => (int) ($counts->get($key)?->game_count ?? 0),
-                'biosCount' => (int) ($counts->get($key)?->bios_count ?? 0),
+                'key'        => $key,
+                'name'       => Arr::get($meta, 'name'),
+                'icon'       => Arr::get($meta, 'icon'),
+                'gameCount'  => (int) ($counts->get($key)?->game_count ?? 0),
+                'biosCount'  => (int) ($counts->get($key)?->bios_count ?? 0),
+                'uploadDirs' => Collection::make([['value' => '', 'label' => Arr::get($meta, 'folder') . '/']])
+                    ->filter(fn() => !is_dir(config('settings.games_path') . '/' . Arr::get($meta, 'folder')))
+                    ->values(),
             ])
             ->values();
 
@@ -76,10 +79,12 @@ class ConsoleController
         $games = $this->games->allForConsole($console, $filterExts, $gameType);
 
         $folder     = config("consoles.{$console}.folder");
+        $gamesPath  = config('settings.games_path');
         $subfolders = config("consoles.{$console}.subfolders", []);
         $uploadDirs = Collection::make($subfolders)
             ->map(fn(string $sub) => ['value' => $sub, 'label' => $folder . '/' . $sub . '/'])
             ->prepend(['value' => '', 'label' => $folder . '/'])
+            ->filter(fn(array $dir) => !is_dir($gamesPath . '/' . $folder . ($dir['value'] !== '' ? '/' . $dir['value'] : '')))
             ->values();
 
         return Inertia::render($response, 'Consoles/Show', [
@@ -180,6 +185,34 @@ class ConsoleController
         $this->games->upsert($console, $filename, $destPath, $fileSize);
 
         $response->getBody()->write(json_encode(['status' => 'complete']));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    /**
+     * Create one or more directories for a console on disk
+     */
+    public function mkdir(Request $request, Response $response, array $args): Response
+    {
+        $console = Arr::get($args, 'console');
+
+        if (!in_array($console, self::$KNOWN_CONSOLES, true)) {
+            return $this->jsonError($response, 'Unknown console', 404);
+        }
+
+        $body       = $request->getParsedBody() ?? [];
+        $subfolders = (array) Arr::get($body, 'subfolders', []);
+
+        foreach ($subfolders as $sub) {
+            $sub = (string) $sub;
+
+            if ($sub !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $sub)) {
+                return $this->jsonError($response, 'Invalid subfolder: ' . $sub, 422);
+            }
+
+            $this->filesystem->createDir($console, $sub);
+        }
+
+        $response->getBody()->write(json_encode(['status' => 'ok']));
         return $response->withHeader('Content-Type', 'application/json');
     }
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { router } from '@inertiajs/vue3'
 import ConsoleCard from '@/Components/ConsoleCard.vue'
+import SetupDirectories from '@/Components/SetupDirectories.vue'
 
 defineProps<{
   consoles: Array<{
@@ -8,13 +10,17 @@ defineProps<{
     icon: string
     gameCount: number
     biosCount: number
+    uploadDirs: Array<{ value: string; label: string }>
   }>
 }>()
 </script>
 
 <template>
   <div>
-    <h1 class="text-2xl font-semibold text-zinc-100 mb-6">Consoles</h1>
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-semibold text-zinc-100">Consoles</h1>
+      <SetupDirectories :consoles="consoles" title="New console" @done="router.reload()" />
+    </div>
 
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
       <ConsoleCard
