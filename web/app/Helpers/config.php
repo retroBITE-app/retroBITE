@@ -4,17 +4,10 @@ declare(strict_types=1);
 
 use \Illuminate\Support\Arr;
 
-if (!function_exists('config')) {
+if (!function_exists('config'))
+{
     /**
      * Access config values using dot notation.
-     *
-     * The first segment maps to a file in config/.
-     * Remaining segments traverse the returned array.
-     *
-     * Examples:
-     *   config('settings.db_path')
-     *   config('settings.games_path', '/games')
-     *   config('settings')            // returns the full settings array
      */
     function config(string $key, mixed $default = null): mixed
     {
