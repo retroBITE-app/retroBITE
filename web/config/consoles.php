@@ -43,7 +43,7 @@ return [
         'subfolders'      => ['bios'],
         'icon'            => '/images/consoles/Nintendo - GameCube.png',
         'file_icon'       => '/images/consoles/Nintendo - GameCube-content.png',
-        'file_extensions' => ['iso', 'gcm', 'ciso', 'gcz', 'nkit.iso'],
+        'file_extensions' => ['iso', 'gcm', 'ciso', 'gcz', 'nkit.iso', 'rvz'],
         'bios_extensions' => ['bin'],
         'exclude_files'   => [],
     ],
