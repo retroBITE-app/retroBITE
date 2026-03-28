@@ -89,13 +89,18 @@ function scan() {
       <li
         v-for="game in games"
         :key="game.file_name"
-        class="group flex items-center justify-between rounded-lg bg-zinc-800 border border-zinc-700 px-5 py-3 hover:border-emerald-500/50 hover:bg-zinc-800/80 transition-colors cursor-pointer"
+        class="group rounded-lg bg-zinc-800 border border-zinc-700 hover:border-emerald-500/50 hover:bg-zinc-800/80 transition-colors"
       >
-        <span class="text-zinc-200 text-sm truncate">{{ game.title ?? game.file_name }}</span>
-        <div class="flex items-center gap-4 shrink-0 ml-4">
-          <span v-if="game.region" class="text-xs font-mono text-zinc-500 uppercase">{{ game.region }}</span>
-          <span class="text-xs text-zinc-600 group-hover:text-white transition-colors">{{ formatSize(game.file_size) }}</span>
-        </div>
+        <Link
+          :href="`/consoles/${props.console}/${encodeURIComponent(game.file_name)}`"
+          class="flex items-center justify-between px-5 py-3"
+        >
+          <span class="text-zinc-200 text-sm truncate">{{ game.title ?? game.file_name }}</span>
+          <div class="flex items-center gap-4 shrink-0 ml-4">
+            <span v-if="game.region" class="text-xs font-mono text-zinc-500 uppercase">{{ game.region }}</span>
+            <span class="text-xs text-zinc-600 group-hover:text-white transition-colors">{{ formatSize(game.file_size) }}</span>
+          </div>
+        </Link>
       </li>
     </ul>
 
