@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import AppSidebar from '@/Components/AppSidebar.vue'
+
+defineProps<{ noPadding?: boolean }>()
 </script>
 
 <template>
@@ -9,7 +11,7 @@ import AppSidebar from '@/Components/AppSidebar.vue'
 
     <!-- Content -->
     <main class="flex-1 flex flex-col overflow-hidden">
-      <div class="flex-1 overflow-y-auto p-8">
+      <div class="flex-1 overflow-y-auto" :class="noPadding ? '' : 'p-8'">
         <slot />
       </div>
     </main>
