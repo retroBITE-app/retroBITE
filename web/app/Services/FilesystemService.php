@@ -96,6 +96,21 @@ class FilesystemService
     }
 
     /**
+     * Extract region codes from a filename
+     */
+    public function resolveRegion(string $filename): ?string
+    {
+        preg_match_all('/\(([^)]+)\)/', $filename, $matches);
+
+        $codes = $matches[1] ?? [];
+
+        return collect(config('regions'))
+            ->filter(fn($region) => collect($codes)->intersect($region['codes'])->isNotEmpty())
+            ->keys()
+            ->first();
+    }
+
+    /**
      * Delete temp upload dirs older than $maxAge seconds.
      */
     public function purgeAbandonedUploads(int $maxAge = 21600): void
