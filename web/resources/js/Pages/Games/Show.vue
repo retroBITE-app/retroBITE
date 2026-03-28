@@ -75,7 +75,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
         <PageHeader>
           <template #title>
             <div class="flex items-center gap-4">
-              <Link :href="`/consoles/${console}`" class="text-white hover:text-zinc-300 transition-colors text-sm">←
+              <Link :href="`/consoles/${props.console}`" class="text-white hover:text-zinc-300 transition-colors text-sm">←
                 Back</Link>
             </div>
             <!-- Action button group -->
