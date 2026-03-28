@@ -10,20 +10,20 @@ const props = defineProps<{
   meta: { name: string; icon: string; file_icon: string }
   games: Array<{ file_name: string; title?: string; file_size?: number; region?: string }>
   extensions: { files: string[]; bios: string[] }
-  type: string | null
+  type: string
   uploadDirs: Array<{ value: string; label: string }>
 }>()
 
 const scanning = ref(false)
 
 const filters = [
-  { key: null,    label: 'All'   },
+  { key: 'all',   label: 'All'   },
   { key: 'files', label: 'Games' },
   { key: 'bios',  label: 'BIOS'  },
 ] as const
 
-function setFilter(type: string | null) {
-  router.get(`/consoles/${props.console}`, type ? { type } : {}, { preserveScroll: true })
+function setFilter(type: string) {
+  router.get(`/consoles/${props.console}`, { type }, { preserveScroll: true })
 }
 
 function scan() {

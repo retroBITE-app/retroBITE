@@ -41,8 +41,8 @@ class ConsoleController
         $consoles = Collection::make(config('consoles'))
             ->map(fn(array $meta, string $key) => [
                 'key'       => $key,
-                'name'      => $meta['name'],
-                'icon'      => $meta['icon'],
+                'name'      => Arr::get($meta, 'name'),
+                'icon'      => Arr::get($meta, 'icon'),
                 'gameCount' => (int) ($counts->get($key)?->game_count ?? 0),
                 'biosCount' => (int) ($counts->get($key)?->bios_count ?? 0),
             ])
@@ -69,18 +69,18 @@ class ConsoleController
             'bios'  => config("consoles.{$console}.bios_extensions", []),
         ];
 
-        $type       = $request->getQueryParams()['type'] ?? null;
-        $filterExts = $extensions[$type] ?? [];
+        $type       = Arr::get($request->getQueryParams(), 'type', 'files');
+        $filterExts = $type === 'all' ? [] : Arr::get($extensions, $type, []);
+        $gameType   = $type === 'all' ? null : $type;
 
-        $games = $this->games->allForConsole($console, $filterExts, $type);
+        $games = $this->games->allForConsole($console, $filterExts, $gameType);
 
         $folder     = config("consoles.{$console}.folder");
         $subfolders = config("consoles.{$console}.subfolders", []);
-        $uploadDirs = [['value' => '', 'label' => $folder . '/']];
-
-        foreach ($subfolders as $sub) {
-            $uploadDirs[] = ['value' => $sub, 'label' => $folder . '/' . $sub . '/'];
-        }
+        $uploadDirs = Collection::make($subfolders)
+            ->map(fn(string $sub) => ['value' => $sub, 'label' => $folder . '/' . $sub . '/'])
+            ->prepend(['value' => '', 'label' => $folder . '/'])
+            ->values();
 
         return Inertia::render($response, 'Consoles/Show', [
             'console'    => $console,
@@ -162,11 +162,11 @@ class ConsoleController
 
         // Get uploaded chunk
         $files = $request->getUploadedFiles();
-        if (!isset($files['chunk'])) {
+        if (!Arr::has($files, 'chunk')) {
             return $this->jsonError($response, 'Missing chunk', 422);
         }
 
-        $this->filesystem->writeChunk($uploadId, $chunkIndex, $files['chunk']);
+        $this->filesystem->writeChunk($uploadId, $chunkIndex, Arr::get($files, 'chunk'));
 
         // Intermediate chunk — just acknowledge
         if ($chunkIndex < $totalChunks - 1) {
