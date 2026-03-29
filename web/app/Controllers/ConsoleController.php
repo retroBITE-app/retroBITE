@@ -38,7 +38,10 @@ class ConsoleController
             ->get()
             ->keyBy('console');
 
+        $gamesPath = config('settings.games_path');
+
         $consoles = Collection::make(config('consoles'))
+            ->filter(fn(array $meta) => is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
             ->map(fn(array $meta, string $key) => [
                 'key'        => $key,
                 'name'       => Arr::get($meta, 'name'),
@@ -46,7 +49,7 @@ class ConsoleController
                 'gameCount'  => (int) ($counts->get($key)?->game_count ?? 0),
                 'biosCount'  => (int) ($counts->get($key)?->bios_count ?? 0),
                 'uploadDirs' => Collection::make([['value' => '', 'label' => Arr::get($meta, 'folder') . '/']])
-                    ->filter(fn() => !is_dir(config('settings.games_path') . '/' . Arr::get($meta, 'folder')))
+                    ->filter(fn() => !is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
                     ->values(),
             ])
             ->values();

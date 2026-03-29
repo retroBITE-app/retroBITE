@@ -40,8 +40,6 @@ class GameController
         $region = $this->filesystemService->resolveRegion($fileName) ?? 'unknown';
         $regionMeta = config("regions.{$region}");
 
-        logger()->info('', $regionMeta);
-
         return Inertia::render($response, 'Games/Show', [
             'console'    => $console,
             'meta'       => config("consoles.{$console}"),
