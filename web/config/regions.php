@@ -13,7 +13,7 @@ return [
         'name'     => 'Europe',
         'flag'     => 'EU',
         'codes'    => ['Europe', 'EUR', 'E', 'PAL', 'En,Fr,De', 'En,Fr,De,Es,It'],
-        'icon'     => '/images/regions/europe.png',
+        'icon'     => '/images/regions/eu.png',
     ],
     'japan' => [
         'name'     => 'Japan',
