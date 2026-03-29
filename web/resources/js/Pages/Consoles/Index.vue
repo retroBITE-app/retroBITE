@@ -10,6 +10,10 @@ defineProps<{
     icon: string
     gameCount: number
     biosCount: number
+  }>
+  available: Array<{
+    key: string
+    name: string
     uploadDirs: Array<{ value: string; label: string }>
   }>
 }>()
@@ -19,7 +23,7 @@ defineProps<{
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-semibold text-zinc-100">Consoles</h1>
-      <SetupDirectories :consoles="consoles" title="New console" @done="router.reload()" />
+      <SetupDirectories :consoles="available" title="New console" @done="router.reload()" />
     </div>
 
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">

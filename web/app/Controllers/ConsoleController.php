@@ -38,24 +38,32 @@ class ConsoleController
             ->get()
             ->keyBy('console');
 
-        $gamesPath = config('settings.games_path');
+        $gamesPath   = config('settings.games_path');
+        $allConsoles = Collection::make(config('consoles'));
 
-        $consoles = Collection::make(config('consoles'))
+        $consoles = $allConsoles
             ->filter(fn(array $meta) => is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
+            ->map(fn(array $meta, string $key) => [
+                'key'       => $key,
+                'name'      => Arr::get($meta, 'name'),
+                'icon'      => Arr::get($meta, 'icon'),
+                'gameCount' => (int) ($counts->get($key)?->game_count ?? 0),
+                'biosCount' => (int) ($counts->get($key)?->bios_count ?? 0),
+            ])
+            ->values();
+
+        $available = $allConsoles
+            ->filter(fn(array $meta) => !is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
             ->map(fn(array $meta, string $key) => [
                 'key'        => $key,
                 'name'       => Arr::get($meta, 'name'),
-                'icon'       => Arr::get($meta, 'icon'),
-                'gameCount'  => (int) ($counts->get($key)?->game_count ?? 0),
-                'biosCount'  => (int) ($counts->get($key)?->bios_count ?? 0),
-                'uploadDirs' => Collection::make([['value' => '', 'label' => Arr::get($meta, 'folder') . '/']])
-                    ->filter(fn() => !is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
-                    ->values(),
+                'uploadDirs' => [['value' => '', 'label' => Arr::get($meta, 'folder') . '/']],
             ])
             ->values();
 
         return Inertia::render($response, 'Consoles/Index', [
-            'consoles' => $consoles,
+            'consoles'  => $consoles,
+            'available' => $available,
         ]);
     }
 
