@@ -12,6 +12,10 @@ $resources = $base . '/resources';
 
 return [
     'app_debug'       => (bool) Arr::get($_ENV, 'APP_DEBUG', true),
+    'network'         => [
+        'host_ip'  => Arr::get($_ENV, 'HOST_IP', '127.0.0.1'),
+        'username' => Arr::get($_ENV, 'USER', 'retrobite'),
+    ],
 
     // Root paths
     'root_path'       => $base,

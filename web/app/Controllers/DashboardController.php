@@ -41,6 +41,10 @@ class DashboardController
 
         return Inertia::render($response, 'Dashboard', [
             'consoles' => $consoles,
+            'network'   => [
+                'hostIp' => config('settings.network.host_ip'),
+                'username' => config('settings.network.username'),
+            ]
         ]);
     }
 }
