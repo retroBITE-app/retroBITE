@@ -6,19 +6,22 @@ namespace App\Inertia;
 
 use Psr\Http\Message\ResponseInterface;
 
-/**
- * Minimal Inertia.js server-side adapter for Slim 4.
- *
- * Protocol:
- *  - First visit (no X-Inertia header): return full HTML page with
- *    the page data encoded in <div id="app" data-page="...">.
- *  - Subsequent SPA navigation (X-Inertia header present): return JSON
- *    { component, props, url, version } with X-Inertia response header.
- */
 class Inertia
 {
     private static string $version = '1';
+    private static array  $shared  = [];
 
+    /**
+     * Share data with all Inertia responses
+     */
+    public static function share(array $props): void
+    {
+        self::$shared = array_merge(self::$shared, $props);
+    }
+
+    /**
+     * Render a page
+     */
     public static function render(
         ResponseInterface $response,
         string $component,
@@ -26,7 +29,7 @@ class Inertia
     ): ResponseInterface {
         $page = [
             'component' => $component,
-            'props'     => $props,
+            'props'     => array_merge(self::$shared, $props),
             'url'       => $_SERVER['REQUEST_URI'] ?? '/',
             'version'   => self::$version,
         ];
@@ -58,8 +61,7 @@ class Inertia
     }
 
     /**
-     * Redirect after a form submission.
-     * PUT/PATCH/DELETE Inertia requests must receive 303 (not 302).
+     * Redirect after a form submission
      */
     public static function redirect(ResponseInterface $response, string $url): ResponseInterface
     {

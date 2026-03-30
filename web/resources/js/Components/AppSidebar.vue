@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Link, usePage } from '@inertiajs/vue3'
+import { ref, computed } from 'vue'
+import { Link, usePage, router } from '@inertiajs/vue3'
 
 const page = usePage()
 const open = ref(false)
+
+const authUser = computed(() => (page.props.auth as { user: string } | undefined)?.user ?? null)
+
+function logout() {
+  router.post('/logout')
+}
 
 function isActive(href: string): boolean {
   return href === '/'
@@ -69,8 +75,22 @@ const nav = [
     </nav>
 
     <!-- Footer -->
-    <div class="px-5 py-4 border-t text-center border-zinc-800">
-      <p class="text-xs text-zinc-600"><a href="https://github.com/mattiasghodsian/retroBite" target="_new">retroBITE</a> v0.0.1</p>
+    <div class="px-4 py-4 border-t border-zinc-800 flex items-center gap-3">
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-zinc-300 truncate">{{ authUser }}</p>
+        <p class="text-xs text-zinc-600">
+          <a href="https://github.com/mattiasghodsian/retroBite" target="_new">retroBITE</a> v0.0.1
+        </p>
+      </div>
+      <button
+        @click="logout"
+        title="Sign out"
+        class="shrink-0 cursor-pointer flex items-center justify-center w-8 h-8 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+        </svg>
+      </button>
     </div>
 
   </aside>

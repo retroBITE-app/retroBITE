@@ -6,7 +6,7 @@ use Illuminate\Container\Container;
 
 $container      = new Container;
 $base           = dirname(__DIR__) . '/app';
-$allowedDirs    = ['Controllers', 'Repositories', 'Services'];
+$allowedDirs    = ['Controllers', 'Repositories', 'Services', 'Middleware'];
 
 foreach ($allowedDirs as $dir) {
     foreach (glob("{$base}/{$dir}/*.php") as $file) {

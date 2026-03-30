@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Database\Schema;
+use App\Database\Seeder;
+use App\Middleware\SessionMiddleware;
 use Monolog\ErrorHandler;
 use Slim\Factory\AppFactory;
 use Slim\Handlers\ErrorHandler as SlimErrorHandler;
@@ -41,7 +43,12 @@ $errorMiddleware->setDefaultErrorHandler(
 
 Schema::migrate();
 
+$app->add(SessionMiddleware::class);
+
 require __DIR__ . '/database.php';
+
+Seeder::seed();
+
 require dirname(__DIR__) . '/routes/web.php';
 
 return $app;

@@ -2,15 +2,26 @@
 
 declare(strict_types=1);
 
-use App\Controllers\DashboardController;
+use App\Controllers\AuthController;
 use App\Controllers\ConsoleController;
+use App\Controllers\DashboardController;
 use App\Controllers\GameController;
+use App\Middleware\AuthMiddleware;
+use Slim\Routing\RouteCollectorProxy;
 
-$app->get('/', [DashboardController::class, 'index']);
+// Public auth routes
+$app->get('/login',  [AuthController::class, 'showLogin']);
+$app->post('/login', [AuthController::class, 'login']);
+$app->post('/logout', [AuthController::class, 'logout']);
 
-$app->get('/consoles', [ConsoleController::class, 'index']);
-$app->get('/consoles/{console}', [ConsoleController::class, 'show']);
-$app->get('/consoles/{console}/{game}', [GameController::class, 'show']);
-$app->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
-$app->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);
-$app->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);
+// Protected routes
+$app->group('', function (RouteCollectorProxy $group) {
+    $group->get('/', [DashboardController::class, 'index']);
+
+    $group->get('/consoles', [ConsoleController::class, 'index']);
+    $group->get('/consoles/{console}', [ConsoleController::class, 'show']);
+    $group->get('/consoles/{console}/{game}', [GameController::class, 'show']);
+    $group->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
+    $group->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);
+    $group->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);
+})->add(AuthMiddleware::class);
