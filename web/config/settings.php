@@ -14,7 +14,7 @@ return [
     'app_debug'       => (bool) Arr::get($_ENV, 'APP_DEBUG', true),
     'network'         => [
         'host_ip'  => Arr::get($_ENV, 'HOST_IP', '127.0.0.1'),
-        'username' => Arr::get($_ENV, 'USER', 'retrobite'),
+        'username' => Arr::get($_ENV, 'AUTH_USER', 'retrobite'),
     ],
 
     // Root paths
@@ -26,9 +26,10 @@ return [
 
     // Extensible paths
     'views_path'      => $resources . '/views',
+    'build_path'      => $public    . '/build',
     'image_path'      => $public    . '/images',
     'tmp_path'        => $storage   . '/tmp',
-    'games_path'      => $storage   . '/games',
+    'games_path'      => Arr::get($_ENV, 'GAMES_PATH', $storage . '/games'),
     'migrations_path' => $database  . '/migrations',
     'db_path'         => Arr::get($_ENV, 'DB_PATH', $database . '/retrobite.db'),
 ];

@@ -6,9 +6,6 @@ services:
     container_name: retrobite-web
     env_file:
       - .env
-    environment:
-      - GAMES_PATH=/games
-      - DB_PATH=/data/retrobite.db
     ports:
       - "${WEB_PORT:-80}:80"
     volumes:

@@ -1,0 +1,27 @@
+services:
+  retrobite-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.dev
+    container_name: retrobite-web-dev
+    env_file:
+      - .env
+    ports:
+      - "${WEB_PORT:-80}:80"
+    volumes:
+      - ./web:/app/web
+      - ./games:/games:ro
+      - retrobite-data:/data
+
+  vite:
+    image: node:22-alpine
+    container_name: retrobite-vite
+    working_dir: /app/web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app/web
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  retrobite-data:

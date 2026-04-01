@@ -2,8 +2,8 @@
 set -e
 
 # Set default values if not provided
-USER=${USER:-retrobite}
-PASS=${PASS:-retrobite}
+USER=${AUTH_USER:-retrobite}
+PASS=${AUTH_PASS:-retrobite}
 HOST_IP=${HOST_IP:-}
 
 echo "===================================="

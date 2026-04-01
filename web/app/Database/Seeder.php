@@ -15,8 +15,8 @@ class Seeder
             return;
         }
 
-        $username = Arr::get($_ENV, 'USER', 'retrobite');
-        $password = Arr::get($_ENV, 'PASS', 'retrobite');
+        $username = Arr::get($_ENV, 'AUTH_USER', 'retrobite');
+        $password = Arr::get($_ENV, 'AUTH_PASS', 'retrobite');
 
         User::create([
             'username'   => $username,

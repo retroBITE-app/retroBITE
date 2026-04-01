@@ -42,6 +42,10 @@ retroBITE is designed to run exclusively as a Docker container. To ensure stabil
 ```bash
 docker-compose up -d
 ```
+For local devopment
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
 
 4. Connect your retro console to the network share to load ROMs directly over your local network. See [`CONSOLES.md`](CONSOLES.md) for per-console setup instructions.
 

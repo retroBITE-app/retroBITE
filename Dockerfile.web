@@ -8,7 +8,7 @@ COPY web/ .
 RUN npm run build
 
 # Stage 2: PHP-FPM + Nginx runtime
-FROM php:8.3-fpm-alpine AS runner
+FROM php:8.4-fpm-alpine AS runner
 
 RUN apk add --no-cache nginx sqlite sqlite-dev \
     && docker-php-ext-install pdo_sqlite
@@ -20,6 +20,7 @@ COPY web/composer.json web/composer.lock* ./
 RUN composer update --no-dev --no-interaction --optimize-autoloader
 
 COPY web/ .
+RUN mkdir -p storage/games storage/tmp database
 COPY --from=frontend-builder /app/web/public/build ./public/build
 
 # Nginx server block
