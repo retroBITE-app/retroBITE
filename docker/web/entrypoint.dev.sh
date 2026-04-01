@@ -1,13 +1,23 @@
 #!/bin/sh
 set -e
 
+# Match www-data UID/GID to host user so bind-mounted files just work
+HOST_UID=$(stat -c '%u' /app/web)
+HOST_GID=$(stat -c '%g' /app/web)
+if [ "$HOST_UID" != "0" ]; then
+    deluser www-data 2>/dev/null || true
+    addgroup -g "$HOST_GID" -S www-data 2>/dev/null || true
+    adduser -u "$HOST_UID" -G www-data -S -D -H www-data 2>/dev/null || true
+fi
+addgroup www-data users 2>/dev/null || true
+
 # Ensure storage subdirs exist
 mkdir -p /app/web/storage/games /app/web/storage/tmp /app/web/database
 
 # Install PHP deps (volume-mounted, so not baked into image)
 composer install --no-interaction --working-dir=/app/web
 
-# Ensure PHP-FPM (www-data) can write to storage and database dirs
+# Ensure writable dirs are owned by www-data
 chown -R www-data:www-data /app/web/storage /app/web/database /data
 
 # Start PHP-FPM in the background (manages its own worker pool)

@@ -9,7 +9,7 @@ services:
     ports:
       - "${WEB_PORT:-80}:80"
     volumes:
-      - ./games:/games:ro
+      - ./games:/games
       - retrobite-data:/data
     restart: on-failure
 

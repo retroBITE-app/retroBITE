@@ -26,8 +26,9 @@ COPY --from=frontend-builder /app/web/public/build ./public/build
 # Nginx server block
 COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf
 
-# PHP-FPM pool override: pass Docker env vars through to PHP
+# PHP config overrides
 COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
+COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 COPY docker/web/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

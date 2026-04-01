@@ -95,7 +95,7 @@ class ConsoleController
         $uploadDirs = Collection::make($subfolders)
             ->map(fn(string $sub) => ['value' => $sub, 'label' => $folder . '/' . $sub . '/'])
             ->prepend(['value' => '', 'label' => $folder . '/'])
-            ->filter(fn(array $dir) => !is_dir($gamesPath . '/' . $folder . ($dir['value'] !== '' ? '/' . $dir['value'] : '')))
+            ->filter(fn(array $dir) => is_dir($gamesPath . '/' . $folder . ($dir['value'] !== '' ? '/' . $dir['value'] : '')))
             ->values();
 
         return Inertia::render($response, 'Consoles/Show', [
