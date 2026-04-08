@@ -92,8 +92,11 @@ async function startUpload() {
   progress.value  = 0
   error.value     = null
 
-  const files  = [...selectedFiles.value]
+  const files      = [...selectedFiles.value]
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
   const errors: string[] = []
+
+  let bytesBeforeFile = 0
 
   for (let fi = 0; fi < files.length; fi++) {
     const file        = files[fi]
@@ -105,7 +108,8 @@ async function startUpload() {
         statusText.value = files.length > 1
           ? `File ${fi + 1} / ${files.length}: ${file.name}`
           : file.name
-        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        const chunk            = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        const bytesBeforeChunk = bytesBeforeFile + i * CHUNK_SIZE
 
         await sendChunk({
           uploadId,
@@ -116,13 +120,16 @@ async function startUpload() {
           totalChunks,
           chunk,
           onProgress: (pct: number) => {
-            progress.value = Math.round(((fi + pct / 100) / files.length) * 100)
+            const chunkBytes = Math.round(chunk.size * pct / 100)
+            progress.value   = Math.round((bytesBeforeChunk + chunkBytes) / totalBytes * 100)
           },
         })
       }
     } catch (e: unknown) {
       errors.push(`${file.name}: ${e instanceof Error ? e.message : 'failed'}`)
     }
+
+    bytesBeforeFile += file.size
   }
 
   progress.value  = 100
