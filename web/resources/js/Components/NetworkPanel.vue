@@ -1,31 +1,42 @@
 <script setup lang="ts">
-const props = defineProps<{ network: { hostIp: string, username: string } }>()
+import { ref, onMounted } from 'vue'
 
-const smbShares = [
-  { label: 'All Games',     share: 'games', icon: null },
-  { label: 'PlayStation 2', share: 'ps2',   icon: '/images/consoles/Sony - PlayStation 2.png' },
-  { label: 'GameCube',      share: 'gc',    icon: '/images/consoles/Nintendo - GameCube.png' },
-  { label: 'Wii',           share: 'wii',   icon: '/images/consoles/Nintendo - Wii.png' },
-]
+type Share = { key: string; name: string; folder: string; icon: string | null }
 
-function smbConnection(share: string) {
-  return `\\\\${props.network.hostIp}\\${share}`
+const props = defineProps<{
+  network: {
+    hostIp: string
+    username: string
+    shares: Share[]
+  }
+}>()
+
+const smbOnline = ref<boolean | null>(null)
+const ftpOnline = ref<boolean | null>(null)
+const checking  = ref(false)
+
+async function checkStatus() {
+  checking.value = true
+  smbOnline.value = null
+  ftpOnline.value = null
+  try {
+    const res  = await fetch('/api/network/status')
+    const data = await res.json()
+    smbOnline.value = !!data.smb
+    ftpOnline.value = !!data.ftp
+  } catch {
+    smbOnline.value = false
+    ftpOnline.value = false
+  } finally {
+    checking.value = false
+  }
 }
 
-const ftpConsoles = [
-  {
-    label: 'PlayStation 3',
-    path: '/games/ps3',
-    icon: '/images/consoles/Sony - PlayStation 3.png',
-    folder: 'ps3',
-  },
-  {
-    label: 'Xbox',
-    path: '/games/xbox',
-    icon: '/images/consoles/Microsoft - Xbox.png',
-    folder: 'xbox',
-  }
-]
+onMounted(checkStatus)
+
+function smbConnection(folder: string) {
+  return `\\\\${props.network.hostIp}\\${folder}`
+}
 
 function ftpConnection(folder: string) {
   return `ftp://${props.network.hostIp}/${folder}`
@@ -50,9 +61,29 @@ function copy(text: string) {
           </span>
           <span class="text-sm text-zinc-400">Samba</span>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_theme(colors.emerald.500)]"></span>
-          <span class="text-xs text-zinc-400">Active</span>
+        <div class="flex items-center gap-2">
+          <!-- Status indicator -->
+          <div class="flex items-center gap-1.5">
+            <template v-if="smbOnline === null">
+              <span class="h-2 w-2 rounded-full bg-zinc-500 animate-pulse"></span>
+              <span class="text-xs text-zinc-500">Checking…</span>
+            </template>
+            <template v-else-if="smbOnline">
+              <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_var(--color-emerald-500)]"></span>
+              <span class="text-xs text-zinc-400">Active</span>
+            </template>
+            <template v-else>
+              <span class="h-2 w-2 rounded-full bg-red-500"></span>
+              <span class="text-xs text-red-400">Offline</span>
+            </template>
+          </div>
+          <!-- Refresh -->
+          <button
+            @click="checkStatus"
+            :disabled="checking"
+            title="Re-check status"
+            class="text-zinc-600 hover:text-zinc-300 transition-colors disabled:opacity-30 text-sm leading-none"
+          >↺</button>
         </div>
       </div>
 
@@ -78,37 +109,31 @@ function copy(text: string) {
 
       <!-- Shares -->
       <div class="divide-y divide-zinc-700/40">
+        <p v-if="!network.shares.length" class="px-5 py-4 text-sm text-zinc-600">No consoles installed</p>
         <div
-          v-for="share in smbShares"
-          :key="share.share"
+          v-for="share in network.shares"
+          :key="share.key"
           class="flex items-center gap-3 px-5 py-3 hover:bg-zinc-700/30 transition-colors group"
         >
-          <!-- Icon -->
           <div class="flex h-8 w-8 shrink-0 items-center justify-center">
             <img
               v-if="share.icon"
               :src="share.icon"
-              :alt="share.label"
+              :alt="share.name"
               class="h-7 w-7 object-contain opacity-60 group-hover:opacity-90 transition-opacity"
             />
             <svg v-else class="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0v2.25A2.25 2.25 0 0 1 19.5 18.75h-15a2.25 2.25 0 0 1-2.25-2.25v-2.25" />
             </svg>
           </div>
-
-          <!-- Info -->
           <div class="flex-1 min-w-0">
-            <p class="text-sm text-zinc-200 leading-tight">{{ share.label }}</p>
-            <p class="text-xs font-mono text-zinc-500 truncate mt-0.5">{{ smbConnection(share.share) }}</p>
+            <p class="text-sm text-zinc-200 leading-tight">{{ share.name }}</p>
+            <p class="text-xs font-mono text-zinc-500 truncate mt-0.5">{{ smbConnection(share.folder) }}</p>
           </div>
-
-          <!-- Copy button -->
           <button
-            @click="copy(smbConnection(share.share))"
+            @click="copy(smbConnection(share.folder))"
             class="shrink-0 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-500 opacity-0 group-hover:opacity-100 hover:border-zinc-500 hover:text-zinc-300 transition-all"
-          >
-            Copy
-          </button>
+          >Copy</button>
         </div>
       </div>
 
@@ -125,9 +150,29 @@ function copy(text: string) {
           </span>
           <span class="text-sm text-zinc-400">vsftpd · Passive Mode</span>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_theme(colors.emerald.500)]"></span>
-          <span class="text-xs text-zinc-400">Active</span>
+        <div class="flex items-center gap-2">
+          <!-- Status indicator -->
+          <div class="flex items-center gap-1.5">
+            <template v-if="ftpOnline === null">
+              <span class="h-2 w-2 rounded-full bg-zinc-500 animate-pulse"></span>
+              <span class="text-xs text-zinc-500">Checking…</span>
+            </template>
+            <template v-else-if="ftpOnline">
+              <span class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_var(--color-emerald-500)]"></span>
+              <span class="text-xs text-zinc-400">Active</span>
+            </template>
+            <template v-else>
+              <span class="h-2 w-2 rounded-full bg-red-500"></span>
+              <span class="text-xs text-red-400">Offline</span>
+            </template>
+          </div>
+          <!-- Refresh -->
+          <button
+            @click="checkStatus"
+            :disabled="checking"
+            title="Re-check status"
+            class="text-zinc-600 hover:text-zinc-300 transition-colors disabled:opacity-30 text-sm leading-none"
+          >↺</button>
         </div>
       </div>
 
@@ -147,39 +192,37 @@ function copy(text: string) {
         </div>
         <div class="bg-zinc-800/50 px-4 py-3">
           <p class="text-xs text-zinc-500 uppercase tracking-wider mb-0.5">Auth</p>
-           <p class="text-sm text-zinc-200">{{ props.network.username }} / ******</p>
+          <p class="text-sm text-zinc-200">{{ props.network.username }} / ******</p>
         </div>
       </div>
 
-      <!-- Consoles -->
+      <!-- Folders -->
       <div class="divide-y divide-zinc-700/40">
+        <p v-if="!network.shares.length" class="px-5 py-4 text-sm text-zinc-600">No consoles installed</p>
         <div
-          v-for="console in ftpConsoles"
-          :key="console.label"
+          v-for="share in network.shares"
+          :key="share.key"
           class="flex items-center gap-3 px-5 py-3 hover:bg-zinc-700/30 transition-colors group"
         >
-          <!-- Icon -->
           <div class="flex h-8 w-8 shrink-0 items-center justify-center">
             <img
-              :src="console.icon"
-              :alt="console.label"
+              v-if="share.icon"
+              :src="share.icon"
+              :alt="share.name"
               class="h-7 w-7 object-contain opacity-60 group-hover:opacity-90 transition-opacity"
             />
+            <svg v-else class="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0v2.25A2.25 2.25 0 0 1 19.5 18.75h-15a2.25 2.25 0 0 1-2.25-2.25v-2.25" />
+            </svg>
           </div>
-
-          <!-- Info -->
           <div class="flex-1 min-w-0">
-            <p class="text-sm text-zinc-200 leading-tight">{{ console.label }}</p>
-            <p class="text-xs font-mono text-zinc-500 truncate mt-0.5">{{ ftpConnection(console.folder) }}</p>
+            <p class="text-sm text-zinc-200 leading-tight">{{ share.name }}</p>
+            <p class="text-xs font-mono text-zinc-500 truncate mt-0.5">{{ ftpConnection(share.folder) }}</p>
           </div>
-
-          <!-- Copy button -->
           <button
-            @click="copy(ftpConnection(console.folder))"
+            @click="copy(ftpConnection(share.folder))"
             class="shrink-0 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-500 opacity-0 group-hover:opacity-100 hover:border-zinc-500 hover:text-zinc-300 transition-all"
-          >
-            Copy
-          </button>
+          >Copy</button>
         </div>
       </div>
 

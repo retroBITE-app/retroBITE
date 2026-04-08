@@ -6,6 +6,7 @@ use App\Controllers\AuthController;
 use App\Controllers\ConsoleController;
 use App\Controllers\DashboardController;
 use App\Controllers\GameController;
+use App\Controllers\NetworkController;
 use App\Middleware\AuthMiddleware;
 use Slim\Routing\RouteCollectorProxy;
 
@@ -24,4 +25,6 @@ $app->group('', function (RouteCollectorProxy $group) {
     $group->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
     $group->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);
     $group->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);
+
+    $group->get('/api/network/status', [NetworkController::class, 'status']);
 })->add(AuthMiddleware::class);

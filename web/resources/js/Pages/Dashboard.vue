@@ -11,7 +11,11 @@ const props = defineProps<{
     gameCount: number
     biosCount: number
   }>
-  network: { hostIp: string; username: string }
+  network: {
+    hostIp: string
+    username: string
+    shares: Array<{ key: string; name: string; folder: string; icon: string | null }>
+  }
 }>()
 </script>
 

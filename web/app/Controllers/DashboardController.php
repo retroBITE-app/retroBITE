@@ -39,12 +39,25 @@ class DashboardController
             ->take(6)
             ->values();
 
+        $shares = Collection::make(config('consoles'))
+            ->filter(fn(array $meta) => is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
+            ->map(fn(array $meta, string $key) => [
+                'key'    => $key,
+                'name'   => $meta['name'],
+                'folder' => $meta['folder'],
+                'icon'   => $meta['icon'],
+            ])
+            ->values()
+            ->prepend(['key' => '__root__', 'name' => 'All Games', 'folder' => 'games', 'icon' => null])
+            ->all();
+
         return Inertia::render($response, 'Dashboard', [
             'consoles' => $consoles,
-            'network'   => [
-                'hostIp' => config('settings.network.host_ip'),
+            'network'  => [
+                'hostIp'   => config('settings.network.host_ip'),
                 'username' => config('settings.network.username'),
-            ]
+                'shares'   => $shares,
+            ],
         ]);
     }
 }
