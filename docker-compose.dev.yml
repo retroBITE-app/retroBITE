@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web.dev
-    container_name: retrobite-web-dev
+    container_name: web-dev
     env_file:
       - .env
     ports:
@@ -12,16 +12,28 @@ services:
       - ./web:/app/web
       - ./games:/games
       - retrobite-data:/data
+    restart: always
 
-  vite:
-    image: node:22-alpine
-    container_name: retrobite-vite
-    working_dir: /app/web
-    ports:
-      - "5173:5173"
+  retrobite-share:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: share
+    env_file:
+      - .env
+    # network_mode: host
     volumes:
-      - ./web:/app/web
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+      - ./games:/storage/games
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    ports:
+      - "139:139"     # SMB
+      - "446:445"     # SMB
+      - "20:20"       # FTP data
+      - "21:21"       # FTP control
+      - "21100-21110:21100-21110"  # FTP passive
+    restart: always
 
 volumes:
   retrobite-data:

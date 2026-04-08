@@ -14,6 +14,9 @@ addgroup www-data users 2>/dev/null || true
 # Ensure storage subdirs exist
 mkdir -p /app/web/storage/games /app/web/storage/tmp /app/web/database
 
+# Remove any stale production build so Vite.php falls back to the dev server
+rm -rf /app/web/public/build
+
 # Install PHP deps (volume-mounted, so not baked into image)
 composer install --no-interaction --working-dir=/app/web
 
