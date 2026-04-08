@@ -38,7 +38,7 @@ class GameRepository
     /**
      * Insert a game record or update
      */
-    public function upsert(string $console, string $fileName, string $filePath, int $fileSize): void
+    public function upsert(string $console, string $fileName, string $filePath, int $fileSize, ?string $fileMd5 = null): void
     {
         $now = time();
 
@@ -49,11 +49,12 @@ class GameRepository
                 'file_name'     => $fileName,
                 'file_path'     => $filePath,
                 'file_size'     => $fileSize,
+                'file_md5'      => $fileMd5,
                 'first_seen_at' => $now,
                 'last_seen_at'  => $now,
             ]],
             uniqueBy: ['id'],
-            update: ['file_size', 'last_seen_at'],
+            update: ['file_size', 'file_md5', 'last_seen_at'],
         );
     }
 }

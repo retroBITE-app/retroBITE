@@ -15,6 +15,7 @@ const props = defineProps<{
   game: {
     file_name: string
     file_size?: number
+    file_md5?: string | null
     title?: string
     cover_url?: string
     logo_url?: string
@@ -148,6 +149,9 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
               <span
                 class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">{{
                   game.release_date }}</span>
+              <span class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">
+                {{ game.file_md5 ?? '—' }}
+              </span>
             </div>
 
             <div class="flex">

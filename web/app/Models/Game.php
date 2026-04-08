@@ -21,6 +21,7 @@ class Game extends Model
         'file_name',
         'file_path',
         'file_size',
+        'file_md5',
         'title',
         'region',
         'cover_url',

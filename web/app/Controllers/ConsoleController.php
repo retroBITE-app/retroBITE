@@ -120,7 +120,8 @@ class ConsoleController
         }
 
         foreach ($this->filesystem->scanConsoleDir($console) as $file) {
-            $this->games->upsert($console, $file->getFilename(), $file->getPathname(), $file->getSize());
+            $md5 = md5_file($file->getPathname()) ?: null;
+            $this->games->upsert($console, $file->getFilename(), $file->getPathname(), $file->getSize(), $md5);
         }
 
         return Inertia::redirect($response, '/consoles/' . $console);
@@ -193,7 +194,8 @@ class ConsoleController
         // Final chunk — reassemble and register in DB
         $destPath = $this->filesystem->resolvePath($console, $filename, $subfolder);
         $this->filesystem->assembleFile($uploadId, $totalChunks, $destPath);
-        $this->games->upsert($console, $filename, $destPath, $fileSize);
+        $md5 = md5_file($destPath) ?: null;
+        $this->games->upsert($console, $filename, $destPath, $fileSize, $md5);
 
         $response->getBody()->write(json_encode(['status' => 'complete']));
         return $response->withHeader('Content-Type', 'application/json');
