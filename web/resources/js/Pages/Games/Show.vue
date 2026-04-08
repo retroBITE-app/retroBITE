@@ -17,24 +17,24 @@ const props = defineProps<{
     file_size?: number
     file_md5?: string | null
     title?: string
+    description?: string
     cover_url?: string
     logo_url?: string
     release_date?: string
     first_seen_at?: number
     last_seen_at?: number
+    region?: string | null
+    regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null
   },
-  region?: string | null
-  regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null
 }>()
 
 /**
  * hardcode for designing
  */
-props.game.cover_url = '/images/tmp_game/cover.jpg'
-props.game.logo_url = '/images/tmp_game/logo.png'
-props.game.release_date = '2002-08-26'
+// props.game.cover_url = '/images/tmp_game/cover.jpg'
+// props.game.logo_url = '/images/tmp_game/logo.png'
+// props.game.release_date = '2002-08-26'
 
-console.log(props.regionMeta);
 
 function formatDate(ts?: number): string {
   if (!ts) return '—'
@@ -114,11 +114,11 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 
           <!-- Cover art -->
           <div class="shrink-0 w-64 aspect-5/7">
-            <img v-if="game.cover_url" :src="game.cover_url" :alt="game.title ?? game.file_name"
+            <img v-if="game.cover_url" :src="game.cover_url" :alt="game.title"
               class="w-full h-full object-cover rounded-md border border-zinc-600" />
             <div v-else
               class="w-full h-full rounded-md border border-zinc-600 bg-zinc-900 flex items-center justify-center">
-              <img :src="meta.file_icon" :alt="meta.name" class="w-16 h-16 object-contain opacity-30" />
+              <img :src="meta.file_icon" :alt="meta.name" class="w-34 h-34 object-contain opacity-30" />
             </div>
           </div>
 
@@ -126,17 +126,16 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
           <div class="flex flex-col justify-start py-4 gap-3">
 
             <div class="flex items-center gap-3">
-              <img :src="game.logo_url" :alt="game.title ?? game.file_name" class="w-30" />
-              <div v-if="game.title">
+              <img v-if="game.logo_url" :src="game.logo_url" :alt="game.titlee" class="w-30" />
+              <div>
                 <p class="text-zinc-100 text-xl font-semibold">{{ game.title }}</p>
                 <p class="text-zinc-500 text-sm mt-0.5 font-mono">{{ game.file_name }}</p>
               </div>
-              <p v-else class="text-zinc-100 text-2xl font-semibold font-mono">{{ game.file_name }}</p>
             </div>
 
             <!-- badges -->
             <div class="flex gap-2">
-              <img :src="regionMeta?.icon" :alt="regionMeta?.name" class="w-8 border-2 border-zinc-700" />
+              <img :src="props.game.regionMeta?.icon" :alt="props.game.regionMeta?.name" class="w-8 border-2 border-zinc-700" />
               <span
                 class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">{{
                 meta.name }}</span>
@@ -146,7 +145,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
               <span
                 class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">{{
                 ext }}</span>
-              <span
+              <span v-if="game.release_date"
                 class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">{{
                   game.release_date }}</span>
               <span class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">
@@ -154,15 +153,12 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
               </span>
             </div>
 
-            <div class="flex">
-              The game takes place on the tropical Isle Delfino, where Mario, Toadsworth, Princess Peach, and five Toads
-              are
-              taking a vacation. A villain resembling Mario, known as Shadow Mario, vandalizes the island with graffiti
-              and
-              causes Mario to be wrongfully convicted for the mess. Mario is ordered to clean up Isle Delfino, using a
-              device
-              called the Flash Liquidizer Ultra Dousing Device (F.L.U.D.D.), while saving Princess Peach from Shadow
-              Mario.
+            <div class="flex" v-if="game.description">
+              {{ game.description }}
+            </div>
+
+            <div class="flex" v-else>
+              This file is currently shy. Please identify file to get metadata - Powered by Retrobite
             </div>
 
           </div>

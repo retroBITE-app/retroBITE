@@ -9,7 +9,7 @@ import CreateDirectory from '@/Components/CreateDirectory.vue'
 const props = defineProps<{
   console: string
   meta: { name: string; icon: string; file_icon: string; folder: string }
-  games: Array<{ file_name: string; title?: string; file_size?: number; region?: string }>
+  games: Array<{ file_name: string; title?: string; file_size?: number; region?: string, file_md5?: string }>
   extensions: { files: string[]; bios: string[] }
   type: string
   uploadDirs: Array<{ value: string; label: string }>
@@ -103,7 +103,10 @@ function scan() {
           :href="`/consoles/${props.console}/${encodeURIComponent(game.file_name)}`"
           class="flex items-center justify-between px-5 py-3"
         >
-          <span class="text-zinc-200 text-sm truncate">{{ game.title ?? game.file_name }}</span>
+          <div class="flex gap-4">
+            <span class="text-zinc-200 text-sm truncate">{{ game.title }}</span>
+            <span class="text-zinc-200 text-sm truncate bg-zinc-500">{{ game.file_md5 ?? '—' }}</span>
+          </div>
           <div class="flex items-center gap-4 shrink-0 ml-4">
             <span v-if="game.region" class="text-xs font-mono text-zinc-500 uppercase">{{ game.region }}</span>
             <span class="text-xs text-zinc-600 group-hover:text-white transition-colors">{{ formatSize(game.file_size) }}</span>

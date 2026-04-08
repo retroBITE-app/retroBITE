@@ -10,16 +10,19 @@ use Illuminate\Support\Arr;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Services\FilesystemService;
+use App\Services\GameDataService;
 
 class GameController
 {
     private static array $KNOWN_CONSOLES = [];
     private FilesystemService $filesystemService;
+    private GameDataService $gameDataService;
 
-    public function __construct(FilesystemService $filesystemService)
+    public function __construct(FilesystemService $filesystemService, GameDataService $gameDataService)
     {
         self::$KNOWN_CONSOLES = array_keys(config('consoles'));
         $this->filesystemService = $filesystemService;
+        $this->gameDataService = $gameDataService;
     }
 
     public function show(Request $request, Response $response, array $args): Response
@@ -37,15 +40,10 @@ class GameController
             return $response->withStatus(404);
         }
 
-        $region = $this->filesystemService->resolveRegion($fileName) ?? 'unknown';
-        $regionMeta = config("regions.{$region}");
-
         return Inertia::render($response, 'Games/Show', [
-            'console'    => $console,
-            'meta'       => config("consoles.{$console}"),
-            'game'       => $game,
-            'region'     => $region,
-            'regionMeta' => $regionMeta,
+            'console' => $console,
+            'meta'    => config("consoles.{$console}"),
+            'game'    => $this->gameDataService->enrichGame($game),
         ]);
     }
 }

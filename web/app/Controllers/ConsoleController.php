@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Inertia\Inertia;
 use App\Repositories\GameRepository;
 use App\Services\FilesystemService;
+use App\Services\GameDataService;
 use App\Models\Game;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -20,6 +21,7 @@ class ConsoleController
     public function __construct(
         private GameRepository $games,
         private FilesystemService $filesystem,
+        private GameDataService $gameDataService,
     ) {
         self::$KNOWN_CONSOLES = array_keys(config('consoles'));
     }
@@ -101,7 +103,7 @@ class ConsoleController
         return Inertia::render($response, 'Consoles/Show', [
             'console'    => $console,
             'meta'       => config("consoles.{$console}"),
-            'games'      => $games,
+            'games'      => $this->gameDataService->enrichGames($games),
             'extensions' => $extensions,
             'type'       => $type,
             'uploadDirs' => $uploadDirs,
