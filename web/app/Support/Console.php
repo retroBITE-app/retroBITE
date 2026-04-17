@@ -29,6 +29,8 @@ final class Console
     /** @var string[] */
     public readonly array $excludeFiles;
 
+    public readonly ?int $screenscraperId;
+
     public function __construct(string $key)
     {
         $meta = config("consoles.{$key}");
@@ -37,16 +39,19 @@ final class Console
             throw new InvalidArgumentException("Unknown console: {$key}");
         }
 
-        $this->key            = $key;
-        $this->name           = (string) Arr::get($meta, 'name', '');
-        $this->brand          = (string) Arr::get($meta, 'brand', '');
-        $this->icon           = (string) Arr::get($meta, 'icon', '');
-        $this->fileIcon       = (string) Arr::get($meta, 'file_icon', '');
-        $this->folder         = (string) Arr::get($meta, 'folder', '');
-        $this->fileExtensions = (array)  Arr::get($meta, 'file_extensions', []);
-        $this->biosExtensions = (array)  Arr::get($meta, 'bios_extensions', []);
-        $this->subfolders     = (array)  Arr::get($meta, 'subfolders', []);
-        $this->excludeFiles   = (array)  Arr::get($meta, 'exclude_files', []);
+        $ssId = Arr::get($meta, 'screenscraper_id');
+
+        $this->key             = $key;
+        $this->name            = (string) Arr::get($meta, 'name', '');
+        $this->brand           = (string) Arr::get($meta, 'brand', '');
+        $this->icon            = (string) Arr::get($meta, 'icon', '');
+        $this->fileIcon        = (string) Arr::get($meta, 'file_icon', '');
+        $this->folder          = (string) Arr::get($meta, 'folder', '');
+        $this->fileExtensions  = (array)  Arr::get($meta, 'file_extensions', []);
+        $this->biosExtensions  = (array)  Arr::get($meta, 'bios_extensions', []);
+        $this->subfolders      = (array)  Arr::get($meta, 'subfolders', []);
+        $this->excludeFiles    = (array)  Arr::get($meta, 'exclude_files', []);
+        $this->screenscraperId = $ssId !== null ? (int) $ssId : null;
     }
 
     /**

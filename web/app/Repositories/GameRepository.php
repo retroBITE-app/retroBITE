@@ -12,7 +12,8 @@ class GameRepository
 {
     public function allForConsole(string $console, array $extensions = [], ?string $type = null): EloquentCollection
     {
-        $query = Game::where('console', $console)
+        $query = Game::with('metadata')
+            ->where('console', $console)
             ->havingExtensions($extensions);
 
         return match ($type) {
@@ -24,7 +25,7 @@ class GameRepository
 
     public function find(string $id): ?Game
     {
-        return Game::find($id);
+        return Game::with('metadata')->find($id);
     }
 
     /**

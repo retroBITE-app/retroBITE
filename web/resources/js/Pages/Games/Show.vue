@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import { formatSize } from '@/Helpers/format'
 import PageHeader from '@/Components/PageHeader.vue'
+import IdentifyModal from '@/Components/IdentifyModal.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
 defineOptions({
@@ -13,28 +14,26 @@ const props = defineProps<{
   console: string
   meta: { name: string; icon: string; file_icon: string }
   game: {
-    file_name: string
-    file_size?: number
-    file_md5?: string | null
-    title?: string
-    description?: string
-    cover_url?: string
-    logo_url?: string
-    release_date?: string
+    file_name:      string
+    file_size?:     number
+    file_md5?:      string | null
+    title?:         string
+    description?:   string
+    cover_url?:     string | null
+    logo_url?:      string | null
+    backdrop_url?:  string | null
+    release_date?:  string | null
+    genre?:         string | null
+    players?:       string | null
+    publisher?:     string | null
+    developer?:     string | null
     first_seen_at?: number
-    last_seen_at?: number
-    region?: string | null
-    regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null
+    last_seen_at?:  number
+    identified_at?: number | null
+    region?:        string | null
+    regionMeta?:    { name: string; flag: string; codes: string[]; icon: string } | null
   },
 }>()
-
-/**
- * hardcode for designing
- */
-// props.game.cover_url = '/images/tmp_game/cover.jpg'
-// props.game.logo_url = '/images/tmp_game/logo.png'
-// props.game.release_date = '2002-08-26'
-
 
 function formatDate(ts?: number): string {
   if (!ts) return '—'
@@ -46,6 +45,12 @@ function formatDate(ts?: number): string {
 const ext = props.game.file_name.split('.').pop()?.toUpperCase() ?? '—'
 const actionsOpen = ref(false)
 const actionsRef = ref<HTMLElement | null>(null)
+const identifyOpen = ref(false)
+
+function openIdentify() {
+  actionsOpen.value = false
+  identifyOpen.value = true
+}
 
 function onClickOutside(e: MouseEvent) {
   if (actionsRef.value && !actionsRef.value.contains(e.target as Node)) {
@@ -63,9 +68,11 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
     <div class="relative top-0 left-0 flex flex-col pb-10">
 
       <!-- Backdrop -->
-      <div class="absolute inset-0 bg-cover bg-center min-h-125"
-        style="background-image: url('/images/tmp_game/backdrop.jpg')">
-        <div class="absolute inset-0 bg-black/60" />
+      <div
+        class="absolute inset-0 bg-cover bg-center min-h-125 bg-zinc-950"
+        :style="game.backdrop_url ? { backgroundImage: `url(${game.backdrop_url})` } : {}"
+      >
+        <div v-if="game.backdrop_url" class="absolute inset-0 bg-black/60" />
         <div class="absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-zinc-950 to-transparent" />
       </div>
 
@@ -93,17 +100,20 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
                   <span class="text-xs">▾</span>
                 </button>
                 <div v-show="actionsOpen" class="absolute right-0 mt-1 w-44 rounded border border-zinc-700 bg-zinc-800 shadow-lg z-50">
-                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
+                  <!-- <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Download
                   </button>
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Share
-                  </button>
+                  </button> -->
                   <div class="border-t border-zinc-700 my-0.5" />
-                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
+                  <button
+                    @click="openIdentify"
+                    class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors"
+                  >
                     Identify
                   </button>
-                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
+                  <!-- <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Edit Meta
                   </button>
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
@@ -112,7 +122,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
                   <div class="border-t border-zinc-700 my-0.5" />
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors">
                     Delete
-                  </button>
+                  </button> -->
                 </div>
               </div>
             </div>
@@ -136,7 +146,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
           <div class="flex flex-col justify-start py-4 gap-3">
 
             <div class="flex items-center gap-3">
-              <img v-if="game.logo_url" :src="game.logo_url" :alt="game.titlee" class="w-30" />
+              <img v-if="game.logo_url" :src="game.logo_url" :alt="game.title" class="w-30" />
               <div>
                 <p class="text-zinc-100 text-xl font-semibold">{{ game.title }}</p>
                 <p class="text-zinc-500 text-sm mt-0.5 font-mono">{{ game.file_name }}</p>
@@ -163,6 +173,29 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
               </span>
             </div>
 
+            <!-- Detail strip -->
+            <dl
+              v-if="game.developer || game.publisher || game.genre || game.players"
+              class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm max-w-xl"
+            >
+              <template v-if="game.developer">
+                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Developer</dt>
+                <dd class="text-zinc-200">{{ game.developer }}</dd>
+              </template>
+              <template v-if="game.publisher">
+                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Publisher</dt>
+                <dd class="text-zinc-200">{{ game.publisher }}</dd>
+              </template>
+              <template v-if="game.genre">
+                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Genre</dt>
+                <dd class="text-zinc-200">{{ game.genre }}</dd>
+              </template>
+              <template v-if="game.players">
+                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Players</dt>
+                <dd class="text-zinc-200">{{ game.players }}</dd>
+              </template>
+            </dl>
+
             <div class="flex" v-if="game.description">
               {{ game.description }}
             </div>
@@ -180,6 +213,13 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
     <div class="text-white relative z-10 p-8">
       new section here
     </div>
+
+    <IdentifyModal
+      :open="identifyOpen"
+      :console="props.console"
+      :game-file-name="game.file_name"
+      @close="identifyOpen = false"
+    />
 
   </div>
 </template>

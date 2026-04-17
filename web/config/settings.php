@@ -16,6 +16,14 @@ return [
         'host_ip'  => Arr::get($_ENV, 'HOST_IP', '127.0.0.1'),
         'username' => Arr::get($_ENV, 'AUTH_USER', 'retrobite'),
     ],
+    'screenscraper'   => [
+        'dev_id'       => Arr::get($_ENV, 'SCREENSCRAPER_DEV_ID', ''),
+        'dev_password' => Arr::get($_ENV, 'SCREENSCRAPER_DEV_PASSWORD', ''),
+        'user'         => Arr::get($_ENV, 'SCREENSCRAPER_USER', ''),
+        'password'     => Arr::get($_ENV, 'SCREENSCRAPER_PASSWORD', ''),
+        'softname'     => Arr::get($_ENV, 'SCREENSCRAPER_SOFTNAME', 'retroBITE'),
+        'endpoint'     => Arr::get($_ENV, 'SCREENSCRAPER_ENDPOINT', 'https://api.screenscraper.fr/api2'),
+    ],
 
     // Root paths
     'root_path'       => $base,
@@ -29,6 +37,12 @@ return [
     'build_path'      => $public    . '/build',
     'image_path'      => $public    . '/images',
     'tmp_path'        => $storage   . '/tmp',
+
+    // Locally cached provider images (served by nginx from public/)
+    'storage'         => [
+        'metadata_path' => $public . '/storage/metadata',
+        'metadata_url'  => '/storage/metadata',
+    ],
     'games_path'      => Arr::get($_ENV, 'GAMES_PATH', $storage . '/games'),
     'migrations_path' => $database  . '/migrations',
     'db_path'         => Arr::get($_ENV, 'DB_PATH', $database . '/retrobite.db'),

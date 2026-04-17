@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class Game extends Model
@@ -34,6 +35,11 @@ class Game extends Model
     public function isBios(): bool
     {
         return Str::contains((string) $this->file_path, '/BIOS/');
+    }
+
+    public function metadata(): HasOne
+    {
+        return $this->hasOne(GameMetadata::class, 'md5', 'file_md5');
     }
 
     public function scopeGames(Builder $query): Builder

@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS games (
     file_size    INTEGER,
     title        TEXT,
     region       TEXT,
-    cover_url    TEXT,
     first_seen_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     last_seen_at  INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
