@@ -94,6 +94,16 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
                 </button>
                 <div v-show="actionsOpen" class="absolute right-0 mt-1 w-44 rounded border border-zinc-700 bg-zinc-800 shadow-lg z-50">
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
+                    Download
+                  </button>
+                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
+                    Share
+                  </button>
+                  <div class="border-t border-zinc-700 my-0.5" />
+                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
+                    Identify
+                  </button>
+                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Edit Meta
                   </button>
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
