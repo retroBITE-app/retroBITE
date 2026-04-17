@@ -8,60 +8,37 @@ use App\Inertia\Inertia;
 use App\Repositories\GameRepository;
 use App\Services\FilesystemService;
 use App\Services\GameDataService;
-use App\Models\Game;
+use App\Support\Console;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Collection;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 class ConsoleController
 {
-    private static array $KNOWN_CONSOLES = [];
-
     public function __construct(
         private GameRepository $games,
         private FilesystemService $filesystem,
         private GameDataService $gameDataService,
-    ) {
-        self::$KNOWN_CONSOLES = array_keys(config('consoles'));
-    }
+    ) {}
 
     /**
-     * List all consoles with games
+     * List all installed consoles + available (uninstalled) ones for setup.
      */
     public function index(Request $request, Response $response): Response
     {
-        $counts = Game::selectRaw("
-                console,
-                SUM(CASE WHEN file_path NOT LIKE '%/BIOS/%' THEN 1 ELSE 0 END) as game_count,
-                SUM(CASE WHEN file_path LIKE '%/BIOS/%' THEN 1 ELSE 0 END) as bios_count
-            ")
-            ->groupBy('console')
-            ->get()
-            ->keyBy('console');
+        $counts = $this->games->consoleCounts();
 
-        $gamesPath   = config('settings.games_path');
-        $allConsoles = Collection::make(config('consoles'));
+        $consoles = Console::allInstalled()
+            ->map(fn(Console $c) => $c->toCardArray($counts->get($c->key)))
+            ->all();
 
-        $consoles = $allConsoles
-            ->filter(fn(array $meta) => is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
-            ->map(fn(array $meta, string $key) => [
-                'key'       => $key,
-                'name'      => Arr::get($meta, 'name'),
-                'icon'      => Arr::get($meta, 'icon'),
-                'gameCount' => (int) ($counts->get($key)?->game_count ?? 0),
-                'biosCount' => (int) ($counts->get($key)?->bios_count ?? 0),
+        $available = Console::allAvailable()
+            ->map(fn(Console $c) => [
+                'key'        => $c->key,
+                'name'       => $c->name,
+                'uploadDirs' => [['value' => '', 'label' => $c->folder . '/']],
             ])
-            ->values();
-
-        $available = $allConsoles
-            ->filter(fn(array $meta) => !is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
-            ->map(fn(array $meta, string $key) => [
-                'key'        => $key,
-                'name'       => Arr::get($meta, 'name'),
-                'uploadDirs' => [['value' => '', 'label' => Arr::get($meta, 'folder') . '/']],
-            ])
-            ->values();
+            ->all();
 
         return Inertia::render($response, 'Consoles/Index', [
             'consoles'  => $consoles,
@@ -70,74 +47,65 @@ class ConsoleController
     }
 
     /**
-     * Show games for a console
+     * Show games for a console.
      */
     public function show(Request $request, Response $response, array $args): Response
     {
-        $console = Arr::get($args, 'console');
+        $console = Console::tryFrom(Arr::get($args, 'console'));
 
-        if (!in_array($console, self::$KNOWN_CONSOLES, true)) {
+        if (!$console) {
             return $response->withStatus(404);
         }
 
         $extensions = [
-            'files' => config("consoles.{$console}.file_extensions", []),
-            'bios'  => config("consoles.{$console}.bios_extensions", []),
+            'files' => $console->fileExtensions,
+            'bios'  => $console->biosExtensions,
         ];
 
         $type       = Arr::get($request->getQueryParams(), 'type', 'files');
         $filterExts = $type === 'all' ? [] : Arr::get($extensions, $type, []);
         $gameType   = $type === 'all' ? null : $type;
 
-        $games = $this->games->allForConsole($console, $filterExts, $gameType);
-
-        $folder     = config("consoles.{$console}.folder");
-        $gamesPath  = config('settings.games_path');
-        $subfolders = config("consoles.{$console}.subfolders", []);
-        $uploadDirs = Collection::make($subfolders)
-            ->map(fn(string $sub) => ['value' => $sub, 'label' => $folder . '/' . $sub . '/'])
-            ->prepend(['value' => '', 'label' => $folder . '/'])
-            ->filter(fn(array $dir) => is_dir($gamesPath . '/' . $folder . ($dir['value'] !== '' ? '/' . $dir['value'] : '')))
-            ->values();
+        $games = $this->games->allForConsole($console->key, $filterExts, $gameType);
 
         return Inertia::render($response, 'Consoles/Show', [
-            'console'    => $console,
-            'meta'       => config("consoles.{$console}"),
+            'console'    => $console->key,
+            'meta'       => config("consoles.{$console->key}"),
             'games'      => $this->gameDataService->enrichGames($games),
             'extensions' => $extensions,
             'type'       => $type,
-            'uploadDirs' => $uploadDirs,
+            'uploadDirs' => $console->uploadDirs(),
         ]);
     }
 
     /**
-     * Scan the filesystem for games and update DB metadata
+     * Scan the filesystem for games and update DB metadata.
      */
     public function scan(Request $request, Response $response, array $args): Response
     {
-        $console = Arr::get($args, 'console');
+        $console = Console::tryFrom(Arr::get($args, 'console'));
 
-        if (!in_array($console, self::$KNOWN_CONSOLES, true)) {
+        if (!$console) {
             return $response->withStatus(404);
         }
 
         foreach ($this->filesystem->scanConsoleDir($console) as $file) {
             $md5 = md5_file($file->getPathname()) ?: null;
-            $this->games->upsert($console, $file->getFilename(), $file->getPathname(), $file->getSize(), $md5);
+            $this->games->upsert($console->key, $file->getFilename(), $file->getPathname(), $file->getSize(), $md5);
         }
 
-        return Inertia::redirect($response, '/consoles/' . $console);
+        return Inertia::redirect($response, '/consoles/' . $console->key);
     }
 
     /**
-     * Receive a single chunk of a file upload
+     * Receive a single chunk of a file upload.
      */
     public function uploadChunk(Request $request, Response $response, array $args): Response
     {
         $this->filesystem->purgeAbandonedUploads();
 
-        $console = Arr::get($args, 'console');
-        if (!in_array($console, self::$KNOWN_CONSOLES, true)) {
+        $console = Console::tryFrom(Arr::get($args, 'console'));
+        if (!$console) {
             return $this->jsonError($response, 'Unknown console', 404);
         }
 
@@ -160,12 +128,9 @@ class ConsoleController
         if ($filename === '' || $filename === '.') {
             return $this->jsonError($response, 'Invalid filename', 422);
         }
-        $ext     = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        $allowed = array_merge(
-            config("consoles.{$console}.file_extensions", []),
-            config("consoles.{$console}.bios_extensions", [])
-        );
-        if (!in_array($ext, $allowed, true)) {
+
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (!$console->hasExtension($ext)) {
             return $this->jsonError($response, 'File type not allowed for this console', 422);
         }
 
@@ -197,20 +162,20 @@ class ConsoleController
         $destPath = $this->filesystem->resolvePath($console, $filename, $subfolder);
         $this->filesystem->assembleFile($uploadId, $totalChunks, $destPath);
         $md5 = md5_file($destPath) ?: null;
-        $this->games->upsert($console, $filename, $destPath, $fileSize, $md5);
+        $this->games->upsert($console->key, $filename, $destPath, $fileSize, $md5);
 
         $response->getBody()->write(json_encode(['status' => 'complete']));
         return $response->withHeader('Content-Type', 'application/json');
     }
 
     /**
-     * Create one or more directories for a console on disk
+     * Create one or more directories for a console on disk.
      */
     public function mkdir(Request $request, Response $response, array $args): Response
     {
-        $console = Arr::get($args, 'console');
+        $console = Console::tryFrom(Arr::get($args, 'console'));
 
-        if (!in_array($console, self::$KNOWN_CONSOLES, true)) {
+        if (!$console) {
             return $this->jsonError($response, 'Unknown console', 404);
         }
 

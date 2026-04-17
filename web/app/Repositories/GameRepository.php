@@ -5,29 +5,21 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Models\Game;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Collection;
 
 class GameRepository
 {
-    public function allForConsole(string $console, array $extensions = [], ?string $type = null): Collection
+    public function allForConsole(string $console, array $extensions = [], ?string $type = null): EloquentCollection
     {
-        $query = Game::where('console', $console);
+        $query = Game::where('console', $console)
+            ->havingExtensions($extensions);
 
-        if (!empty($extensions)) {
-            $query->where(function ($q) use ($extensions) {
-                foreach ($extensions as $ext) {
-                    $q->orWhere('file_name', 'LIKE', "%.{$ext}");
-                }
-            });
-        }
-
-        if ($type === 'files') {
-            $query->where('file_path', 'NOT LIKE', '%/BIOS/%');
-        } elseif ($type === 'bios') {
-            $query->where('file_path', 'LIKE', '%/BIOS/%');
-        }
-
-        return $query->get();
+        return match ($type) {
+            'files' => $query->games()->get(),
+            'bios'  => $query->bios()->get(),
+            default => $query->get(),
+        };
     }
 
     public function find(string $id): ?Game
@@ -36,7 +28,23 @@ class GameRepository
     }
 
     /**
-     * Insert a game record or update
+     * Game + BIOS counts per console, keyed by console slug.
+     *
+     * @return Collection<string, array{game_count: int, bios_count: int}>
+     */
+    public function consoleCounts(): Collection
+    {
+        return Game::select(['console', 'file_path'])
+            ->get()
+            ->groupBy('console')
+            ->map(fn(EloquentCollection $games) => [
+                'game_count' => $games->reject(fn(Game $g) => $g->isBios())->count(),
+                'bios_count' => $games->filter(fn(Game $g) => $g->isBios())->count(),
+            ]);
+    }
+
+    /**
+     * Insert or update a game record.
      */
     public function upsert(string $console, string $fileName, string $filePath, int $fileSize, ?string $fileMd5 = null): void
     {

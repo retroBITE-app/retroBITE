@@ -4,25 +4,20 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Console;
+use Illuminate\Support\Collection;
 use Psr\Http\Message\UploadedFileInterface;
 
 class FilesystemService
 {
     /**
-     * Recursively scan a console's game directory and yield each valid SplFileInfo
+     * Recursively scan a console's game directory and yield each valid SplFileInfo.
+     *
+     * @return iterable<\SplFileInfo>
      */
-    public function scanConsoleDir(string $console): iterable
+    public function scanConsoleDir(Console $console): iterable
     {
-        $dir          = config('settings.games_path') . '/' . config("consoles.{$console}.folder");
-        $extensions   = array_merge(
-            config("consoles.{$console}.file_extensions", []),
-            config("consoles.{$console}.bios_extensions", [])
-        );
-        $excludeFiles = config("consoles.{$console}.exclude_files", []);
-
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+        $dir = $this->ensureDir($console->path());
 
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS)
@@ -32,10 +27,10 @@ class FilesystemService
             if (!$file->isFile()) {
                 continue;
             }
-            if (in_array($file->getFilename(), $excludeFiles, true)) {
+            if (in_array($file->getFilename(), $console->excludeFiles, true)) {
                 continue;
             }
-            if (!in_array(strtolower($file->getExtension()), $extensions, true)) {
+            if (!$console->hasExtension($file->getExtension())) {
                 continue;
             }
 
@@ -48,11 +43,7 @@ class FilesystemService
      */
     public function writeChunk(string $uploadId, int $chunkIndex, UploadedFileInterface $chunk): void
     {
-        $tmpDir = config('settings.tmp_path') . '/' . $uploadId;
-
-        if (!is_dir($tmpDir)) {
-            mkdir($tmpDir, 0755, true);
-        }
+        $tmpDir = $this->ensureDir(config('settings.tmp_path') . '/' . $uploadId);
 
         $chunk->moveTo($tmpDir . '/' . $chunkIndex . '.part');
     }
@@ -60,32 +51,17 @@ class FilesystemService
     /**
      * Resolve the final destination path for a file, creating the directory if needed.
      */
-    public function resolvePath(string $console, string $filename, string $subfolder): string
+    public function resolvePath(Console $console, string $filename, string $subfolder): string
     {
-        $gamesPath = config('settings.games_path');
-        $folder    = config("consoles.{$console}.folder");
-
-        $dir = $gamesPath . '/' . $folder . ($subfolder !== '' ? '/' . $subfolder : '');
-
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        return $dir . '/' . $filename;
+        return $this->ensureDir($console->path($subfolder)) . '/' . $filename;
     }
 
     /**
      * Create a console directory (and optional subfolder) on disk.
      */
-    public function createDir(string $console, string $subfolder): void
+    public function createDir(Console $console, string $subfolder): void
     {
-        $gamesPath = config('settings.games_path');
-        $folder    = config("consoles.{$console}.folder");
-        $dir       = $gamesPath . '/' . $folder . ($subfolder !== '' ? '/' . $subfolder : '');
-
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+        $this->ensureDir($console->path($subfolder));
     }
 
     /**
@@ -110,7 +86,7 @@ class FilesystemService
     }
 
     /**
-     * Extract region codes from a filename
+     * Extract region codes from a filename.
      */
     public function resolveRegion(string $filename): ?string
     {
@@ -118,8 +94,8 @@ class FilesystemService
 
         $codes = $matches[1] ?? [];
 
-        return collect(config('regions'))
-            ->filter(fn($region) => collect($codes)->intersect($region['codes'])->isNotEmpty())
+        return Collection::make(config('regions'))
+            ->filter(fn($region) => Collection::make($codes)->intersect($region['codes'])->isNotEmpty())
             ->keys()
             ->first();
     }
@@ -149,5 +125,14 @@ class FilesystemService
                 @rmdir($entry->getPathname());
             }
         }
+    }
+
+    private function ensureDir(string $dir): string
+    {
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        return $dir;
     }
 }

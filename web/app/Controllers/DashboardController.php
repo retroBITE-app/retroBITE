@@ -5,49 +5,32 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Inertia\Inertia;
-use App\Models\Game;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Collection;
+use App\Repositories\GameRepository;
+use App\Support\Console;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 class DashboardController
 {
-    public function index(Request $request, Response $response): Response
+    public function __construct(
+        private GameRepository $games,
+    ) {}
+
+    public function index(Request $_request, Response $response): Response
     {
-        $counts = Game::selectRaw("
-                console,
-                SUM(CASE WHEN file_path NOT LIKE '%/BIOS/%' THEN 1 ELSE 0 END) as game_count,
-                SUM(CASE WHEN file_path LIKE '%/BIOS/%' THEN 1 ELSE 0 END) as bios_count
-            ")
-            ->groupBy('console')
-            ->get()
-            ->keyBy('console');
+        $counts = $this->games->consoleCounts();
 
-        $gamesPath = config('settings.games_path');
+        $installed = Console::allInstalled();
 
-        $consoles = Collection::make(config('consoles'))
-            ->filter(fn(array $meta) => is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
-            ->map(fn(array $meta, string $key) => [
-                'key'       => $key,
-                'name'      => $meta['name'],
-                'icon'      => $meta['icon'],
-                'gameCount' => (int) ($counts->get($key)?->game_count ?? 0),
-                'biosCount' => (int) ($counts->get($key)?->bios_count ?? 0),
-            ])
+        $consoles = $installed
+            ->map(fn(Console $c) => $c->toCardArray($counts->get($c->key)))
             ->sortByDesc('gameCount')
             ->take(6)
-            ->values();
-
-        $shares = Collection::make(config('consoles'))
-            ->filter(fn(array $meta) => is_dir($gamesPath . '/' . Arr::get($meta, 'folder')))
-            ->map(fn(array $meta, string $key) => [
-                'key'    => $key,
-                'name'   => $meta['name'],
-                'folder' => $meta['folder'],
-                'icon'   => $meta['icon'],
-            ])
             ->values()
+            ->all();
+
+        $shares = $installed
+            ->map(fn(Console $c) => $c->toShareArray())
             ->prepend(['key' => '__root__', 'name' => 'All Games', 'folder' => 'games', 'icon' => null])
             ->all();
 
