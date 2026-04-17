@@ -140,6 +140,34 @@ class GameController
     }
 
     /**
+     * Permanently delete a game: unlinks the file on disk and removes the
+     * game + any associated metadata row. Not reversible.
+     */
+    public function destroy(Request $_request, Response $response, array $args): Response
+    {
+        $console = Console::tryFrom(Arr::get($args, 'console'));
+        if (!$console) {
+            return $this->jsonError($response, 'Unknown console', 404);
+        }
+
+        $game = $this->games->find($console->key . ':' . Arr::get($args, 'game'));
+        if (!$game) {
+            return $this->jsonError($response, 'Unknown game', 404);
+        }
+
+        try {
+            if (is_file($game->file_path)) {
+                unlink($game->file_path);
+            }
+            $game->delete();
+        } catch (Throwable $e) {
+            return $this->jsonError($response, 'Delete failed: ' . $e->getMessage(), 500);
+        }
+
+        return $this->json($response, ['status' => 'ok']);
+    }
+
+    /**
      * Derive a searchable name from a ROM filename by stripping the extension,
      * bracketed tag groups ("(Europe)", "[!]"), a leading product-code prefix
      * ("SLUS-20576.", "SLES_527.25.", "SCUS-97112 - "), and trailing disc hints.

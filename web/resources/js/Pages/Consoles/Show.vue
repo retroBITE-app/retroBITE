@@ -9,7 +9,7 @@ import CreateDirectory from '@/Components/CreateDirectory.vue'
 const props = defineProps<{
   console: string
   meta: { name: string; icon: string; file_icon: string; folder: string }
-  games: Array<{ file_name: string; title?: string; file_size?: number; region?: string, file_md5?: string }>
+  games: Array<{ file_name: string; title?: string; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
   extensions: { files: string[]; bios: string[] }
   type: string
   uploadDirs: Array<{ value: string; label: string }>
@@ -92,24 +92,43 @@ function scan() {
       <p class="text-zinc-500 text-sm">No files found. Try scanning the directory.</p>
     </div>
 
-    <!-- Game list -->
-    <ul v-else class="space-y-2">
+    <!-- Game grid -->
+    <ul v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
       <li
         v-for="game in games"
         :key="game.file_name"
-        class="group rounded-lg bg-zinc-800 border border-zinc-700 hover:border-emerald-500/50 hover:bg-zinc-800/80 transition-colors"
+        class="group"
       >
         <Link
           :href="`/consoles/${props.console}/${encodeURIComponent(game.file_name)}`"
-          class="flex items-center justify-between px-5 py-3"
+          class="flex flex-col gap-2"
         >
-          <div class="flex gap-4">
-            <span class="text-zinc-200 text-sm truncate">{{ game.title }}</span>
-            <span class="text-zinc-200 text-sm truncate bg-zinc-500">{{ game.file_md5 ?? '—' }}</span>
+          <!-- Cover -->
+          <div class="relative w-full aspect-5/7 rounded-lg overflow-hidden bg-zinc-800 border-2 border-zinc-700 group-hover:border-emerald-500/60 transition-colors flex items-center justify-center">
+            <img
+              v-if="game.cover_url"
+              :src="game.cover_url"
+              :alt="game.title"
+              class="w-full h-full object-cover"
+            />
+            <div v-else class="flex flex-col items-center gap-2 text-zinc-600">
+              <img :src="meta.file_icon" :alt="meta.name" class="w-16 h-16 object-contain opacity-30" />
+            </div>
           </div>
-          <div class="flex items-center gap-4 shrink-0 ml-4">
-            <span v-if="game.region" class="text-xs font-mono text-zinc-500 uppercase">{{ game.region }}</span>
-            <span class="text-xs text-zinc-600 group-hover:text-white transition-colors">{{ formatSize(game.file_size) }}</span>
+
+          <!-- Title + meta -->
+          <div class="px-0.5 min-w-0">
+            <p class="text-sm text-zinc-200 truncate group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
+            <div class="mt-1 flex items-center gap-2">
+              <img
+                v-if="game.regionMeta?.icon"
+                :src="game.regionMeta.icon"
+                :alt="game.regionMeta.name"
+                :title="game.regionMeta.name"
+                class="w-6 border border-zinc-700 shrink-0"
+              />
+              <span class="text-xs text-zinc-500">{{ formatSize(game.file_size) }}</span>
+            </div>
           </div>
         </Link>
       </li>

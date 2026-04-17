@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Link } from '@inertiajs/vue3'
+import { Link, router } from '@inertiajs/vue3'
 import { formatSize } from '@/Helpers/format'
 import PageHeader from '@/Components/PageHeader.vue'
 import IdentifyModal from '@/Components/IdentifyModal.vue'
+import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
 defineOptions({
@@ -46,10 +47,41 @@ const ext = props.game.file_name.split('.').pop()?.toUpperCase() ?? '—'
 const actionsOpen = ref(false)
 const actionsRef = ref<HTMLElement | null>(null)
 const identifyOpen = ref(false)
+const deleteOpen = ref(false)
+const deleting = ref(false)
+const deleteError = ref<string | null>(null)
 
 function openIdentify() {
   actionsOpen.value = false
   identifyOpen.value = true
+}
+
+function openDelete() {
+  actionsOpen.value = false
+  deleteError.value = null
+  deleteOpen.value = true
+}
+
+async function confirmDelete() {
+  deleting.value = true
+  deleteError.value = null
+
+  try {
+    const url = `/consoles/${props.console}/${encodeURIComponent(props.game.file_name)}`
+    const res = await fetch(url, {
+      method:  'DELETE',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+
+    deleteOpen.value = false
+    router.visit(`/consoles/${props.console}`)
+  } catch (e: unknown) {
+    deleteError.value = e instanceof Error ? e.message : 'Delete failed'
+  } finally {
+    deleting.value = false
+  }
 }
 
 function onClickOutside(e: MouseEvent) {
@@ -119,10 +151,14 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Rename
                   </button>
+                  -->
                   <div class="border-t border-zinc-700 my-0.5" />
-                  <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors">
+                  <button
+                    @click="openDelete"
+                    class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-700 transition-colors"
+                  >
                     Delete
-                  </button> -->
+                  </button>
                 </div>
               </div>
             </div>
@@ -220,6 +256,22 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
       :game-file-name="game.file_name"
       @close="identifyOpen = false"
     />
+
+    <ConfirmDialog
+      :open="deleteOpen"
+      title="Delete this file?"
+      :message="`\u201C${game.file_name}\u201D will be permanently removed from storage, along with its metadata.`"
+      warning="This cannot be undone. The file will be lost forever if you proceed."
+      confirm-label="Delete forever"
+      variant="danger"
+      :busy="deleting"
+      @confirm="confirmDelete"
+      @cancel="deleteOpen = false"
+    />
+
+    <div v-if="deleteError" class="fixed bottom-4 right-4 z-50 max-w-sm rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 shadow-lg">
+      {{ deleteError }}
+    </div>
 
   </div>
 </template>
