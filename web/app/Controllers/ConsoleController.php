@@ -90,8 +90,7 @@ class ConsoleController
         }
 
         foreach ($this->filesystem->scanConsoleDir($console) as $file) {
-            $md5 = md5_file($file->getPathname()) ?: null;
-            $this->games->upsert($console->key, $file->getFilename(), $file->getPathname(), $file->getSize(), $md5);
+            $this->games->scanUpsert($console->key, $file);
         }
 
         return Inertia::redirect($response, '/consoles/' . $console->key);

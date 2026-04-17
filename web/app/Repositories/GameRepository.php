@@ -44,6 +44,26 @@ class GameRepository
     }
 
     /**
+     * Upsert a scanned file, reusing the stored md5 when the file is unchanged.
+     *
+     * Hashing a multi-GB ISO is the slow part of scan; skipping it when
+     * file_md5 is already set and file_size matches keeps repeat scans fast
+     * and lets a second scan fill in anything a prior timeout missed.
+     */
+    public function scanUpsert(string $console, \SplFileInfo $file): void
+    {
+        $id       = $console . ':' . $file->getFilename();
+        $existing = $this->find($id);
+        $size     = $file->getSize();
+
+        $md5 = ($existing && $existing->file_md5 !== null && (int) $existing->file_size === $size)
+            ? $existing->file_md5
+            : (md5_file($file->getPathname()) ?: null);
+
+        $this->upsert($console, $file->getFilename(), $file->getPathname(), $size, $md5);
+    }
+
+    /**
      * Insert or update a game record.
      */
     public function upsert(string $console, string $fileName, string $filePath, int $fileSize, ?string $fileMd5 = null): void
