@@ -27,6 +27,7 @@ type Md5Match = {
   backdrop_url: string | null
   release_date: string | null
   genre:        string | null
+  region:       string | null
   developer:    string | null
   publisher:    string | null
   players:      string | null
@@ -37,6 +38,7 @@ const error      = ref<string | null>(null)
 const md5Match   = ref<Md5Match>(null)
 const candidates = ref<Candidate[]>([])
 const assigning  = ref<string | null>(null)
+const searchName = ref('')
 
 async function load() {
   loading.value    = true
@@ -45,7 +47,10 @@ async function load() {
   candidates.value = []
 
   try {
-    const url = `/consoles/${props.console}/${encodeURIComponent(props.gameFileName)}/identify`
+    const query = searchName.value.trim()
+      ? `?search=${encodeURIComponent(searchName.value.trim())}`
+      : ''
+    const url = `/consoles/${props.console}/${encodeURIComponent(props.gameFileName)}/identify${query}`
     const res = await fetch(url, {
       method:  'POST',
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -91,7 +96,10 @@ async function pick(providerId: string, source: 'md5' | 'name') {
 }
 
 watch(() => props.open, (isOpen) => {
-  if (isOpen) load()
+  if (isOpen) {
+    searchName.value = ''
+    load()
+  }
 })
 </script>
 
@@ -130,9 +138,23 @@ watch(() => props.open, (isOpen) => {
           </div>
 
           <!-- Empty -->
-          <div v-else-if="!md5Match && candidates.length === 0" class="text-center py-10">
-            <p class="text-zinc-300 text-sm">No matches found for this ROM.</p>
-            <p class="text-zinc-600 text-xs mt-1">Try renaming the file to a cleaner title.</p>
+          <div v-else-if="!md5Match && candidates.length === 0" class="py-6">
+            <p class="text-center text-zinc-300 text-sm">No matches found for this ROM.</p>
+            <p class="text-center text-zinc-600 text-xs mt-1">Try searching with a custom title.</p>
+            <form @submit.prevent="load" class="mt-5 flex gap-2">
+              <input
+                v-model="searchName"
+                type="text"
+                placeholder="e.g. Super Mario Sunshine"
+                class="flex-1 rounded-md bg-zinc-800 border border-zinc-700 focus:border-emerald-500/60 focus:outline-none text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2"
+                autofocus
+              />
+              <button
+                type="submit"
+                :disabled="!searchName.trim() || loading"
+                class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >Search</button>
+            </form>
           </div>
 
           <!-- Results -->
@@ -149,13 +171,15 @@ watch(() => props.open, (isOpen) => {
                 :disabled="assigning !== null"
                 class="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/60 transition-colors p-3 flex gap-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <img v-if="md5Match.cover_url" :src="md5Match.cover_url" class="w-14 h-20 object-cover rounded bg-zinc-800 shrink-0" />
-                <div v-else class="w-14 h-20 rounded bg-zinc-800 shrink-0" />
+                <img v-if="md5Match.cover_url" :src="md5Match.cover_url" class="w-50 h-auto self-start object-contain rounded bg-zinc-800 shrink-0" />
+                <div v-else class="w-24 aspect-5/7 rounded bg-zinc-800 shrink-0" />
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-medium text-zinc-100 truncate">{{ md5Match.title ?? '(no title)' }}</p>
                   <p class="text-xs text-zinc-500 mt-0.5">
                     <span v-if="md5Match.release_date">{{ md5Match.release_date }}</span>
                     <span v-if="md5Match.genre" class="ml-2">· {{ md5Match.genre }}</span>
+                    <span v-if="md5Match.region" class="ml-2">· {{ md5Match.region.toUpperCase() }}</span>
+                    <span v-if="md5Match.players" class="ml-2">· {{ md5Match.players }}P</span>
                   </p>
                   <p class="text-xs text-zinc-600 mt-0.5 truncate">
                     <span v-if="md5Match.developer">{{ md5Match.developer }}</span>
@@ -179,13 +203,13 @@ watch(() => props.open, (isOpen) => {
                   :disabled="assigning !== null"
                   class="w-full rounded-lg border border-zinc-700 bg-zinc-800/50 hover:border-zinc-500 hover:bg-zinc-800 transition-colors p-3 flex gap-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <img v-if="c.cover_url" :src="c.cover_url" class="w-12 h-16 object-cover rounded bg-zinc-800 shrink-0" />
-                  <div v-else class="w-12 h-16 rounded bg-zinc-800 shrink-0" />
+                  <img v-if="c.cover_url" :src="c.cover_url" class="w-50 h-auto self-start object-contain rounded bg-zinc-800 shrink-0" />
+                  <div v-else class="w-20 aspect-5/7 rounded bg-zinc-800 shrink-0" />
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-medium text-zinc-100 truncate">{{ c.title ?? '(no title)' }}</p>
                     <p class="text-xs text-zinc-500 mt-0.5">
                       <span v-if="c.year">{{ c.year }}</span>
-                      <span v-if="c.region" class="ml-2">· {{ c.region }}</span>
+                      <span v-if="c.region" class="ml-2">· {{ c.region.toUpperCase() }}</span>
                     </p>
                     <p v-if="c.rom_name" class="text-xs font-mono text-zinc-600 truncate mt-0.5">{{ c.rom_name }}</p>
                   </div>

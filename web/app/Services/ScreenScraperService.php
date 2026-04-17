@@ -7,18 +7,19 @@ namespace App\Services;
 use App\Support\Console;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * Thin client for the ScreenScraper.fr v2 API.
- *
- * Scoped to the basic surface: jeuInfos.php and jeuRecherche.php.
  * Docs: https://www.screenscraper.fr/webapi2.php
  */
 class ScreenScraperService
 {
     private const DEFAULT_REGION = 'ss'; // ScreenScraper's "fallback" region
     private const PREFERRED_LANG = 'en';
+
+    /** Region preference for box art / screenshots — English-speaking first. */
+    private const MEDIA_REGION_PRIORITY = ['us', 'wor', 'eu', 'uk', 'au', 'ss'];
 
     public function __construct() {}
 
@@ -108,6 +109,7 @@ class ScreenScraperService
             'backdrop_url' => $this->pickMedia(Arr::get($jeu, 'medias', []), ['fanart', 'background', 'sstitle', 'ss', 'screenmarquee']),
             'release_date' => $this->pickLocalized(Arr::get($jeu, 'dates', []), 'text'),
             'genre'        => $this->flattenGenres(Arr::get($jeu, 'genres', [])),
+            'region'       => $this->firstRegion($jeu),
             'players'      => (string) Arr::get($jeu, 'joueurs.text', ''),
             'publisher'    => (string) Arr::get($jeu, 'editeur.text', ''),
             'developer'    => (string) Arr::get($jeu, 'developpeur.text', ''),
@@ -137,6 +139,8 @@ class ScreenScraperService
 
     /**
      * Pick the best media URL from jeu.medias for any of the given types.
+     * Prefers English-region variants (us → wor → eu → …) before falling back
+     * to whatever SS returns first (often fr).
      */
     private function pickMedia(mixed $medias, array $types): ?string
     {
@@ -145,10 +149,22 @@ class ScreenScraperService
         }
 
         foreach ($types as $type) {
-            $match = Collection::make($medias)
-                ->first(fn($media) => is_array($media) && Arr::get($media, 'type') === $type);
+            $ofType = Collection::make($medias)
+                ->filter(fn($media) => is_array($media) && Arr::get($media, 'type') === $type);
 
-            if ($match !== null && is_string($url = Arr::get($match, 'url')) && $url !== '') {
+            if ($ofType->isEmpty()) {
+                continue;
+            }
+
+            foreach (self::MEDIA_REGION_PRIORITY as $region) {
+                $match = $ofType->first(fn($media) => Arr::get($media, 'region') === $region);
+                if ($match !== null && is_string($url = Arr::get($match, 'url')) && $url !== '') {
+                    return $url;
+                }
+            }
+
+            $fallback = $ofType->first();
+            if (is_string($url = Arr::get($fallback, 'url')) && $url !== '') {
                 return $url;
             }
         }
@@ -213,25 +229,18 @@ class ScreenScraperService
         ], fn($v) => $v !== '' && $v !== null);
 
         $url = rtrim(Arr::get($creds, 'endpoint', 'https://api.screenscraper.fr/api2'), '/')
-            . '/' . ltrim($endpoint, '/')
-            . '?' . http_build_query($query);
+            . '/' . ltrim($endpoint, '/');
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_USERAGENT      => Arr::get($creds, 'softname', 'retroBITE'),
-        ]);
-
-        $body   = curl_exec($ch);
-        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err    = curl_error($ch);
-        curl_close($ch);
-
-        if ($body === false) {
-            throw new RuntimeException("ScreenScraper HTTP error: {$err}");
+        try {
+            $response = Http::withUserAgent(Arr::get($creds, 'softname', 'retroBITE'))
+                ->connectTimeout(5)
+                ->timeout(15)
+                ->get($url, $query);
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            throw new RuntimeException("ScreenScraper HTTP error: {$e->getMessage()}");
         }
+
+        $status = $response->status();
 
         // SS returns 404 when a lookup misses — not an error we need to raise.
         if ($status === 404 || $status === 400) {
@@ -244,7 +253,7 @@ class ScreenScraperService
 
         // SS sometimes returns text errors above/below the JSON for quota/auth issues;
         // try to locate and decode the JSON envelope.
-        $json = $this->extractJson((string) $body);
+        $json = $this->extractJson($response->body());
 
         return is_array($json) ? $json : [];
     }

@@ -52,7 +52,7 @@ class GameController
      * Trigger a ScreenScraper identification for a game. Returns a candidate list
      * the user picks from via the Identify modal. Never auto-persists.
      */
-    public function identify(Request $_request, Response $response, array $args): Response
+    public function identify(Request $request, Response $response, array $args): Response
     {
         $console = Console::tryFrom(Arr::get($args, 'console'));
         if (!$console) {
@@ -68,12 +68,15 @@ class GameController
             return $this->jsonError($response, 'Unknown game', 404);
         }
 
+        $override    = trim((string) Arr::get($request->getQueryParams(), 'search', ''));
+        $searchName  = $override !== '' ? $override : $this->cleanName($game->file_name);
+
         try {
-            $md5Match = $game->file_md5
+            $md5Match = $override === '' && $game->file_md5
                 ? $this->screenScraper->lookupByMd5($console, $game->file_md5)
                 : null;
 
-            $candidates = $this->screenScraper->search($console, $this->cleanName($game->file_name));
+            $candidates = $this->screenScraper->search($console, $searchName);
         } catch (Throwable $e) {
             return $this->jsonError($response, 'ScreenScraper request failed: ' . $e->getMessage(), 502);
         }

@@ -106,7 +106,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
                   <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Share
                   </button> -->
-                  <div class="border-t border-zinc-700 my-0.5" />
+                  <!-- <div class="border-t border-zinc-700 my-0.5" /> -->
                   <button
                     @click="openIdentify"
                     class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors"
@@ -133,11 +133,11 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
         <div class="flex gap-6 rounded-lg">
 
           <!-- Cover art -->
-          <div class="shrink-0 w-64 aspect-5/7">
+          <div class="shrink-0 w-64 min-h-88.75">
             <img v-if="game.cover_url" :src="game.cover_url" :alt="game.title"
-              class="w-full h-full object-cover rounded-md border border-zinc-600" />
+              class="w-full h-auto object-contain rounded-md border border-zinc-600" />
             <div v-else
-              class="w-full h-full rounded-md border border-zinc-600 bg-zinc-900 flex items-center justify-center">
+              class="w-full aspect-5/7 rounded-md border border-zinc-600 bg-zinc-900 flex items-center justify-center">
               <img :src="meta.file_icon" :alt="meta.name" class="w-34 h-34 object-contain opacity-30" />
             </div>
           </div>

@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Container\Container;
+use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Support\Facades\Facade;
 
 $container      = new Container;
 $base           = dirname(__DIR__) . '/app';
@@ -14,5 +16,8 @@ foreach ($allowedDirs as $dir) {
         $container->singleton($class);
     }
 }
+
+$container->singleton('http', fn() => new HttpFactory);
+Facade::setFacadeApplication($container);
 
 return $container;
