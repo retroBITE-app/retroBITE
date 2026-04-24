@@ -13,7 +13,7 @@ defineOptions({
 
 const props = defineProps<{
   console: string
-  meta: { name: string; icon: string; file_icon: string }
+  meta: { name: string; icon: string; file_icon: string; cover_aspect?: string }
   game: {
     file_name:      string
     file_size?:     number
@@ -173,7 +173,8 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
             <img v-if="game.cover_url" :src="game.cover_url" :alt="game.title"
               class="w-full h-auto object-contain rounded-md border border-zinc-600" />
             <div v-else
-              class="w-full aspect-5/7 rounded-md border border-zinc-600 bg-zinc-900 flex items-center justify-center">
+              :style="{ aspectRatio: meta.cover_aspect ?? '5/7' }"
+              class="w-full rounded-md border border-zinc-600 bg-zinc-900 flex items-center justify-center">
               <img :src="meta.file_icon" :alt="meta.name" class="w-34 h-34 object-contain opacity-30" />
             </div>
           </div>

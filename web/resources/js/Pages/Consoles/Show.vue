@@ -9,13 +9,22 @@ import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 
 const props = defineProps<{
   console: string
-  meta: { name: string; icon: string; file_icon: string; folder: string }
+  meta: { name: string; icon: string; file_icon: string; folder: string; cover_aspect?: string; cover_height?: number }
   games: Array<{ file_name: string; title?: string; description?: string | null; publisher?: string | null; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
   extensions: string[]
   folders: Array<{ value: string; label: string; count: number }>
   folder: string
   uploadDirs: Array<{ value: string; label: string }>
 }>()
+
+const coverHeight = computed(() => (props.meta.cover_height ?? 280) + 'px')
+
+const placeholderStyle = computed(() => {
+  const h = props.meta.cover_height ?? 280
+  const [aw, ah] = (props.meta.cover_aspect ?? '5/7').split('/').map(Number)
+  const ratio = ah ? aw / ah : 5 / 7
+  return { height: h + 'px', width: Math.round(h * ratio) + 'px' }
+})
 
 const scanning     = ref(false)
 const deleteOpen   = ref(false)
@@ -204,7 +213,7 @@ async function confirmDeleteFolder() {
     </div>
 
     <!-- Game grid -->
-    <ul v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
+    <ul v-else class="flex flex-wrap gap-4">
       <li
         v-for="game in filteredGames"
         :key="game.file_name"
@@ -215,21 +224,22 @@ async function confirmDeleteFolder() {
           class="flex flex-col gap-2"
         >
           <!-- Cover -->
-          <div class="relative w-full aspect-5/7 rounded-lg overflow-hidden bg-zinc-800 border-2 border-zinc-700 group-hover:border-emerald-500/60 transition-colors flex items-center justify-center">
+          <div
+            :style="game.cover_url ? { height: coverHeight } : placeholderStyle"
+            class="relative w-fit rounded-lg overflow-hidden bg-zinc-800 border-2 border-zinc-700 group-hover:border-emerald-500/60 transition-colors flex items-center justify-center"
+          >
             <img
               v-if="game.cover_url"
               :src="game.cover_url"
               :alt="game.title"
-              class="w-full h-full object-cover"
+              class="h-full w-auto block"
             />
-            <div v-else class="flex flex-col items-center gap-2 text-zinc-600">
-              <img :src="meta.file_icon" :alt="meta.name" class="w-16 h-16 object-contain opacity-30" />
-            </div>
+            <img v-else :src="meta.file_icon" :alt="meta.name" class="w-16 h-16 object-contain opacity-30" />
           </div>
 
           <!-- Title + meta -->
-          <div class="px-0.5 min-w-0">
-            <p class="text-sm text-zinc-200 truncate group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
+          <div class="px-0.5 min-w-0 w-full">
+            <p class="text-sm text-zinc-200 line-clamp-2 wrap-break-word group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
             <div class="mt-1 flex items-center gap-2">
               <img
                 v-if="game.regionMeta?.icon"

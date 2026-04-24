@@ -71,7 +71,7 @@ class ConsoleController
         $folders = [['value' => '', 'label' => 'All', 'count' => $all->count()]];
         $folders[] = [
             'value' => 'root',
-            'label' => 'Root',
+            'label' => $console->folder,
             'count' => $all
                 ->filter(fn($g) => !preg_match('~' . preg_quote($basePath, '~') . '[^/]+/~', (string) $g->file_path))
                 ->count(),

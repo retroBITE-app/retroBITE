@@ -18,6 +18,8 @@ return [
         'bios_extensions'  => ['rom'],
         'exclude_files'    => [],
         'screenscraper_id' => 4,
+        'cover_aspect'     => '2/3',
+        'cover_height'     => 280,
     ],
     'ps2' => [
         'name'             => 'PlayStation 2',
@@ -29,6 +31,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 58,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 280,
     ],
     'ps3' => [
         'name'             => 'PlayStation 3',
@@ -40,6 +44,8 @@ return [
         'bios_extensions'  => ['bin', 'pup'],
         'exclude_files'    => [],
         'screenscraper_id' => 57,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 280,
     ],
     'gc' => [
         'name'             => 'GameCube',
@@ -51,6 +57,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 13,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 280,
     ],
     'wii' => [
         'name'             => 'Wii',
@@ -62,6 +70,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 16,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 280,
     ],
     'xbox' => [
         'name'             => 'Xbox',
@@ -73,6 +83,8 @@ return [
         'bios_extensions'  => ['bin', 'rom'],
         'exclude_files'    => [],
         'screenscraper_id' => 32,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 280,
     ],
     'dreamcast' => [
         'name'             => 'Dreamcast',
@@ -84,6 +96,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 23,
+        'cover_aspect'     => '7/8',
+        'cover_height'     => 260,
     ],
     'gb' => [
         'name'             => 'Game Boy',
@@ -95,6 +109,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 9,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 260,
     ],
     'gbc' => [
         'name'             => 'Game Boy Color',
@@ -106,6 +122,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 10,
+        'cover_aspect'     => '5/7',
+        'cover_height'     => 260,
     ],
     'gba' => [
         'name'             => 'Game Boy Advance',
@@ -117,6 +135,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 12,
+        'cover_aspect'     => '2/3',
+        'cover_height'     => 240,
     ],
     'psp' => [
         'name'             => 'PlayStation Portable',
@@ -128,6 +148,8 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 61,
+        'cover_aspect'     => '3/5',
+        'cover_height'     => 260,
     ],
     'n64' => [
         'name'             => 'Nintendo 64',
@@ -139,5 +161,7 @@ return [
         'bios_extensions'  => ['bin'],
         'exclude_files'    => [],
         'screenscraper_id' => 14,
+        'cover_aspect'     => '8/2',
+        'cover_height'     => 200,
     ],
 ];
