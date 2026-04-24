@@ -19,6 +19,12 @@ const props = defineProps<{
 
 const coverHeight = computed(() => (props.meta.cover_height ?? 280) + 'px')
 
+function onCoverLoad(e: Event) {
+  const img = e.target as HTMLImageElement
+  const link = img.closest('a') as HTMLElement | null
+  if (link) link.style.width = img.offsetWidth + 'px'
+}
+
 const placeholderStyle = computed(() => {
   const h = props.meta.cover_height ?? 280
   const [aw, ah] = (props.meta.cover_aspect ?? '5/7').split('/').map(Number)
@@ -232,6 +238,7 @@ async function confirmDeleteFolder() {
               v-if="game.cover_url"
               :src="game.cover_url"
               :alt="game.title"
+              @load="onCoverLoad"
               class="h-full w-auto block"
             />
             <img v-else :src="meta.file_icon" :alt="meta.name" class="w-16 h-16 object-contain opacity-30" />
@@ -239,7 +246,7 @@ async function confirmDeleteFolder() {
 
           <!-- Title + meta -->
           <div class="px-0.5 min-w-0 w-full">
-            <p class="text-sm text-zinc-200 line-clamp-2 wrap-break-word group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
+            <p class="text-sm text-zinc-200 truncate group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
             <div class="mt-1 flex items-center gap-2">
               <img
                 v-if="game.regionMeta?.icon"
