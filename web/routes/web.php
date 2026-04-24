@@ -7,6 +7,7 @@ use App\Controllers\ConsoleController;
 use App\Controllers\DashboardController;
 use App\Controllers\GameController;
 use App\Controllers\NetworkController;
+use App\Controllers\SettingsController;
 use App\Middleware\AuthMiddleware;
 use Slim\Routing\RouteCollectorProxy;
 
@@ -30,4 +31,8 @@ $app->group('', function (RouteCollectorProxy $group) {
     $group->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);
 
     $group->get('/api/network/status', [NetworkController::class, 'status']);
+
+    $group->get('/settings',                         [SettingsController::class, 'index']);
+    $group->post('/settings/{group}/{key}',          [SettingsController::class, 'save']);
+    $group->post('/settings/{group}/{key}/reset',    [SettingsController::class, 'reset']);
 })->add(AuthMiddleware::class);

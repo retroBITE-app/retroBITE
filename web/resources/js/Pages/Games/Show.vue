@@ -215,19 +215,19 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
               class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm max-w-xl"
             >
               <template v-if="game.developer">
-                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Developer</dt>
+                <dt class="text-xs uppercase tracking-wider text-white self-center">Developer</dt>
                 <dd class="text-zinc-200">{{ game.developer }}</dd>
               </template>
               <template v-if="game.publisher">
-                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Publisher</dt>
+                <dt class="text-xs uppercase tracking-wider text-white self-center">Publisher</dt>
                 <dd class="text-zinc-200">{{ game.publisher }}</dd>
               </template>
               <template v-if="game.genre">
-                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Genre</dt>
+                <dt class="text-xs uppercase tracking-wider text-white self-center">Genre</dt>
                 <dd class="text-zinc-200">{{ game.genre }}</dd>
               </template>
               <template v-if="game.players">
-                <dt class="text-xs uppercase tracking-wider text-zinc-500 self-center">Players</dt>
+                <dt class="text-xs uppercase tracking-wider text-white self-center">Players</dt>
                 <dd class="text-zinc-200">{{ game.players }}</dd>
               </template>
             </dl>

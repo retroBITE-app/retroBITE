@@ -20,6 +20,7 @@ function isActive(href: string): boolean {
 const nav = [
   { href: '/',         label: 'Dashboard' },
   { href: '/consoles', label: 'Consoles'  },
+  { href: '/settings', label: 'Settings'  },
 ]
 </script>
 
