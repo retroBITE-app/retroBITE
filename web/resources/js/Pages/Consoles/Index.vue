@@ -14,7 +14,6 @@ defineProps<{
   available: Array<{
     key: string
     name: string
-    uploadDirs: Array<{ value: string; label: string }>
   }>
 }>()
 </script>

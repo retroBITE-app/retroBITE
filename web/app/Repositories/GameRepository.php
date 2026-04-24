@@ -5,27 +5,55 @@ declare(strict_types=1);
 namespace App\Repositories;
 
 use App\Models\Game;
+use App\Support\Console;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
 class GameRepository
 {
-    public function allForConsole(string $console, array $extensions = [], ?string $type = null): EloquentCollection
+    /**
+     * Fetch games for a console, optionally scoped to a folder:
+     *   - null / ''      → all games for the console
+     *   - 'root'         → games directly under games/{console.folder}/ (no subfolder)
+     *   - any other name → games under games/{console.folder}/{folder}/
+     */
+    public function allForConsoleFolder(Console $console, ?string $folder = null): EloquentCollection
     {
-        $query = Game::with('metadata')
-            ->where('console', $console)
-            ->havingExtensions($extensions);
+        $query = Game::with('metadata')->where('console', $console->key);
 
-        return match ($type) {
-            'files' => $query->games()->get(),
-            'bios'  => $query->bios()->get(),
-            default => $query->get(),
-        };
+        $base = '/' . $console->folder . '/';
+
+        if ($folder === null || $folder === '') {
+            // all
+        } elseif ($folder === 'root') {
+            $query->where('file_path', 'NOT LIKE', '%' . $base . '%/%');
+        } else {
+            $query->where('file_path', 'LIKE', '%' . $base . $folder . '/%');
+        }
+
+        return $query->get();
     }
 
     public function find(string $id): ?Game
     {
         return Game::with('metadata')->find($id);
+    }
+
+    /**
+     * Delete all game rows whose file_path sits under games/{console.folder}/{folder}/.
+     * Returns the number of rows removed.
+     */
+    public function deleteByFolder(Console $console, string $folder): int
+    {
+        if ($folder === '') {
+            return 0;
+        }
+
+        $pattern = '%/' . $console->folder . '/' . $folder . '/%';
+
+        return (int) Game::where('console', $console->key)
+            ->where('file_path', 'LIKE', $pattern)
+            ->delete();
     }
 
     /**

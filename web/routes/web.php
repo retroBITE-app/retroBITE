@@ -29,6 +29,7 @@ $app->group('', function (RouteCollectorProxy $group) {
     $group->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
     $group->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);
     $group->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);
+    $group->delete('/consoles/{console}/folder/{folder:.+}', [ConsoleController::class, 'deleteFolder']);
 
     $group->get('/api/network/status', [NetworkController::class, 'status']);
 

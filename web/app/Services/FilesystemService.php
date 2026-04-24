@@ -11,6 +11,24 @@ use Psr\Http\Message\UploadedFileInterface;
 class FilesystemService
 {
     /**
+     * Direct subdirectory names under a console's root folder on disk.
+     *
+     * @return string[]
+     */
+    public function listSubfolders(Console $console): array
+    {
+        $base = $console->path();
+        if (!is_dir($base)) {
+            return [];
+        }
+
+        return Collection::make(scandir($base) ?: [])
+            ->reject(fn(string $name) => $name === '.' || $name === '..' || !is_dir($base . '/' . $name))
+            ->values()
+            ->all();
+    }
+
+    /**
      * Recursively scan a console's game directory and yield each valid SplFileInfo.
      *
      * @return iterable<\SplFileInfo>
@@ -62,6 +80,42 @@ class FilesystemService
     public function createDir(Console $console, string $subfolder): void
     {
         $this->ensureDir($console->path($subfolder));
+    }
+
+    /**
+     * Recursively delete a subfolder of a console. Refuses empty / root / paths
+     * that escape the console root.
+     */
+    public function deleteDir(Console $console, string $subfolder): bool
+    {
+        $subfolder = trim($subfolder, '/');
+        if ($subfolder === '' || $subfolder === '.' || $subfolder === '..') {
+            return false;
+        }
+
+        $base   = realpath($console->path()) ?: null;
+        $target = realpath($console->path($subfolder)) ?: null;
+
+        if ($base === null || $target === null) {
+            return false;
+        }
+
+        // Target must live strictly under $base, and must not be $base itself.
+        if ($target === $base || !str_starts_with($target . '/', $base . '/')) {
+            return false;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($target, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($iterator as $fsi) {
+            /** @var \SplFileInfo $fsi */
+            $fsi->isDir() ? @rmdir($fsi->getPathname()) : @unlink($fsi->getPathname());
+        }
+
+        return @rmdir($target);
     }
 
     /**

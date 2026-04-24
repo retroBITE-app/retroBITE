@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
@@ -40,28 +39,5 @@ class Game extends Model
     public function metadata(): HasOne
     {
         return $this->hasOne(GameMetadata::class, 'md5', 'file_md5');
-    }
-
-    public function scopeGames(Builder $query): Builder
-    {
-        return $query->where('file_path', 'NOT LIKE', '%/BIOS/%');
-    }
-
-    public function scopeBios(Builder $query): Builder
-    {
-        return $query->where('file_path', 'LIKE', '%/BIOS/%');
-    }
-
-    public function scopeHavingExtensions(Builder $query, array $extensions): Builder
-    {
-        if ($extensions === []) {
-            return $query;
-        }
-
-        return $query->where(function (Builder $q) use ($extensions) {
-            foreach ($extensions as $ext) {
-                $q->orWhere('file_name', 'LIKE', '%.' . $ext);
-            }
-        });
     }
 }

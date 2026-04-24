@@ -24,7 +24,6 @@ return [
             'folder'           => ['type' => 'text',   'label' => 'Folder',              'required' => true],
             'icon'             => ['type' => 'text',   'label' => 'Icon URL'],
             'file_icon'        => ['type' => 'text',   'label' => 'File-icon URL'],
-            'subfolders'       => ['type' => 'text[]', 'label' => 'Subfolders'],
             'file_extensions'  => ['type' => 'text[]', 'label' => 'Game extensions',     'required' => true],
             'bios_extensions'  => ['type' => 'text[]', 'label' => 'BIOS extensions'],
             'exclude_files'    => ['type' => 'text[]', 'label' => 'Excluded files'],

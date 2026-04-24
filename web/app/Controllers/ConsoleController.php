@@ -34,9 +34,8 @@ class ConsoleController
 
         $available = Console::allAvailable()
             ->map(fn(Console $c) => [
-                'key'        => $c->key,
-                'name'       => $c->name,
-                'uploadDirs' => [['value' => '', 'label' => $c->folder . '/']],
+                'key'  => $c->key,
+                'name' => $c->name,
             ])
             ->all();
 
@@ -47,7 +46,7 @@ class ConsoleController
     }
 
     /**
-     * Show games for a console.
+     * Show games for a console, filtered by a disk-derived subfolder selection.
      */
     public function show(Request $request, Response $response, array $args): Response
     {
@@ -57,24 +56,49 @@ class ConsoleController
             return $response->withStatus(404);
         }
 
-        $extensions = [
-            'files' => $console->fileExtensions,
-            'bios'  => $console->biosExtensions,
+        $folder = (string) Arr::get($request->getQueryParams(), 'folder', '');
+
+        $subfolders = $this->filesystem->listSubfolders($console);
+        $games      = $this->games->allForConsoleFolder($console, $folder === '' ? null : $folder);
+
+        // Build filter pills with counts derived from all games for the console.
+        $all      = $this->games->allForConsoleFolder($console);
+        $basePath = '/' . $console->folder . '/';
+
+        $folders = [['value' => '', 'label' => 'All', 'count' => $all->count()]];
+        $folders[] = [
+            'value' => 'root',
+            'label' => 'Root',
+            'count' => $all
+                ->filter(fn($g) => !preg_match('~' . preg_quote($basePath, '~') . '[^/]+/~', (string) $g->file_path))
+                ->count(),
         ];
+        foreach ($subfolders as $sub) {
+            $folders[] = [
+                'value' => $sub,
+                'label' => $sub,
+                'count' => $all
+                    ->filter(fn($g) => str_contains((string) $g->file_path, $basePath . $sub . '/'))
+                    ->count(),
+            ];
+        }
 
-        $type       = Arr::get($request->getQueryParams(), 'type', 'files');
-        $filterExts = $type === 'all' ? [] : Arr::get($extensions, $type, []);
-        $gameType   = $type === 'all' ? null : $type;
+        // Upload-dir picker: root + every subfolder discovered on disk.
+        $uploadDirs = [['value' => '', 'label' => $console->folder . '/']];
+        foreach ($subfolders as $sub) {
+            $uploadDirs[] = ['value' => $sub, 'label' => $console->folder . '/' . $sub . '/'];
+        }
 
-        $games = $this->games->allForConsole($console->key, $filterExts, $gameType);
+        $extensions = Arr::collapse([$console->fileExtensions, $console->biosExtensions]);
 
         return Inertia::render($response, 'Consoles/Show', [
             'console'    => $console->key,
             'meta'       => config("consoles.{$console->key}"),
             'games'      => $this->gameDataService->enrichGames($games),
             'extensions' => $extensions,
-            'type'       => $type,
-            'uploadDirs' => $console->uploadDirs(),
+            'folders'    => $folders,
+            'folder'     => $folder,
+            'uploadDirs' => $uploadDirs,
         ]);
     }
 
@@ -168,6 +192,32 @@ class ConsoleController
     }
 
     /**
+     * Recursively delete a subfolder of a console — disk + DB rows.
+     */
+    public function deleteFolder(Request $_request, Response $response, array $args): Response
+    {
+        $console = Console::tryFrom(Arr::get($args, 'console'));
+        if (!$console) {
+            return $this->jsonError($response, 'Unknown console', 404);
+        }
+
+        $folder = (string) Arr::get($args, 'folder', '');
+        if ($folder === '' || $folder === 'root' || !preg_match('/^[a-zA-Z0-9_\-]+(\/[a-zA-Z0-9_\-]+)*$/', $folder)) {
+            return $this->jsonError($response, 'Invalid folder', 422);
+        }
+
+        $removedRows = $this->games->deleteByFolder($console, $folder);
+        $diskOk      = $this->filesystem->deleteDir($console, $folder);
+
+        if (!$diskOk) {
+            return $this->jsonError($response, 'Folder not found or could not be deleted', 500);
+        }
+
+        $response->getBody()->write(json_encode(['status' => 'ok', 'games_removed' => $removedRows]));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    /**
      * Create one or more directories for a console on disk.
      */
     public function mkdir(Request $request, Response $response, array $args): Response
@@ -184,7 +234,7 @@ class ConsoleController
         foreach ($subfolders as $sub) {
             $sub = (string) $sub;
 
-            if ($sub !== '' && !preg_match('/^[a-zA-Z0-9_\-]+$/', $sub)) {
+            if ($sub !== '' && !preg_match('/^[a-zA-Z0-9_\-]+(\/[a-zA-Z0-9_\-]+)*\/?$/', $sub)) {
                 return $this->jsonError($response, 'Invalid subfolder: ' . $sub, 422);
             }
 

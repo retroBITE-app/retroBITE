@@ -24,9 +24,6 @@ final class Console
     public readonly array $biosExtensions;
 
     /** @var string[] */
-    public readonly array $subfolders;
-
-    /** @var string[] */
     public readonly array $excludeFiles;
 
     public readonly ?int $screenscraperId;
@@ -49,7 +46,6 @@ final class Console
         $this->folder          = (string) Arr::get($meta, 'folder', '');
         $this->fileExtensions  = (array)  Arr::get($meta, 'file_extensions', []);
         $this->biosExtensions  = (array)  Arr::get($meta, 'bios_extensions', []);
-        $this->subfolders      = (array)  Arr::get($meta, 'subfolders', []);
         $this->excludeFiles    = (array)  Arr::get($meta, 'exclude_files', []);
         $this->screenscraperId = $ssId !== null ? (int) $ssId : null;
     }
@@ -120,21 +116,6 @@ final class Console
     public function installed(): bool
     {
         return is_dir($this->path());
-    }
-
-    /**
-     * Destination options for uploads: root + installed subfolders, shaped for the Vue picker.
-     *
-     * @return array<int, array{value: string, label: string}>
-     */
-    public function uploadDirs(): array
-    {
-        return Collection::make($this->subfolders)
-            ->map(fn(string $sub) => ['value' => $sub, 'label' => $this->folder . '/' . $sub . '/'])
-            ->prepend(['value' => '', 'label' => $this->folder . '/'])
-            ->filter(fn(array $dir) => is_dir($this->path($dir['value'])))
-            ->values()
-            ->all();
     }
 
     /**
