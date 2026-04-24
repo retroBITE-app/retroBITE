@@ -10,7 +10,7 @@ import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 const props = defineProps<{
   console: string
   meta: { name: string; icon: string; file_icon: string; folder: string }
-  games: Array<{ file_name: string; title?: string; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
+  games: Array<{ file_name: string; title?: string; description?: string | null; publisher?: string | null; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
   extensions: string[]
   folders: Array<{ value: string; label: string; count: number }>
   folder: string
@@ -21,6 +21,18 @@ const scanning     = ref(false)
 const deleteOpen   = ref(false)
 const deleting     = ref(false)
 const deleteError  = ref<string | null>(null)
+const query        = ref('')
+
+const filteredGames = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return props.games
+  return props.games.filter(g =>
+    (g.title       ?? '').toLowerCase().includes(q) ||
+    (g.description ?? '').toLowerCase().includes(q) ||
+    (g.publisher   ?? '').toLowerCase().includes(q) ||
+    (g.file_name   ?? '').toLowerCase().includes(q)
+  )
+})
 
 const selectedFolders = computed<Set<string>>(() => {
   if (!props.folder) return new Set()
@@ -126,6 +138,12 @@ async function confirmDeleteFolder() {
       </template>
       <template #actions>
         <div class="flex items-center gap-2">
+          <input
+            v-model="query"
+            type="text"
+            placeholder="Search games…"
+            class="w-56 rounded-md bg-zinc-800 border border-zinc-700 focus:border-emerald-500/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors"
+          />
           <CreateDirectory
             :console="props.console"
             :console-name="meta.name"
@@ -180,10 +198,15 @@ async function confirmDeleteFolder() {
       <p class="text-zinc-500 text-sm">No files found. Try scanning the directory.</p>
     </div>
 
+    <!-- No search matches -->
+    <div v-else-if="filteredGames.length === 0" class="rounded-lg border border-dashed border-zinc-700 p-12 text-center">
+      <p class="text-zinc-500 text-sm">No games match “{{ query }}”.</p>
+    </div>
+
     <!-- Game grid -->
     <ul v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
       <li
-        v-for="game in games"
+        v-for="game in filteredGames"
         :key="game.file_name"
         class="group"
       >
