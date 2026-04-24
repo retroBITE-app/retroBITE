@@ -56,13 +56,16 @@ class ConsoleController
             return $response->withStatus(404);
         }
 
-        $folder = (string) Arr::get($request->getQueryParams(), 'folder', '');
+        $folderParam = (string) Arr::get($request->getQueryParams(), 'folder', '');
+        $folderList  = $folderParam === ''
+            ? []
+            : array_values(array_filter(array_map('trim', explode(',', $folderParam))));
 
         $subfolders = $this->filesystem->listSubfolders($console);
-        $games      = $this->games->allForConsoleFolder($console, $folder === '' ? null : $folder);
+        $games      = $this->games->allForConsoleFolders($console, $folderList);
 
         // Build filter pills with counts derived from all games for the console.
-        $all      = $this->games->allForConsoleFolder($console);
+        $all      = $this->games->allForConsoleFolders($console, []);
         $basePath = '/' . $console->folder . '/';
 
         $folders = [['value' => '', 'label' => 'All', 'count' => $all->count()]];
@@ -97,7 +100,7 @@ class ConsoleController
             'games'      => $this->gameDataService->enrichGames($games),
             'extensions' => $extensions,
             'folders'    => $folders,
-            'folder'     => $folder,
+            'folder'     => $folderParam,
             'uploadDirs' => $uploadDirs,
         ]);
     }

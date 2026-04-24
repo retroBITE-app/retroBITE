@@ -22,16 +22,55 @@ const deleteOpen   = ref(false)
 const deleting     = ref(false)
 const deleteError  = ref<string | null>(null)
 
+const selectedFolders = computed<Set<string>>(() => {
+  if (!props.folder) return new Set()
+  return new Set(props.folder.split(',').map(s => s.trim()).filter(Boolean))
+})
+
+const singleSelection = computed(() =>
+  selectedFolders.value.size === 1 ? [...selectedFolders.value][0] : null
+)
+
 const canDeleteFolder = computed(() =>
-  props.folder !== '' && props.folder !== 'root'
+  singleSelection.value !== null && singleSelection.value !== 'root'
 )
 
-const currentFolderCount = computed(() =>
-  props.folders.find(f => f.value === props.folder)?.count ?? 0
-)
+const currentFolderCount = computed(() => {
+  const only = singleSelection.value
+  if (!only) return 0
+  return props.folders.find(f => f.value === only)?.count ?? 0
+})
 
-function setFolder(value: string) {
-  router.get(`/consoles/${props.console}`, { folder: value }, { preserveScroll: true })
+function isActive(value: string): boolean {
+  if (value === '') return selectedFolders.value.size === 0
+  return selectedFolders.value.has(value)
+}
+
+function navigate(folders: string[]) {
+  router.get(
+    `/consoles/${props.console}`,
+    { folder: folders.join(',') },
+    { preserveScroll: true },
+  )
+}
+
+function onPillClick(value: string, event: MouseEvent) {
+  const multi = event.ctrlKey || event.metaKey
+
+  // "All" pill always clears.
+  if (value === '') {
+    navigate([])
+    return
+  }
+
+  if (!multi) {
+    navigate([value])
+    return
+  }
+
+  const next = new Set(selectedFolders.value)
+  next.has(value) ? next.delete(value) : next.add(value)
+  navigate([...next])
 }
 
 function scan() {
@@ -48,13 +87,14 @@ function openDelete() {
 }
 
 async function confirmDeleteFolder() {
-  if (!canDeleteFolder.value) return
+  const target = singleSelection.value
+  if (!canDeleteFolder.value || !target) return
 
   deleting.value    = true
   deleteError.value = null
 
   try {
-    const url = `/consoles/${props.console}/folder/${encodeURIComponent(props.folder)}`
+    const url = `/consoles/${props.console}/folder/${encodeURIComponent(target)}`
     const res = await fetch(url, {
       method:  'DELETE',
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -115,8 +155,9 @@ async function confirmDeleteFolder() {
       <button
         v-for="f in folders"
         :key="f.value || 'all'"
-        @click="setFolder(f.value)"
-        :class="folder === f.value
+        @click="onPillClick(f.value, $event)"
+        :title="f.value === '' ? 'Show all' : 'Click to select, Ctrl/Cmd+Click to toggle'"
+        :class="isActive(f.value)
           ? 'bg-zinc-700 text-zinc-100'
           : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'"
         class="px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
@@ -183,8 +224,8 @@ async function confirmDeleteFolder() {
 
     <ConfirmDialog
       :open="deleteOpen"
-      :title="`Delete folder ${folder}?`"
-      :message="`This will permanently delete the folder ${meta.folder}/${folder} from disk and remove ${currentFolderCount} game record${currentFolderCount === 1 ? '' : 's'} from the database.`"
+      :title="`Delete folder ${singleSelection ?? ''}?`"
+      :message="`This will permanently delete the folder ${meta.folder}/${singleSelection ?? ''} from disk and remove ${currentFolderCount} game record${currentFolderCount === 1 ? '' : 's'} from the database.`"
       warning="The folder, every file inside it, and all nested subfolders will be removed. This cannot be undone."
       confirm-label="Delete folder"
       variant="danger"

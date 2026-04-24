@@ -12,24 +12,32 @@ use Illuminate\Support\Collection;
 class GameRepository
 {
     /**
-     * Fetch games for a console, optionally scoped to a folder:
-     *   - null / ''      → all games for the console
-     *   - 'root'         → games directly under games/{console.folder}/ (no subfolder)
-     *   - any other name → games under games/{console.folder}/{folder}/
+     * Fetch games for a console, optionally scoped to one or more folders.
+     *
+     * $folders values:
+     *   - []             → all games for the console
+     *   - ['root', ...]  → games directly under games/{console.folder}/ (no subfolder) ∪ …
+     *   - ['DVD', 'CD']  → union of games under games/{console.folder}/DVD/ and /CD/
      */
-    public function allForConsoleFolder(Console $console, ?string $folder = null): EloquentCollection
+    public function allForConsoleFolders(Console $console, array $folders): EloquentCollection
     {
         $query = Game::with('metadata')->where('console', $console->key);
 
+        if ($folders === []) {
+            return $query->get();
+        }
+
         $base = '/' . $console->folder . '/';
 
-        if ($folder === null || $folder === '') {
-            // all
-        } elseif ($folder === 'root') {
-            $query->where('file_path', 'NOT LIKE', '%' . $base . '%/%');
-        } else {
-            $query->where('file_path', 'LIKE', '%' . $base . $folder . '/%');
-        }
+        $query->where(function ($q) use ($folders, $base) {
+            foreach ($folders as $folder) {
+                if ($folder === 'root') {
+                    $q->orWhere('file_path', 'NOT LIKE', '%' . $base . '%/%');
+                } else {
+                    $q->orWhere('file_path', 'LIKE', '%' . $base . $folder . '/%');
+                }
+            }
+        });
 
         return $query->get();
     }
