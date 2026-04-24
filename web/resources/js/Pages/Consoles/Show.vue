@@ -141,8 +141,8 @@ async function confirmDeleteFolder() {
           <input
             v-model="query"
             type="text"
-            placeholder="Search games…"
-            class="w-56 rounded-md bg-zinc-800 border border-zinc-700 focus:border-emerald-500/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors"
+            placeholder="Search titles, publisher, filename…"
+            class="w-64 rounded-md bg-zinc-800 border border-zinc-700 focus:border-emerald-500/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors"
           />
           <CreateDirectory
             :console="props.console"

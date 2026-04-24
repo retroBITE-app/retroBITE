@@ -21,7 +21,6 @@ return [
         'schema'    => [
             'name'             => ['type' => 'text',   'label' => 'Display name',        'required' => true],
             'brand'            => ['type' => 'text',   'label' => 'Brand'],
-            'folder'           => ['type' => 'text',   'label' => 'Folder',              'required' => true],
             'icon'             => ['type' => 'text',   'label' => 'Icon URL'],
             'file_icon'        => ['type' => 'text',   'label' => 'File-icon URL'],
             'file_extensions'  => ['type' => 'text[]', 'label' => 'Game extensions',     'required' => true],
@@ -36,7 +35,6 @@ return [
         'item_name' => 'name',
         'schema'    => [
             'name'  => ['type' => 'text',   'label' => 'Name',        'required' => true],
-            'flag'  => ['type' => 'text',   'label' => 'Flag code'],
             'codes' => ['type' => 'text[]', 'label' => 'Match codes', 'required' => true],
             'icon'  => ['type' => 'text',   'label' => 'Icon URL'],
         ],
