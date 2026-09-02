@@ -15,7 +15,8 @@ use RuntimeException;
  */
 class ScreenScraperService
 {
-    private const DEFAULT_REGION = 'ss'; // ScreenScraper's "fallback" region
+    private const SOFTNAME = 'retroBITE';
+    private const DEFAULT_REGION = 'ss';
     private const PREFERRED_LANG = 'en';
 
     /** Region preference for box art / screenshots — English-speaking first. */
@@ -215,13 +216,13 @@ class ScreenScraperService
         $creds = config('settings.screenscraper');
 
         if (Arr::get($creds, 'dev_id') === '' || Arr::get($creds, 'dev_password') === '') {
-            throw new RuntimeException('ScreenScraper credentials not configured — see SCREENSCRAPER_* env vars.');
+            throw new RuntimeException('ScreenScraper dev credentials missing — see config/settings.php.');
         }
 
         $query = array_filter([
             'devid'       => Arr::get($creds, 'dev_id'),
             'devpassword' => Arr::get($creds, 'dev_password'),
-            'softname'    => Arr::get($creds, 'softname', 'retroBITE'),
+            'softname'    => self::SOFTNAME,
             'ssid'        => Arr::get($creds, 'user'),
             'sspassword'  => Arr::get($creds, 'password'),
             'output'      => 'json',
@@ -232,7 +233,7 @@ class ScreenScraperService
             . '/' . ltrim($endpoint, '/');
 
         try {
-            $response = Http::withUserAgent(Arr::get($creds, 'softname', 'retroBITE'))
+            $response = Http::withUserAgent(self::SOFTNAME)
                 ->connectTimeout(5)
                 ->timeout(15)
                 ->get($url, $query);

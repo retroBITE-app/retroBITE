@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Support\Obfuscated;
 use Illuminate\Support\Arr;
 
 $base      = dirname(__DIR__);
@@ -16,13 +17,13 @@ return [
         'host_ip'  => Arr::get($_ENV, 'HOST_IP', '127.0.0.1'),
         'username' => Arr::get($_ENV, 'AUTH_USER', 'retrobite'),
     ],
+
     'screenscraper'   => [
-        'dev_id'       => Arr::get($_ENV, 'SCREENSCRAPER_DEV_ID', ''),
-        'dev_password' => Arr::get($_ENV, 'SCREENSCRAPER_DEV_PASSWORD', ''),
+        'dev_id'       => Obfuscated::reveal('AAQfHw4='),
+        'dev_password' => Obfuscated::reveal('ICkQAFwOCCY9KDw='),
         'user'         => Arr::get($_ENV, 'SCREENSCRAPER_USER', ''),
         'password'     => Arr::get($_ENV, 'SCREENSCRAPER_PASSWORD', ''),
-        'softname'     => Arr::get($_ENV, 'SCREENSCRAPER_SOFTNAME', 'retroBITE'),
-        'endpoint'     => Arr::get($_ENV, 'SCREENSCRAPER_ENDPOINT', 'https://api.screenscraper.fr/api2'),
+        'endpoint'     => 'https://api.screenscraper.fr/api2',
     ],
 
     // Root paths
