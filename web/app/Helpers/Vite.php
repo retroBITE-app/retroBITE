@@ -52,10 +52,16 @@ class Vite
 
         // Development — no manifest, use Vite HMR dev server
         if ($manifest === null) {
-            $tags = '<script type="module" src="http://localhost:5173/@vite/client"></script>' . "\n";
+            $dev = rtrim((string) config('settings.vite_dev_url'), '/');
+
+            $tags = sprintf(
+                '<script type="module" src="%s/@vite/client"></script>' . "\n",
+                htmlspecialchars($dev, ENT_QUOTES, 'UTF-8')
+            );
             foreach ($entrypoints as $ep) {
                 $tags .= sprintf(
-                    '<script type="module" src="http://localhost:5173/%s"></script>' . "\n",
+                    '<script type="module" src="%s/%s"></script>' . "\n",
+                    htmlspecialchars($dev, ENT_QUOTES, 'UTF-8'),
                     htmlspecialchars($ep, ENT_QUOTES, 'UTF-8')
                 );
             }

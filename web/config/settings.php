@@ -13,6 +13,13 @@ $resources = $base . '/resources';
 
 return [
     'app_debug'       => (bool) Arr::get($_ENV, 'APP_DEBUG', true),
+
+    // Vite HMR dev server — override the port when 5173 is taken by another project
+    'vite_dev_url'    => Arr::get(
+        $_ENV,
+        'VITE_DEV_URL',
+        'http://localhost:' . Arr::get($_ENV, 'VITE_PORT', '5173')
+    ),
     'network'         => [
         'host_ip'  => Arr::get($_ENV, 'HOST_IP', '127.0.0.1'),
         'username' => Arr::get($_ENV, 'AUTH_USER', 'retrobite'),

@@ -14,6 +14,22 @@ services:
       - retrobite-data:/data
     restart: always
 
+  # Opt-in: `docker compose -f docker-compose.dev.yml --profile vite up`.
+  # Skip it if you already run `npm run dev` on the host — both bind VITE_PORT.
+  retrobite-vite:
+    image: node:22-alpine
+    container_name: retrobite-vite
+    profiles: ["vite"]
+    working_dir: /app/web
+    env_file:
+      - .env
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    ports:
+      - "${VITE_PORT:-5173}:${VITE_PORT:-5173}"
+    volumes:
+      - ./web:/app/web
+    restart: always
+
   retrobite-share:
     build:
       context: .
