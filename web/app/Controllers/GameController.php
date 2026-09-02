@@ -230,8 +230,11 @@ class GameController
     }
 
     /**
-     * Permanently delete a game: unlinks the file on disk and removes the
-     * game + any associated metadata row. Not reversible.
+     * Permanently delete a game: unlinks the file on disk and removes the game
+     * row. Not reversible.
+     *
+     * The game_metadata row is keyed by md5 and left in place, so re-adding the
+     * same file restores its identification without another provider lookup.
      */
     public function destroy(Request $_request, Response $response, array $args): Response
     {

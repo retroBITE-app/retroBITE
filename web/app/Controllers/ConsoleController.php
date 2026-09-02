@@ -106,7 +106,8 @@ class ConsoleController
     }
 
     /**
-     * Scan the filesystem for games and update DB metadata.
+     * Scan the filesystem for games and update DB metadata, then drop rows whose
+     * file is no longer on disk so the database matches the directory.
      */
     public function scan(Request $request, Response $response, array $args): Response
     {
@@ -116,8 +117,21 @@ class ConsoleController
             return $response->withStatus(404);
         }
 
+        $mounted = is_dir($console->path());
+
         foreach ($this->filesystem->scanConsoleDir($console) as $file) {
             $this->games->scanUpsert($console->key, $file);
+        }
+
+        if ($mounted) {
+            $pruned = $this->games->pruneMissing($console);
+
+            if ($pruned > 0) {
+                logger()->info('Pruned missing games', [
+                    'console' => $console->key,
+                    'removed' => $pruned,
+                ]);
+            }
         }
 
         return Inertia::redirect($response, '/consoles/' . $console->key);

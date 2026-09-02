@@ -65,6 +65,29 @@ class GameRepository
     }
 
     /**
+     * Delete this console's rows whose file is gone from disk. Returns the number
+     * of rows removed.
+     *
+     * Meant to run right after a scan, which refreshes file_path first, so a file
+     * moved outside the app gets its path corrected rather than mistaken for a
+     * missing one. Metadata is keyed by md5 and deliberately left alone — it
+     * re-associates on its own if the file ever comes back.
+     */
+    public function pruneMissing(Console $console): int
+    {
+        $missing = Game::select(['id', 'file_path'])
+            ->where('console', $console->key)
+            ->get()
+            ->reject(fn(Game $game) => is_file((string) $game->file_path))
+            ->pluck('id');
+
+        // Chunked so a large library cannot exceed SQLite's bound-variable limit.
+        return (int) $missing
+            ->chunk(500)
+            ->sum(fn(Collection $chunk) => Game::whereIn('id', $chunk->values()->all())->delete());
+    }
+
+    /**
      * Game + BIOS counts per console, keyed by console slug.
      *
      * @return Collection<string, array{game_count: int, bios_count: int}>
@@ -119,7 +142,7 @@ class GameRepository
                 'last_seen_at'  => $now,
             ]],
             uniqueBy: ['id'],
-            update: ['file_size', 'file_md5', 'last_seen_at'],
+            update: ['file_path', 'file_size', 'file_md5', 'last_seen_at'],
         );
     }
 }
