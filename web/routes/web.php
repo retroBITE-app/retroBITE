@@ -25,6 +25,7 @@ $app->group('', function (RouteCollectorProxy $group) {
     $group->get('/consoles/{console}/{game}', [GameController::class, 'show']);
     $group->post('/consoles/{console}/{game}/identify', [GameController::class, 'identify']);
     $group->post('/consoles/{console}/{game}/metadata', [GameController::class, 'assignMetadata']);
+    $group->post('/consoles/{console}/{game}/move', [GameController::class, 'move']);
     $group->delete('/consoles/{console}/{game}', [GameController::class, 'destroy']);
     $group->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
     $group->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);

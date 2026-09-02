@@ -4,6 +4,7 @@ import { Link, router } from '@inertiajs/vue3'
 import { formatSize } from '@/Helpers/format'
 import PageHeader from '@/Components/PageHeader.vue'
 import IdentifyModal from '@/Components/IdentifyModal.vue'
+import MoveModal from '@/Components/MoveModal.vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
@@ -34,6 +35,9 @@ const props = defineProps<{
     region?:        string | null
     regionMeta?:    { name: string; flag: string; codes: string[]; icon: string } | null
   },
+  folder:      string
+  folderLabel: string
+  folders:     Array<{ value: string; label: string }>
 }>()
 
 function formatDate(ts?: number): string {
@@ -47,6 +51,7 @@ const ext = props.game.file_name.split('.').pop()?.toUpperCase() ?? '—'
 const actionsOpen = ref(false)
 const actionsRef = ref<HTMLElement | null>(null)
 const identifyOpen = ref(false)
+const moveOpen = ref(false)
 const deleteOpen = ref(false)
 const deleting = ref(false)
 const deleteError = ref<string | null>(null)
@@ -54,6 +59,11 @@ const deleteError = ref<string | null>(null)
 function openIdentify() {
   actionsOpen.value = false
   identifyOpen.value = true
+}
+
+function openMove() {
+  actionsOpen.value = false
+  moveOpen.value = true
 }
 
 function openDelete() {
@@ -144,6 +154,13 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
                     class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors"
                   >
                     Identify
+                  </button>
+                  <button
+                    v-if="folders.length > 1"
+                    @click="openMove"
+                    class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors"
+                  >
+                    Move
                   </button>
                   <!-- <button class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors">
                     Edit Meta
@@ -256,6 +273,16 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
       :console="props.console"
       :game-file-name="game.file_name"
       @close="identifyOpen = false"
+    />
+
+    <MoveModal
+      :open="moveOpen"
+      :console="props.console"
+      :game-file-name="game.file_name"
+      :folder="folder"
+      :folder-label="folderLabel"
+      :folders="folders"
+      @close="moveOpen = false"
     />
 
     <ConfirmDialog

@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Support\Console;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Psr\Http\Message\UploadedFileInterface;
+use RuntimeException;
 
 class FilesystemService
 {
@@ -26,6 +29,25 @@ class FilesystemService
             ->reject(fn(string $name) => $name === '.' || $name === '..' || !is_dir($base . '/' . $name))
             ->values()
             ->all();
+    }
+
+    /**
+     * The subfolder a file sits in, relative to the console root. Returns '' for a
+     * file directly under the root, and may be nested (e.g. "BIOS/Misc BIOS").
+     *
+     * Paths that do not live under this console's root also yield '' — the move
+     * guard rejects those separately rather than guessing at a folder for them.
+     */
+    public function relativeFolder(Console $console, ?string $filePath): string
+    {
+        $base = $console->path() . '/';
+
+        if ($filePath === null || !Str::startsWith($filePath, $base)) {
+            return '';
+        }
+
+        $relative = Str::after($filePath, $base);
+        return Str::contains($relative, '/') ? Str::beforeLast($relative, '/') : '';
     }
 
     /**
@@ -80,6 +102,51 @@ class FilesystemService
     public function createDir(Console $console, string $subfolder): void
     {
         $this->ensureDir($console->path($subfolder));
+    }
+
+    /**
+     * Move a file into a different subfolder of the same console.
+     */
+    public function moveFile(Console $console, string $sourcePath, string $subfolder): string
+    {
+        $base   = realpath($console->path()) ?: null;
+        $source = realpath($sourcePath) ?: null;
+
+        if ($base === null || $source === null || !is_file($source)) {
+            throw new RuntimeException('Source file not found on disk');
+        }
+
+        if (!Str::startsWith($source, $base . '/')) {
+            throw new RuntimeException('Source file lives outside the console folder');
+        }
+
+        $targetDir = realpath($console->path($subfolder)) ?: null;
+
+        if ($targetDir === null || !is_dir($targetDir)) {
+            throw new RuntimeException('Destination folder does not exist');
+        }
+
+        if ($targetDir !== $base && !Str::startsWith($targetDir . '/', $base . '/')) {
+            throw new RuntimeException('Destination folder lives outside the console folder');
+        }
+
+        $destination = $targetDir . '/' . basename($source);
+
+        if ($destination === $source) {
+            throw new RuntimeException('Source and destination are the same');
+        }
+
+        if (file_exists($destination)) {
+            throw new RuntimeException('A file with that name already exists in the destination');
+        }
+
+        if (!@rename($source, $destination)) {
+            throw new RuntimeException(
+                'rename() failed: ' . Arr::get(error_get_last() ?? [], 'message', 'unknown error')
+            );
+        }
+
+        return $destination;
     }
 
     /**
