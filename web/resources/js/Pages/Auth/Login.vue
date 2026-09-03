@@ -1,15 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
-import {
-  PhEye,
-  PhEyeSlash,
-  PhHardDrives,
-  PhLockSimple,
-  PhSignIn,
-  PhUser,
-} from '@phosphor-icons/vue'
-import AppBrand from '@/Components/AppBrand.vue'
+import { PhEye, PhEyeSlash, PhLockSimple, PhSignIn, PhUser } from '@phosphor-icons/vue'
 import IconField from '@/Components/UI/IconField.vue'
 import { route } from '@/routes'
 import type { HostStat } from '@/Types/api'
@@ -48,14 +40,14 @@ function submit(): void {
       class="order-2 flex items-center justify-center overflow-y-auto px-5 pt-6 pb-10 lg:order-1 lg:border-r lg:border-line-bright lg:px-14 lg:py-12"
     >
       <div class="flex w-full max-w-[372px] flex-col">
-        <img src="/images/logo.webp" alt="retroBITE" class="block h-auto w-[148px]" />
+        <img src="/images/logo.webp" alt="retroBITE" class="mx-auto block h-auto w-[148px]" />
 
-        <p class="mt-9 text-3xs tracking-[0.2em] text-fg-faint uppercase">Sign in</p>
-        <h1 class="mt-2 text-[25px] leading-tight font-medium tracking-[-0.01em] text-fg">
+        <p class="mt-9 text-3xs text-center tracking-[0.2em] text-fg-faint uppercase">Sign in</p>
+        <h1 class="mt-2 text-[25px] text-center leading-tight font-medium tracking-[-0.01em] text-fg">
           Welcome back
         </h1>
-        <p class="mt-2 text-[13.5px] leading-relaxed text-fg-dim">
-          Your library, achievements and console files are waiting on this host.
+        <p class="mt-2 text-center text-[13.5px] leading-relaxed text-fg-dim">
+          Your library, achievements and console files are waiting.
         </p>
 
         <form class="mt-8 flex flex-col gap-4" @submit.prevent="submit">
@@ -111,12 +103,6 @@ function submit(): void {
             {{ form.processing ? 'Signing in…' : 'Sign in' }}
           </button>
         </form>
-
-        <div class="mt-9 flex items-center gap-2.5 border-t border-line-bright pt-4">
-          <PhHardDrives :size="15" class="shrink-0 text-fg-faint" />
-          <span class="font-mono text-2xs text-fg-faint">retrobite.local</span>
-          <AppBrand class="ml-auto text-fg-faint" />
-        </div>
       </div>
     </div>
 
