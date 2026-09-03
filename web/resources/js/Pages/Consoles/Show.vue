@@ -6,6 +6,7 @@ import PageHeader from '@/Components/PageHeader.vue'
 import FileUploader from '@/Components/FileUploader.vue'
 import CreateDirectory from '@/Components/CreateDirectory.vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
+import { apiHeaders } from '@/Helpers/http'
 
 const props = defineProps<{
   console: string
@@ -124,7 +125,7 @@ async function confirmDeleteFolder() {
     const url = `/consoles/${props.console}/folder/${encodeURIComponent(target)}`
     const res = await fetch(url, {
       method:  'DELETE',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: apiHeaders(),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)

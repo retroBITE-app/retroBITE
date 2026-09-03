@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { apiHeaders } from '@/Helpers/http'
 
 const props = defineProps<{
   console:     string
@@ -67,7 +68,7 @@ async function create() {
       method:  'POST',
       headers: {
         'Content-Type':     'application/x-www-form-urlencoded',
-        'X-Requested-With': 'XMLHttpRequest',
+        ...apiHeaders(),
       },
       body: form.toString(),
     })

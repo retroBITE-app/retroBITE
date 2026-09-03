@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { formatSize } from '@/Helpers/format'
+import { apiHeaders } from '@/Helpers/http'
 
 const props = defineProps<{
   console: string
@@ -165,7 +166,9 @@ function sendChunk(opts: {
 
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `/consoles/${props.console}/upload-chunk`)
-    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest')
+    for (const [name, value] of Object.entries(apiHeaders())) {
+      xhr.setRequestHeader(name, value)
+    }
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) opts.onProgress(Math.round((e.loaded / e.total) * 100))

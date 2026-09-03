@@ -14,10 +14,11 @@ use Slim\Routing\RouteCollectorProxy;
 // Public auth routes
 $app->get('/login',  [AuthController::class, 'showLogin']);
 $app->post('/login', [AuthController::class, 'login']);
-$app->post('/logout', [AuthController::class, 'logout']);
 
 // Protected routes
 $app->group('', function (RouteCollectorProxy $group) {
+    $group->post('/logout', [AuthController::class, 'logout']);
+
     $group->get('/', [DashboardController::class, 'index']);
 
     $group->get('/consoles', [ConsoleController::class, 'index']);

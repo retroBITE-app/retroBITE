@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { apiHeaders } from '@/Helpers/http'
 
 type ConsoleEntry = { key: string; name: string }
 
@@ -51,7 +52,7 @@ async function create() {
         method:  'POST',
         headers: {
           'Content-Type':     'application/x-www-form-urlencoded',
-          'X-Requested-With': 'XMLHttpRequest',
+          ...apiHeaders(),
         },
         body: form.toString(),
       })

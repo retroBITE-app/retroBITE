@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
+import { apiHeaders } from '@/Helpers/http'
 
 const props = defineProps<{
   open:         boolean
@@ -53,7 +54,7 @@ async function load() {
     const url = `/consoles/${props.console}/${encodeURIComponent(props.gameFileName)}/identify${query}`
     const res = await fetch(url, {
       method:  'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: apiHeaders(),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -79,7 +80,7 @@ async function pick(providerId: string, source: 'md5' | 'name') {
       method:  'POST',
       headers: {
         'Content-Type':     'application/x-www-form-urlencoded',
-        'X-Requested-With': 'XMLHttpRequest',
+        ...apiHeaders(),
       },
       body: `provider_id=${encodeURIComponent(providerId)}`,
     })

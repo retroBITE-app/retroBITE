@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import PageHeader from '@/Components/PageHeader.vue'
 import SettingsEditModal from '@/Components/SettingsEditModal.vue'
+import { apiHeaders } from '@/Helpers/http'
 
 type FieldMeta = {
   type:      'text' | 'number' | 'text[]'
@@ -64,7 +65,7 @@ async function reset(slug: string, key: string) {
   try {
     const res = await fetch(`/settings/${slug}/${encodeURIComponent(key)}/reset`, {
       method:  'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: apiHeaders(),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)

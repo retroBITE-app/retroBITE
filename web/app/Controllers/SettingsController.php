@@ -21,7 +21,7 @@ class SettingsController
     /**
      * Settings page: tabs per overridable group, each with its current item values.
      */
-    public function index(Request $_request, Response $response): Response
+    public function index(Request $request, Response $response): Response
     {
         $overrides = $this->settings->asMap();
 
@@ -42,8 +42,9 @@ class SettingsController
     }
 
     /**
-     * Persist a whole-item override.
-     * Body: JSON of the full entry. Validates against the group's schema.
+     * Persist an override for one existing item. Body is JSON of the entry's schema
+     * fields; unknown fields are dropped and a key that does not already exist is
+     * rejected rather than creating an entry missing its unexposed fields.
      */
     public function save(Request $request, Response $response, array $args): Response
     {
@@ -54,8 +55,12 @@ class SettingsController
             return $this->jsonError($response, 'Unknown group', 404);
         }
 
-        if (!preg_match('/^[a-zA-Z0-9_\-]+$/', $key)) {
+        if (!Registry::isValidKey($key)) {
             return $this->jsonError($response, 'Invalid key', 422);
+        }
+
+        if (!Registry::hasItem($group, $key)) {
+            return $this->jsonError($response, 'Unknown item', 404);
         }
 
         $body = $request->getParsedBody();
@@ -63,28 +68,33 @@ class SettingsController
             return $this->jsonError($response, 'Body must be JSON object', 422);
         }
 
-        $normalised = Registry::normalise($group, $body);
-        $errors     = Registry::validate($group, $normalised);
+        $normalized = Registry::normalize($group, $body);
+        $errors     = Registry::validate($group, $normalized);
 
         if ($errors !== []) {
             return $this->json($response, ['error' => 'Validation failed', 'errors' => $errors], 422);
         }
 
-        $this->settings->upsert($group, $key, $normalised);
+        $this->settings->upsert($group, $key, $normalized);
 
-        return $this->json($response, ['status' => 'ok', 'value' => $normalised]);
+        return $this->json($response, ['status' => 'ok', 'value' => $normalized]);
     }
 
     /**
-     * Remove a previously-saved override; config() falls back to the file default.
+     * Remove a saved override so config() falls back to the file default. Unlike
+     * save(), the item need not still exist — orphaned rows must stay deletable.
      */
-    public function reset(Request $_request, Response $response, array $args): Response
+    public function reset(Request $request, Response $response, array $args): Response
     {
         $group = (string) Arr::get($args, 'group');
         $key   = (string) Arr::get($args, 'key');
 
         if (!Registry::has($group)) {
             return $this->jsonError($response, 'Unknown group', 404);
+        }
+
+        if (!Registry::isValidKey($key)) {
+            return $this->jsonError($response, 'Invalid key', 422);
         }
 
         $deleted = $this->settings->delete($group, $key);

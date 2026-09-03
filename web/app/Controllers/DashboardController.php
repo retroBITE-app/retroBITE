@@ -16,7 +16,7 @@ class DashboardController
         private GameRepository $games,
     ) {}
 
-    public function index(Request $_request, Response $response): Response
+    public function index(Request $request, Response $response): Response
     {
         $counts = $this->games->consoleCounts();
 

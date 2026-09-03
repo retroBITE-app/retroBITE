@@ -12,7 +12,7 @@ class NetworkController
 {
     public function __construct(private NetworkService $network) {}
 
-    public function status(Request $_request, Response $response): Response
+    public function status(Request $request, Response $response): Response
     {
         $data = $this->network->status();
         $response->getBody()->write(json_encode($data));

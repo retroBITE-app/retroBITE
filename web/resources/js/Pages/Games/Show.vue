@@ -7,6 +7,7 @@ import IdentifyModal from '@/Components/IdentifyModal.vue'
 import MoveModal from '@/Components/MoveModal.vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { apiHeaders } from '@/Helpers/http'
 
 defineOptions({
   layout: (h: typeof import('vue').h, page: any) => h(AppLayout, { noPadding: true }, () => page),
@@ -80,7 +81,7 @@ async function confirmDelete() {
     const url = `/consoles/${props.console}/${encodeURIComponent(props.game.file_name)}`
     const res = await fetch(url, {
       method:  'DELETE',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      headers: apiHeaders(),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)

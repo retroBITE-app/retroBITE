@@ -27,18 +27,42 @@ final class Registry
         return (array) config("overridable.{$group}.schema", []);
     }
 
+    /**
+     * Human-readable group name for the settings UI, falling back to the slug.
+     */
     public static function labelFor(string $group): string
     {
         return (string) config("overridable.{$group}.label", $group);
     }
 
+    /**
+     * Is this group declared overridable?
+     */
     public static function has(string $group): bool
     {
         return is_array(config("overridable.{$group}"));
     }
 
     /**
-     * Coerce a raw incoming value to the schema-declared type. Returns the normalised value.
+     * Does the group already contain this item? Overrides may only edit existing
+     * entries — an unknown key would invent one missing every unexposed field.
+     */
+    public static function hasItem(string $group, string $key): bool
+    {
+        return is_array(config("{$group}.{$key}"));
+    }
+
+    /**
+     * Is this a syntactically valid item key? Item keys become config path segments,
+     * so they are restricted to a conservative slug alphabet.
+     */
+    public static function isValidKey(string $key): bool
+    {
+        return preg_match('/^[a-zA-Z0-9_\-]+$/', $key) === 1;
+    }
+
+    /**
+     * Coerce a raw incoming value to the schema-declared type. Returns the normalized value.
      */
     public static function coerce(string $type, mixed $value): mixed
     {
@@ -82,9 +106,9 @@ final class Registry
     }
 
     /**
-     * Normalise an item payload: drop unknown fields, coerce types on known fields.
+     * Normalize an item payload: drop unknown fields, coerce types on known fields.
      */
-    public static function normalise(string $group, array $payload): array
+    public static function normalize(string $group, array $payload): array
     {
         $out = [];
         foreach (self::schemaFor($group) as $field => $meta) {

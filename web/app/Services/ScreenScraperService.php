@@ -219,6 +219,8 @@ class ScreenScraperService
             throw new RuntimeException('ScreenScraper dev credentials missing — see config/settings.php.');
         }
 
+        // The v2 API only accepts credentials as query parameters, so anything that
+        // echoes a request URL must go through redact() first.
         $query = array_filter([
             'devid'       => Arr::get($creds, 'dev_id'),
             'devpassword' => Arr::get($creds, 'dev_password'),
@@ -238,7 +240,7 @@ class ScreenScraperService
                 ->timeout(15)
                 ->get($url, $query);
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            throw new RuntimeException("ScreenScraper HTTP error: {$e->getMessage()}");
+            throw new RuntimeException('ScreenScraper HTTP error: ' . $this->redact($e->getMessage()));
         }
 
         $status = $response->status();
@@ -259,6 +261,24 @@ class ScreenScraperService
         return is_array($json) ? $json : [];
     }
 
+    /**
+     * Strip credential values out of a message before it is thrown or logged.
+     * The API only accepts them as query parameters, and Guzzle appends the full
+     * request URL to its connection errors.
+     */
+    private function redact(string $message): string
+    {
+        return (string) preg_replace(
+            '/\b(devid|devpassword|ssid|sspassword)=[^&\s]*/i',
+            '$1=REDACTED',
+            $message,
+        );
+    }
+
+    /**
+     * Decode the response body, tolerating the plain-text quota and auth notices
+     * ScreenScraper prepends to otherwise valid JSON.
+     */
     private function extractJson(string $body): mixed
     {
         $decoded = json_decode($body, true);

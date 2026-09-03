@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
+import { apiHeaders } from '@/Helpers/http'
 
 const props = defineProps<{
   open:        boolean
@@ -39,7 +40,7 @@ async function submit() {
       method:  'POST',
       headers: {
         'Content-Type':     'application/x-www-form-urlencoded',
-        'X-Requested-With': 'XMLHttpRequest',
+        ...apiHeaders(),
       },
       body: form.toString(),
     })

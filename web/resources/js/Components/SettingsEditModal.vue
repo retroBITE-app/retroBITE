@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { apiHeaders } from '@/Helpers/http'
 
 type FieldMeta = {
   type:      'text' | 'number' | 'text[]'
@@ -93,7 +94,7 @@ async function save() {
       method:  'POST',
       headers: {
         'Content-Type':     'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
+        ...apiHeaders(),
       },
       body: JSON.stringify(payload),
     })

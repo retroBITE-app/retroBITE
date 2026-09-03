@@ -30,7 +30,7 @@ class GameController
         private MediaCacheService $mediaCache,
     ) {}
 
-    public function show(Request $_request, Response $response, array $args): Response
+    public function show(Request $request, Response $response, array $args): Response
     {
         $console = Console::tryFrom(Arr::get($args, 'console'));
 
@@ -96,7 +96,7 @@ class GameController
 
             $candidates = $this->screenScraper->search($console, $searchName);
         } catch (Throwable $e) {
-            return $this->jsonError($response, 'ScreenScraper request failed: ' . $e->getMessage(), 502);
+            return $this->providerFailed($response, $e);
         }
 
         return $this->json($response, [
@@ -128,7 +128,7 @@ class GameController
         try {
             $payload = $this->screenScraper->fetchById($providerId);
         } catch (Throwable $e) {
-            return $this->jsonError($response, 'ScreenScraper request failed: ' . $e->getMessage(), 502);
+            return $this->providerFailed($response, $e);
         }
 
         if (!$payload) {
@@ -191,7 +191,7 @@ class GameController
             return $this->jsonError($response, 'Game is already in that folder', 422);
         }
 
-        if (is_file($console->path($subfolder) . '/' . $game->file_name)) {
+        if ($this->filesystem->exists($console, $subfolder, (string) $game->file_name)) {
             return $this->jsonError(
                 $response,
                 'A file named "' . $game->file_name . '" already exists there',
@@ -202,21 +202,28 @@ class GameController
         try {
             $to = $this->filesystem->moveFile($console, $from, $subfolder);
         } catch (Throwable $e) {
-            return $this->jsonError($response, 'Move failed: ' . $e->getMessage(), 500);
+            logger()->error('Move failed', ['game' => $game->id, 'message' => $e->getMessage()]);
+
+            return $this->jsonError($response, 'Move failed', 500);
         }
 
         try {
             $game->update(['file_path' => $to]);
         } catch (Throwable $e) {
             if (@rename($to, $from)) {
-                return $this->jsonError($response, 'Move failed: ' . $e->getMessage(), 500);
+                logger()->error('Move rolled back after a failed database update', [
+                    'game'    => $game->id,
+                    'message' => $e->getMessage(),
+                ]);
+
+                return $this->jsonError($response, 'Move failed', 500);
             }
 
             logger()->error('Move left disk and database out of sync', [
-                'game'     => $game->id,
-                'expected' => $from,
-                'actual'   => $to,
-                'error'    => $e->getMessage(),
+                'game'        => $game->id,
+                'row_path'    => $from,
+                'actual_path' => $to,
+                'message'     => $e->getMessage(),
             ]);
 
             return $this->jsonError(
@@ -236,7 +243,7 @@ class GameController
      * The game_metadata row is keyed by md5 and left in place, so re-adding the
      * same file restores its identification without another provider lookup.
      */
-    public function destroy(Request $_request, Response $response, array $args): Response
+    public function destroy(Request $request, Response $response, array $args): Response
     {
         $console = Console::tryFrom(Arr::get($args, 'console'));
         if (!$console) {
@@ -249,12 +256,12 @@ class GameController
         }
 
         try {
-            if (is_file($game->file_path)) {
-                unlink($game->file_path);
-            }
+            $this->filesystem->deleteFile($console, (string) $game->file_path);
             $game->delete();
         } catch (Throwable $e) {
-            return $this->jsonError($response, 'Delete failed: ' . $e->getMessage(), 500);
+            logger()->error('Delete failed', ['game' => $game->id, 'message' => $e->getMessage()]);
+
+            return $this->jsonError($response, 'Delete failed', 500);
         }
 
         return $this->json($response, ['status' => 'ok']);
@@ -276,9 +283,24 @@ class GameController
         return trim(Str::of($base)->replaceMatches('/\s+/', ' ')->toString());
     }
 
+    /**
+     * Report an upstream provider failure without echoing its message — Guzzle's
+     * text appends the request URL, which carries the ScreenScraper credentials.
+     */
+    private function providerFailed(Response $response, Throwable $e): Response
+    {
+        logger()->error('ScreenScraper request failed', [
+            'exception' => get_class($e),
+            'message'   => $e->getMessage(),
+        ]);
+
+        return $this->jsonError($response, 'Metadata provider is unavailable', 502);
+    }
+
     private function json(Response $response, array $body, int $status = 200): Response
     {
-        $response->getBody()->write(json_encode($body));
+        $response->getBody()->write(json_encode($body, JSON_THROW_ON_ERROR));
+
         return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
     }
 

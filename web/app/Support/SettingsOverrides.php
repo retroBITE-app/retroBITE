@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Models\Setting;
+use Illuminate\Support\Arr;
 use Throwable;
 
 /**
@@ -21,7 +22,9 @@ final class SettingsOverrides
     private static ?array $loaded = null;
 
     /**
-     * Merge overrides into a freshly-loaded config file's array.
+     * Merge overrides into a freshly-loaded config file's array, per item rather than
+     * per group — a saved override holds only schema fields, so replacing a whole
+     * entry would drop the unexposed ones (for consoles, `folder`).
      */
     public static function applyTo(string $file, array $value): array
     {
@@ -33,9 +36,19 @@ final class SettingsOverrides
             return $value;
         }
 
-        $overrides = self::forGroup($file);
+        foreach (self::forGroup($file) as $key => $override) {
+            if (!is_array($override)) {
+                continue;
+            }
 
-        return $overrides === [] ? $value : array_replace($value, $overrides);
+            $existing = Arr::get($value, $key);
+
+            $value[$key] = is_array($existing)
+                ? array_replace($existing, $override)
+                : $override;
+        }
+
+        return $value;
     }
 
     /** @return array<string, mixed> */
@@ -48,22 +61,32 @@ final class SettingsOverrides
         return self::$loaded[$group] ?? [];
     }
 
+    /**
+     * Drop the memoized overrides so the next read hits the database again.
+     */
     public static function invalidate(): void
     {
         self::$loaded = null;
     }
 
+    /**
+     * Load every override row once per process, grouped by config file then item key.
+     * Failure is logged, not thrown: it is expected before the table exists.
+     */
     private static function loadAll(): void
     {
         self::$loaded = [];
 
         try {
             foreach (Setting::all() as $row) {
-                $decoded = json_decode((string) $row->value, true);
-                self::$loaded[$row->group][$row->key] = $decoded;
+                self::$loaded[$row->group][$row->key] = json_decode((string) $row->value, true);
             }
-        } catch (Throwable) {
-            // settings table missing (pre-migration) or Eloquent not yet booted — silent.
+        } catch (Throwable $e) {
+            // Any fault here silently reverts every override to its file default.
+            logger()->warning('Could not load settings overrides; using file defaults', [
+                'exception' => get_class($e),
+                'message'   => $e->getMessage(),
+            ]);
         }
     }
 }

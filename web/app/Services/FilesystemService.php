@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Support\Console;
-use Illuminate\Support\Arr;
+use App\Support\PathRules;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Psr\Http\Message\UploadedFileInterface;
@@ -52,6 +52,8 @@ class FilesystemService
 
     /**
      * Recursively scan a console's game directory and yield each valid SplFileInfo.
+     * Symlinks are skipped — games/ is also writable over SMB and FTP, so a link
+     * planted there would otherwise register a path outside the console root.
      *
      * @return iterable<\SplFileInfo>
      */
@@ -60,11 +62,15 @@ class FilesystemService
         $dir = $this->ensureDir($console->path());
 
         $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS)
+            new \RecursiveDirectoryIterator(
+                $dir,
+                \RecursiveDirectoryIterator::SKIP_DOTS,
+            ),
         );
 
         foreach ($iterator as $file) {
-            if (!$file->isFile()) {
+            /** @var \SplFileInfo $file */
+            if ($file->isLink() || !$file->isFile()) {
                 continue;
             }
             if (in_array($file->getFilename(), $console->excludeFiles, true)) {
@@ -83,17 +89,21 @@ class FilesystemService
      */
     public function writeChunk(string $uploadId, int $chunkIndex, UploadedFileInterface $chunk): void
     {
-        $tmpDir = $this->ensureDir(config('settings.tmp_path') . '/' . $uploadId);
+        if (!PathRules::isUploadId($uploadId)) {
+            throw new RuntimeException('Invalid upload id');
+        }
 
-        $chunk->moveTo($tmpDir . '/' . $chunkIndex . '.part');
+        $chunk->moveTo($this->ensureDir($this->stagingDir($uploadId)) . '/' . $chunkIndex . '.part');
     }
 
     /**
-     * Resolve the final destination path for a file, creating the directory if needed.
+     * Absolute destination path for a file, creating the target directory if needed.
      */
     public function resolvePath(Console $console, string $filename, string $subfolder): string
     {
-        return $this->ensureDir($console->path($subfolder)) . '/' . $filename;
+        $dir = $this->assertWithin($console, $console->path($subfolder), allowRoot: true);
+
+        return $this->ensureDir($dir) . '/' . basename($filename);
     }
 
     /**
@@ -101,7 +111,9 @@ class FilesystemService
      */
     public function createDir(Console $console, string $subfolder): void
     {
-        $this->ensureDir($console->path($subfolder));
+        $this->ensureDir(
+            $this->assertWithin($console, $console->path($subfolder), allowRoot: true)
+        );
     }
 
     /**
@@ -109,25 +121,18 @@ class FilesystemService
      */
     public function moveFile(Console $console, string $sourcePath, string $subfolder): string
     {
-        $base   = realpath($console->path()) ?: null;
         $source = realpath($sourcePath) ?: null;
 
-        if ($base === null || $source === null || !is_file($source)) {
+        if ($source === null || !is_file($source)) {
             throw new RuntimeException('Source file not found on disk');
         }
 
-        if (!Str::startsWith($source, $base . '/')) {
-            throw new RuntimeException('Source file lives outside the console folder');
-        }
+        $this->assertWithin($console, $source);
 
-        $targetDir = realpath($console->path($subfolder)) ?: null;
+        $targetDir = $this->assertWithin($console, $console->path($subfolder), allowRoot: true);
 
-        if ($targetDir === null || !is_dir($targetDir)) {
+        if (!is_dir($targetDir)) {
             throw new RuntimeException('Destination folder does not exist');
-        }
-
-        if ($targetDir !== $base && !Str::startsWith($targetDir . '/', $base . '/')) {
-            throw new RuntimeException('Destination folder lives outside the console folder');
         }
 
         $destination = $targetDir . '/' . basename($source);
@@ -141,12 +146,53 @@ class FilesystemService
         }
 
         if (!@rename($source, $destination)) {
-            throw new RuntimeException(
-                'rename() failed: ' . Arr::get(error_get_last() ?? [], 'message', 'unknown error')
-            );
+            // error_get_last() carries absolute host paths, so it is logged, not thrown.
+            logger()->error('rename() failed', [
+                'source'      => $source,
+                'destination' => $destination,
+                'error'       => error_get_last()['message'] ?? 'unknown error',
+            ]);
+
+            throw new RuntimeException('Could not move the file');
         }
 
         return $destination;
+    }
+
+    /**
+     * Does a file already sit at this console-relative location?
+     */
+    public function exists(Console $console, string $subfolder, string $filename): bool
+    {
+        return is_file($console->path($subfolder) . '/' . basename($filename));
+    }
+
+    /**
+     * Delete one game file, reporting whether anything was removed. Refuses — and
+     * logs — a path outside the console root rather than throwing, so a stale row
+     * pointing elsewhere can still be cleaned up without unlinking that file.
+     */
+    public function deleteFile(Console $console, string $filePath): bool
+    {
+        $target = realpath($filePath) ?: null;
+
+        if ($target === null || !is_file($target)) {
+            return false;
+        }
+
+        try {
+            $this->assertWithin($console, $target);
+        } catch (RuntimeException $e) {
+            logger()->warning('Refused to delete a file outside the console folder', [
+                'console' => $console->key,
+                'path'    => $target,
+                'reason'  => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        return @unlink($target);
     }
 
     /**
@@ -155,20 +201,22 @@ class FilesystemService
      */
     public function deleteDir(Console $console, string $subfolder): bool
     {
-        $subfolder = trim($subfolder, '/');
-        if ($subfolder === '' || $subfolder === '.' || $subfolder === '..') {
+        $subfolder = PathRules::normalizeSubfolder($subfolder);
+
+        if (!PathRules::isSubfolder($subfolder)) {
             return false;
         }
 
-        $base   = realpath($console->path()) ?: null;
         $target = realpath($console->path($subfolder)) ?: null;
 
-        if ($base === null || $target === null) {
+        if ($target === null || !is_dir($target)) {
             return false;
         }
 
-        // Target must live strictly under $base, and must not be $base itself.
-        if ($target === $base || !str_starts_with($target . '/', $base . '/')) {
+        // Must live strictly under the console root, and not be the root itself.
+        try {
+            $this->assertWithin($console, $target);
+        } catch (RuntimeException) {
             return false;
         }
 
@@ -179,31 +227,50 @@ class FilesystemService
 
         foreach ($iterator as $fsi) {
             /** @var \SplFileInfo $fsi */
-            $fsi->isDir() ? @rmdir($fsi->getPathname()) : @unlink($fsi->getPathname());
+            $fsi->isDir() && !$fsi->isLink()
+                ? @rmdir($fsi->getPathname())
+                : @unlink($fsi->getPathname());
         }
 
         return @rmdir($target);
     }
 
     /**
-     * Reassemble ordered .part files into the destination path, then clean up the temp dir.
+     * Reassemble ordered .part files into the destination path, then clean up the
+     * temp dir. Verifies every chunk is present first, and refuses to overwrite.
      */
     public function assembleFile(string $uploadId, int $totalChunks, string $destPath): void
     {
-        $tmpDir = config('settings.tmp_path') . '/' . $uploadId;
-
-        $dest = fopen($destPath, 'wb');
-        for ($i = 0; $i < $totalChunks; $i++) {
-            $part = fopen($tmpDir . '/' . $i . '.part', 'rb');
-            stream_copy_to_stream($part, $dest);
-            fclose($part);
+        if (!PathRules::isUploadId($uploadId)) {
+            throw new RuntimeException('Invalid upload id');
         }
+
+        if (file_exists($destPath)) {
+            throw new RuntimeException('A file with that name already exists');
+        }
+
+        $parts = $this->assertChunksPresent($uploadId, $totalChunks);
+
+        $dest = @fopen($destPath, 'wb');
+
+        if ($dest === false) {
+            throw new RuntimeException('Could not open the destination file for writing');
+        }
+
+        try {
+            foreach ($parts as $partPath) {
+                $this->appendPart($partPath, $dest);
+            }
+        } catch (RuntimeException $e) {
+            fclose($dest);
+            @unlink($destPath);
+
+            throw $e;
+        }
+
         fclose($dest);
 
-        for ($i = 0; $i < $totalChunks; $i++) {
-            @unlink($tmpDir . '/' . $i . '.part');
-        }
-        @rmdir($tmpDir);
+        $this->discardStaging($uploadId, $totalChunks);
     }
 
     /**
@@ -216,7 +283,7 @@ class FilesystemService
         $codes = $matches[1] ?? [];
 
         return Collection::make(config('regions'))
-            ->filter(fn($region) => Collection::make($codes)->intersect($region['codes'])->isNotEmpty())
+            ->filter(fn(array $region) => Collection::make($codes)->intersect($region['codes'])->isNotEmpty())
             ->keys()
             ->first();
     }
@@ -236,11 +303,11 @@ class FilesystemService
             if (!$entry->isDir() || $entry->isDot()) {
                 continue;
             }
-            if (!preg_match('/^[0-9a-f\-]{36}$/', $entry->getFilename())) {
+            if (!PathRules::isUploadId($entry->getFilename())) {
                 continue;
             }
             if (time() - $entry->getMTime() > $maxAge) {
-                foreach (glob($entry->getPathname() . '/*.part') as $part) {
+                foreach (glob($entry->getPathname() . '/*.part') ?: [] as $part) {
                     @unlink($part);
                 }
                 @rmdir($entry->getPathname());
@@ -248,10 +315,142 @@ class FilesystemService
         }
     }
 
+    /**
+     * Assert a path resolves inside the console's root, and return it resolved.
+     * The single containment gate every write, move and delete goes through.
+     *
+     * Paths that do not exist yet are resolved through their nearest existing
+     * ancestor, so a console root can still be created while `..` is rejected.
+     */
+    private function assertWithin(Console $console, string $path, bool $allowRoot = false): string
+    {
+        $base     = $this->resolveIntendedPath($console->path());
+        $resolved = $this->resolveIntendedPath($path);
+
+        if ($base === null || $resolved === null) {
+            throw new RuntimeException('Path could not be resolved');
+        }
+
+        if ($resolved === $base) {
+            if ($allowRoot) {
+                return $resolved;
+            }
+
+            throw new RuntimeException('Path is the console root');
+        }
+
+        if (!str_starts_with($resolved . '/', $base . '/')) {
+            throw new RuntimeException('Path lives outside the console folder');
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * Resolve a path that does not exist yet by resolving its nearest existing
+     * ancestor, so containment can be checked before the directory is created.
+     */
+    private function resolveIntendedPath(string $path): ?string
+    {
+        $existing = realpath($path);
+
+        if ($existing !== false) {
+            return $existing;
+        }
+
+        $missing = [];
+        $current = rtrim($path, '/');
+
+        while ($current !== '' && $current !== '/' && !file_exists($current)) {
+            $missing[] = basename($current);
+            $current   = dirname($current);
+        }
+
+        $anchor = realpath($current) ?: null;
+
+        if ($anchor === null) {
+            return null;
+        }
+
+        return $missing === []
+            ? $anchor
+            : $anchor . '/' . implode('/', array_reverse($missing));
+    }
+
+    /**
+     * Paths of every chunk, in order, failing if any is missing.
+     *
+     * @return string[]
+     */
+    private function assertChunksPresent(string $uploadId, int $totalChunks): array
+    {
+        $tmpDir = $this->stagingDir($uploadId);
+        $parts  = [];
+
+        for ($i = 0; $i < $totalChunks; $i++) {
+            $path = $tmpDir . '/' . $i . '.part';
+
+            if (!is_file($path)) {
+                throw new RuntimeException("Upload is incomplete — chunk {$i} is missing");
+            }
+
+            $parts[] = $path;
+        }
+
+        return $parts;
+    }
+
+    /**
+     * Append one chunk to the open destination handle.
+     *
+     * @param resource $dest
+     */
+    private function appendPart(string $partPath, $dest): void
+    {
+        $part = @fopen($partPath, 'rb');
+
+        if ($part === false) {
+            throw new RuntimeException('Could not read an uploaded chunk');
+        }
+
+        $copied = stream_copy_to_stream($part, $dest);
+        fclose($part);
+
+        if ($copied === false) {
+            throw new RuntimeException('Could not append an uploaded chunk');
+        }
+    }
+
+    /**
+     * Remove an upload's staging directory and its chunks.
+     */
+    private function discardStaging(string $uploadId, int $totalChunks): void
+    {
+        $tmpDir = $this->stagingDir($uploadId);
+
+        for ($i = 0; $i < $totalChunks; $i++) {
+            @unlink($tmpDir . '/' . $i . '.part');
+        }
+
+        @rmdir($tmpDir);
+    }
+
+    /**
+     * Temp directory holding one upload's chunks.
+     */
+    private function stagingDir(string $uploadId): string
+    {
+        return config('settings.tmp_path') . '/' . $uploadId;
+    }
+
+    /**
+     * Create a directory if absent, failing loudly rather than returning a path
+     * nothing can be written to.
+     */
     private function ensureDir(string $dir): string
     {
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new RuntimeException('Could not create directory');
         }
 
         return $dir;
