@@ -38,8 +38,8 @@ class HostSummaryService
 
         return [
             [
-                'value' => number_format($library['count']),
-                'label' => $this->plural($library['count'], 'game catalogued', 'games catalogued'),
+                'value' => number_format($library['game_count']),
+                'label' => $this->plural($library['game_count'], 'game catalogued', 'games catalogued'),
             ],
             [
                 'value' => (string) $consoles,

@@ -220,20 +220,29 @@ class GameRepository
     }
 
     /**
-     * Row count and total bytes across the whole library, in one query.
+     * Library totals in one query: games and BIOS images counted separately, and
+     * the bytes they occupy together.
      *
-     * @return array{count: int, bytes: int}
+     * BIOS files are library rows but not games, so they are split out with the
+     * same predicate consoleCounts() uses. `bytes` deliberately covers both —
+     * it reports disk occupied, and a BIOS image occupies disk.
+     *
+     * @return array{game_count: int, bios_count: int, bytes: int}
      */
     public function librarySummary(): array
     {
+        $biosMatch = "file_path LIKE '%" . Game::BIOS_SEGMENT . "%'";
+
         $row = Game::query()
-            ->selectRaw('COUNT(*) AS row_count')
+            ->selectRaw("SUM(CASE WHEN {$biosMatch} THEN 0 ELSE 1 END) AS game_count")
+            ->selectRaw("SUM(CASE WHEN {$biosMatch} THEN 1 ELSE 0 END) AS bios_count")
             ->selectRaw('COALESCE(SUM(file_size), 0) AS total_bytes')
             ->first();
 
         return [
-            'count' => (int) ($row->row_count ?? 0),
-            'bytes' => (int) ($row->total_bytes ?? 0),
+            'game_count' => (int) ($row->game_count ?? 0),
+            'bios_count' => (int) ($row->bios_count ?? 0),
+            'bytes'      => (int) ($row->total_bytes ?? 0),
         ];
     }
 

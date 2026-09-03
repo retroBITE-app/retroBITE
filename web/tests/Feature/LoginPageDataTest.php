@@ -82,7 +82,10 @@ final class LoginPageDataTest extends DatabaseTestCase
 
     public function test_library_summary_is_zero_on_an_empty_library(): void
     {
-        $this->assertSame(['count' => 0, 'bytes' => 0], $this->games->librarySummary());
+        $this->assertSame(
+            ['game_count' => 0, 'bios_count' => 0, 'bytes' => 0],
+            $this->games->librarySummary(),
+        );
     }
 
     public function test_library_summary_counts_rows_and_bytes(): void
@@ -90,7 +93,39 @@ final class LoginPageDataTest extends DatabaseTestCase
         $this->seedGame('Ico.iso', 1024);
         $this->seedGame('Sotc.iso', 2048);
 
-        $this->assertSame(['count' => 2, 'bytes' => 3072], $this->games->librarySummary());
+        $this->assertSame(
+            ['game_count' => 2, 'bios_count' => 0, 'bytes' => 3072],
+            $this->games->librarySummary(),
+        );
+    }
+
+    /**
+     * A BIOS image is a library row but not a game — the login page said
+     * "94 games catalogued" while counting them.
+     */
+    public function test_library_summary_keeps_bios_out_of_the_game_count(): void
+    {
+        $this->seedGame('Ico.iso', 1024);
+        $this->seedGame('scph39001.bin', 512, 'BIOS');
+
+        $this->assertSame(
+            ['game_count' => 1, 'bios_count' => 1, 'bytes' => 1536],
+            $this->games->librarySummary(),
+            'bytes still covers both, since a BIOS image occupies disk',
+        );
+    }
+
+    public function test_login_summary_excludes_bios_from_the_game_count(): void
+    {
+        $this->seedGame('Ico.iso', 1024);
+        $this->seedGame('scph39001.bin', 512, 'BIOS');
+        $this->seedGame('scph70012.bin', 512, 'BIOS');
+
+        $summary = (new HostSummaryService($this->games))->loginSummary();
+
+        $this->assertIsArray($summary);
+        $this->assertSame('1', $summary[0]['value']);
+        $this->assertSame('game catalogued', $summary[0]['label']);
     }
 
     public function test_login_summary_reports_three_figures(): void
@@ -120,12 +155,12 @@ final class LoginPageDataTest extends DatabaseTestCase
         ]);
     }
 
-    private function seedGame(string $fileName, int $size): void
+    private function seedGame(string $fileName, int $size, string $subfolder = ''): void
     {
         $this->games->upsert(
             $this->console->key,
             $fileName,
-            $this->console->path() . '/' . $fileName,
+            $this->console->path($subfolder) . '/' . $fileName,
             $size,
             null,
         );
