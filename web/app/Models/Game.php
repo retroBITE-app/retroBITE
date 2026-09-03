@@ -9,6 +9,9 @@ use Illuminate\Support\Str;
 
 class Game extends Model
 {
+    /** Path segment marking a file as a BIOS image rather than a game. */
+    public const BIOS_SEGMENT = '/BIOS/';
+
     protected $table        = 'games';
     protected $primaryKey   = 'id';
     public    $keyType      = 'string';
@@ -33,7 +36,7 @@ class Game extends Model
      */
     public function isBios(): bool
     {
-        return Str::contains((string) $this->file_path, '/BIOS/');
+        return Str::contains((string) $this->file_path, self::BIOS_SEGMENT);
     }
 
     /**

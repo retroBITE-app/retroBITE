@@ -6,6 +6,8 @@ namespace App\Services;
 
 use App\Enums\MediaKind;
 use App\Support\Console;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +24,12 @@ class ScreenScraperService
 
     /** Region preference for box art / screenshots — English-speaking first. */
     private const MEDIA_REGION_PRIORITY = ['us', 'wor', 'eu', 'uk', 'au', 'ss'];
+
+    /** Statuses that mean "no such game" rather than a failure. */
+    private const MISS_STATUSES = [400, 404];
+
+    private const CONNECT_TIMEOUT = 5;
+    private const TIMEOUT         = 15;
 
     /**
      * Look up a single game by ROM md5 + console system id.
@@ -172,6 +180,9 @@ class ScreenScraperService
         return null;
     }
 
+    /**
+     * The first region shortname the provider lists for a game.
+     */
     private function firstRegion(array $jeu): ?string
     {
         $regions = Arr::get($jeu, 'regions.regions_shortname', []);
@@ -182,6 +193,9 @@ class ScreenScraperService
         return Arr::get($jeu, 'rom.regions.regions_shortname.0');
     }
 
+    /**
+     * The four-digit year inside a provider date string.
+     */
     private function extractYear(?string $date): ?string
     {
         if ($date === null) {
@@ -191,6 +205,9 @@ class ScreenScraperService
         return preg_match('/(\d{4})/', $date, $m) ? $m[1] : null;
     }
 
+    /**
+     * Provider genres joined into one comma-separated string.
+     */
     private function flattenGenres(mixed $genres): ?string
     {
         if (!is_array($genres)) {
@@ -209,43 +226,94 @@ class ScreenScraperService
     /**
      * Perform an authenticated GET against the SS v2 API, returning the decoded body.
      * Returns [] on 404 / missing game; throws on other failures.
+     *
+     * @throws RuntimeException
      */
     private function call(string $endpoint, array $params): array
     {
-        $creds = config('settings.screenscraper');
+        $credentials = $this->credentials();
 
-        if (Arr::get($creds, 'dev_id') === '' || Arr::get($creds, 'dev_password') === '') {
+        $response = $this->send(
+            $this->endpointUrl($credentials, $endpoint),
+            $this->query($credentials, $params),
+        );
+
+        return $this->decode($response);
+    }
+
+    /**
+     * Provider credentials, refusing to call out without the dev pair.
+     *
+     * @throws RuntimeException
+     */
+    private function credentials(): array
+    {
+        $credentials = (array) config('settings.screenscraper');
+
+        if (Arr::get($credentials, 'dev_id') === '' || Arr::get($credentials, 'dev_password') === '') {
             throw new RuntimeException('ScreenScraper dev credentials missing — see config/settings.php.');
         }
 
-        // The v2 API only accepts credentials as query parameters, so anything that
-        // echoes a request URL must go through redact() first.
-        $query = array_filter([
-            'devid'       => Arr::get($creds, 'dev_id'),
-            'devpassword' => Arr::get($creds, 'dev_password'),
+        return $credentials;
+    }
+
+    /**
+     * Query parameters for a call.
+     *
+     * The v2 API only accepts credentials as query parameters, so anything that
+     * echoes a request URL must go through redact() first.
+     */
+    private function query(array $credentials, array $params): array
+    {
+        return array_filter([
+            'devid'       => Arr::get($credentials, 'dev_id'),
+            'devpassword' => Arr::get($credentials, 'dev_password'),
             'softname'    => self::SOFTNAME,
-            'ssid'        => Arr::get($creds, 'user'),
-            'sspassword'  => Arr::get($creds, 'password'),
+            'ssid'        => Arr::get($credentials, 'user'),
+            'sspassword'  => Arr::get($credentials, 'password'),
             'output'      => 'json',
             ...$params,
-        ], fn($v) => $v !== '' && $v !== null);
+        ], fn(mixed $value) => $value !== '' && $value !== null);
+    }
 
-        $url = rtrim(Arr::get($creds, 'endpoint', 'https://api.screenscraper.fr/api2'), '/')
-            . '/' . ltrim($endpoint, '/');
+    /**
+     * Absolute URL for one API endpoint.
+     */
+    private function endpointUrl(array $credentials, string $endpoint): string
+    {
+        $base = Arr::get($credentials, 'endpoint', 'https://api.screenscraper.fr/api2');
 
+        return rtrim((string) $base, '/') . '/' . ltrim($endpoint, '/');
+    }
+
+    /**
+     * Issue the request, translating a transport failure into a redacted one.
+     *
+     * @throws RuntimeException
+     */
+    private function send(string $url, array $query): Response
+    {
         try {
-            $response = Http::withUserAgent(self::SOFTNAME)
-                ->connectTimeout(5)
-                ->timeout(15)
+            return Http::withUserAgent(self::SOFTNAME)
+                ->connectTimeout(self::CONNECT_TIMEOUT)
+                ->timeout(self::TIMEOUT)
                 ->get($url, $query);
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+        } catch (ConnectionException $e) {
             throw new RuntimeException('ScreenScraper HTTP error: ' . $this->redact($e->getMessage()));
         }
+    }
 
+    /**
+     * Decode a response body. A miss is [] rather than an error; a server fault throws.
+     *
+     * @throws RuntimeException
+     */
+    private function decode(Response $response): array
+    {
         $status = $response->status();
 
-        // SS returns 404 when a lookup misses — not an error we need to raise.
-        if ($status === 404 || $status === 400) {
+        // SS returns 404 (and sometimes 400) when a lookup simply misses.
+        if (in_array($status, self::MISS_STATUSES, true)) {
             return [];
         }
 
@@ -253,8 +321,6 @@ class ScreenScraperService
             throw new RuntimeException("ScreenScraper server error: HTTP {$status}");
         }
 
-        // SS sometimes returns text errors above/below the JSON for quota/auth issues;
-        // try to locate and decode the JSON envelope.
         $json = $this->extractJson($response->body());
 
         return is_array($json) ? $json : [];

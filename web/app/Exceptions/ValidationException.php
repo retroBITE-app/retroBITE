@@ -19,11 +19,17 @@ final class ValidationException extends DomainException
         parent::__construct($message);
     }
 
+    /**
+     * HTTP status this failure is reported as.
+     */
     public function status(): int
     {
         return 422;
     }
 
+    /**
+     * Stable code the frontend branches on.
+     */
     public function code(): string
     {
         return 'validation_failed';

@@ -7,6 +7,10 @@ use Monolog\Level;
 use Monolog\Logger;
 
 if (!function_exists('logger')) {
+    /**
+     * The shared application logger, writing to storage/retrobite.log. Its level
+     * follows APP_DEBUG.
+     */
     function logger(): Logger
     {
         static $instance = null;

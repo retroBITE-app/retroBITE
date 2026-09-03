@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Collection;
 
 class SettingRepository
 {
+    /**
+     * Every stored override row.
+     */
     public function all(): Collection
     {
         return Setting::all();
@@ -36,6 +39,9 @@ class SettingRepository
         return Setting::where('group', $group)->where('key', $key)->firstOrFail();
     }
 
+    /**
+     * Remove one override, returning how many rows went.
+     */
     public function delete(string $group, string $key): int
     {
         $count = Setting::where('group', $group)->where('key', $key)->delete();

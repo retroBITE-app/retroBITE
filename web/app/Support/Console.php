@@ -62,6 +62,9 @@ final class Console
         return new self($key);
     }
 
+    /**
+     * Is this a known console key?
+     */
     public static function exists(string $key): bool
     {
         return is_array(config("consoles.{$key}"));
@@ -98,6 +101,9 @@ final class Console
         return Arr::collapse([$this->fileExtensions, $this->biosExtensions]);
     }
 
+    /**
+     * Does this console accept files with that extension?
+     */
     public function hasExtension(string $ext): bool
     {
         return in_array(strtolower($ext), $this->allExtensions(), true);
@@ -113,6 +119,9 @@ final class Console
         return $subfolder !== '' ? $base . '/' . $subfolder : $base;
     }
 
+    /**
+     * Has this console had its directory created?
+     */
     public function installed(): bool
     {
         return is_dir($this->path());

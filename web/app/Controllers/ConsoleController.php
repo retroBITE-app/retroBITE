@@ -6,21 +6,21 @@ namespace App\Controllers;
 
 use App\Enums\FolderScope;
 use App\Enums\ResponseStatus;
-use App\Exceptions\UploadException;
-use App\Exceptions\ValidationException;
 use App\Http\ApiResponse;
 use App\Http\Input;
 use App\Http\RouteResolver;
 use App\Inertia\Inertia;
 use App\Repositories\GameRepository;
+use App\Services\ChunkedUploadService;
+use App\Services\ConsoleFolderService;
 use App\Services\FilesystemService;
 use App\Services\GameDataService;
 use App\Support\Console;
 use App\Support\PathRules;
+use App\Support\UploadChunk;
 use Illuminate\Support\Arr;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\UploadedFileInterface;
 
 class ConsoleController
 {
@@ -28,7 +28,9 @@ class ConsoleController
         private RouteResolver $resolve,
         private GameRepository $games,
         private FilesystemService $filesystem,
-        private GameDataService $gameDataService,
+        private GameDataService $gameData,
+        private ChunkedUploadService $uploads,
+        private ConsoleFolderService $folders,
     ) {}
 
     /**
@@ -53,20 +55,18 @@ class ConsoleController
      */
     public function show(Request $request, Response $response, array $args): Response
     {
-        $console     = $this->resolve->console($args);
-        $folderParam = Input::query($request)->string('folder');
-        $folders     = $this->requestedFolders($request);
-        $subfolders  = $this->filesystem->listSubfolders($console);
+        $console    = $this->resolve->console($args);
+        $subfolders = $this->filesystem->listSubfolders($console);
 
         return Inertia::render($request, $response, 'Consoles/Show', [
             'console'     => $console->key,
             'meta'        => $console->toMetaArray(),
-            'games'       => $this->gameDataService->enrichGames(
-                $this->games->allForConsoleFolders($console, $folders)
+            'games'       => $this->gameData->enrichGames(
+                $this->games->allForConsoleFolders($console, $this->requestedFolders($request))
             ),
             'extensions'  => $console->allExtensions(),
             'folders'     => $this->games->folderCounts($console, $subfolders),
-            'folder'      => $folderParam,
+            'folder'      => Input::query($request)->string('folder'),
             'upload_dirs' => $console->folderOptions($subfolders),
         ]);
     }
@@ -88,7 +88,11 @@ class ConsoleController
             logger()->info('Pruned missing games', ['console' => $console->key, 'removed' => $pruned]);
         }
 
-        return Inertia::redirect($response, '/consoles/' . $console->key, $request->getMethod());
+        return Inertia::redirect(
+            $response,
+            route('console', ['console' => $console->key]),
+            $request->getMethod(),
+        );
     }
 
     /**
@@ -96,35 +100,12 @@ class ConsoleController
      */
     public function uploadChunk(Request $request, Response $response, array $args): Response
     {
-        $this->filesystem->purgeAbandonedUploads();
+        $console  = $this->resolve->console($args);
+        $complete = $this->uploads->accept($console, UploadChunk::fromRequest($request));
 
-        $console = $this->resolve->console($args);
-        $input   = Input::body($request);
-
-        $uploadId    = $input->string('upload_id');
-        $filename    = basename($input->string('filename'));
-        $fileSize    = $input->integer('file_size', -1);
-        $subfolder   = PathRules::normalizeSubfolder($input->string('subfolder'));
-        $chunkIndex  = $input->integer('chunk_index', -1);
-        $totalChunks = $input->integer('total_chunks', -1);
-
-        $this->assertChunkAcceptable($console, $uploadId, $filename, $subfolder, $fileSize, $chunkIndex, $totalChunks);
-
-        $chunk = Arr::get($request->getUploadedFiles(), 'chunk');
-
-        if (!$chunk instanceof UploadedFileInterface) {
-            throw ValidationException::fields(['chunk' => 'Required']);
-        }
-
-        $this->filesystem->writeChunk($uploadId, $chunkIndex, $chunk);
-
-        if ($chunkIndex < $totalChunks - 1) {
-            return ApiResponse::status($response, ResponseStatus::Received, ['chunk' => $chunkIndex]);
-        }
-
-        $this->registerUpload($console, $uploadId, $filename, $subfolder, $fileSize, $totalChunks);
-
-        return ApiResponse::status($response, ResponseStatus::Complete);
+        return $complete
+            ? ApiResponse::status($response, ResponseStatus::Complete)
+            : ApiResponse::status($response, ResponseStatus::Received);
     }
 
     /**
@@ -133,19 +114,9 @@ class ConsoleController
     public function deleteFolder(Request $request, Response $response, array $args): Response
     {
         $console = $this->resolve->console($args);
-        $folder  = PathRules::normalizeSubfolder(Input::args($args)->string('folder'));
-
-        if ($folder === 'root' || !PathRules::isSubfolder($folder)) {
-            throw ValidationException::because('Invalid folder');
-        }
-
-        // Disk first: dropping the rows first left them gone when the rmdir failed.
-        if (!$this->filesystem->deleteDir($console, $folder)) {
-            throw ValidationException::because('Folder not found or could not be deleted');
-        }
 
         return ApiResponse::status($response, ResponseStatus::Ok, [
-            'games_removed' => $this->games->deleteByFolder($console, $folder),
+            'games_removed' => $this->folders->delete($console, Input::args($args)->string('folder')),
         ]);
     }
 
@@ -154,23 +125,10 @@ class ConsoleController
      */
     public function mkdir(Request $request, Response $response, array $args): Response
     {
-        $console = $this->resolve->console($args);
-
-        // '' is the console root — creating it is how a console gets installed.
-        $targets = Arr::map(
+        $this->folders->create(
+            $this->resolve->console($args),
             Input::body($request)->list('subfolders'),
-            fn(mixed $sub): string => PathRules::normalizeSubfolder((string) $sub),
         );
-
-        foreach ($targets as $sub) {
-            if (!PathRules::isSubfolderOrRoot($sub)) {
-                throw ValidationException::because('Invalid subfolder: ' . $sub);
-            }
-        }
-
-        foreach ($targets as $sub) {
-            $this->filesystem->createDir($console, $sub);
-        }
 
         return ApiResponse::status($response);
     }
@@ -188,85 +146,6 @@ class ConsoleController
             Input::query($request)->commaSeparated('folder'),
             fn(string $folder): bool => $folder === FolderScope::Root->value
                 || PathRules::isSubfolder($folder),
-        );
-    }
-
-    /**
-     * Reject chunk metadata we will not act on.
-     *
-     * @throws ValidationException
-     */
-    private function assertChunkAcceptable(
-        Console $console,
-        string $uploadId,
-        string $filename,
-        string $subfolder,
-        int $fileSize,
-        int $chunkIndex,
-        int $totalChunks,
-    ): void {
-        if (!PathRules::isUploadId($uploadId)) {
-            throw ValidationException::fields(['upload_id' => 'Invalid']);
-        }
-
-        if ($filename === '' || $filename === '.' || $filename === '..') {
-            throw ValidationException::fields(['filename' => 'Invalid']);
-        }
-
-        if (!$console->hasExtension(strtolower(pathinfo($filename, PATHINFO_EXTENSION)))) {
-            throw ValidationException::because('File type not allowed for this console');
-        }
-
-        if (!PathRules::isSubfolderOrRoot($subfolder)) {
-            throw ValidationException::fields(['subfolder' => 'Invalid']);
-        }
-
-        if ($chunkIndex < 0 || $totalChunks < 1 || $chunkIndex >= $totalChunks) {
-            throw ValidationException::because('Invalid chunk metadata');
-        }
-
-        if ($fileSize < 0) {
-            throw ValidationException::fields(['file_size' => 'Invalid']);
-        }
-
-        // nginx caps a single chunk, not the assembled file, so the total is capped here.
-        if ($fileSize > (int) config('settings.upload_max_bytes')) {
-            throw ValidationException::because('File exceeds the maximum upload size');
-        }
-    }
-
-    /**
-     * Assemble the staged chunks and record the finished file, verifying that what
-     * landed on disk is the size the client declared.
-     *
-     * @throws UploadException
-     */
-    private function registerUpload(
-        Console $console,
-        string $uploadId,
-        string $filename,
-        string $subfolder,
-        int $declaredSize,
-        int $totalChunks,
-    ): void {
-        $destPath = $this->filesystem->resolvePath($console, $filename, $subfolder);
-
-        $this->filesystem->assembleFile($uploadId, $totalChunks, $destPath);
-
-        $actualSize = filesize($destPath);
-
-        if ($actualSize === false || $actualSize !== $declaredSize) {
-            $this->filesystem->deleteFile($console, $destPath);
-
-            throw UploadException::sizeMismatch($declaredSize, (int) $actualSize);
-        }
-
-        $this->games->upsert(
-            $console->key,
-            $filename,
-            $destPath,
-            $actualSize,
-            md5_file($destPath) ?: null,
         );
     }
 }

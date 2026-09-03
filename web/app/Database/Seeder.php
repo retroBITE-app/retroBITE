@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Database;
 
-use App\Models\User;
+use App\Repositories\UserRepository;
 use App\Support\Env;
 
 class Seeder
@@ -14,17 +14,15 @@ class Seeder
      */
     public static function seed(): void
     {
-        if (User::count() > 0) {
+        $users = new UserRepository();
+
+        if ($users->count() > 0) {
             return;
         }
 
-        $username = (string) Env::get('AUTH_USER', 'retrobite');
-        $password = (string) Env::get('AUTH_PASS', 'retrobite');
-
-        User::create([
-            'username'   => $username,
-            'password'   => password_hash($password, PASSWORD_BCRYPT),
-            'created_at' => time(),
-        ]);
+        $users->create(
+            (string) Env::get('AUTH_USER', 'retrobite'),
+            (string) Env::get('AUTH_PASS', 'retrobite'),
+        );
     }
 }

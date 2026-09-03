@@ -19,11 +19,17 @@ final class Obfuscated
 {
     private const KEY = 'retroBITE';
 
+    /**
+     * Recover the plaintext from a concealed value.
+     */
     public static function reveal(string $encoded): string
     {
         return self::cipher((string) base64_decode($encoded, true));
     }
 
+    /**
+     * Conceal a plaintext value for committing. Inverse of reveal().
+     */
     public static function conceal(string $plain): string
     {
         return base64_encode(self::cipher($plain));

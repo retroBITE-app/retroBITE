@@ -16,6 +16,9 @@ enum FolderScope: string
     /** Only games sitting directly in the console root, not in a subfolder. */
     case Root = 'root';
 
+    /**
+     * Human-readable name for the UI.
+     */
     public function label(): string
     {
         return match ($this) {

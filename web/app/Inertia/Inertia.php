@@ -189,6 +189,9 @@ class Inertia
         return $response->withHeader('Content-Type', 'text/html; charset=UTF-8');
     }
 
+    /**
+     * Encode the page object, throwing rather than emitting false.
+     */
     private static function encode(array $page): string
     {
         return json_encode($page, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);

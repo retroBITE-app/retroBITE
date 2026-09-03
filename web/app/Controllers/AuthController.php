@@ -6,7 +6,7 @@ namespace App\Controllers;
 
 use App\Http\Input;
 use App\Inertia\Inertia;
-use App\Models\User;
+use App\Repositories\UserRepository;
 use App\Services\LoginThrottleService;
 use App\Support\Csrf;
 use App\Support\Session;
@@ -18,6 +18,7 @@ class AuthController
 {
     public function __construct(
         private LoginThrottleService $throttle,
+        private UserRepository $users,
     ) {}
 
     /**
@@ -43,7 +44,7 @@ class AuthController
 
         $input    = Input::body($request);
         $username = $input->string('username');
-        $user     = User::where('username', $username)->first();
+        $user     = $this->users->findByUsername($username);
 
         if (!$user || !password_verify($input->string('password'), $user->password)) {
             $this->throttle->recordFailure($ip);
@@ -55,7 +56,7 @@ class AuthController
         $this->throttle->clear($ip);
         Session::login((int) $user->id, (string) $user->username);
 
-        return Inertia::redirect($response, '/', $request->getMethod());
+        return Inertia::redirect($response, route('dashboard'), $request->getMethod());
     }
 
     /**
@@ -66,7 +67,7 @@ class AuthController
         Session::destroy();
 
         return $this->withExpiredCookies(
-            Inertia::redirect($response, '/login', $request->getMethod())
+            Inertia::redirect($response, route('login'), $request->getMethod())
         );
     }
 
@@ -77,7 +78,7 @@ class AuthController
     {
         Session::flashError($message);
 
-        return Inertia::redirect($response, '/login', 'POST');
+        return Inertia::redirect($response, route('login'), 'POST');
     }
 
     /**

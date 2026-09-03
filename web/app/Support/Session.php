@@ -36,6 +36,9 @@ final class Session
         return is_string($name) ? $name : null;
     }
 
+    /**
+     * Is anyone logged in on this session?
+     */
     public static function isAuthenticated(): bool
     {
         return self::userId() !== null;

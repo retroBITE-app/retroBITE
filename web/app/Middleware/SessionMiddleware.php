@@ -20,6 +20,9 @@ final class SessionMiddleware
     private const COOKIE_PATH = '/';
     private const SAME_SITE   = 'Lax';
 
+    /**
+     * Start the session, then attach the CSRF cookie to the response.
+     */
     public function __invoke(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         $this->start($request);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\MediaKind;
+use App\Support\CappedFileSink;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -16,7 +17,7 @@ use RuntimeException;
  */
 class MediaCacheService
 {
-    private const MAX_BYTES     = 5 * 1024 * 1024;
+    private const MAX_BYTES = 5 * 1024 * 1024;
     private const MAX_REDIRECTS = 3;
     private const ALLOWED_HOSTS = ['screenscraper.fr', 'neoclone.screenscraper.fr', 'api.screenscraper.fr'];
     private const ALLOWED_TYPES = [
@@ -25,6 +26,17 @@ class MediaCacheService
         'image/jpg'  => 'jpg',
         'image/webp' => 'webp',
         'image/gif'  => 'gif',
+    ];
+
+    /**
+     * Options every request shares. Redirects are followed by hand so each hop's
+     * host is re-checked, and the protocol allowlist blocks file://, dict:// and
+     * the rest of curl's repertoire.
+     */
+    private const CURL_OPTIONS = [
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_CONNECTTIMEOUT => 5,
     ];
 
     /**
@@ -82,33 +94,18 @@ class MediaCacheService
      * Walk the redirect chain by hand, re-validating the host at every hop.
      * curl's own FOLLOWLOCATION checks nothing, so one 302 from an allowed host
      * would otherwise reach the loopback interface or the metadata service.
+     *
+     * @throws RuntimeException
      */
     private function resolveRedirects(string $url): string
     {
         for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
             $this->assertFetchable($url);
 
-            $handle = curl_init($url);
-            curl_setopt_array($handle, [
-                CURLOPT_NOBODY         => true,
-                CURLOPT_FOLLOWLOCATION => false,
-                CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-                CURLOPT_TIMEOUT        => 10,
-                CURLOPT_CONNECTTIMEOUT => 5,
-                CURLOPT_RETURNTRANSFER => true,
-            ]);
+            $location = $this->redirectTarget($url);
 
-            curl_exec($handle);
-            $status   = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
-            $location = (string) curl_getinfo($handle, CURLINFO_REDIRECT_URL);
-            curl_close($handle);
-
-            if ($status < 300 || $status >= 400) {
+            if ($location === null) {
                 return $url;
-            }
-
-            if ($location === '') {
-                throw new RuntimeException("Redirect with no location (HTTP {$status})");
             }
 
             $url = $location;
@@ -118,9 +115,41 @@ class MediaCacheService
     }
 
     /**
+     * Where this URL redirects to, or null when it does not redirect.
+     *
+     * @throws RuntimeException When it redirects without saying where.
+     */
+    private function redirectTarget(string $url): ?string
+    {
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            ...self::CURL_OPTIONS,
+            CURLOPT_NOBODY         => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_RETURNTRANSFER => true,
+        ]);
+
+        curl_exec($curl);
+        $status   = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $location = (string) curl_getinfo($curl, CURLINFO_REDIRECT_URL);
+        curl_close($curl);
+
+        if ($status < 300 || $status >= 400) {
+            return null;
+        }
+
+        if ($location === '') {
+            throw new RuntimeException("Redirect with no location (HTTP {$status})");
+        }
+
+        return $location;
+    }
+
+    /**
      * Stream the body to a temp file beside the cache, capped at MAX_BYTES.
      *
      * @return array{0: string, 1: string} Temp path and content type.
+     * @throws RuntimeException
      */
     private function fetch(string $url): array
     {
@@ -131,55 +160,44 @@ class MediaCacheService
             throw new RuntimeException('Could not open a temp file');
         }
 
-        $received = 0;
-        $failure  = null;
+        $sink = new CappedFileSink($handle, self::MAX_BYTES);
 
+        [$status, $contentType] = $this->transfer($url, $sink);
+        fclose($handle);
+
+        if ($failure = $sink->failure()) {
+            @unlink($tmpPath);
+            throw new RuntimeException($failure);
+        }
+
+        if ($status < 200 || $status >= 300 || $sink->received() === 0) {
+            @unlink($tmpPath);
+            throw new RuntimeException("Unusable response (HTTP {$status}, {$sink->received()} bytes)");
+        }
+
+        return [$tmpPath, $contentType];
+    }
+
+    /**
+     * Run the transfer, writing through $sink.
+     *
+     * @return array{0: int, 1: string} Status and content type.
+     */
+    private function transfer(string $url, CappedFileSink $sink): array
+    {
         $curl = curl_init($url);
         curl_setopt_array($curl, [
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_TIMEOUT        => 30,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_WRITEFUNCTION  => function ($curl, string $chunk) use (&$received, &$failure, $handle): int {
-                $received += strlen($chunk);
-
-                if ($received > self::MAX_BYTES) {
-                    $failure = 'Image exceeds the size limit';
-
-                    return -1;
-                }
-
-                $written = fwrite($handle, $chunk);
-
-                // A short or failed write must abort: coercing it to 0 previously
-                // published a truncated image as a successful cache entry.
-                if ($written !== strlen($chunk)) {
-                    $failure = 'Could not write the downloaded image';
-
-                    return -1;
-                }
-
-                return $written;
-            },
+            ...self::CURL_OPTIONS,
+            CURLOPT_TIMEOUT       => 30,
+            CURLOPT_WRITEFUNCTION => fn($handle, string $chunk): int => $sink->write($chunk),
         ]);
 
         curl_exec($curl);
         $status      = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
         $contentType = strtolower((string) curl_getinfo($curl, CURLINFO_CONTENT_TYPE));
         curl_close($curl);
-        fclose($handle);
 
-        if ($failure !== null) {
-            @unlink($tmpPath);
-            throw new RuntimeException($failure);
-        }
-
-        if ($status < 200 || $status >= 300 || $received === 0) {
-            @unlink($tmpPath);
-            throw new RuntimeException("Unusable response (HTTP {$status}, {$received} bytes)");
-        }
-
-        return [$tmpPath, $contentType];
+        return [$status, $contentType];
     }
 
     /**
@@ -267,11 +285,17 @@ class MediaCacheService
         }
     }
 
+    /**
+     * Is this a lowercase 32-character md5? It becomes a filename.
+     */
     private function isValidMd5(string $md5): bool
     {
         return (bool) preg_match('/^[0-9a-f]{32}$/', strtolower($md5));
     }
 
+    /**
+     * File extension for an allow-listed content type, or null.
+     */
     private function extensionFor(string $contentType): ?string
     {
         return Arr::get(self::ALLOWED_TYPES, trim(Str::before($contentType, ';')));

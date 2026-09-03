@@ -10,11 +10,17 @@ namespace App\Exceptions;
  */
 final class ConflictException extends DomainException
 {
+    /**
+     * HTTP status this failure is reported as.
+     */
     public function status(): int
     {
         return 409;
     }
 
+    /**
+     * Stable code the frontend branches on.
+     */
     public function code(): string
     {
         return 'conflict';

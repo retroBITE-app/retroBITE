@@ -22,6 +22,9 @@ final class CsrfMiddleware
 
     private const STATUS_MISMATCH = 419;
 
+    /**
+     * Let the request through only if it presents the session token.
+     */
     public function __invoke(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         if ($this->isSafe($request)) {

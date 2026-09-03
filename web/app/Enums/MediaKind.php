@@ -17,6 +17,9 @@ enum MediaKind: string
     case Logo     = 'logo';
     case Backdrop = 'backdrop';
 
+    /**
+     * Human-readable name for the UI.
+     */
     public function label(): string
     {
         return match ($this) {

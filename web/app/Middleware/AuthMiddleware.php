@@ -19,8 +19,9 @@ use Slim\Psr7\Response;
  */
 final class AuthMiddleware
 {
-    private const LOGIN_PATH = '/login';
-
+    /**
+     * Gate the request, sharing the current user when it passes.
+     */
     public function __invoke(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         if (!Session::isAuthenticated()) {
@@ -38,14 +39,14 @@ final class AuthMiddleware
     private function challenge(ServerRequestInterface $request): ResponseInterface
     {
         if ($request->getHeaderLine('X-Inertia') !== '') {
-            return Inertia::location(new Response(), self::LOGIN_PATH);
+            return Inertia::location(new Response(), route('login'));
         }
 
         if ($this->wantsJson($request)) {
             return ApiResponse::error(new Response(), 'Not signed in', 401, 'unauthenticated');
         }
 
-        return (new Response(302))->withHeader('Location', self::LOGIN_PATH);
+        return (new Response(302))->withHeader('Location', route('login'));
     }
 
     /**

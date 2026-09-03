@@ -39,16 +39,16 @@ final class FilesystemContainmentTest extends DatabaseTestCase
         @unlink($this->outsideFile);
     }
 
-    public function test_resolves_a_path_inside_the_console_root(): void
+    public function test_prepares_a_destination_inside_the_console_root(): void
     {
-        $path = $this->filesystem->resolvePath($this->console, 'Ico.iso', '');
+        $path = $this->filesystem->prepareDestination($this->console, 'Ico.iso', '');
 
         $this->assertSame($this->console->path() . '/Ico.iso', $path);
     }
 
-    public function test_resolves_a_path_inside_a_subfolder(): void
+    public function test_prepares_a_destination_inside_a_subfolder(): void
     {
-        $path = $this->filesystem->resolvePath($this->console, 'Ico.iso', 'DVD');
+        $path = $this->filesystem->prepareDestination($this->console, 'Ico.iso', 'DVD');
 
         $this->assertSame($this->console->path() . '/DVD/Ico.iso', $path);
         $this->assertDirectoryExists($this->console->path() . '/DVD');
@@ -56,16 +56,16 @@ final class FilesystemContainmentTest extends DatabaseTestCase
 
     public function test_strips_directory_components_from_a_filename(): void
     {
-        $path = $this->filesystem->resolvePath($this->console, '../../evil.iso', '');
+        $path = $this->filesystem->prepareDestination($this->console, '../../evil.iso', '');
 
         $this->assertSame($this->console->path() . '/evil.iso', $path);
     }
 
-    public function test_refuses_to_resolve_a_path_above_the_console_root(): void
+    public function test_refuses_a_destination_above_the_console_root(): void
     {
         $this->expectException(RuntimeException::class);
 
-        $this->filesystem->resolvePath($this->console, 'Ico.iso', '../..');
+        $this->filesystem->prepareDestination($this->console, 'Ico.iso', '../..');
     }
 
     public function test_refuses_to_create_a_directory_above_the_console_root(): void
@@ -83,7 +83,7 @@ final class FilesystemContainmentTest extends DatabaseTestCase
 
     public function test_deletes_a_file_inside_the_console_root(): void
     {
-        $inside = $this->filesystem->resolvePath($this->console, 'Doomed.iso', '');
+        $inside = $this->filesystem->prepareDestination($this->console, 'Doomed.iso', '');
         touch($inside);
 
         $this->assertTrue($this->filesystem->deleteFile($this->console, $inside));
@@ -112,7 +112,7 @@ final class FilesystemContainmentTest extends DatabaseTestCase
     public function test_moves_a_file_between_subfolders(): void
     {
         $this->filesystem->createDir($this->console, 'CD');
-        $source = $this->filesystem->resolvePath($this->console, 'Mover.iso', '');
+        $source = $this->filesystem->prepareDestination($this->console, 'Mover.iso', '');
         touch($source);
 
         $destination = $this->filesystem->moveFile($this->console, $source, 'CD');
@@ -127,8 +127,8 @@ final class FilesystemContainmentTest extends DatabaseTestCase
     public function test_refuses_to_overwrite_an_existing_file_on_move(): void
     {
         $this->filesystem->createDir($this->console, 'CD');
-        $source = $this->filesystem->resolvePath($this->console, 'Clash.iso', '');
-        $taken  = $this->filesystem->resolvePath($this->console, 'Clash.iso', 'CD');
+        $source = $this->filesystem->prepareDestination($this->console, 'Clash.iso', '');
+        $taken  = $this->filesystem->prepareDestination($this->console, 'Clash.iso', 'CD');
         touch($source);
         touch($taken);
 

@@ -16,6 +16,9 @@ enum SettingFieldType: string
     case Number   = 'number';
     case TextList = 'text[]';
 
+    /**
+     * Human-readable name for the UI.
+     */
     public function label(): string
     {
         return match ($this) {

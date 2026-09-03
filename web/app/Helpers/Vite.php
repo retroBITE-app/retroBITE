@@ -58,46 +58,82 @@ class Vite
     }
 
     /**
+     * Tags for the given entrypoints — dev-server scripts when no build exists,
+     * hashed asset paths from the manifest otherwise.
+     *
      * @param string[] $entrypoints e.g. ['resources/js/app.ts']
      */
     public static function assets(array $entrypoints): string
     {
         $manifest = self::manifest();
 
-        // Development — no manifest, use Vite HMR dev server
-        if ($manifest === null) {
-            $dev = rtrim((string) config('settings.vite_dev_url'), '/');
+        return $manifest === null
+            ? self::devTags($entrypoints)
+            : self::buildTags($manifest, $entrypoints);
+    }
 
-            $tags = sprintf(
-                '<script type="module" src="%s/@vite/client"></script>' . "\n",
-                htmlspecialchars($dev, ENT_QUOTES, 'UTF-8')
-            );
-            foreach ($entrypoints as $ep) {
-                $tags .= sprintf(
-                    '<script type="module" src="%s/%s"></script>' . "\n",
-                    htmlspecialchars($dev, ENT_QUOTES, 'UTF-8'),
-                    htmlspecialchars($ep, ENT_QUOTES, 'UTF-8')
-                );
-            }
-            return $tags;
-        }
+    /**
+     * Script tags pointing at the Vite HMR server.
+     *
+     * @param string[] $entrypoints
+     */
+    private static function devTags(array $entrypoints): string
+    {
+        $dev  = rtrim((string) config('settings.vite_dev_url'), '/');
+        $tags = self::script($dev . '/@vite/client');
 
-        // Production — resolve through manifest
-        $tags = '';
-        foreach ($entrypoints as $ep) {
-            $entry = $manifest[$ep] ?? null;
-            if ($entry === null) {
-                continue;
-            }
-            foreach ($entry['css'] ?? [] as $css) {
-                $tags .= sprintf('<link rel="stylesheet" href="/build/%s">' . "\n", htmlspecialchars($css, ENT_QUOTES, 'UTF-8'));
-            }
-            $tags .= sprintf(
-                '<script type="module" src="/build/%s"></script>' . "\n",
-                htmlspecialchars($entry['file'], ENT_QUOTES, 'UTF-8')
-            );
+        foreach ($entrypoints as $entrypoint) {
+            $tags .= self::script($dev . '/' . $entrypoint);
         }
 
         return $tags;
+    }
+
+    /**
+     * Stylesheet and script tags resolved through the build manifest.
+     *
+     * @param string[] $entrypoints
+     */
+    private static function buildTags(array $manifest, array $entrypoints): string
+    {
+        $tags = '';
+
+        foreach ($entrypoints as $entrypoint) {
+            $entry = $manifest[$entrypoint] ?? null;
+
+            if ($entry === null) {
+                continue;
+            }
+
+            foreach ($entry['css'] ?? [] as $stylesheet) {
+                $tags .= self::stylesheet('/build/' . $stylesheet);
+            }
+
+            $tags .= self::script('/build/' . $entry['file']);
+        }
+
+        return $tags;
+    }
+
+    /**
+     * A module script tag with the src escaped.
+     */
+    private static function script(string $src): string
+    {
+        return sprintf(
+            '<script type="module" src="%s"></script>' . "\n",
+            htmlspecialchars($src, ENT_QUOTES, 'UTF-8'),
+        );
+    }
+
+    /**
+     * A stylesheet link tag with the href escaped.
+     */
+    private static function stylesheet(string $href): string
+    {
+        return sprintf(
+            '<link rel="stylesheet" href="%s">' . "\n",
+            htmlspecialchars($href, ENT_QUOTES, 'UTF-8'),
+        );
     }
 }

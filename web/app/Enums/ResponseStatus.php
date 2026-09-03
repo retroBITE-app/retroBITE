@@ -13,6 +13,9 @@ enum ResponseStatus: string
     case Received = 'received';
     case Complete = 'complete';
 
+    /**
+     * Human-readable name for the UI.
+     */
     public function label(): string
     {
         return match ($this) {

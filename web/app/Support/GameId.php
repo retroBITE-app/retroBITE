@@ -33,6 +33,9 @@ final readonly class GameId
         return new self($console->key, (string) $fileName);
     }
 
+    /**
+     * The stored primary key, "{console}:{filename}".
+     */
     public function __toString(): string
     {
         return $this->console . self::SEPARATOR . $this->fileName;

@@ -8,6 +8,7 @@ use App\Enums\FolderScope;
 use App\Models\Game;
 use App\Support\Console;
 use App\Support\GameId;
+use App\Support\PathRules;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -30,9 +31,17 @@ class GameRepository
             return $query->get();
         }
 
+        $folders = $this->legalFolders($folders);
+
+        // A filter was asked for and nothing in it was usable, so nothing matches.
+        // Skipping the condition instead would silently return the whole library.
+        if ($folders === []) {
+            return new EloquentCollection();
+        }
+
         $query->where(function (Builder $scoped) use ($console, $folders) {
             foreach ($folders as $folder) {
-                $this->scopeToFolder($scoped, $console, (string) $folder);
+                $this->scopeToFolder($scoped, $console, $folder);
             }
         });
 
@@ -72,6 +81,9 @@ class GameRepository
         return $pills;
     }
 
+    /**
+     * One game by its composite id, with metadata eager-loaded.
+     */
     public function find(string $id): ?Game
     {
         return Game::with('metadata')->find($id);
@@ -84,6 +96,10 @@ class GameRepository
     public function deleteByFolder(Console $console, string $folder): int
     {
         if ($folder === '') {
+            return 0;
+        }
+
+        if ($this->legalFolders([$folder]) === []) {
             return 0;
         }
 
@@ -100,20 +116,41 @@ class GameRepository
     {
         $query = Game::where('console', $console->key);
 
+        if ($folder !== FolderScope::All->value && $this->legalFolders([$folder]) === []) {
+            return 0;
+        }
+
         if ($folder !== FolderScope::All->value) {
-            $this->scopeToFolder($query, $console, $folder);
+            // Grouped: scopeToFolder adds an orWhere, which at the top level would
+            // widen the query past the console filter instead of narrowing it.
+            $query->where(fn(Builder $scoped) => $this->scopeToFolder($scoped, $console, $folder));
         }
 
         return $query->count();
     }
 
     /**
-     * Add one folder's condition to a query. `root` means "not in any subfolder";
-     * anything else is a subfolder name.
+     * Keep only folder values safe to interpolate into a LIKE pattern.
      *
-     * Folder values reach here already checked by PathRules, whose alphabet has no
-     * LIKE wildcards — SQLite's LIKE takes no escape character by default, so
-     * validating the input is the only way to keep "%" from matching every path.
+     * SQLite's LIKE takes no escape character by default, so a value of "%" would
+     * otherwise widen the filter to the whole library. PathRules' alphabet has no
+     * wildcards, which makes validation the defence.
+     *
+     * @param array<int, mixed> $folders
+     * @return string[]
+     */
+    private function legalFolders(array $folders): array
+    {
+        return array_values(array_filter(
+            array_map(fn(mixed $folder): string => (string) $folder, $folders),
+            fn(string $folder): bool => $folder === FolderScope::Root->value
+                || PathRules::isSubfolder($folder),
+        ));
+    }
+
+    /**
+     * Add one folder's condition to a query. `root` means "not in any subfolder";
+     * anything else is a subfolder name. Values arrive checked by legalFolders().
      */
     private function scopeToFolder(Builder $query, Console $console, string $folder): void
     {
@@ -160,16 +197,25 @@ class GameRepository
     /**
      * Game + BIOS counts per console, keyed by console slug.
      *
+     * Aggregated in SQL rather than by hydrating every row: the dashboard and the
+     * console list both call this on every render.
+     *
      * @return Collection<string, array{game_count: int, bios_count: int}>
      */
     public function consoleCounts(): Collection
     {
-        return Game::select(['console', 'file_path'])
-            ->get()
+        $biosMatch = "file_path LIKE '%" . Game::BIOS_SEGMENT . "%'";
+
+        return Game::query()
+            ->selectRaw('console')
+            ->selectRaw("SUM(CASE WHEN {$biosMatch} THEN 0 ELSE 1 END) AS game_count")
+            ->selectRaw("SUM(CASE WHEN {$biosMatch} THEN 1 ELSE 0 END) AS bios_count")
             ->groupBy('console')
-            ->map(fn(EloquentCollection $games) => [
-                'game_count' => $games->reject(fn(Game $g) => $g->isBios())->count(),
-                'bios_count' => $games->filter(fn(Game $g) => $g->isBios())->count(),
+            ->get()
+            ->keyBy('console')
+            ->map(fn(Game $row) => [
+                'game_count' => (int) $row->game_count,
+                'bios_count' => (int) $row->bios_count,
             ]);
     }
 
