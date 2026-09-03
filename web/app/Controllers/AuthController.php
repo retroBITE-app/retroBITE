@@ -6,7 +6,9 @@ namespace App\Controllers;
 
 use App\Http\Input;
 use App\Inertia\Inertia;
+use App\Repositories\GameMetadataRepository;
 use App\Repositories\UserRepository;
+use App\Services\HostSummaryService;
 use App\Services\LoginThrottleService;
 use App\Support\Csrf;
 use App\Support\Session;
@@ -19,15 +21,22 @@ class AuthController
     public function __construct(
         private LoginThrottleService $throttle,
         private UserRepository $users,
+        private GameMetadataRepository $metadata,
+        private HostSummaryService $host,
     ) {}
 
     /**
      * Show the login form, surfacing and consuming any pending error message.
+     *
+     * The backdrop is a different cached artwork on every visit, and is null on a
+     * host with no scraped metadata yet.
      */
     public function showLogin(Request $request, Response $response): Response
     {
         return Inertia::render($request, $response, 'Auth/Login', [
-            'error' => Session::pullError(),
+            'error'    => Session::pullError(),
+            'backdrop' => $this->metadata->randomBackdropUrl(),
+            'stats'    => $this->host->loginSummary(),
         ]);
     }
 

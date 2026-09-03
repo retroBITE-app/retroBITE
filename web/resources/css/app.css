@@ -114,6 +114,17 @@
   }
 }
 
+/*
+ * The CRT scanline overlay. The design lays it over every piece of key art —
+ * the login pane, the dashboard hero and the game hero — so it lives here rather
+ * than as an arbitrary value repeated at each site.
+ */
+@utility scanlines {
+  background-image: repeating-linear-gradient(180deg, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px);
+  opacity: 0.32;
+  pointer-events: none;
+}
+
 /* Global scrollbar styling — dark zinc theme */
 * {
   scrollbar-width: thin;

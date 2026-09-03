@@ -114,6 +114,12 @@ export type SettingsGroup = {
   overrides: string[]
 }
 
+/** One figure in the login page's "on this host" block. */
+export type HostStat = {
+  value: string
+  label: string
+}
+
 /** The error shape every failing endpoint returns. */
 export type ApiError = {
   error: string

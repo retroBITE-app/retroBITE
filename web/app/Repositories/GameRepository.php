@@ -220,6 +220,24 @@ class GameRepository
     }
 
     /**
+     * Row count and total bytes across the whole library, in one query.
+     *
+     * @return array{count: int, bytes: int}
+     */
+    public function librarySummary(): array
+    {
+        $row = Game::query()
+            ->selectRaw('COUNT(*) AS row_count')
+            ->selectRaw('COALESCE(SUM(file_size), 0) AS total_bytes')
+            ->first();
+
+        return [
+            'count' => (int) ($row->row_count ?? 0),
+            'bytes' => (int) ($row->total_bytes ?? 0),
+        ];
+    }
+
+    /**
      * Upsert a scanned file, reusing the stored md5 when the file is unchanged.
      *
      * Hashing a multi-GB ISO is the slow part of scan; skipping it when

@@ -17,6 +17,10 @@ return [
     // Cap on a whole assembled upload. nginx's client_max_body_size only caps one chunk.
     'upload_max_bytes' => (int) Env::get('UPLOAD_MAX_BYTES', 64 * 1024 * 1024 * 1024),
 
+    // The login page is public, so its stats block discloses library size, console
+    // count and disk capacity to anyone who can reach the host. Set false to hide it.
+    'login_show_stats' => (bool) Env::get('LOGIN_SHOW_STATS', true),
+
     // Vite HMR dev server — override the port when 5173 is taken by another project
     'vite_dev_url'    => Env::get(
         'VITE_DEV_URL',

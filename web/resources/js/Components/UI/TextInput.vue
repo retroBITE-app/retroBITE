@@ -13,12 +13,15 @@ withDefaults(
     mono?: boolean
     id?: string
     autocomplete?: string
+    /** Drops the border and background so the input can sit inside IconField. */
+    bare?: boolean
   }>(),
   {
     type: 'text',
     disabled: false,
     invalid: false,
     mono: false,
+    bare: false,
   },
 )
 
@@ -35,12 +38,17 @@ const emit = defineEmits<{ 'update:modelValue': [string] }>()
     :autocomplete="autocomplete"
     :aria-invalid="invalid || undefined"
     :class="[
-      invalid
-        ? 'border-red-500/70 focus:border-red-500'
-        : 'border-zinc-700 focus:border-emerald-500',
+      bare
+        ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-[13.5px] text-fg placeholder-fg-faint'
+        : [
+            'w-full rounded-md border bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600',
+            invalid
+              ? 'border-red-500/70 focus:border-red-500'
+              : 'border-zinc-700 focus:border-emerald-500',
+          ],
       mono ? 'font-mono' : '',
     ]"
-    class="w-full rounded-md border bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors disabled:opacity-50"
+    class="outline-none transition-colors disabled:opacity-50"
     @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
   />
 </template>

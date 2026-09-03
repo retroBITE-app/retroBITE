@@ -33,6 +33,22 @@ class GameMetadataRepository
     }
 
     /**
+     * A cached backdrop URL picked at random, or null when nothing is cached.
+     *
+     * The login page paints one behind its art pane, so a fresh install with no
+     * scraped metadata gets null and renders the pane without an image.
+     */
+    public function randomBackdropUrl(): ?string
+    {
+        $url = GameMetadata::whereNotNull('backdrop_url')
+            ->where('backdrop_url', '!=', '')
+            ->inRandomOrder()
+            ->value('backdrop_url');
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    /**
      * Persist a normalized metadata payload keyed by the ROM's md5.
      */
     public function upsert(string $md5, array $payload, string $provider = self::DEFAULT_PROVIDER): GameMetadata

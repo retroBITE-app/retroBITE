@@ -98,7 +98,7 @@ function isActive(href: string): boolean {
     <div class="px-4 py-4 border-t border-zinc-800 flex items-center gap-3">
       <div class="flex-1 min-w-0">
         <p class="text-sm font-medium text-zinc-300 truncate">{{ authUser }}</p>
-        <AppBrand />
+        <AppBrand class="text-zinc-600" />
       </div>
       <button
         title="Sign out"
