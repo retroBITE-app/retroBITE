@@ -1,163 +1,118 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { apiHeaders } from '@/Helpers/http'
+import AlertBox from '@/Components/UI/AlertBox.vue'
+import BaseButton from '@/Components/UI/BaseButton.vue'
+import BaseModal from '@/Components/UI/BaseModal.vue'
+import EmptyState from '@/Components/UI/EmptyState.vue'
+import { useApiAction } from '@/Composables/useApiAction'
+import { useModal } from '@/Composables/useModal'
+import { useSelection } from '@/Composables/useSelection'
 import { route } from '@/routes'
 
-type ConsoleEntry = { key: string; name: string }
-
 const props = defineProps<{
-  consoles: ConsoleEntry[]
-  title?:   string
+  consoles: Array<{ key: string; name: string }>
+  title?: string
 }>()
 
 const emit = defineEmits<{ done: [] }>()
 
-const open     = ref(false)
-const creating = ref(false)
-const error    = ref<string | null>(null)
-const picked   = ref<Set<string>>(new Set())
+const picked = useSelection<string>()
 
-const selectedCount = computed(() => picked.value.size)
+const install = useApiAction(() => route('consoles.install'), { fallback: 'Install failed' })
 
-function openModal() {
-  picked.value = new Set()
-  error.value  = null
-  open.value   = true
-}
+const modal = useModal(install.busy, () => {
+  picked.clear()
+  install.reset()
+})
 
-function closeModal() {
-  if (creating.value) return
-  open.value = false
-}
-
-function toggle(consoleKey: string) {
-  const next = new Set(picked.value)
-  next.has(consoleKey) ? next.delete(consoleKey) : next.add(consoleKey)
-  picked.value = next
-}
-
-async function create() {
-  if (selectedCount.value === 0) return
-
-  creating.value = true
-  error.value    = null
-
-  const errors: string[] = []
-
-  for (const key of picked.value) {
-    const form = new URLSearchParams()
-    form.append('subfolders[]', '') // empty → create root folder
-
-    try {
-      const res = await fetch(route('console.mkdir', { console: key }), {
-        method:  'POST',
-        headers: {
-          'Content-Type':     'application/x-www-form-urlencoded',
-          ...apiHeaders(),
-        },
-        body: form.toString(),
-      })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        const name = props.consoles.find(c => c.key === key)?.name ?? key
-        errors.push(`${name}: ${(body as { error?: string }).error ?? `HTTP ${res.status}`}`)
-      }
-    } catch {
-      const name = props.consoles.find(c => c.key === key)?.name ?? key
-      errors.push(`${name}: network error`)
-    }
+/**
+ * Install every picked console in one request. This was previously one request
+ * per console, with the failures string-joined afterwards.
+ */
+async function submit(): Promise<void> {
+  if (picked.count.value === 0) {
+    return
   }
 
-  creating.value = false
+  const pairs = [...picked.selected.value].map((key): [string, string] => ['consoles[]', key])
 
-  if (errors.length) {
-    error.value = errors.join(' · ')
-  } else {
-    open.value = false
+  if (await install.run({ body: pairs })) {
+    modal.open.value = false
     emit('done')
   }
+}
+
+/**
+ * Failure detail keyed by console, rendered with the console's display name.
+ */
+function failureLines(): string[] {
+  return Object.entries(install.fieldErrors.value).map(([key, reason]) => {
+    const name = props.consoles.find((entry) => entry.key === key)?.name ?? key
+
+    return `${name}: ${reason}`
+  })
 }
 </script>
 
 <template>
-  <button
-    @click="openModal"
-    class="px-4 py-2 rounded-md text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-white transition-colors"
+  <BaseButton variant="secondary" @click="modal.show">New console</BaseButton>
+
+  <BaseModal
+    :open="modal.open.value"
+    :title="title ?? 'Install console'"
+    :busy="install.busy.value"
+    size="lg"
+    @close="modal.hide"
   >
-    New console
-  </button>
+    <EmptyState v-if="consoles.length === 0" message="Every console is already installed." />
 
-  <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/60" @click="closeModal" />
+    <div v-else class="space-y-4">
+      <p class="text-xs text-zinc-400">
+        Pick one or more consoles to install. Folders get created under the games path; you can add
+        subfolders later via the console page.
+      </p>
 
-      <div class="relative z-10 w-full max-w-lg rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl">
-
-        <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <h2 class="text-base font-semibold text-zinc-100">{{ title ?? 'Install console' }}</h2>
-          <button
-            @click="closeModal"
-            :disabled="creating"
-            class="text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
-          >✕</button>
-        </div>
-
-        <div class="p-6 space-y-4">
-
-          <div
-            v-if="consoles.length === 0"
-            class="rounded-lg border border-dashed border-zinc-700 py-10 text-center"
-          >
-            <p class="text-zinc-500 text-sm">Every console is already installed.</p>
-          </div>
-
-          <template v-else>
-            <p class="text-xs text-zinc-400">
-              Pick one or more consoles to install. Folders get created under the games path;
-              you can add subfolders later via the console page.
-            </p>
-
-            <div class="max-h-96 overflow-y-auto space-y-1 pr-1">
-              <label
-                v-for="c in consoles"
-                :key="c.key"
-                class="flex items-center gap-3 rounded-md px-3 py-2 cursor-pointer transition-colors"
-                :class="picked.has(c.key) ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800'"
-              >
-                <input
-                  type="checkbox"
-                  :checked="picked.has(c.key)"
-                  @change="toggle(c.key)"
-                  :disabled="creating"
-                  class="sr-only"
-                />
-                <span class="text-sm">{{ c.name }}</span>
-                <span class="ml-auto text-xs font-mono text-zinc-600">{{ c.key }}/</span>
-              </label>
-            </div>
-          </template>
-
-          <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
-        </div>
-
-        <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-zinc-800">
-          <button
-            @click="closeModal"
-            :disabled="creating"
-            class="px-4 py-2 rounded-md text-sm text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
-          >Cancel</button>
-          <button
-            v-if="consoles.length > 0"
-            @click="create"
-            :disabled="selectedCount === 0 || creating"
-            class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {{ creating ? 'Installing…' : `Install ${selectedCount} console${selectedCount === 1 ? '' : 's'}` }}
-          </button>
-        </div>
-
+      <div class="max-h-96 space-y-1 overflow-y-auto pr-1">
+        <label
+          v-for="entry in consoles"
+          :key="entry.key"
+          class="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors"
+          :class="
+            picked.has(entry.key) ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800'
+          "
+        >
+          <input
+            type="checkbox"
+            class="sr-only"
+            :checked="picked.has(entry.key)"
+            :disabled="install.busy.value"
+            @change="picked.toggle(entry.key)"
+          />
+          <span class="text-sm">{{ entry.name }}</span>
+          <span class="ml-auto font-mono text-xs text-zinc-600">{{ entry.key }}/</span>
+        </label>
       </div>
+
+      <AlertBox v-if="install.error.value" size="sm">
+        <p>{{ install.error.value }}</p>
+        <ul v-if="failureLines().length" class="mt-1 list-inside list-disc">
+          <li v-for="line in failureLines()" :key="line">{{ line }}</li>
+        </ul>
+      </AlertBox>
     </div>
-  </Teleport>
+
+    <template #footer>
+      <BaseButton variant="ghost" :disabled="install.busy.value" @click="modal.hide"
+        >Cancel</BaseButton
+      >
+      <BaseButton
+        v-if="consoles.length > 0"
+        :disabled="picked.count.value === 0"
+        :busy="install.busy.value"
+        busy-label="Installing…"
+        @click="submit"
+      >
+        Install {{ picked.count.value }} console{{ picked.count.value === 1 ? '' : 's' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>

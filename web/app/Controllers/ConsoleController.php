@@ -51,6 +51,26 @@ class ConsoleController
     }
 
     /**
+     * Install one or more consoles by creating their root folders.
+     */
+    public function install(Request $request, Response $response): Response
+    {
+        $failures = $this->folders->install(Input::body($request)->list('consoles'));
+
+        if ($failures !== []) {
+            return ApiResponse::error(
+                $response,
+                'Some consoles could not be installed',
+                422,
+                'install_failed',
+                $failures,
+            );
+        }
+
+        return ApiResponse::status($response);
+    }
+
+    /**
      * Show games for a console, filtered by a disk-derived subfolder selection.
      */
     public function show(Request $request, Response $response, array $args): Response

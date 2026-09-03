@@ -1,351 +1,382 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
+import AlertBox from '@/Components/UI/AlertBox.vue'
+import BaseButton from '@/Components/UI/BaseButton.vue'
+import BaseModal from '@/Components/UI/BaseModal.vue'
+import OptionList from '@/Components/UI/OptionList.vue'
+import { useModal } from '@/Composables/useModal'
 import { formatSize } from '@/Helpers/format'
 import { apiHeaders } from '@/Helpers/http'
+import { uuidV4 } from '@/Helpers/uuid'
 import { route } from '@/routes'
+import type { SelectOption } from '@/Types/api'
+
+/** Must stay under nginx's client_max_body_size, which caps one chunk. */
+const CHUNK_SIZE = 50 * 1024 * 1024
 
 const props = defineProps<{
-  console: string
+  consoleKey: string
   consoleName: string
   acceptedExtensions: string[]
-  uploadDirs: Array<{ value: string; label: string }>
+  uploadDirs: SelectOption[]
 }>()
 
 const emit = defineEmits<{ done: [] }>()
 
-const CHUNK_SIZE = 50 * 1024 * 1024
-
-const open          = ref(false)
-const isDragging    = ref(false)
+const isDragging = ref(false)
 const selectedFiles = ref<File[]>([])
-const selectedDir   = ref(props.uploadDirs[0]?.value ?? '')
-const uploading     = ref(false)
-const progress      = ref(0)
-const statusText    = ref('')
-const error         = ref<string | null>(null)
-const fileInputRef  = ref<HTMLInputElement>()
+const selectedDir = ref(props.uploadDirs[0]?.value ?? '')
+const uploading = ref(false)
+const progress = ref(0)
+const statusText = ref('')
+const error = ref<string | null>(null)
+const fileInput = ref<HTMLInputElement>()
 
-const totalSize = computed(() =>
-  selectedFiles.value.reduce((sum, f) => sum + f.size, 0)
-)
-
-function openModal() {
+const modal = useModal(uploading, () => {
   selectedFiles.value = []
-  selectedDir.value   = props.uploadDirs[0]?.value ?? ''
-  progress.value      = 0
-  error.value         = null
-  open.value          = true
-}
+  selectedDir.value = props.uploadDirs[0]?.value ?? ''
+  progress.value = 0
+  error.value = null
+})
 
-function closeModal() {
-  if (uploading.value) return
-  open.value = false
-}
+const totalSize = computed(() => selectedFiles.value.reduce((sum, file) => sum + file.size, 0))
 
-function onDragOver(e: DragEvent) {
-  e.preventDefault()
+/**
+ * Highlight the drop zone while a drag is over it.
+ */
+function onDragOver(event: DragEvent): void {
+  event.preventDefault()
   isDragging.value = true
 }
 
-function onDragLeave() {
+/**
+ * Drop the drag highlight.
+ */
+function onDragLeave(): void {
   isDragging.value = false
 }
 
-function onDrop(e: DragEvent) {
-  e.preventDefault()
+/**
+ * Queue whatever was dropped.
+ */
+function onDrop(event: DragEvent): void {
+  event.preventDefault()
   isDragging.value = false
-  if (e.dataTransfer?.files) addFiles(e.dataTransfer.files)
+
+  if (event.dataTransfer?.files) {
+    addFiles(event.dataTransfer.files)
+  }
 }
 
-function onFileInput(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (files) addFiles(files)
-  if (fileInputRef.value) fileInputRef.value.value = ''
+/**
+ * Queue the picked files, then clear the input so the same file can be picked again.
+ */
+function onFileInput(event: Event): void {
+  const files = (event.target as HTMLInputElement).files
+
+  if (files) {
+    addFiles(files)
+  }
+
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
 }
 
-function addFiles(fileList: FileList) {
+/**
+ * Queue files this console accepts, reporting how many were skipped.
+ */
+function addFiles(fileList: FileList): void {
   error.value = null
-  const rejected: string[] = []
+  let rejected = 0
 
   for (const file of Array.from(fileList)) {
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-    if (!props.acceptedExtensions.includes(ext)) {
-      rejected.push(file.name)
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+
+    if (!props.acceptedExtensions.includes(extension)) {
+      rejected++
       continue
     }
-    if (!selectedFiles.value.some(f => f.name === file.name && f.size === file.size)) {
+
+    const already = selectedFiles.value.some(
+      (queued) => queued.name === file.name && queued.size === file.size,
+    )
+
+    if (!already) {
       selectedFiles.value.push(file)
     }
   }
 
-  if (rejected.length) {
-    error.value = `Skipped ${rejected.length} file${rejected.length > 1 ? 's' : ''} with unsupported extensions`
+  if (rejected > 0) {
+    error.value = `Skipped ${rejected} file${rejected > 1 ? 's' : ''} with unsupported extensions`
   }
 }
 
-function removeFile(index: number) {
+/**
+ * Drop one file from the queue.
+ */
+function removeFile(index: number): void {
   selectedFiles.value.splice(index, 1)
 }
 
-async function startUpload() {
-  if (!selectedFiles.value.length) return
-
-  uploading.value = true
-  progress.value  = 0
-  error.value     = null
-
-  const files      = [...selectedFiles.value]
-  const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
-  const errors: string[] = []
-
-  let bytesBeforeFile = 0
-
-  for (let fi = 0; fi < files.length; fi++) {
-    const file        = files[fi]
-    const uploadId    = crypto.randomUUID()
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
-
-    try {
-      for (let i = 0; i < totalChunks; i++) {
-        statusText.value = files.length > 1
-          ? `File ${fi + 1} / ${files.length}: ${file.name}`
-          : file.name
-        const chunk            = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-        const bytesBeforeChunk = bytesBeforeFile + i * CHUNK_SIZE
-
-        await sendChunk({
-          uploadId,
-          filename:    file.name,
-          fileSize:    file.size,
-          subfolder:   selectedDir.value,
-          chunkIndex:  i,
-          totalChunks,
-          chunk,
-          onProgress: (pct: number) => {
-            const chunkBytes = Math.round(chunk.size * pct / 100)
-            progress.value   = Math.round((bytesBeforeChunk + chunkBytes) / totalBytes * 100)
-          },
-        })
-      }
-    } catch (e: unknown) {
-      errors.push(`${file.name}: ${e instanceof Error ? e.message : 'failed'}`)
-    }
-
-    bytesBeforeFile += file.size
+/**
+ * Upload every queued file, chunk by chunk, reporting overall byte progress.
+ */
+async function startUpload(): Promise<void> {
+  if (selectedFiles.value.length === 0) {
+    return
   }
 
-  progress.value  = 100
+  uploading.value = true
+  progress.value = 0
+  error.value = null
+
+  const files = [...selectedFiles.value]
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0)
+  const failures: string[] = []
+  let bytesDone = 0
+
+  for (const [index, file] of files.entries()) {
+    statusText.value =
+      files.length > 1 ? `File ${index + 1} / ${files.length}: ${file.name}` : file.name
+
+    try {
+      await uploadFile(file, bytesDone, totalBytes)
+    } catch (e: unknown) {
+      failures.push(`${file.name}: ${e instanceof Error ? e.message : 'failed'}`)
+    }
+
+    bytesDone += file.size
+  }
+
+  progress.value = 100
   uploading.value = false
 
-  if (errors.length) {
-    error.value = errors.join(' · ')
-  } else {
-    open.value = false
-    emit('done')
+  if (failures.length > 0) {
+    error.value = failures.join(' · ')
+
+    return
+  }
+
+  modal.open.value = false
+  emit('done')
+}
+
+/**
+ * Send one file as a sequence of chunks.
+ */
+async function uploadFile(file: File, bytesBefore: number, totalBytes: number): Promise<void> {
+  const uploadId = uuidV4()
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+
+  for (let index = 0; index < totalChunks; index++) {
+    const chunk = file.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE)
+    const bytesBeforeChunk = bytesBefore + index * CHUNK_SIZE
+
+    await sendChunk({
+      uploadId,
+      filename: file.name,
+      fileSize: file.size,
+      chunkIndex: index,
+      totalChunks,
+      chunk,
+      onProgress: (percent) => {
+        const chunkBytes = Math.round((chunk.size * percent) / 100)
+        progress.value = Math.round(((bytesBeforeChunk + chunkBytes) / totalBytes) * 100)
+      },
+    })
   }
 }
 
-function sendChunk(opts: {
+type ChunkRequest = {
   uploadId: string
   filename: string
   fileSize: number
-  subfolder: string
   chunkIndex: number
   totalChunks: number
   chunk: Blob
-  onProgress: (pct: number) => void
-}): Promise<void> {
+  onProgress: (percent: number) => void
+}
+
+/**
+ * POST one chunk. Uses XHR rather than fetch because only XHR reports upload
+ * progress.
+ */
+function sendChunk(request: ChunkRequest): Promise<void> {
   return new Promise((resolve, reject) => {
     const form = new FormData()
-    form.append('upload_id',    opts.uploadId)
-    form.append('filename',     opts.filename)
-    form.append('file_size',    String(opts.fileSize))
-    form.append('subfolder',    opts.subfolder)
-    form.append('chunk_index',  String(opts.chunkIndex))
-    form.append('total_chunks', String(opts.totalChunks))
-    form.append('chunk',        opts.chunk, opts.filename)
+    form.append('upload_id', request.uploadId)
+    form.append('filename', request.filename)
+    form.append('file_size', String(request.fileSize))
+    form.append('subfolder', selectedDir.value)
+    form.append('chunk_index', String(request.chunkIndex))
+    form.append('total_chunks', String(request.totalChunks))
+    form.append('chunk', request.chunk, request.filename)
 
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', route('console.uploadChunk', { console: props.console }))
+    xhr.open('POST', route('console.uploadChunk', { console: props.consoleKey }))
+
     for (const [name, value] of Object.entries(apiHeaders())) {
       xhr.setRequestHeader(name, value)
     }
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) opts.onProgress(Math.round((e.loaded / e.total) * 100))
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        request.onProgress(Math.round((event.loaded / event.total) * 100))
+      }
     }
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve()
-      } else {
-        try {
-          const body = JSON.parse(xhr.responseText)
-          reject(new Error(body.error ?? `HTTP ${xhr.status}`))
-        } catch {
-          reject(new Error(`HTTP ${xhr.status}`))
-        }
+
+        return
       }
+
+      reject(new Error(readError(xhr)))
     }
 
     xhr.onerror = () => reject(new Error('Network error'))
     xhr.send(form)
   })
 }
+
+/**
+ * The server's error message, or the bare status when the body is not JSON.
+ */
+function readError(xhr: XMLHttpRequest): string {
+  try {
+    const body = JSON.parse(xhr.responseText) as { error?: string }
+
+    return body.error ?? `HTTP ${xhr.status}`
+  } catch {
+    return `HTTP ${xhr.status}`
+  }
+}
 </script>
 
 <template>
-  <button
-    @click="openModal"
-    class="px-4 py-2 rounded-md text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-white transition-colors"
+  <BaseButton variant="secondary" @click="modal.show">Upload file</BaseButton>
+
+  <BaseModal
+    :open="modal.open.value"
+    :title="`Upload to ${consoleName}`"
+    :busy="uploading"
+    size="lg"
+    @close="modal.hide"
   >
-    Upload file
-  </button>
-
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
-      <div class="absolute inset-0 bg-black/60" @click="closeModal" />
-
-      <div class="relative z-10 w-full max-w-lg rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl">
-
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <h2 class="text-base font-semibold text-zinc-100">Upload to {{ consoleName }}</h2>
-          <button
-            @click="closeModal"
-            :disabled="uploading"
-            class="text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
-          >✕</button>
+    <div class="space-y-5">
+      <div>
+        <div
+          :class="[
+            isDragging
+              ? 'border-emerald-500 bg-emerald-500/5'
+              : 'border-zinc-700 hover:border-zinc-500',
+            selectedFiles.length ? 'py-4' : 'py-10',
+          ]"
+          class="cursor-pointer rounded-lg border-2 border-dashed text-center transition-all"
+          @dragover="onDragOver"
+          @dragleave="onDragLeave"
+          @drop="onDrop"
+          @click="fileInput?.click()"
+        >
+          <p class="text-sm font-medium text-zinc-300">
+            {{
+              selectedFiles.length ? 'Drop more files or click to add' : 'Drag & drop files here'
+            }}
+          </p>
+          <p v-if="!selectedFiles.length" class="mt-1 text-xs text-zinc-600">or click to browse</p>
         </div>
 
-        <div class="p-6 space-y-5">
+        <input ref="fileInput" type="file" multiple class="hidden" @change="onFileInput" />
 
-          <!-- Drop zone -->
-          <div>
-            <div
-              @dragover="onDragOver"
-              @dragleave="onDragLeave"
-              @drop="onDrop"
-              @click="fileInputRef?.click()"
-              :class="[
-                isDragging ? 'border-emerald-500 bg-emerald-500/5' : 'border-zinc-700 hover:border-zinc-500',
-                selectedFiles.length ? 'py-4' : 'py-10',
-                'rounded-lg border-2 border-dashed text-center cursor-pointer transition-all'
-              ]"
-            >
-              <p class="text-zinc-300 text-sm font-medium">
-                {{ selectedFiles.length ? 'Drop more files or click to add' : 'Drag & drop files here' }}
-              </p>
-              <p v-if="!selectedFiles.length" class="text-zinc-600 text-xs mt-1">or click to browse</p>
-            </div>
-
-            <div class="mt-3 flex flex-wrap gap-1.5 items-center">
-              <span class="text-xs text-zinc-500">Accepted:</span>
-              <span
-                v-for="ext in acceptedExtensions"
-                :key="ext"
-                class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono text-xs"
-              >.{{ ext }}</span>
-            </div>
-          </div>
-
-          <!-- File list -->
-          <div v-if="selectedFiles.length">
-            <div class="flex items-center justify-between mb-2">
-              <p class="text-xs font-medium text-zinc-400">
-                {{ selectedFiles.length }} file{{ selectedFiles.length > 1 ? 's' : '' }}
-                <span class="text-zinc-600 ml-1">{{ formatSize(totalSize) }} total</span>
-              </p>
-              <button
-                @click="selectedFiles = []"
-                :disabled="uploading"
-                class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors disabled:opacity-40"
-              >Clear all</button>
-            </div>
-
-            <div class="max-h-40 overflow-y-auto space-y-1 pr-1">
-              <div
-                v-for="(file, i) in selectedFiles"
-                :key="file.name + file.size"
-                class="flex items-center justify-between rounded-md bg-zinc-800 border border-zinc-700/60 px-3 py-2"
-              >
-                <span class="text-sm text-zinc-200 truncate min-w-0 mr-2">{{ file.name }}</span>
-                <div class="flex items-center gap-2 shrink-0">
-                  <span class="text-xs text-zinc-500">{{ formatSize(file.size) }}</span>
-                  <button
-                    @click="removeFile(i)"
-                    :disabled="uploading"
-                    class="text-zinc-600 hover:text-zinc-400 transition-colors disabled:opacity-40 text-xs leading-none"
-                  >✕</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Directory selector -->
-          <div v-if="uploadDirs.length > 1">
-            <p class="text-xs font-medium text-zinc-400 mb-2">Upload to</p>
-            <div class="space-y-1">
-              <label
-                v-for="dir in uploadDirs"
-                :key="dir.value"
-                class="flex items-center gap-3 rounded-md px-3 py-2 cursor-pointer transition-colors"
-                :class="selectedDir === dir.value ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800'"
-              >
-                <input type="radio" :value="dir.value" v-model="selectedDir" class="accent-emerald-500" />
-                <span class="font-mono text-sm">{{ dir.label }}</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Progress -->
-          <div v-if="uploading" class="space-y-1.5">
-            <div class="flex justify-between text-xs text-zinc-400">
-              <span class="truncate mr-2">{{ statusText }}</span>
-              <span class="shrink-0">{{ progress }}%</span>
-            </div>
-            <div class="h-1.5 rounded-full bg-zinc-700 overflow-hidden">
-              <div
-                class="h-full bg-emerald-500 rounded-full transition-all duration-150"
-                :style="{ width: progress + '%' }"
-              />
-            </div>
-          </div>
-
-          <!-- Error -->
-          <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
-
-        </div>
-
-        <!-- Footer -->
-        <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-zinc-800">
-          <button
-            @click="closeModal"
-            :disabled="uploading"
-            class="px-4 py-2 rounded-md text-sm text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
-          >Cancel</button>
-          <button
-            @click="startUpload"
-            :disabled="!selectedFiles.length || uploading"
-            class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        <div class="mt-3 flex flex-wrap items-center gap-1.5">
+          <span class="text-xs text-zinc-500">Accepted:</span>
+          <span
+            v-for="extension in acceptedExtensions"
+            :key="extension"
+            class="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-zinc-400"
           >
-            {{ uploading ? 'Uploading…' : selectedFiles.length > 1 ? `Upload ${selectedFiles.length} files` : 'Upload' }}
+            .{{ extension }}
+          </span>
+        </div>
+      </div>
+
+      <div v-if="selectedFiles.length">
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-xs font-medium text-zinc-400">
+            {{ selectedFiles.length }} file{{ selectedFiles.length > 1 ? 's' : '' }}
+            <span class="ml-1 text-zinc-600">{{ formatSize(totalSize) }} total</span>
+          </p>
+          <button
+            type="button"
+            :disabled="uploading"
+            class="cursor-pointer text-xs text-zinc-600 transition-colors hover:text-zinc-400 disabled:opacity-40"
+            @click="selectedFiles = []"
+          >
+            Clear all
           </button>
         </div>
 
+        <div class="max-h-40 space-y-1 overflow-y-auto pr-1">
+          <div
+            v-for="(file, index) in selectedFiles"
+            :key="file.name + file.size"
+            class="flex items-center justify-between rounded-md border border-zinc-700/60 bg-zinc-800 px-3 py-2"
+          >
+            <span class="mr-2 min-w-0 truncate text-sm text-zinc-200">{{ file.name }}</span>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="text-xs text-zinc-500">{{ formatSize(file.size) }}</span>
+              <button
+                type="button"
+                aria-label="Remove file"
+                :disabled="uploading"
+                class="cursor-pointer text-xs leading-none text-zinc-600 transition-colors hover:text-zinc-400 disabled:opacity-40"
+                @click="removeFile(index)"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  </Teleport>
 
-  <input
-    ref="fileInputRef"
-    type="file"
-    multiple
-    class="hidden"
-    :accept="acceptedExtensions.map(e => '.' + e).join(',')"
-    @change="onFileInput"
-  />
+      <div v-if="uploadDirs.length > 1">
+        <p class="mb-2 text-xs font-medium text-zinc-400">Upload to</p>
+        <OptionList
+          v-model="selectedDir"
+          :options="uploadDirs"
+          :disabled="uploading"
+          @update:model-value="selectedDir = $event"
+        />
+      </div>
+
+      <div v-if="uploading" class="space-y-1.5">
+        <div class="flex justify-between text-xs text-zinc-400">
+          <span class="mr-2 truncate">{{ statusText }}</span>
+          <span class="shrink-0">{{ progress }}%</span>
+        </div>
+        <div class="h-1.5 overflow-hidden rounded-full bg-zinc-700">
+          <div
+            class="h-full rounded-full bg-emerald-500 transition-all duration-150"
+            :style="{ width: progress + '%' }"
+          />
+        </div>
+      </div>
+
+      <AlertBox v-if="error" size="sm">{{ error }}</AlertBox>
+    </div>
+
+    <template #footer>
+      <BaseButton variant="ghost" :disabled="uploading" @click="modal.hide">Cancel</BaseButton>
+      <BaseButton
+        :disabled="!selectedFiles.length"
+        :busy="uploading"
+        busy-label="Uploading…"
+        @click="startUpload"
+      >
+        {{ selectedFiles.length > 1 ? `Upload ${selectedFiles.length} files` : 'Upload' }}
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>

@@ -28,6 +28,7 @@ return [
     'dashboard' => ['method' => 'GET', 'path' => '/', 'handler' => [DashboardController::class, 'index']],
 
     'consoles'               => ['method' => 'GET',    'path' => '/consoles',                                 'handler' => [ConsoleController::class, 'index']],
+    'consoles.install'       => ['method' => 'POST',   'path' => '/consoles/install',                         'handler' => [ConsoleController::class, 'install']],
     'console'                => ['method' => 'GET',    'path' => '/consoles/{console}',                       'handler' => [ConsoleController::class, 'show']],
     'console.scan'           => ['method' => 'POST',   'path' => '/consoles/{console}/scan',                  'handler' => [ConsoleController::class, 'scan']],
     'console.uploadChunk'    => ['method' => 'POST',   'path' => '/consoles/{console}/upload-chunk',          'handler' => [ConsoleController::class, 'uploadChunk']],

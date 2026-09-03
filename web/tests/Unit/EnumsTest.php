@@ -63,6 +63,41 @@ final class EnumsTest extends TestCase
         $this->assertNull(SettingFieldType::Text->validate('anything'));
     }
 
+    #[DataProvider('acceptedUrls')]
+    public function test_url_accepts_a_renderable_value(mixed $value): void
+    {
+        $this->assertNull(SettingFieldType::Url->validate($value));
+    }
+
+    #[DataProvider('rejectedUrls')]
+    public function test_url_rejects_an_unrenderable_value(mixed $value): void
+    {
+        $this->assertNotNull(SettingFieldType::Url->validate($value));
+    }
+
+    public static function acceptedUrls(): array
+    {
+        return [
+            'https'         => ['https://example.test/icon.png'],
+            'http'          => ['http://example.test/icon.png'],
+            'root relative' => ['/images/consoles/ps2.png'],
+            'empty'         => [''],
+            'null'          => [null],
+        ];
+    }
+
+    public static function rejectedUrls(): array
+    {
+        return [
+            'javascript'      => ['javascript:alert(1)'],
+            'data uri'        => ['data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
+            'protocol split'  => ['//evil.test/icon.png'],
+            'file'            => ['file:///etc/passwd'],
+            'bare word'       => ['not-a-url'],
+            'array'           => [['https://example.test']],
+        ];
+    }
+
     public function test_folder_scope_uses_empty_string_for_all(): void
     {
         $this->assertSame('', FolderScope::All->value);

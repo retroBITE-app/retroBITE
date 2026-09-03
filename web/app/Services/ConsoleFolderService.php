@@ -10,6 +10,7 @@ use App\Repositories\GameRepository;
 use App\Support\Console;
 use App\Support\PathRules;
 use Illuminate\Support\Arr;
+use Throwable;
 
 /**
  * Creates and removes the subfolders a console's library is organised into.
@@ -44,6 +45,40 @@ class ConsoleFolderService
         foreach ($targets as $target) {
             $this->filesystem->createDir($console, $target);
         }
+    }
+
+    /**
+     * Create the root folder for each named console, so installing several is one
+     * request rather than one per console.
+     *
+     * @param array<int, mixed> $consoleKeys
+     * @return array<string, string> Console key => failure reason, for the ones that failed.
+     */
+    public function install(array $consoleKeys): array
+    {
+        $failures = [];
+
+        foreach ($consoleKeys as $key) {
+            $console = Console::tryFrom(is_scalar($key) ? (string) $key : null);
+
+            if ($console === null) {
+                $failures[(string) $key] = 'Unknown console';
+                continue;
+            }
+
+            try {
+                $this->filesystem->createDir($console, '');
+            } catch (Throwable $e) {
+                logger()->error('Could not install console', [
+                    'console' => $console->key,
+                    'message' => $e->getMessage(),
+                ]);
+
+                $failures[$console->key] = 'Could not create the directory';
+            }
+        }
+
+        return $failures;
     }
 
     /**

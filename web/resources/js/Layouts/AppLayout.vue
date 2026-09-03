@@ -6,7 +6,6 @@ defineProps<{ noPadding?: boolean }>()
 
 <template>
   <div class="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
-
     <AppSidebar />
 
     <!-- Content -->
@@ -15,6 +14,5 @@ defineProps<{ noPadding?: boolean }>()
         <slot />
       </div>
     </main>
-
   </div>
 </template>

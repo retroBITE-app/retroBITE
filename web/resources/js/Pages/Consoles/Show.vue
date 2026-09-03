@@ -1,81 +1,104 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import { ref, computed } from 'vue'
-import { formatSize } from '@/Helpers/format'
-import PageHeader from '@/Components/PageHeader.vue'
-import FileUploader from '@/Components/FileUploader.vue'
-import CreateDirectory from '@/Components/CreateDirectory.vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
-import { apiHeaders } from '@/Helpers/http'
+import CreateDirectory from '@/Components/CreateDirectory.vue'
+import FileUploader from '@/Components/FileUploader.vue'
+import PageHeader from '@/Components/PageHeader.vue'
+import BaseButton from '@/Components/UI/BaseButton.vue'
+import EmptyState from '@/Components/UI/EmptyState.vue'
+import TextInput from '@/Components/UI/TextInput.vue'
+import Toast from '@/Components/UI/Toast.vue'
+import { useApiAction } from '@/Composables/useApiAction'
+import { formatSize } from '@/Helpers/format'
 import { route } from '@/routes'
+import type { ConsoleMeta, FolderPill, Game, SelectOption } from '@/Types/api'
+
+/** Fallbacks for a console that declares no cover geometry. */
+const DEFAULT_COVER_HEIGHT = 280
+const DEFAULT_COVER_ASPECT = '5/7'
 
 const props = defineProps<{
   console: string
-  meta: { name: string; icon: string; file_icon: string; folder: string; cover_aspect?: string; cover_height?: number }
-  games: Array<{ file_name: string; title?: string; description?: string | null; publisher?: string | null; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, region_meta?: { key: string; name: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
+  meta: ConsoleMeta
+  games: Game[]
   extensions: string[]
-  folders: Array<{ value: string; label: string; count: number }>
+  folders: FolderPill[]
   folder: string
-  upload_dirs: Array<{ value: string; label: string }>
+  upload_dirs: SelectOption[]
 }>()
 
-const coverHeight = computed(() => (props.meta.cover_height ?? 280) + 'px')
+const query = ref('')
+const scanning = ref(false)
+const deleteOpen = ref(false)
 
-function onCoverLoad(e: Event) {
-  const img = e.target as HTMLImageElement
-  const link = img.closest('a') as HTMLElement | null
-  if (link) link.style.width = img.offsetWidth + 'px'
-}
+const deleteFolder = useApiAction(
+  () =>
+    route('console.folder.destroy', {
+      console: props.console,
+      folder: singleSelection.value ?? '',
+    }),
+  { method: 'DELETE', fallback: 'Delete failed' },
+)
+
+const coverHeight = computed(() => `${props.meta.cover_height ?? DEFAULT_COVER_HEIGHT}px`)
 
 const placeholderStyle = computed(() => {
-  const h = props.meta.cover_height ?? 280
-  const [aw, ah] = (props.meta.cover_aspect ?? '5/7').split('/').map(Number)
-  const ratio = ah ? aw / ah : 5 / 7
-  return { height: h + 'px', width: Math.round(h * ratio) + 'px' }
+  const height = props.meta.cover_height ?? DEFAULT_COVER_HEIGHT
+  const [width, depth] = (props.meta.cover_aspect ?? DEFAULT_COVER_ASPECT).split('/').map(Number)
+  const ratio = depth ? width / depth : 5 / 7
+
+  return { height: `${height}px`, width: `${Math.round(height * ratio)}px` }
 })
 
-const scanning     = ref(false)
-const deleteOpen   = ref(false)
-const deleting     = ref(false)
-const deleteError  = ref<string | null>(null)
-const query        = ref('')
-
 const filteredGames = computed(() => {
-  const q = query.value.trim().toLowerCase()
-  if (!q) return props.games
-  return props.games.filter(g =>
-    (g.title       ?? '').toLowerCase().includes(q) ||
-    (g.description ?? '').toLowerCase().includes(q) ||
-    (g.publisher   ?? '').toLowerCase().includes(q) ||
-    (g.file_name   ?? '').toLowerCase().includes(q)
+  const needle = query.value.trim().toLowerCase()
+
+  if (!needle) {
+    return props.games
+  }
+
+  return props.games.filter((game) =>
+    [game.title, game.description, game.publisher, game.file_name].some((field) =>
+      (field ?? '').toLowerCase().includes(needle),
+    ),
   )
 })
 
-const selectedFolders = computed<Set<string>>(() => {
-  if (!props.folder) return new Set()
-  return new Set(props.folder.split(',').map(s => s.trim()).filter(Boolean))
-})
+const selectedFolders = computed(
+  () =>
+    new Set(
+      props.folder
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean),
+    ),
+)
 
 const singleSelection = computed(() =>
-  selectedFolders.value.size === 1 ? [...selectedFolders.value][0] : null
+  selectedFolders.value.size === 1 ? [...selectedFolders.value][0] : null,
 )
 
-const canDeleteFolder = computed(() =>
-  singleSelection.value !== null && singleSelection.value !== 'root'
+const canDeleteFolder = computed(
+  () => singleSelection.value !== null && singleSelection.value !== 'root',
 )
 
-const currentFolderCount = computed(() => {
-  const only = singleSelection.value
-  if (!only) return 0
-  return props.folders.find(f => f.value === only)?.count ?? 0
-})
+const currentFolderCount = computed(
+  () => props.folders.find((pill) => pill.value === singleSelection.value)?.count ?? 0,
+)
 
+/**
+ * Is this filter pill part of the current selection? The "All" pill is active
+ * only when nothing else is.
+ */
 function isActive(value: string): boolean {
-  if (value === '') return selectedFolders.value.size === 0
-  return selectedFolders.value.has(value)
+  return value === '' ? selectedFolders.value.size === 0 : selectedFolders.value.has(value)
 }
 
-function navigate(folders: string[]) {
+/**
+ * Visit the page with a folder selection.
+ */
+function navigate(folders: string[]): void {
   router.get(
     route('console', { console: props.console }),
     { folder: folders.join(',') },
@@ -83,179 +106,197 @@ function navigate(folders: string[]) {
   )
 }
 
-function onPillClick(value: string, event: MouseEvent) {
-  const multi = event.ctrlKey || event.metaKey
-
-  // "All" pill always clears.
+/**
+ * Plain click replaces the selection; Ctrl/Cmd-click toggles one pill.
+ */
+function onPillClick(value: string, event: MouseEvent): void {
   if (value === '') {
     navigate([])
+
     return
   }
 
-  if (!multi) {
+  if (!(event.ctrlKey || event.metaKey)) {
     navigate([value])
+
     return
   }
 
   const next = new Set(selectedFolders.value)
-  next.has(value) ? next.delete(value) : next.add(value)
+
+  if (next.has(value)) {
+    next.delete(value)
+  } else {
+    next.add(value)
+  }
+
   navigate([...next])
 }
 
-function scan() {
+/**
+ * Rescan the console directory and reload the page with what it found.
+ */
+function scan(): void {
   scanning.value = true
-  router.post(route('console.scan', { console: props.console }), {}, {
-    onFinish: () => { scanning.value = false },
-  })
+
+  router.post(
+    route('console.scan', { console: props.console }),
+    {},
+    { onFinish: () => (scanning.value = false) },
+  )
 }
 
-function openDelete() {
-  if (!canDeleteFolder.value) return
-  deleteError.value = null
-  deleteOpen.value  = true
+/**
+ * Open the delete confirmation, but only for a deletable selection.
+ */
+function openDelete(): void {
+  if (canDeleteFolder.value) {
+    deleteFolder.reset()
+    deleteOpen.value = true
+  }
 }
 
-async function confirmDeleteFolder() {
-  const target = singleSelection.value
-  if (!canDeleteFolder.value || !target) return
+/**
+ * Delete the selected folder, then reload without a folder filter since the one
+ * that was selected no longer exists.
+ */
+async function confirmDeleteFolder(): Promise<void> {
+  if (!canDeleteFolder.value) {
+    return
+  }
 
-  deleting.value    = true
-  deleteError.value = null
-
-  try {
-    const url = route('console.folder.destroy', { console: props.console, folder: target })
-    const res = await fetch(url, {
-      method:  'DELETE',
-      headers: apiHeaders(),
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
-
+  if (await deleteFolder.run()) {
     deleteOpen.value = false
-    router.get(route('console', { console: props.console }), { folder: '' }, { preserveScroll: false })
-  } catch (e: unknown) {
-    deleteError.value = e instanceof Error ? e.message : 'Delete failed'
-  } finally {
-    deleting.value = false
+    router.get(route('console', { console: props.console }), { folder: '' })
+  }
+}
+
+/**
+ * Match the link's width to the cover that just loaded, so the caption aligns
+ * with a cover of any aspect ratio.
+ */
+function onCoverLoad(event: Event): void {
+  const image = event.target as HTMLImageElement
+  const link = image.closest('a')
+
+  if (link) {
+    link.style.width = `${image.offsetWidth}px`
   }
 }
 </script>
 
 <template>
   <div>
-
-    <!-- Header -->
     <PageHeader>
       <template #title>
         <div class="flex items-center gap-4">
-          <Link :href="route('consoles')" class="text-zinc-500 hover:text-zinc-300 transition-colors text-sm">← Back</Link>
+          <Link
+            :href="route('consoles')"
+            class="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            ← Back
+          </Link>
           <img :src="meta.icon" :alt="meta.name" class="h-8 w-8 object-contain opacity-80" />
           <h1 class="text-2xl font-semibold text-zinc-100">{{ meta.name }}</h1>
         </div>
       </template>
+
       <template #actions>
-        <div class="flex items-center gap-2">
-          <input
-            v-model="query"
-            type="text"
-            placeholder="Search titles, publisher, filename…"
-            class="w-64 rounded-md bg-zinc-800 border border-zinc-700 focus:border-emerald-500/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition-colors"
-          />
-          <CreateDirectory
-            :console="props.console"
-            :console-name="meta.name"
-            :folder="meta.folder"
-            @done="router.reload()"
-          />
-          <FileUploader
-            :console="props.console"
-            :console-name="meta.name"
-            :accepted-extensions="extensions"
-            :upload-dirs="upload_dirs"
-            @done="router.reload()"
-          />
-          <button
-            @click="scan"
-            :disabled="scanning"
-            class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {{ scanning ? 'Scanning…' : 'Scan directory' }}
-          </button>
-        </div>
+        <TextInput v-model="query" placeholder="Search titles, publisher, filename…" class="w-64" />
+        <CreateDirectory
+          :console-key="props.console"
+          :console-name="meta.name"
+          :folder="meta.folder"
+          @done="router.reload()"
+        />
+        <FileUploader
+          :console-key="props.console"
+          :console-name="meta.name"
+          :accepted-extensions="extensions"
+          :upload-dirs="upload_dirs"
+          @done="router.reload()"
+        />
+        <BaseButton :busy="scanning" busy-label="Scanning…" @click="scan"
+          >Scan directory</BaseButton
+        >
       </template>
     </PageHeader>
 
-    <!-- Action bar -->
-    <div class="flex items-center gap-2 mb-4 flex-wrap">
+    <div class="mb-4 flex flex-wrap items-center gap-2">
       <button
-        v-for="f in folders"
-        :key="f.value || 'all'"
-        @click="onPillClick(f.value, $event)"
-        :title="f.value === '' ? 'Show all' : 'Click to select, Ctrl/Cmd+Click to toggle'"
-        :class="isActive(f.value)
-          ? 'bg-zinc-700 text-zinc-100'
-          : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'"
-        class="px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
+        v-for="pill in folders"
+        :key="pill.value || 'all'"
+        type="button"
+        :title="pill.value === '' ? 'Show all' : 'Click to select, Ctrl/Cmd+Click to toggle'"
+        :class="
+          isActive(pill.value)
+            ? 'bg-zinc-700 text-zinc-100'
+            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+        "
+        class="cursor-pointer rounded px-3 py-1 text-xs font-medium transition-colors"
+        @click="onPillClick(pill.value, $event)"
       >
-        {{ f.label }}
-        <span class="ml-1 text-zinc-500">{{ f.count }}</span>
+        {{ pill.label }}
+        <span class="ml-1 text-zinc-500">{{ pill.count }}</span>
       </button>
 
       <button
         v-if="canDeleteFolder"
+        type="button"
+        class="ml-auto cursor-pointer rounded px-3 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
         @click="openDelete"
-        class="ml-auto px-3 py-1 rounded text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
       >
         Delete folder
       </button>
     </div>
 
-    <!-- Empty state -->
-    <div v-if="games.length === 0" class="rounded-lg border border-dashed border-zinc-700 p-12 text-center">
-      <p class="text-zinc-500 text-sm">No files found. Try scanning the directory.</p>
-    </div>
+    <EmptyState
+      v-if="games.length === 0"
+      message="No files found."
+      hint="Try scanning the directory, or upload something."
+    />
 
-    <!-- No search matches -->
-    <div v-else-if="filteredGames.length === 0" class="rounded-lg border border-dashed border-zinc-700 p-12 text-center">
-      <p class="text-zinc-500 text-sm">No games match “{{ query }}”.</p>
-    </div>
+    <EmptyState v-else-if="filteredGames.length === 0" :message="`No games match “${query}”.`" />
 
-    <!-- Game grid -->
     <ul v-else class="flex flex-wrap gap-4">
-      <li
-        v-for="game in filteredGames"
-        :key="game.file_name"
-        class="group"
-      >
+      <li v-for="game in filteredGames" :key="game.file_name" class="group">
         <Link
           :href="route('game', { console: props.console, game: game.file_name })"
           class="flex flex-col gap-2"
         >
-          <!-- Cover -->
           <div
             :style="game.cover_url ? { height: coverHeight } : placeholderStyle"
-            class="relative w-fit rounded-lg overflow-hidden bg-zinc-800 border-2 border-zinc-700 group-hover:border-emerald-500/60 transition-colors flex items-center justify-center"
+            class="relative flex w-fit items-center justify-center overflow-hidden rounded-lg border-2 border-zinc-700 bg-zinc-800 transition-colors group-hover:border-emerald-500/60"
           >
             <img
               v-if="game.cover_url"
               :src="game.cover_url"
-              :alt="game.title"
+              :alt="game.title ?? game.file_name"
+              class="block h-full w-auto"
               @load="onCoverLoad"
-              class="h-full w-auto block"
             />
-            <img v-else :src="meta.file_icon" :alt="meta.name" class="w-16 h-16 object-contain opacity-30" />
+            <img
+              v-else
+              :src="meta.file_icon"
+              :alt="meta.name"
+              class="h-16 w-16 object-contain opacity-30"
+            />
           </div>
 
-          <!-- Title + meta -->
-          <div class="px-0.5 min-w-0 w-full">
-            <p class="text-sm text-zinc-200 truncate group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
+          <div class="w-full min-w-0 px-0.5">
+            <p
+              :title="game.title ?? game.file_name"
+              class="truncate text-sm text-zinc-200 transition-colors group-hover:text-white"
+            >
+              {{ game.title ?? game.file_name }}
+            </p>
             <div class="mt-1 flex items-center gap-2">
               <img
                 v-if="game.region_meta?.icon"
                 :src="game.region_meta.icon"
                 :alt="game.region_meta.name"
                 :title="game.region_meta.name"
-                class="w-6 border border-zinc-700 shrink-0"
+                class="w-6 shrink-0 border border-zinc-700"
               />
               <span class="text-xs text-zinc-500">{{ formatSize(game.file_size) }}</span>
             </div>
@@ -267,19 +308,15 @@ async function confirmDeleteFolder() {
     <ConfirmDialog
       :open="deleteOpen"
       :title="`Delete folder ${singleSelection ?? ''}?`"
-      :message="`This will permanently delete the folder ${meta.folder}/${singleSelection ?? ''} from disk and remove ${currentFolderCount} game record${currentFolderCount === 1 ? '' : 's'} from the database.`"
+      :message="`This will permanently delete ${meta.folder}/${singleSelection ?? ''} from disk and remove ${currentFolderCount} game record${currentFolderCount === 1 ? '' : 's'} from the database.`"
       warning="The folder, every file inside it, and all nested subfolders will be removed. This cannot be undone."
       confirm-label="Delete folder"
       variant="danger"
-      :busy="deleting"
+      :busy="deleteFolder.busy.value"
       @cancel="deleteOpen = false"
       @confirm="confirmDeleteFolder"
     />
 
-    <p
-      v-if="deleteError"
-      class="fixed bottom-4 right-4 z-40 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300 shadow-lg"
-    >{{ deleteError }}</p>
-
+    <Toast v-if="deleteFolder.error.value">{{ deleteFolder.error.value }}</Toast>
   </div>
 </template>

@@ -15,6 +15,7 @@ enum SettingFieldType: string
     case Text     = 'text';
     case Number   = 'number';
     case TextList = 'text[]';
+    case Url      = 'url';
 
     /**
      * Human-readable name for the UI.
@@ -25,6 +26,7 @@ enum SettingFieldType: string
             self::Text     => 'Text',
             self::Number   => 'Number',
             self::TextList => 'List of text',
+            self::Url      => 'URL',
         };
     }
 
@@ -42,9 +44,9 @@ enum SettingFieldType: string
     public function coerce(mixed $value): mixed
     {
         return match ($this) {
-            self::Number   => $value === null || $value === '' ? null : (int) $value,
-            self::TextList => $this->coerceList($value),
-            self::Text     => $value === null ? null : (string) $value,
+            self::Number         => $value === null || $value === '' ? null : (int) $value,
+            self::TextList       => $this->coerceList($value),
+            self::Text, self::Url => $value === null ? null : (string) $value,
         };
     }
 
@@ -56,8 +58,32 @@ enum SettingFieldType: string
         return match (true) {
             $this === self::Number && $value !== null && $value !== '' && !is_numeric($value) => 'Must be a number',
             $this === self::TextList && $value !== null && !is_array($value)                  => 'Must be a list',
+            $this === self::Url && !$this->isRenderableUrl($value)                            => 'Must be an http(s) or root-relative URL',
             default                                                                            => null,
         };
+    }
+
+    /**
+     * Is this safe to put in an `src` attribute? These values are user-editable and
+     * rendered straight into <img>, so `javascript:` and `data:` are refused.
+     */
+    private function isRenderableUrl(mixed $value): bool
+    {
+        if ($value === null || $value === '') {
+            return true;
+        }
+
+        if (!is_string($value)) {
+            return false;
+        }
+
+        if (str_starts_with($value, '/') && !str_starts_with($value, '//')) {
+            return true;
+        }
+
+        $scheme = strtolower((string) parse_url($value, PHP_URL_SCHEME));
+
+        return in_array($scheme, ['http', 'https'], true);
     }
 
     /**

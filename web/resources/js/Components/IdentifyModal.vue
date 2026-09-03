@@ -1,247 +1,242 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
-import { apiHeaders } from '@/Helpers/http'
+import AlertBox from '@/Components/UI/AlertBox.vue'
+import BaseButton from '@/Components/UI/BaseButton.vue'
+import BaseModal from '@/Components/UI/BaseModal.vue'
+import Spinner from '@/Components/UI/Spinner.vue'
+import TextInput from '@/Components/UI/TextInput.vue'
+import { useApiAction } from '@/Composables/useApiAction'
 import { route } from '@/routes'
+import type { ProviderCandidate } from '@/Types/api'
 
 const props = defineProps<{
-  open:         boolean
-  console:      string
+  open: boolean
+  consoleKey: string
   gameFileName: string
 }>()
 
 const emit = defineEmits<{ close: [] }>()
 
-type Candidate = {
-  provider_id: string
-  title:       string | null
-  rom_name:    string | null
-  region:      string | null
-  year:        string | null
-  cover_url:   string | null
+type LookupResult = {
+  md5_match: ProviderCandidate | null
+  candidates: ProviderCandidate[]
 }
 
-type Md5Match = {
-  provider_id:  string
-  title:        string | null
-  cover_url:    string | null
-  logo_url:     string | null
-  backdrop_url: string | null
-  release_date: string | null
-  genre:        string | null
-  region:       string | null
-  developer:    string | null
-  publisher:    string | null
-  players:      string | null
-} | null
-
-const loading    = ref(false)
-const error      = ref<string | null>(null)
-const md5Match   = ref<Md5Match>(null)
-const candidates = ref<Candidate[]>([])
-const assigning  = ref<string | null>(null)
 const searchName = ref('')
+const md5Match = ref<ProviderCandidate | null>(null)
+const candidates = ref<ProviderCandidate[]>([])
+const assigning = ref<string | null>(null)
 
-async function load() {
-  loading.value    = true
-  error.value      = null
-  md5Match.value   = null
+const lookup = useApiAction<LookupResult>(
+  () =>
+    route('game.identify', { console: props.consoleKey, game: props.gameFileName }) +
+    searchQuery.value,
+  { fallback: 'Lookup failed' },
+)
+
+const assign = useApiAction(
+  () => route('game.metadata', { console: props.consoleKey, game: props.gameFileName }),
+  { fallback: 'Assign failed' },
+)
+
+const searchQuery = computed(() =>
+  searchName.value.trim() ? `?search=${encodeURIComponent(searchName.value.trim())}` : '',
+)
+
+const hasResults = computed(() => md5Match.value !== null || candidates.value.length > 0)
+const error = computed(() => assign.error.value ?? lookup.error.value)
+
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen) {
+      searchName.value = ''
+      load()
+    }
+  },
+)
+
+/**
+ * Ask the provider for matches, replacing whatever was on screen.
+ */
+async function load(): Promise<void> {
+  md5Match.value = null
   candidates.value = []
 
-  try {
-    const query = searchName.value.trim()
-      ? `?search=${encodeURIComponent(searchName.value.trim())}`
-      : ''
-    const url = route('game.identify', { console: props.console, game: props.gameFileName }) + query
-    const res = await fetch(url, {
-      method:  'POST',
-      headers: apiHeaders(),
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+  const result = await lookup.run()
 
-    md5Match.value   = body.md5_match ?? null
-    candidates.value = body.candidates ?? []
-  } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Lookup failed'
-  } finally {
-    loading.value = false
+  if (result) {
+    md5Match.value = result.md5_match ?? null
+    candidates.value = result.candidates ?? []
   }
 }
 
-async function pick(providerId: string, source: 'md5' | 'name') {
-  if (assigning.value) return
+/**
+ * Store the chosen match and refresh the page's game prop.
+ */
+async function pick(providerId: string, source: 'md5' | 'name'): Promise<void> {
+  if (assigning.value !== null) {
+    return
+  }
 
   assigning.value = `${source}:${providerId}`
-  error.value     = null
 
-  try {
-    const url = route('game.metadata', { console: props.console, game: props.gameFileName })
-    const res = await fetch(url, {
-      method:  'POST',
-      headers: {
-        'Content-Type':     'application/x-www-form-urlencoded',
-        ...apiHeaders(),
-      },
-      body: `provider_id=${encodeURIComponent(providerId)}`,
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
+  const saved = await assign.run({ body: { provider_id: providerId } })
+  assigning.value = null
 
+  if (saved) {
     emit('close')
     router.reload({ only: ['game'] })
-  } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : 'Assign failed'
-  } finally {
-    assigning.value = null
   }
 }
 
-watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    searchName.value = ''
-    load()
-  }
-})
+/**
+ * Secondary detail line for a candidate: date, genre, region, player count.
+ */
+function detailLine(candidate: ProviderCandidate): string {
+  return [
+    candidate.release_date ?? candidate.year,
+    candidate.genre,
+    candidate.region?.toUpperCase(),
+    candidate.players ? `${candidate.players}P` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/**
+ * Studio line for a candidate, avoiding "Foo / Foo".
+ */
+function studioLine(candidate: ProviderCandidate): string {
+  return candidate.publisher && candidate.publisher !== candidate.developer
+    ? `${candidate.developer ?? ''} / ${candidate.publisher}`.trim()
+    : (candidate.developer ?? '')
+}
 </script>
 
 <template>
-  <Teleport to="body">
-    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/60" @click="assigning === null && emit('close')" />
+  <BaseModal
+    :open="open"
+    title="Identify game"
+    :subtitle="gameFileName"
+    :busy="assigning !== null"
+    size="2xl"
+    @close="emit('close')"
+  >
+    <Spinner v-if="lookup.busy.value" label="Searching ScreenScraper…" />
 
-      <div class="relative z-10 w-full max-w-2xl rounded-xl bg-zinc-900 border border-zinc-700 shadow-2xl">
+    <AlertBox v-else-if="error">{{ error }}</AlertBox>
 
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <div>
-            <h2 class="text-base font-semibold text-zinc-100">Identify game</h2>
-            <p class="text-xs font-mono text-zinc-500 truncate mt-0.5 max-w-lg">{{ gameFileName }}</p>
-          </div>
-          <button
-            @click="emit('close')"
-            :disabled="assigning !== null"
-            class="text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
-          >✕</button>
-        </div>
+    <div v-else-if="!hasResults">
+      <p class="text-center text-sm text-zinc-300">No matches found for this ROM.</p>
+      <p class="mt-1 text-center text-xs text-zinc-600">Try searching with a custom title.</p>
 
-        <!-- Body -->
-        <div class="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-
-          <!-- Loading -->
-          <div v-if="loading" class="flex items-center justify-center gap-3 text-zinc-400 text-sm py-8">
-            <span class="inline-block h-5 w-5 rounded-full border-2 border-zinc-700 border-t-emerald-500 animate-spin"></span>
-            <span>Searching ScreenScraper…</span>
-          </div>
-
-          <!-- Error -->
-          <div v-else-if="error" class="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {{ error }}
-          </div>
-
-          <!-- Empty -->
-          <div v-else-if="!md5Match && candidates.length === 0" class="py-6">
-            <p class="text-center text-zinc-300 text-sm">No matches found for this ROM.</p>
-            <p class="text-center text-zinc-600 text-xs mt-1">Try searching with a custom title.</p>
-            <form @submit.prevent="load" class="mt-5 flex gap-2">
-              <input
-                v-model="searchName"
-                type="text"
-                placeholder="e.g. Super Mario Sunshine"
-                class="flex-1 rounded-md bg-zinc-800 border border-zinc-700 focus:border-emerald-500/60 focus:outline-none text-sm text-zinc-100 placeholder-zinc-600 px-3 py-2"
-                autofocus
-              />
-              <button
-                type="submit"
-                :disabled="!searchName.trim() || loading"
-                class="px-4 py-2 rounded-md text-sm font-medium bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >Search</button>
-            </form>
-          </div>
-
-          <!-- Results -->
-          <template v-else>
-
-            <!-- MD5 match pinned -->
-            <section v-if="md5Match">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_var(--color-emerald-500)]"></span>
-                <h3 class="text-[11px] font-semibold uppercase tracking-wider text-emerald-500">Exact MD5 match</h3>
-              </div>
-              <button
-                @click="pick(md5Match.provider_id, 'md5')"
-                :disabled="assigning !== null"
-                class="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/60 transition-colors p-3 flex gap-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <img v-if="md5Match.cover_url" :src="md5Match.cover_url" class="w-50 h-auto self-start object-contain rounded bg-zinc-800 shrink-0" />
-                <div v-else class="w-24 aspect-5/7 rounded bg-zinc-800 shrink-0" />
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-zinc-100 truncate">{{ md5Match.title ?? '(no title)' }}</p>
-                  <p class="text-xs text-zinc-500 mt-0.5">
-                    <span v-if="md5Match.release_date">{{ md5Match.release_date }}</span>
-                    <span v-if="md5Match.genre" class="ml-2">· {{ md5Match.genre }}</span>
-                    <span v-if="md5Match.region" class="ml-2">· {{ md5Match.region.toUpperCase() }}</span>
-                    <span v-if="md5Match.players" class="ml-2">· {{ md5Match.players }}P</span>
-                  </p>
-                  <p class="text-xs text-zinc-600 mt-0.5 truncate">
-                    <span v-if="md5Match.developer">{{ md5Match.developer }}</span>
-                    <span v-if="md5Match.publisher && md5Match.publisher !== md5Match.developer" class="ml-1">/ {{ md5Match.publisher }}</span>
-                  </p>
-                </div>
-                <span v-if="assigning === `md5:${md5Match.provider_id}`" class="shrink-0 self-center text-xs text-emerald-400">Assigning…</span>
-              </button>
-            </section>
-
-            <!-- Name matches -->
-            <section v-if="candidates.length">
-              <h3 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-                Name matches <span class="text-zinc-600 font-normal">({{ candidates.length }})</span>
-              </h3>
-              <div class="space-y-1.5">
-                <button
-                  v-for="c in candidates"
-                  :key="c.provider_id"
-                  @click="pick(c.provider_id, 'name')"
-                  :disabled="assigning !== null"
-                  class="w-full rounded-lg border border-zinc-700 bg-zinc-800/50 hover:border-zinc-500 hover:bg-zinc-800 transition-colors p-3 flex gap-3 text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <img v-if="c.cover_url" :src="c.cover_url" class="w-50 h-auto self-start object-contain rounded bg-zinc-800 shrink-0" />
-                  <div v-else class="w-20 aspect-5/7 rounded bg-zinc-800 shrink-0" />
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-zinc-100 truncate">{{ c.title ?? '(no title)' }}</p>
-                    <p class="text-xs text-zinc-500 mt-0.5">
-                      <span v-if="c.year">{{ c.year }}</span>
-                      <span v-if="c.region" class="ml-2">· {{ c.region.toUpperCase() }}</span>
-                    </p>
-                    <p v-if="c.rom_name" class="text-xs font-mono text-zinc-600 truncate mt-0.5">{{ c.rom_name }}</p>
-                  </div>
-                  <span v-if="assigning === `name:${c.provider_id}`" class="shrink-0 self-center text-xs text-emerald-400">Assigning…</span>
-                </button>
-              </div>
-            </section>
-
-          </template>
-        </div>
-
-        <!-- Footer -->
-        <div class="flex items-center justify-between px-6 py-4 border-t border-zinc-800">
-          <p class="text-xs text-zinc-600">Powered by ScreenScraper.fr</p>
-          <div class="flex items-center gap-2">
-            <button
-              v-if="!loading && !error"
-              @click="load"
-              :disabled="assigning !== null"
-              class="px-3 py-1.5 rounded-md text-xs text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
-            >Refresh</button>
-            <button
-              @click="emit('close')"
-              :disabled="assigning !== null"
-              class="px-4 py-2 rounded-md text-sm text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
-            >Close</button>
-          </div>
-        </div>
-
-      </div>
+      <form class="mt-5 flex gap-2" @submit.prevent="load">
+        <TextInput v-model="searchName" placeholder="e.g. Super Mario Sunshine" class="flex-1" />
+        <BaseButton type="submit" :disabled="!searchName.trim()">Search</BaseButton>
+      </form>
     </div>
-  </Teleport>
+
+    <div v-else class="space-y-5">
+      <section v-if="md5Match">
+        <div class="mb-2 flex items-center gap-2">
+          <span
+            class="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_var(--color-emerald-500)]"
+            aria-hidden="true"
+          />
+          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+            Exact MD5 match
+          </h3>
+        </div>
+
+        <button
+          type="button"
+          :disabled="assigning !== null"
+          class="flex w-full cursor-pointer gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-left transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+          @click="pick(md5Match.provider_id, 'md5')"
+        >
+          <img
+            v-if="md5Match.cover_url"
+            :src="md5Match.cover_url"
+            :alt="md5Match.title ?? ''"
+            class="w-50 h-auto shrink-0 self-start rounded bg-zinc-800 object-contain"
+          />
+          <div v-else class="aspect-5/7 w-24 shrink-0 rounded bg-zinc-800" />
+
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-medium text-zinc-100">
+              {{ md5Match.title ?? '(no title)' }}
+            </p>
+            <p class="mt-0.5 text-xs text-zinc-500">{{ detailLine(md5Match) }}</p>
+            <p class="mt-0.5 truncate text-xs text-zinc-600">{{ studioLine(md5Match) }}</p>
+          </div>
+
+          <span
+            v-if="assigning === `md5:${md5Match.provider_id}`"
+            class="shrink-0 self-center text-xs text-emerald-400"
+          >
+            Assigning…
+          </span>
+        </button>
+      </section>
+
+      <section v-if="candidates.length">
+        <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+          Name matches <span class="font-normal text-zinc-600">({{ candidates.length }})</span>
+        </h3>
+
+        <div class="space-y-1.5">
+          <button
+            v-for="candidate in candidates"
+            :key="candidate.provider_id"
+            type="button"
+            :disabled="assigning !== null"
+            class="flex w-full cursor-pointer gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 text-left transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            @click="pick(candidate.provider_id, 'name')"
+          >
+            <img
+              v-if="candidate.cover_url"
+              :src="candidate.cover_url"
+              :alt="candidate.title ?? ''"
+              class="w-50 h-auto shrink-0 self-start rounded bg-zinc-800 object-contain"
+            />
+            <div v-else class="aspect-5/7 w-20 shrink-0 rounded bg-zinc-800" />
+
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium text-zinc-100">
+                {{ candidate.title ?? '(no title)' }}
+              </p>
+              <p class="mt-0.5 text-xs text-zinc-500">{{ detailLine(candidate) }}</p>
+              <p v-if="candidate.rom_name" class="mt-0.5 truncate font-mono text-xs text-zinc-600">
+                {{ candidate.rom_name }}
+              </p>
+            </div>
+
+            <span
+              v-if="assigning === `name:${candidate.provider_id}`"
+              class="shrink-0 self-center text-xs text-emerald-400"
+            >
+              Assigning…
+            </span>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <template #footer>
+      <p class="mr-auto text-xs text-zinc-600">Powered by ScreenScraper.fr</p>
+      <BaseButton
+        v-if="!lookup.busy.value && !error"
+        variant="ghost"
+        :disabled="assigning !== null"
+        @click="load"
+      >
+        Refresh
+      </BaseButton>
+      <BaseButton variant="ghost" :disabled="assigning !== null" @click="emit('close')">
+        Close
+      </BaseButton>
+    </template>
+  </BaseModal>
 </template>

@@ -1,50 +1,33 @@
 <script setup lang="ts">
 import ConsoleCard from '@/Components/ConsoleCard.vue'
 import NetworkPanel from '@/Components/NetworkPanel.vue'
-import AchievementsPanel from '@/Components/AchievementsPanel.vue'
+import EmptyState from '@/Components/UI/EmptyState.vue'
+import type { ConsoleCard as ConsoleCardData, NetworkInfo } from '@/Types/api'
 
 const props = defineProps<{
-  consoles: Array<{
-    key: string
-    name: string
-    icon: string
-    game_count: number
-    bios_count: number
-  }>
-  network: {
-    host_ip: string
-    username: string
-    shares: Array<{ key: string; name: string; folder: string; icon: string | null }>
-  }
+  consoles: ConsoleCardData[]
+  network: NetworkInfo
 }>()
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <div class="flex flex-col">
-      <h2 class="text-xl font-semibold text-zinc-100 mb-4">Top Consoles</h2>
-      <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <ConsoleCard
-          v-for="c in consoles"
-          :key="c.key"
-          :console-key="c.key"
-          :name="c.name"
-          :icon="c.icon"
-          :game-count="c.game_count"
-          :bios-count="c.bios_count"
-        />
+  <div class="flex flex-col gap-8">
+    <section>
+      <h2 class="mb-4 text-xl font-semibold text-zinc-100">Top consoles</h2>
+
+      <EmptyState
+        v-if="consoles.length === 0"
+        message="No consoles installed yet."
+        hint="Install one from the Consoles page to get started."
+      />
+
+      <div v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <ConsoleCard v-for="entry in props.consoles" :key="entry.key" :console="entry" />
       </div>
-    </div>
+    </section>
 
-    <div class="flex flex-col">
-      <h2 class="text-xl font-semibold text-zinc-100 mb-4">Latest Achievements</h2>
-      <AchievementsPanel />
-    </div>
-
-    <div class="flex flex-col">
-      <h2 class="text-xl font-semibold text-zinc-100 mb-4">Network</h2>
+    <section>
       <NetworkPanel :network="props.network" />
-    </div>
-
+    </section>
   </div>
 </template>

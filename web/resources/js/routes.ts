@@ -8,6 +8,7 @@ const PATHS = {
   'logout': '/logout',
   'dashboard': '/',
   'consoles': '/consoles',
+  'consoles.install': '/consoles/install',
   'console': '/consoles/{console}',
   'console.scan': '/consoles/{console}/scan',
   'console.uploadChunk': '/consoles/{console}/upload-chunk',

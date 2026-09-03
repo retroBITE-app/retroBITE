@@ -1,94 +1,68 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3'
+import AppBrand from '@/Components/AppBrand.vue'
+import AlertBox from '@/Components/UI/AlertBox.vue'
+import BaseButton from '@/Components/UI/BaseButton.vue'
+import FormField from '@/Components/UI/FormField.vue'
+import TextInput from '@/Components/UI/TextInput.vue'
 import { route } from '@/routes'
 
 defineOptions({ layout: false })
 
-defineProps<{
-  error?: string | null
-}>()
+defineProps<{ error?: string | null }>()
 
-const form = useForm({
-  username: '',
-  password: '',
-})
+const form = useForm({ username: '', password: '' })
 
-function submit() {
+/**
+ * Post the credentials; Inertia surfaces any failure as a page prop.
+ */
+function submit(): void {
   form.post(route('login.submit'))
 }
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-    <div class="w-full max-w-sm gap-2 flex flex-col">
+  <div class="flex min-h-screen items-center justify-center bg-zinc-950 p-4">
+    <div class="flex w-full max-w-sm flex-col gap-2">
+      <img src="/logo.png" alt="retroBITE" class="mx-auto mb-2 h-32 w-auto" />
 
-      <!-- Logo / Title -->
-      <div class="text-center">
-        <p class="text-3xl font-bold tracking-tight text-zinc-100">
-          <img src="/logo.png" alt="retroBITE" class="h-32 mx-auto w-auto mb-2" />
-        </p>
-      </div>
-
-      <!-- Card -->
       <div class="rounded-xl border border-zinc-700 bg-zinc-900 p-6">
+        <AlertBox v-if="error" class="mb-5">{{ error }}</AlertBox>
 
-        <!-- Error -->
-        <div
-          v-if="error"
-          class="mb-5 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"
-        >
-          <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          {{ error }}
-        </div>
-
-        <form @submit.prevent="submit" class="flex flex-col gap-4">
-
-          <!-- Username -->
-          <div class="flex flex-col gap-1.5">
-            <label for="username" class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Username</label>
-            <input
+        <form class="flex flex-col gap-4" @submit.prevent="submit">
+          <FormField for="username" label="Username" :error="form.errors.username">
+            <TextInput
               id="username"
               v-model="form.username"
-              type="text"
               autocomplete="username"
-              required
-              class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               placeholder="Enter username"
+              :disabled="form.processing"
             />
-          </div>
+          </FormField>
 
-          <!-- Password -->
-          <div class="flex flex-col gap-1.5">
-            <label for="password" class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Password</label>
-            <input
+          <FormField for="password" label="Password" :error="form.errors.password">
+            <TextInput
               id="password"
               v-model="form.password"
               type="password"
               autocomplete="current-password"
-              required
-              class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               placeholder="Enter password"
+              :disabled="form.processing"
             />
-          </div>
+          </FormField>
 
-          <!-- Submit -->
-          <button
+          <BaseButton
             type="submit"
-            :disabled="form.processing"
-            class="mt-1 w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="mt-1 w-full"
+            :busy="form.processing"
+            busy-label="Signing in…"
           >
-            {{ form.processing ? 'Signing in…' : 'Sign in' }}
-          </button>
-
+            Sign in
+          </BaseButton>
         </form>
-
-        
       </div>
-      <p class="text-xs text-center text-zinc-600">
-          <a href="https://github.com/mattiasghodsian/retroBite" target="_new">retroBITE</a> v0.0.1
-        </p>
+
+      <AppBrand class="text-center" />
     </div>
   </div>
 </template>
