@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3'
+import { route } from '@/routes'
 
 defineProps<{
   consoleKey: string
@@ -12,7 +13,7 @@ defineProps<{
 
 <template>
   <Link
-    :href="`/consoles/${consoleKey}`"
+    :href="route('console', { console: consoleKey })"
     class="group flex flex-col items-center gap-3 rounded-lg bg-zinc-800 border border-zinc-700 p-6 hover:border-emerald-500/50 hover:bg-zinc-800/80 transition-colors"
   >
     <img :src="icon" :alt="name" class="h-16 w-16 object-contain opacity-80 group-hover:opacity-100 transition-opacity" />

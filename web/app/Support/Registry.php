@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Enums\SettingFieldType;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
 /**
  * Thin façade over config('overridable') — the registry of user-editable config groups.
@@ -62,43 +64,25 @@ final class Registry
     }
 
     /**
-     * Coerce a raw incoming value to the schema-declared type. Returns the normalized value.
-     */
-    public static function coerce(string $type, mixed $value): mixed
-    {
-        return match ($type) {
-            'number' => $value === null || $value === '' ? null : (int) $value,
-            'text[]' => self::coerceList($value),
-            default  => $value === null ? null : (string) $value,
-        };
-    }
-
-    /**
-     * Validate an item payload against a group's schema. Returns ['field' => 'message', ...].
-     * Empty array means valid.
+     * Validate an item payload against a group's schema.
      *
-     * @return array<string, string>
+     * @return array<string, string> Field => message; empty means valid.
      */
     public static function validate(string $group, array $payload): array
     {
         $errors = [];
 
         foreach (self::schemaFor($group) as $field => $meta) {
-            $type     = (string) Arr::get($meta, 'type', 'text');
-            $required = (bool)   Arr::get($meta, 'required', false);
-            $value    = Arr::get($payload, $field);
+            $type  = SettingFieldType::fromSchema(Arr::get($meta, 'type'));
+            $value = Arr::get($payload, $field);
 
-            if ($required && ($value === null || $value === '' || (is_array($value) && $value === []))) {
+            if ((bool) Arr::get($meta, 'required', false) && $type->isEmpty($value)) {
                 $errors[$field] = 'Required';
                 continue;
             }
 
-            if ($type === 'number' && $value !== null && $value !== '' && !is_numeric($value)) {
-                $errors[$field] = 'Must be a number';
-            }
-
-            if ($type === 'text[]' && $value !== null && !is_array($value)) {
-                $errors[$field] = 'Must be a list';
+            if ($message = $type->validate($value)) {
+                $errors[$field] = $message;
             }
         }
 
@@ -110,30 +94,10 @@ final class Registry
      */
     public static function normalize(string $group, array $payload): array
     {
-        $out = [];
-        foreach (self::schemaFor($group) as $field => $meta) {
-            if (!array_key_exists($field, $payload)) {
-                continue;
-            }
-            $out[$field] = self::coerce((string) Arr::get($meta, 'type', 'text'), $payload[$field]);
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param mixed $value
-     * @return string[]
-     */
-    private static function coerceList(mixed $value): array
-    {
-        if (!is_array($value)) {
-            return [];
-        }
-
-        return array_values(array_filter(
-            array_map(fn($v) => (string) $v, $value),
-            fn(string $v) => $v !== '',
-        ));
+        return Collection::make(self::schemaFor($group))
+            ->filter(fn(array $meta, string $field) => array_key_exists($field, $payload))
+            ->map(fn(array $meta, string $field) => SettingFieldType::fromSchema(Arr::get($meta, 'type'))
+                ->coerce($payload[$field]))
+            ->all();
     }
 }

@@ -7,15 +7,16 @@ import FileUploader from '@/Components/FileUploader.vue'
 import CreateDirectory from '@/Components/CreateDirectory.vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 const props = defineProps<{
   console: string
   meta: { name: string; icon: string; file_icon: string; folder: string; cover_aspect?: string; cover_height?: number }
-  games: Array<{ file_name: string; title?: string; description?: string | null; publisher?: string | null; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, regionMeta?: { name: string; flag: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
+  games: Array<{ file_name: string; title?: string; description?: string | null; publisher?: string | null; file_size?: number; region?: string, file_md5?: string, logo_url?: string | null, cover_url?: string | null, region_meta?: { key: string; name: string; codes: string[]; icon: string } | null, identified_at?: number | null }>
   extensions: string[]
   folders: Array<{ value: string; label: string; count: number }>
   folder: string
-  uploadDirs: Array<{ value: string; label: string }>
+  upload_dirs: Array<{ value: string; label: string }>
 }>()
 
 const coverHeight = computed(() => (props.meta.cover_height ?? 280) + 'px')
@@ -76,7 +77,7 @@ function isActive(value: string): boolean {
 
 function navigate(folders: string[]) {
   router.get(
-    `/consoles/${props.console}`,
+    route('console', { console: props.console }),
     { folder: folders.join(',') },
     { preserveScroll: true },
   )
@@ -103,7 +104,7 @@ function onPillClick(value: string, event: MouseEvent) {
 
 function scan() {
   scanning.value = true
-  router.post(`/consoles/${props.console}/scan`, {}, {
+  router.post(route('console.scan', { console: props.console }), {}, {
     onFinish: () => { scanning.value = false },
   })
 }
@@ -122,7 +123,7 @@ async function confirmDeleteFolder() {
   deleteError.value = null
 
   try {
-    const url = `/consoles/${props.console}/folder/${encodeURIComponent(target)}`
+    const url = route('console.folder.destroy', { console: props.console, folder: target })
     const res = await fetch(url, {
       method:  'DELETE',
       headers: apiHeaders(),
@@ -131,7 +132,7 @@ async function confirmDeleteFolder() {
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
 
     deleteOpen.value = false
-    router.get(`/consoles/${props.console}`, { folder: '' }, { preserveScroll: false })
+    router.get(route('console', { console: props.console }), { folder: '' }, { preserveScroll: false })
   } catch (e: unknown) {
     deleteError.value = e instanceof Error ? e.message : 'Delete failed'
   } finally {
@@ -147,7 +148,7 @@ async function confirmDeleteFolder() {
     <PageHeader>
       <template #title>
         <div class="flex items-center gap-4">
-          <Link href="/consoles" class="text-zinc-500 hover:text-zinc-300 transition-colors text-sm">← Back</Link>
+          <Link :href="route('consoles')" class="text-zinc-500 hover:text-zinc-300 transition-colors text-sm">← Back</Link>
           <img :src="meta.icon" :alt="meta.name" class="h-8 w-8 object-contain opacity-80" />
           <h1 class="text-2xl font-semibold text-zinc-100">{{ meta.name }}</h1>
         </div>
@@ -170,7 +171,7 @@ async function confirmDeleteFolder() {
             :console="props.console"
             :console-name="meta.name"
             :accepted-extensions="extensions"
-            :upload-dirs="uploadDirs"
+            :upload-dirs="upload_dirs"
             @done="router.reload()"
           />
           <button
@@ -227,7 +228,7 @@ async function confirmDeleteFolder() {
         class="group"
       >
         <Link
-          :href="`/consoles/${props.console}/${encodeURIComponent(game.file_name)}`"
+          :href="route('game', { console: props.console, game: game.file_name })"
           class="flex flex-col gap-2"
         >
           <!-- Cover -->
@@ -250,10 +251,10 @@ async function confirmDeleteFolder() {
             <p class="text-sm text-zinc-200 truncate group-hover:text-white transition-colors" :title="game.title">{{ game.title }}</p>
             <div class="mt-1 flex items-center gap-2">
               <img
-                v-if="game.regionMeta?.icon"
-                :src="game.regionMeta.icon"
-                :alt="game.regionMeta.name"
-                :title="game.regionMeta.name"
+                v-if="game.region_meta?.icon"
+                :src="game.region_meta.icon"
+                :alt="game.region_meta.name"
+                :title="game.region_meta.name"
                 class="w-6 border border-zinc-700 shrink-0"
               />
               <span class="text-xs text-zinc-500">{{ formatSize(game.file_size) }}</span>

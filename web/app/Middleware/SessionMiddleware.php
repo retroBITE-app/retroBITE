@@ -24,7 +24,7 @@ final class SessionMiddleware
     {
         $this->start($request);
 
-        Inertia::share(['csrfToken' => Csrf::token()]);
+        Inertia::share(['csrf_token' => Csrf::token()]);
 
         return $this->withTokenCookie($handler->handle($request), $request);
     }

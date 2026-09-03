@@ -32,7 +32,8 @@ export default defineConfig(({ mode }) => {
       host: true,
       port,
       strictPort: true,
-      https: false,
+      // No `https` key: Vite 6 types it as options, not a boolean, and plain HTTP
+      // is what the LAN dev flow uses anyway.
       cors: true,
       hmr: {
         host: 'localhost',

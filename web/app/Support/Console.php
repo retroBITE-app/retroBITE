@@ -122,17 +122,61 @@ final class Console
      * Card-shaped payload for console lists on Dashboard and Consoles/Index.
      *
      * @param array{game_count?: int, bios_count?: int}|null $counts
-     * @return array{key: string, name: string, icon: string, gameCount: int, biosCount: int}
+     * @return array{key: string, name: string, icon: string, game_count: int, bios_count: int}
      */
     public function toCardArray(?array $counts = null): array
     {
         return [
-            'key'       => $this->key,
-            'name'      => $this->name,
-            'icon'      => $this->icon,
-            'gameCount' => (int) Arr::get($counts ?? [], 'game_count', 0),
-            'biosCount' => (int) Arr::get($counts ?? [], 'bios_count', 0),
+            'key'        => $this->key,
+            'name'       => $this->name,
+            'icon'       => $this->icon,
+            'game_count' => (int) Arr::get($counts ?? [], 'game_count', 0),
+            'bios_count' => (int) Arr::get($counts ?? [], 'bios_count', 0),
         ];
+    }
+
+    /**
+     * Presentation fields the frontend needs, rather than the whole config entry.
+     *
+     * @return array{name: string, icon: string, file_icon: string, folder: string, cover_aspect: ?string, cover_height: ?int}
+     */
+    public function toMetaArray(): array
+    {
+        $meta = (array) config("consoles.{$this->key}");
+
+        return [
+            'name'         => $this->name,
+            'icon'         => $this->icon,
+            'file_icon'    => $this->fileIcon,
+            'folder'       => $this->folder,
+            'cover_aspect' => Arr::get($meta, 'cover_aspect'),
+            'cover_height' => Arr::get($meta, 'cover_height'),
+        ];
+    }
+
+    /**
+     * Display path for a subfolder, e.g. "ps2/DVD/" or "ps2/" for the root.
+     */
+    public function folderLabel(string $subfolder = ''): string
+    {
+        return $subfolder === ''
+            ? $this->folder . '/'
+            : $this->folder . '/' . $subfolder . '/';
+    }
+
+    /**
+     * Picker options for the console root plus each subfolder given.
+     *
+     * @param string[] $subfolders
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function folderOptions(array $subfolders): array
+    {
+        return Collection::make($subfolders)
+            ->map(fn(string $sub) => ['value' => $sub, 'label' => $this->folderLabel($sub)])
+            ->prepend(['value' => '', 'label' => $this->folderLabel()])
+            ->values()
+            ->all();
     }
 
     /**

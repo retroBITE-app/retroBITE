@@ -8,6 +8,7 @@ import MoveModal from '@/Components/MoveModal.vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 defineOptions({
   layout: (h: typeof import('vue').h, page: any) => h(AppLayout, { noPadding: true }, () => page),
@@ -34,19 +35,13 @@ const props = defineProps<{
     last_seen_at?:  number
     identified_at?: number | null
     region?:        string | null
-    regionMeta?:    { name: string; flag: string; codes: string[]; icon: string } | null
+    region_meta?:   { key: string; name: string; codes: string[]; icon: string } | null
   },
   folder:      string
-  folderLabel: string
+  folder_label: string
   folders:     Array<{ value: string; label: string }>
 }>()
 
-function formatDate(ts?: number): string {
-  if (!ts) return '—'
-  return new Date(ts * 1000).toLocaleDateString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-  })
-}
 
 const ext = props.game.file_name.split('.').pop()?.toUpperCase() ?? '—'
 const actionsOpen = ref(false)
@@ -78,7 +73,7 @@ async function confirmDelete() {
   deleteError.value = null
 
   try {
-    const url = `/consoles/${props.console}/${encodeURIComponent(props.game.file_name)}`
+    const url = route('game.destroy', { console: props.console, game: props.game.file_name })
     const res = await fetch(url, {
       method:  'DELETE',
       headers: apiHeaders(),
@@ -87,7 +82,7 @@ async function confirmDelete() {
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
 
     deleteOpen.value = false
-    router.visit(`/consoles/${props.console}`)
+    router.visit(route('console', { console: props.console }))
   } catch (e: unknown) {
     deleteError.value = e instanceof Error ? e.message : 'Delete failed'
   } finally {
@@ -126,7 +121,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
         <PageHeader>
           <template #title>
             <div class="flex items-center gap-4">
-              <Link :href="`/consoles/${props.console}`" class="text-white hover:text-zinc-300 transition-colors text-sm">←
+              <Link :href="route('console', { console: props.console })" class="text-white hover:text-zinc-300 transition-colors text-sm">←
                 Back</Link>
             </div>
             <!-- Action button group -->
@@ -210,7 +205,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
 
             <!-- badges -->
             <div class="flex gap-2">
-              <img :src="props.game.regionMeta?.icon" :alt="props.game.regionMeta?.name" class="w-8 border-2 border-zinc-700" />
+              <img v-if="props.game.region_meta?.icon" :src="props.game.region_meta.icon" :alt="props.game.region_meta.name" class="w-8 border-2 border-zinc-700" />
               <span
                 class="inline-flex px-2 pt-1 items-center rounded text-xs font-mono bg-zinc-700 text-white leading-none">{{
                 meta.name }}</span>
@@ -281,7 +276,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside))
       :console="props.console"
       :game-file-name="game.file_name"
       :folder="folder"
-      :folder-label="folderLabel"
+      :folder-label="folder_label"
       :folders="folders"
       @close="moveOpen = false"
     />

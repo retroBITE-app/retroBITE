@@ -21,6 +21,9 @@ final class SettingsOverrides
     /** @var array<string, array<string, mixed>>|null */
     private static ?array $loaded = null;
 
+    /** Bumped on every invalidation so config() knows its merge is stale. */
+    private static int $generation = 0;
+
     /**
      * Merge overrides into a freshly-loaded config file's array, per item rather than
      * per group — a saved override holds only schema fields, so replacing a whole
@@ -67,6 +70,15 @@ final class SettingsOverrides
     public static function invalidate(): void
     {
         self::$loaded = null;
+        self::$generation++;
+    }
+
+    /**
+     * Current override generation. config() caches its merged view against this.
+     */
+    public static function generation(): int
+    {
+        return self::$generation;
     }
 
     /**

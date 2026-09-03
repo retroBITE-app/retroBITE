@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { route } from '@/routes'
+import { apiHeaders } from '@/Helpers/http'
 
 type Share = { key: string; name: string; folder: string; icon: string | null }
 
 const props = defineProps<{
   network: {
-    hostIp: string
+    host_ip: string
     username: string
     shares: Share[]
   }
@@ -20,7 +22,7 @@ async function checkStatus() {
   smbOnline.value = null
   ftpOnline.value = null
   try {
-    const res  = await fetch('/api/network/status')
+    const res  = await fetch(route('network.status'), { headers: apiHeaders() })
     const data = await res.json()
     smbOnline.value = !!data.smb
     ftpOnline.value = !!data.ftp
@@ -35,11 +37,11 @@ async function checkStatus() {
 onMounted(checkStatus)
 
 function smbConnection(folder: string) {
-  return `\\\\${props.network.hostIp}\\${folder}`
+  return `\\\\${props.network.host_ip}\\${folder}`
 }
 
 function ftpConnection(folder: string) {
-  return `ftp://${props.network.hostIp}/${folder}`
+  return `ftp://${props.network.host_ip}/${folder}`
 }
 
 function copy(text: string) {
@@ -91,7 +93,7 @@ function copy(text: string) {
       <div class="grid grid-cols-2 gap-px bg-zinc-700/40 border-b border-zinc-700/60">
         <div class="bg-zinc-800/50 px-4 py-3">
           <p class="text-xs text-zinc-500 uppercase tracking-wider mb-0.5">Server</p>
-          <p class="text-sm font-mono text-zinc-200">\\{{ props.network.hostIp }}</p>
+          <p class="text-sm font-mono text-zinc-200">\\{{ props.network.host_ip }}</p>
         </div>
         <div class="bg-zinc-800/50 px-4 py-3">
           <p class="text-xs text-zinc-500 uppercase tracking-wider mb-0.5">Ports</p>

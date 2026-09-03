@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 const props = defineProps<{
   open:        boolean
@@ -33,7 +34,7 @@ async function submit() {
   error.value = null
 
   try {
-    const url  = `/consoles/${props.console}/${encodeURIComponent(props.gameFileName)}/move`
+    const url  = route('game.move', { console: props.console, game: props.gameFileName })
     const form = new URLSearchParams({ subfolder: selected.value })
 
     const res = await fetch(url, {
@@ -49,7 +50,7 @@ async function submit() {
 
     emit('close')
 
-    router.reload({ only: ['folder', 'folderLabel'] })
+    router.reload({ only: ['folder', 'folder_label'] })
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Move failed'
   } finally {

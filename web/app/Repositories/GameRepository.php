@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Enums\FolderScope;
 use App\Models\Game;
 use App\Support\Console;
+use App\Support\GameId;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
@@ -27,19 +30,46 @@ class GameRepository
             return $query->get();
         }
 
-        $base = '/' . $console->folder . '/';
-
-        $query->where(function ($q) use ($folders, $base) {
+        $query->where(function (Builder $scoped) use ($console, $folders) {
             foreach ($folders as $folder) {
-                if ($folder === 'root') {
-                    $q->orWhere('file_path', 'NOT LIKE', '%' . $base . '%/%');
-                } else {
-                    $q->orWhere('file_path', 'LIKE', '%' . $base . $folder . '/%');
-                }
+                $this->scopeToFolder($scoped, $console, (string) $folder);
             }
         });
 
         return $query->get();
+    }
+
+    /**
+     * Filter pills for the console page: All, the root, then each subfolder, each
+     * with its game count.
+     *
+     * @param string[] $subfolders
+     * @return array<int, array{value: string, label: string, count: int}>
+     */
+    public function folderCounts(Console $console, array $subfolders): array
+    {
+        $pills = [
+            [
+                'value' => FolderScope::All->value,
+                'label' => FolderScope::All->label(),
+                'count' => $this->countForFolder($console, FolderScope::All->value),
+            ],
+            [
+                'value' => FolderScope::Root->value,
+                'label' => $console->folder,
+                'count' => $this->countForFolder($console, FolderScope::Root->value),
+            ],
+        ];
+
+        foreach ($subfolders as $sub) {
+            $pills[] = [
+                'value' => $sub,
+                'label' => $sub,
+                'count' => $this->countForFolder($console, $sub),
+            ];
+        }
+
+        return $pills;
     }
 
     public function find(string $id): ?Game
@@ -57,11 +87,51 @@ class GameRepository
             return 0;
         }
 
-        $pattern = '%/' . $console->folder . '/' . $folder . '/%';
-
         return (int) Game::where('console', $console->key)
-            ->where('file_path', 'LIKE', $pattern)
+            ->where('file_path', 'LIKE', $this->folderPattern($console, $folder))
             ->delete();
+    }
+
+    /**
+     * Rows matching one folder value, counted in the database rather than by
+     * re-filtering a full table read once per subfolder.
+     */
+    private function countForFolder(Console $console, string $folder): int
+    {
+        $query = Game::where('console', $console->key);
+
+        if ($folder !== FolderScope::All->value) {
+            $this->scopeToFolder($query, $console, $folder);
+        }
+
+        return $query->count();
+    }
+
+    /**
+     * Add one folder's condition to a query. `root` means "not in any subfolder";
+     * anything else is a subfolder name.
+     *
+     * Folder values reach here already checked by PathRules, whose alphabet has no
+     * LIKE wildcards — SQLite's LIKE takes no escape character by default, so
+     * validating the input is the only way to keep "%" from matching every path.
+     */
+    private function scopeToFolder(Builder $query, Console $console, string $folder): void
+    {
+        if ($folder === FolderScope::Root->value) {
+            $query->orWhere('file_path', 'NOT LIKE', '%/' . $console->folder . '/%/%');
+
+            return;
+        }
+
+        $query->orWhere('file_path', 'LIKE', $this->folderPattern($console, $folder));
+    }
+
+    /**
+     * LIKE pattern matching everything inside games/{console.folder}/{folder}/.
+     */
+    private function folderPattern(Console $console, string $folder): string
+    {
+        return '%/' . $console->folder . '/' . $folder . '/%';
     }
 
     /**
@@ -112,7 +182,7 @@ class GameRepository
      */
     public function scanUpsert(string $console, \SplFileInfo $file): void
     {
-        $id       = $console . ':' . $file->getFilename();
+        $id       = (string) GameId::make($console, $file->getFilename());
         $existing = $this->find($id);
         $size     = $file->getSize();
 
@@ -132,7 +202,7 @@ class GameRepository
 
         Game::upsert(
             [[
-                'id'            => $console . ':' . $fileName,
+                'id'            => (string) GameId::make($console, $fileName),
                 'console'       => $console,
                 'file_name'     => $fileName,
                 'file_path'     => $filePath,

@@ -2,40 +2,21 @@
 
 declare(strict_types=1);
 
-use App\Controllers\AuthController;
-use App\Controllers\ConsoleController;
-use App\Controllers\DashboardController;
-use App\Controllers\GameController;
-use App\Controllers\NetworkController;
-use App\Controllers\SettingsController;
 use App\Middleware\AuthMiddleware;
+use App\Support\Routes;
 use Slim\Routing\RouteCollectorProxy;
 
-// Public auth routes
-$app->get('/login',  [AuthController::class, 'showLogin']);
-$app->post('/login', [AuthController::class, 'login']);
+/*
+ * Registration only — the routes themselves live in config/routes.php so PHP and
+ * the frontend share one definition.
+ */
 
-// Protected routes
+foreach (Routes::requiringAuth(false) as $route) {
+    $app->map([$route['method']], $route['path'], $route['handler']);
+}
+
 $app->group('', function (RouteCollectorProxy $group) {
-    $group->post('/logout', [AuthController::class, 'logout']);
-
-    $group->get('/', [DashboardController::class, 'index']);
-
-    $group->get('/consoles', [ConsoleController::class, 'index']);
-    $group->get('/consoles/{console}', [ConsoleController::class, 'show']);
-    $group->get('/consoles/{console}/{game}', [GameController::class, 'show']);
-    $group->post('/consoles/{console}/{game}/identify', [GameController::class, 'identify']);
-    $group->post('/consoles/{console}/{game}/metadata', [GameController::class, 'assignMetadata']);
-    $group->post('/consoles/{console}/{game}/move', [GameController::class, 'move']);
-    $group->delete('/consoles/{console}/{game}', [GameController::class, 'destroy']);
-    $group->post('/consoles/{console}/scan', [ConsoleController::class, 'scan']);
-    $group->post('/consoles/{console}/upload-chunk', [ConsoleController::class, 'uploadChunk']);
-    $group->post('/consoles/{console}/mkdir', [ConsoleController::class, 'mkdir']);
-    $group->delete('/consoles/{console}/folder/{folder:.+}', [ConsoleController::class, 'deleteFolder']);
-
-    $group->get('/api/network/status', [NetworkController::class, 'status']);
-
-    $group->get('/settings',                         [SettingsController::class, 'index']);
-    $group->post('/settings/{group}/{key}',          [SettingsController::class, 'save']);
-    $group->post('/settings/{group}/{key}/reset',    [SettingsController::class, 'reset']);
+    foreach (Routes::requiringAuth(true) as $route) {
+        $group->map([$route['method']], $route['path'], $route['handler']);
+    }
 })->add(AuthMiddleware::class);

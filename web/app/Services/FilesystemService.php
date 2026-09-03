@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Exceptions\PathOutsideConsoleException;
 use App\Support\Console;
 use App\Support\PathRules;
 use Illuminate\Support\Collection;
@@ -274,21 +275,6 @@ class FilesystemService
     }
 
     /**
-     * Extract region codes from a filename.
-     */
-    public function resolveRegion(string $filename): ?string
-    {
-        preg_match_all('/\(([^)]+)\)/', $filename, $matches);
-
-        $codes = $matches[1] ?? [];
-
-        return Collection::make(config('regions'))
-            ->filter(fn(array $region) => Collection::make($codes)->intersect($region['codes'])->isNotEmpty())
-            ->keys()
-            ->first();
-    }
-
-    /**
      * Delete temp upload dirs older than $maxAge seconds.
      */
     public function purgeAbandonedUploads(int $maxAge = 21600): void
@@ -336,11 +322,11 @@ class FilesystemService
                 return $resolved;
             }
 
-            throw new RuntimeException('Path is the console root');
+            throw PathOutsideConsoleException::forPath('the console root');
         }
 
         if (!str_starts_with($resolved . '/', $base . '/')) {
-            throw new RuntimeException('Path lives outside the console folder');
+            throw PathOutsideConsoleException::forPath($path);
         }
 
         return $resolved;

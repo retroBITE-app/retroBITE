@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "build": "vue-tsc -b --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -b --noEmit"
   },
   "dependencies": {
     "@inertiajs/vue3": "^2.0.0",
@@ -13,9 +14,10 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.20.1",
     "@vitejs/plugin-vue": "^5.2.1",
-    "tailwindcss": "^4.0.0",
     "@vue/tsconfig": "^0.7.0",
+    "tailwindcss": "^4.0.0",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vue-tsc": "^2.2.4"

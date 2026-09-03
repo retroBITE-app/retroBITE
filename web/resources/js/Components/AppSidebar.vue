@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { Link, usePage, router } from '@inertiajs/vue3'
+import { route } from '@/routes'
 
 const page = usePage()
 const open = ref(false)
@@ -8,7 +9,7 @@ const open = ref(false)
 const authUser = computed(() => (page.props.auth as { user: string } | undefined)?.user ?? null)
 
 function logout() {
-  router.post('/logout')
+  router.post(route('logout'))
 }
 
 function isActive(href: string): boolean {
@@ -19,8 +20,8 @@ function isActive(href: string): boolean {
 
 const nav = [
   { href: '/',         label: 'Dashboard' },
-  { href: '/consoles', label: 'Consoles'  },
-  { href: '/settings', label: 'Settings'  },
+  { href: route('consoles'), label: 'Consoles'  },
+  { href: route('settings'), label: 'Settings'  },
 ]
 </script>
 

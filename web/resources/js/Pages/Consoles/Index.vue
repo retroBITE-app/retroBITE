@@ -8,8 +8,8 @@ defineProps<{
     key: string
     name: string
     icon: string
-    gameCount: number
-    biosCount: number
+    game_count: number
+    bios_count: number
   }>
   available: Array<{
     key: string
@@ -32,8 +32,8 @@ defineProps<{
         :console-key="c.key"
         :name="c.name"
         :icon="c.icon"
-        :game-count="c.gameCount"
-        :bios-count="c.biosCount"
+        :game-count="c.game_count"
+        :bios-count="c.bios_count"
       />
     </div>
   </div>

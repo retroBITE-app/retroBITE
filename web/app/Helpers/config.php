@@ -5,18 +5,26 @@ declare(strict_types=1);
 use App\Support\SettingsOverrides;
 use Illuminate\Support\Arr;
 
-if (!function_exists('config'))
-{
+if (!function_exists('config')) {
     /**
-     * Access config values using dot notation. Merges DB overrides
-     * (see App\Support\SettingsOverrides) for groups listed in config/overridable.php.
+     * Access config values using dot notation, with DB overrides merged in for the
+     * groups listed in config/overridable.php.
      *
-     * The raw file is cached for the life of the process; overrides are re-applied
-     * on every call so SettingsOverrides::invalidate() takes effect immediately.
+     * Both the raw file and the merged result are cached for the life of the
+     * process; the merge is discarded whenever SettingsOverrides::invalidate()
+     * bumps its generation. Re-merging on every call cost hundreds of array
+     * rebuilds per page render.
      */
     function config(string $key, mixed $default = null): mixed
     {
-        static $raw = [];
+        static $raw        = [];
+        static $merged     = [];
+        static $generation = -1;
+
+        if ($generation !== SettingsOverrides::generation()) {
+            $merged     = [];
+            $generation = SettingsOverrides::generation();
+        }
 
         $segments = explode('.', $key);
         $file     = array_shift($segments);
@@ -26,12 +34,14 @@ if (!function_exists('config'))
             $raw[$file] = file_exists($path) ? require $path : [];
         }
 
-        $value = SettingsOverrides::applyTo($file, $raw[$file]);
-
-        if (empty($segments)) {
-            return $value;
+        if (!array_key_exists($file, $merged)) {
+            $merged[$file] = SettingsOverrides::applyTo($file, $raw[$file]);
         }
 
-        return Arr::get($value, implode('.', $segments), $default);
+        if ($segments === []) {
+            return $merged[$file];
+        }
+
+        return Arr::get($merged[$file], implode('.', $segments), $default);
     }
 }

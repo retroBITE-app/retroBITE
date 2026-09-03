@@ -2,14 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Database\Bootstrap;
+use App\Http\ErrorRenderer;
 use App\Middleware\CsrfMiddleware;
 use App\Middleware\SessionMiddleware;
 use Monolog\ErrorHandler;
-use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 use Slim\Factory\AppFactory;
-use Slim\Handlers\ErrorHandler as SlimErrorHandler;
 
 $container = require __DIR__ . '/container.php';
 AppFactory::setContainer($container);
@@ -18,9 +15,10 @@ $app = AppFactory::create();
 // Capture all PHP errors, warnings, and fatal errors into the log file
 ErrorHandler::register(logger());
 
-// Boot Eloquent, then bring the schema and seed data up to date under a lock.
+// Boot Eloquent. Migrations are deliberately NOT run here — `php console migrate`
+// owns them, invoked from the container entrypoint, so a request never pays for a
+// glob plus two queries and concurrent workers cannot race on a fresh volume.
 require __DIR__ . '/database.php';
-Bootstrap::prepare();
 
 /*
  * Middleware. Slim's stack is LIFO — the last one added runs outermost — so this
@@ -40,24 +38,8 @@ $app->add(SessionMiddleware::class);
 $debug           = (bool) config('settings.app_debug');
 $errorMiddleware = $app->addErrorMiddleware($debug, true, true);
 
-// Log every unhandled exception, then delegate to Slim's default renderer
 $errorMiddleware->setDefaultErrorHandler(
-    function (
-        ServerRequestInterface $request,
-        Throwable $exception,
-        bool $displayErrorDetails,
-    ) use ($app): ResponseInterface {
-        logger()->error($exception->getMessage(), [
-            'exception' => get_class($exception),
-            'file'      => $exception->getFile(),
-            'line'      => $exception->getLine(),
-            'url'       => (string) $request->getUri(),
-        ]);
-
-        $handler = new SlimErrorHandler($app->getCallableResolver(), $app->getResponseFactory());
-
-        return $handler->__invoke($request, $exception, $displayErrorDetails, true, true);
-    }
+    new ErrorRenderer($app->getCallableResolver(), $app->getResponseFactory())
 );
 
 require dirname(__DIR__) . '/routes/web.php';

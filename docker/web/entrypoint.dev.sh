@@ -23,6 +23,9 @@ composer install --no-interaction --working-dir=/app/web
 # Ensure writable dirs are owned by www-data
 chown -R www-data:www-data /app/web/storage /app/web/database /data
 
+# Bring the schema up to date before serving any request
+su -s /bin/sh www-data -c 'php /app/web/console migrate'
+
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D
 

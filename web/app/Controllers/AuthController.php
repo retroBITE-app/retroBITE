@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Http\Input;
 use App\Inertia\Inertia;
 use App\Models\User;
 use App\Services\LoginThrottleService;
 use App\Support\Csrf;
+use App\Support\Session;
 use Illuminate\Support\Arr;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -23,11 +25,8 @@ class AuthController
      */
     public function showLogin(Request $request, Response $response): Response
     {
-        $error = Arr::get($_SESSION, 'error');
-        Arr::forget($_SESSION, 'error');
-
-        return Inertia::render($response, 'Auth/Login', [
-            'error' => $error,
+        return Inertia::render($request, $response, 'Auth/Login', [
+            'error' => Session::pullError(),
         ]);
     }
 
@@ -42,13 +41,11 @@ class AuthController
             return $this->failed($response, 'Too many attempts. Try again later.');
         }
 
-        $body     = (array) $request->getParsedBody();
-        $username = trim((string) Arr::get($body, 'username', ''));
-        $password = (string) Arr::get($body, 'password', '');
+        $input    = Input::body($request);
+        $username = $input->string('username');
+        $user     = User::where('username', $username)->first();
 
-        $user = User::where('username', $username)->first();
-
-        if (!$user || !password_verify($password, $user->password)) {
+        if (!$user || !password_verify($input->string('password'), $user->password)) {
             $this->throttle->recordFailure($ip);
             logger()->warning('Failed login attempt', ['ip' => $ip, 'username' => $username]);
 
@@ -56,9 +53,9 @@ class AuthController
         }
 
         $this->throttle->clear($ip);
-        $this->establishSession($user);
+        Session::login((int) $user->id, (string) $user->username);
 
-        return Inertia::redirect($response, '/');
+        return Inertia::redirect($response, '/', $request->getMethod());
     }
 
     /**
@@ -66,25 +63,11 @@ class AuthController
      */
     public function logout(Request $request, Response $response): Response
     {
-        $_SESSION = [];
-        session_unset();
-        session_destroy();
+        Session::destroy();
 
-        return $this->withExpiredCookies(Inertia::redirect($response, '/login'));
-    }
-
-    /**
-     * Bind the session to a user, rotating the session id and CSRF token so anything
-     * captured before the privilege change stops working.
-     */
-    private function establishSession(User $user): void
-    {
-        session_regenerate_id(true);
-
-        Arr::set($_SESSION, 'user_id', $user->id);
-        Arr::set($_SESSION, 'username', $user->username);
-
-        Csrf::rotate();
+        return $this->withExpiredCookies(
+            Inertia::redirect($response, '/login', $request->getMethod())
+        );
     }
 
     /**
@@ -92,9 +75,9 @@ class AuthController
      */
     private function failed(Response $response, string $message): Response
     {
-        Arr::set($_SESSION, 'error', $message);
+        Session::flashError($message);
 
-        return Inertia::redirect($response, '/login');
+        return Inertia::redirect($response, '/login', 'POST');
     }
 
     /**

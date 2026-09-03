@@ -4,6 +4,7 @@ import { router } from '@inertiajs/vue3'
 import PageHeader from '@/Components/PageHeader.vue'
 import SettingsEditModal from '@/Components/SettingsEditModal.vue'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 type FieldMeta = {
   type:      'text' | 'number' | 'text[]'
@@ -63,7 +64,7 @@ async function reset(slug: string, key: string) {
   resetError.value = null
 
   try {
-    const res = await fetch(`/settings/${slug}/${encodeURIComponent(key)}/reset`, {
+    const res = await fetch(route('settings.reset', { group: slug, key }), {
       method:  'POST',
       headers: apiHeaders(),
     })

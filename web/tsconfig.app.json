@@ -4,8 +4,19 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["resources/js/*"]
-    }
+      "@/*": [
+        "resources/js/*"
+      ]
+    },
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": false,
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["resources/js/**/*", "resources/js/**/*.vue"]
+  "include": [
+    "resources/js/**/*",
+    "resources/js/**/*.vue"
+  ]
 }

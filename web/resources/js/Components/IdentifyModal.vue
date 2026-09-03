@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 const props = defineProps<{
   open:         boolean
@@ -51,7 +52,7 @@ async function load() {
     const query = searchName.value.trim()
       ? `?search=${encodeURIComponent(searchName.value.trim())}`
       : ''
-    const url = `/consoles/${props.console}/${encodeURIComponent(props.gameFileName)}/identify${query}`
+    const url = route('game.identify', { console: props.console, game: props.gameFileName }) + query
     const res = await fetch(url, {
       method:  'POST',
       headers: apiHeaders(),
@@ -59,7 +60,7 @@ async function load() {
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`)
 
-    md5Match.value   = body.md5Match ?? null
+    md5Match.value   = body.md5_match ?? null
     candidates.value = body.candidates ?? []
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Lookup failed'
@@ -75,7 +76,7 @@ async function pick(providerId: string, source: 'md5' | 'name') {
   error.value     = null
 
   try {
-    const url = `/consoles/${props.console}/${encodeURIComponent(props.gameFileName)}/metadata`
+    const url = route('game.metadata', { console: props.console, game: props.gameFileName })
     const res = await fetch(url, {
       method:  'POST',
       headers: {

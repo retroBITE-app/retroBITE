@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Middleware;
 
+use App\Http\ApiResponse;
 use App\Inertia\Inertia;
-use Illuminate\Support\Arr;
+use App\Support\Session;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
@@ -22,21 +23,13 @@ final class AuthMiddleware
 
     public function __invoke(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        if (!$this->isAuthenticated()) {
+        if (!Session::isAuthenticated()) {
             return $this->challenge($request);
         }
 
-        Inertia::share(['auth' => ['user' => Arr::get($_SESSION, 'username')]]);
+        Inertia::share(['auth' => ['user' => Session::username()]]);
 
         return $handler->handle($request);
-    }
-
-    /**
-     * Is a user id present on the session?
-     */
-    private function isAuthenticated(): bool
-    {
-        return Arr::get($_SESSION, 'user_id') !== null;
     }
 
     /**
@@ -45,17 +38,11 @@ final class AuthMiddleware
     private function challenge(ServerRequestInterface $request): ResponseInterface
     {
         if ($request->getHeaderLine('X-Inertia') !== '') {
-            return (new Response(409))->withHeader('X-Inertia-Location', self::LOGIN_PATH);
+            return Inertia::location(new Response(), self::LOGIN_PATH);
         }
 
         if ($this->wantsJson($request)) {
-            $response = new Response(401);
-            $response->getBody()->write(json_encode(
-                ['error' => 'unauthenticated'],
-                JSON_THROW_ON_ERROR,
-            ));
-
-            return $response->withHeader('Content-Type', 'application/json');
+            return ApiResponse::error(new Response(), 'Not signed in', 401, 'unauthenticated');
         }
 
         return (new Response(302))->withHeader('Location', self::LOGIN_PATH);

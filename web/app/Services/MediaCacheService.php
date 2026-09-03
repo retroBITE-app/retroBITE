@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\MediaKind;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -27,22 +28,30 @@ class MediaCacheService
     ];
 
     /**
-     * @param array{cover?: ?string, logo?: ?string, backdrop?: ?string} $urls
-     * @return array{cover: ?string, logo: ?string, backdrop: ?string}
+     * Cache every artwork slot present in $urls, keyed by MediaKind value.
+     *
+     * @param array<string, ?string> $urls Keyed by MediaKind value.
+     * @return array<string, ?string> Local URLs, null where caching failed.
      */
     public function downloadFor(string $md5, array $urls): array
     {
-        return [
-            'cover'    => $this->download((string) Arr::get($urls, 'cover',    ''), $md5, 'cover'),
-            'logo'     => $this->download((string) Arr::get($urls, 'logo',     ''), $md5, 'logo'),
-            'backdrop' => $this->download((string) Arr::get($urls, 'backdrop', ''), $md5, 'backdrop'),
-        ];
+        $cached = [];
+
+        foreach (MediaKind::cases() as $kind) {
+            $cached[$kind->value] = $this->download(
+                (string) Arr::get($urls, $kind->value, ''),
+                $md5,
+                $kind,
+            );
+        }
+
+        return $cached;
     }
 
     /**
      * Download one image; returns the local URL, or null on any failure (logged).
      */
-    private function download(string $sourceUrl, string $md5, string $kind): ?string
+    private function download(string $sourceUrl, string $md5, MediaKind $kind): ?string
     {
         if ($sourceUrl === '') {
             return null;
@@ -60,7 +69,7 @@ class MediaCacheService
             return $this->commit($tmpPath, $contentType, $md5, $kind);
         } catch (RuntimeException $e) {
             logger()->debug('Media download skipped', [
-                'kind'    => $kind,
+                'kind'    => $kind->value,
                 'md5'     => $md5,
                 'reason'  => $e->getMessage(),
             ]);
@@ -176,7 +185,7 @@ class MediaCacheService
     /**
      * Publish the temp file under its final name and drop stale siblings.
      */
-    private function commit(string $tmpPath, string $contentType, string $md5, string $kind): string
+    private function commit(string $tmpPath, string $contentType, string $md5, MediaKind $kind): string
     {
         $ext = $this->extensionFor($contentType);
 
@@ -185,7 +194,7 @@ class MediaCacheService
             throw new RuntimeException("Unsupported content type '{$contentType}'");
         }
 
-        $filename = "{$md5}_{$kind}.{$ext}";
+        $filename = "{$md5}_{$kind->value}.{$ext}";
         $destPath = $this->cacheDir() . '/' . $filename;
 
         // Same directory as the temp file, so this is a rename and not a copy.
@@ -203,10 +212,10 @@ class MediaCacheService
     /**
      * Delete the same image cached under a different extension (was .png, now .jpg).
      */
-    private function removeStaleSiblings(string $md5, string $kind, string $keepPath): void
+    private function removeStaleSiblings(string $md5, MediaKind $kind, string $keepPath): void
     {
         foreach (self::ALLOWED_TYPES as $ext) {
-            $other = $this->cacheDir() . "/{$md5}_{$kind}.{$ext}";
+            $other = $this->cacheDir() . "/{$md5}_{$kind->value}.{$ext}";
 
             if ($other !== $keepPath && is_file($other)) {
                 @unlink($other);

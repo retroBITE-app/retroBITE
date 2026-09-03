@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Enums\ResponseStatus;
+use App\Exceptions\NotFoundException;
+use App\Exceptions\ValidationException;
+use App\Http\ApiResponse;
+use App\Http\Input;
 use App\Inertia\Inertia;
 use App\Repositories\SettingRepository;
 use App\Support\Registry;
@@ -27,18 +32,16 @@ class SettingsController
 
         $groups = Collection::make(Registry::groups())
             ->map(fn(string $slug) => [
-                'slug'    => $slug,
-                'label'   => Registry::labelFor($slug),
-                'schema'  => Registry::schemaFor($slug),
-                'items'   => $this->itemsFor($slug),
+                'slug'      => $slug,
+                'label'     => Registry::labelFor($slug),
+                'schema'    => Registry::schemaFor($slug),
+                'items'     => $this->itemsFor($slug),
                 'overrides' => array_keys($overrides[$slug] ?? []),
             ])
             ->values()
             ->all();
 
-        return Inertia::render($response, 'Settings/Index', [
-            'groups' => $groups,
-        ]);
+        return Inertia::render($request, $response, 'Settings/Index', ['groups' => $groups]);
     }
 
     /**
@@ -48,36 +51,24 @@ class SettingsController
      */
     public function save(Request $request, Response $response, array $args): Response
     {
-        $group = (string) Arr::get($args, 'group');
-        $key   = (string) Arr::get($args, 'key');
-
-        if (!Registry::has($group)) {
-            return $this->jsonError($response, 'Unknown group', 404);
-        }
-
-        if (!Registry::isValidKey($key)) {
-            return $this->jsonError($response, 'Invalid key', 422);
-        }
-
-        if (!Registry::hasItem($group, $key)) {
-            return $this->jsonError($response, 'Unknown item', 404);
-        }
+        [$group, $key] = $this->target($args, mustExist: true);
 
         $body = $request->getParsedBody();
+
         if (!is_array($body)) {
-            return $this->jsonError($response, 'Body must be JSON object', 422);
+            throw ValidationException::because('Body must be a JSON object');
         }
 
         $normalized = Registry::normalize($group, $body);
         $errors     = Registry::validate($group, $normalized);
 
         if ($errors !== []) {
-            return $this->json($response, ['error' => 'Validation failed', 'errors' => $errors], 422);
+            throw ValidationException::fields($errors);
         }
 
         $this->settings->upsert($group, $key, $normalized);
 
-        return $this->json($response, ['status' => 'ok', 'value' => $normalized]);
+        return ApiResponse::status($response, ResponseStatus::Ok, ['value' => $normalized]);
     }
 
     /**
@@ -86,53 +77,53 @@ class SettingsController
      */
     public function reset(Request $request, Response $response, array $args): Response
     {
-        $group = (string) Arr::get($args, 'group');
-        $key   = (string) Arr::get($args, 'key');
+        [$group, $key] = $this->target($args, mustExist: false);
 
-        if (!Registry::has($group)) {
-            return $this->jsonError($response, 'Unknown group', 404);
-        }
-
-        if (!Registry::isValidKey($key)) {
-            return $this->jsonError($response, 'Invalid key', 422);
-        }
-
-        $deleted = $this->settings->delete($group, $key);
-
-        return $this->json($response, ['status' => 'ok', 'deleted' => $deleted]);
+        return ApiResponse::status($response, ResponseStatus::Ok, [
+            'deleted' => $this->settings->delete($group, $key),
+        ]);
     }
 
     /**
-     * Merged items for a group, keyed by item key.
+     * Validate and return the {group, key} pair a request addresses.
+     *
+     * @return array{0: string, 1: string}
+     * @throws NotFoundException|ValidationException
+     */
+    private function target(array $args, bool $mustExist): array
+    {
+        $input = Input::args($args);
+        $group = $input->string('group');
+        $key   = $input->string('key');
+
+        if (!Registry::has($group)) {
+            throw NotFoundException::settingsGroup($group);
+        }
+
+        if (!Registry::isValidKey($key)) {
+            throw ValidationException::because('Invalid key');
+        }
+
+        if ($mustExist && !Registry::hasItem($group, $key)) {
+            throw NotFoundException::settingsItem($group, $key);
+        }
+
+        return [$group, $key];
+    }
+
+    /**
+     * Merged items for a group, keyed by item key and limited to schema fields so
+     * internal keys never reach the browser.
+     *
      * @return array<string, array<string, mixed>>
      */
     private function itemsFor(string $group): array
     {
-        // config($group) returns the merged file+override view thanks to the config() hook.
-        $all = (array) config($group, []);
-
-        // Limit output to fields in the schema (drops internal/unexposed keys).
         $schema = array_keys(Registry::schemaFor($group));
 
-        $out = [];
-        foreach ($all as $itemKey => $value) {
-            if (!is_array($value)) {
-                continue;
-            }
-            $out[(string) $itemKey] = Arr::only($value, $schema);
-        }
-
-        return $out;
-    }
-
-    private function json(Response $response, array $body, int $status = 200): Response
-    {
-        $response->getBody()->write(json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
-    }
-
-    private function jsonError(Response $response, string $message, int $status): Response
-    {
-        return $this->json($response, ['error' => $message], $status);
+        return Collection::make((array) config($group, []))
+            ->filter(fn(mixed $value) => is_array($value))
+            ->map(fn(array $value) => Arr::only($value, $schema))
+            ->all();
     }
 }

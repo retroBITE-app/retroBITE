@@ -14,6 +14,20 @@ class Vite
 {
     private static ?array $manifest = null;
 
+    /**
+     * A build fingerprint for Inertia's asset-version handshake: the manifest's
+     * hash in production, a constant in dev where HMR already reloads.
+     */
+    public static function version(): string
+    {
+        $manifest = self::manifest();
+
+        return $manifest === null ? 'dev' : md5(json_encode($manifest, JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * The Vite manifest, or null in dev where no build exists.
+     */
     private static function manifest(): ?array
     {
         if (self::$manifest !== null) {

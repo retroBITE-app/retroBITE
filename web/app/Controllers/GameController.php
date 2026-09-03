@@ -4,7 +4,17 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Enums\MediaKind;
+use App\Enums\ResponseStatus;
+use App\Exceptions\ConflictException;
+use App\Exceptions\ProviderException;
+use App\Exceptions\StorageException;
+use App\Exceptions\ValidationException;
+use App\Http\ApiResponse;
+use App\Http\Input;
+use App\Http\RouteResolver;
 use App\Inertia\Inertia;
+use App\Models\Game;
 use App\Repositories\GameMetadataRepository;
 use App\Repositories\GameRepository;
 use App\Services\FilesystemService;
@@ -12,9 +22,9 @@ use App\Services\GameDataService;
 use App\Services\MediaCacheService;
 use App\Services\ScreenScraperService;
 use App\Support\Console;
+use App\Support\RomFilename;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Throwable;
@@ -22,6 +32,7 @@ use Throwable;
 class GameController
 {
     public function __construct(
+        private RouteResolver $resolve,
         private GameRepository $games,
         private GameMetadataRepository $metadataRepo,
         private FilesystemService $filesystem,
@@ -30,39 +41,22 @@ class GameController
         private MediaCacheService $mediaCache,
     ) {}
 
+    /**
+     * Game detail page, including the folders it may be moved into.
+     */
     public function show(Request $request, Response $response, array $args): Response
     {
-        $console = Console::tryFrom(Arr::get($args, 'console'));
+        $console = $this->resolve->console($args);
+        $game    = $this->resolve->game($console, $args);
+        $folder  = $this->filesystem->relativeFolder($console, $game->file_path);
 
-        if (!$console) {
-            return $response->withStatus(404);
-        }
-
-        $game = $this->games->find($console->key . ':' . Arr::get($args, 'game'));
-
-        if ($game === null) {
-            return $response->withStatus(404);
-        }
-
-        $folder = $this->filesystem->relativeFolder($console, $game->file_path);
-
-        return Inertia::render($response, 'Games/Show', [
-            'console'     => $console->key,
-            'meta'        => config("consoles.{$console->key}"),
-            'game'        => $this->gameDataService->enrichGame($game),
-            'folder'      => $folder,
-            'folderLabel' => $console->folder . '/' . ($folder === '' ? '' : $folder . '/'),
-
-            // Move targets: the console root plus every immediate subfolder on disk.
-            // Same {value,label} shape as ConsoleController's uploadDirs.
-            'folders'     => Collection::make($this->filesystem->listSubfolders($console))
-                ->map(fn(string $sub) => [
-                    'value' => $sub,
-                    'label' => $console->folder . '/' . $sub . '/',
-                ])
-                ->prepend(['value' => '', 'label' => $console->folder . '/'])
-                ->values()
-                ->all(),
+        return Inertia::render($request, $response, 'Games/Show', [
+            'console'      => $console->key,
+            'meta'         => $console->toMetaArray(),
+            'game'         => $this->gameDataService->enrichGame($game),
+            'folder'       => $folder,
+            'folder_label' => $console->folderLabel($folder),
+            'folders'      => $console->folderOptions($this->filesystem->listSubfolders($console)),
         ]);
     }
 
@@ -72,22 +66,13 @@ class GameController
      */
     public function identify(Request $request, Response $response, array $args): Response
     {
-        $console = Console::tryFrom(Arr::get($args, 'console'));
-        if (!$console) {
-            return $this->jsonError($response, 'Unknown console', 404);
-        }
+        $console = $this->resolve->console($args);
+        $game    = $this->resolve->game($console, $args);
 
-        if ($console->screenscraperId === null) {
-            return $this->jsonError($response, 'Console not mapped to ScreenScraper', 422);
-        }
+        $this->assertScrapable($console);
 
-        $game = $this->games->find($console->key . ':' . Arr::get($args, 'game'));
-        if (!$game) {
-            return $this->jsonError($response, 'Unknown game', 404);
-        }
-
-        $override    = trim((string) Arr::get($request->getQueryParams(), 'search', ''));
-        $searchName  = $override !== '' ? $override : $this->cleanName($game->file_name);
+        $override   = Input::query($request)->string('search');
+        $searchName = $override !== '' ? $override : RomFilename::toSearchName((string) $game->file_name);
 
         try {
             $md5Match = $override === '' && $game->file_md5
@@ -96,11 +81,11 @@ class GameController
 
             $candidates = $this->screenScraper->search($console, $searchName);
         } catch (Throwable $e) {
-            return $this->providerFailed($response, $e);
+            throw ProviderException::unavailable($e->getMessage());
         }
 
-        return $this->json($response, [
-            'md5Match'   => $md5Match,
+        return ApiResponse::json($response, [
+            'md5_match'  => $md5Match,
             'candidates' => $candidates,
         ]);
     }
@@ -110,49 +95,30 @@ class GameController
      */
     public function assignMetadata(Request $request, Response $response, array $args): Response
     {
-        $console = Console::tryFrom(Arr::get($args, 'console'));
-        if (!$console) {
-            return $this->jsonError($response, 'Unknown console', 404);
+        $console = $this->resolve->console($args);
+        $game    = $this->resolve->game($console, $args);
+
+        if (!$game->file_md5) {
+            throw ValidationException::because('Game must have an md5 before identification');
         }
 
-        $game = $this->games->find($console->key . ':' . Arr::get($args, 'game'));
-        if (!$game || !$game->file_md5) {
-            return $this->jsonError($response, 'Game must have an md5 before identification', 422);
-        }
+        $providerId = Input::body($request)->integer('provider_id');
 
-        $providerId = (int) Arr::get($request->getParsedBody() ?? [], 'provider_id', 0);
         if ($providerId <= 0) {
-            return $this->jsonError($response, 'provider_id required', 422);
+            throw ValidationException::fields(['provider_id' => 'Required']);
         }
 
-        try {
-            $payload = $this->screenScraper->fetchById($providerId);
-        } catch (Throwable $e) {
-            return $this->providerFailed($response, $e);
-        }
+        $payload  = $this->fetchProviderPayload($providerId);
+        $metadata = $this->metadataRepo->upsert(
+            $game->file_md5,
+            $this->withCachedMedia($payload, $game->file_md5),
+        );
 
-        if (!$payload) {
-            return $this->jsonError($response, 'ScreenScraper returned no result for that id', 502);
-        }
-
-        $local = $this->mediaCache->downloadFor($game->file_md5, [
-            'cover'    => Arr::get($payload, 'cover_url'),
-            'logo'     => Arr::get($payload, 'logo_url'),
-            'backdrop' => Arr::get($payload, 'backdrop_url'),
-        ]);
-
-        $payload['cover_url']    = Arr::get($local, 'cover')    ?? Arr::get($payload, 'cover_url');
-        $payload['logo_url']     = Arr::get($local, 'logo')     ?? Arr::get($payload, 'logo_url');
-        $payload['backdrop_url'] = Arr::get($local, 'backdrop') ?? Arr::get($payload, 'backdrop_url');
-
-        $metadata = $this->metadataRepo->upsert($game->file_md5, $payload);
-
-        return $this->json($response, [
-            'status'   => 'ok',
+        return ApiResponse::status($response, ResponseStatus::Ok, [
             'metadata' => [
-                'title'        => $metadata->title,
-                'provider_id'  => $metadata->provider_id,
-                'fetched_at'   => $metadata->fetched_at,
+                'title'       => $metadata->title,
+                'provider_id' => $metadata->provider_id,
+                'fetched_at'  => $metadata->fetched_at,
             ],
         ]);
     }
@@ -162,78 +128,25 @@ class GameController
      */
     public function move(Request $request, Response $response, array $args): Response
     {
-        $console = Console::tryFrom(Arr::get($args, 'console'));
-        if (!$console) {
-            return $this->jsonError($response, 'Unknown console', 404);
+        $console = $this->resolve->console($args);
+        $game    = $this->resolve->game($console, $args);
+
+        $input = Input::body($request);
+
+        if (!$input->has('subfolder')) {
+            throw ValidationException::fields(['subfolder' => 'Required']);
         }
 
-        $game = $this->games->find($console->key . ':' . Arr::get($args, 'game'));
-        if (!$game) {
-            return $this->jsonError($response, 'Unknown game', 404);
-        }
+        $subfolder = trim($input->string('subfolder'), '/');
 
-        $body = (array) ($request->getParsedBody() ?? []);
-
-        if (!Arr::has($body, 'subfolder')) {
-            return $this->jsonError($response, 'Destination folder required', 422);
-        }
-
-        $subfolder = trim((string) Arr::get($body, 'subfolder', ''), '/');
-        $allowed   = Collection::make($this->filesystem->listSubfolders($console))->prepend('');
-
-        if (!$allowed->contains($subfolder)) {
-            return $this->jsonError($response, 'Unknown destination folder', 422);
-        }
+        $this->assertMovable($console, $game, $subfolder);
 
         $from = (string) $game->file_path;
+        $to   = $this->filesystem->moveFile($console, $from, $subfolder);
 
-        if ($this->filesystem->relativeFolder($console, $from) === $subfolder) {
-            return $this->jsonError($response, 'Game is already in that folder', 422);
-        }
+        $this->recordMove($game, $from, $to);
 
-        if ($this->filesystem->exists($console, $subfolder, (string) $game->file_name)) {
-            return $this->jsonError(
-                $response,
-                'A file named "' . $game->file_name . '" already exists there',
-                409
-            );
-        }
-
-        try {
-            $to = $this->filesystem->moveFile($console, $from, $subfolder);
-        } catch (Throwable $e) {
-            logger()->error('Move failed', ['game' => $game->id, 'message' => $e->getMessage()]);
-
-            return $this->jsonError($response, 'Move failed', 500);
-        }
-
-        try {
-            $game->update(['file_path' => $to]);
-        } catch (Throwable $e) {
-            if (@rename($to, $from)) {
-                logger()->error('Move rolled back after a failed database update', [
-                    'game'    => $game->id,
-                    'message' => $e->getMessage(),
-                ]);
-
-                return $this->jsonError($response, 'Move failed', 500);
-            }
-
-            logger()->error('Move left disk and database out of sync', [
-                'game'        => $game->id,
-                'row_path'    => $from,
-                'actual_path' => $to,
-                'message'     => $e->getMessage(),
-            ]);
-
-            return $this->jsonError(
-                $response,
-                'File moved but the database update failed — the record still points at the old path',
-                500
-            );
-        }
-
-        return $this->json($response, ['status' => 'ok', 'folder' => $subfolder]);
+        return ApiResponse::status($response, ResponseStatus::Ok, ['folder' => $subfolder]);
     }
 
     /**
@@ -245,67 +158,114 @@ class GameController
      */
     public function destroy(Request $request, Response $response, array $args): Response
     {
-        $console = Console::tryFrom(Arr::get($args, 'console'));
-        if (!$console) {
-            return $this->jsonError($response, 'Unknown console', 404);
-        }
+        $console = $this->resolve->console($args);
+        $game    = $this->resolve->game($console, $args);
 
-        $game = $this->games->find($console->key . ':' . Arr::get($args, 'game'));
-        if (!$game) {
-            return $this->jsonError($response, 'Unknown game', 404);
-        }
+        $this->filesystem->deleteFile($console, (string) $game->file_path);
+        $game->delete();
 
+        return ApiResponse::status($response);
+    }
+
+    /**
+     * Reject a console the provider has no system id for.
+     */
+    private function assertScrapable(Console $console): void
+    {
+        if ($console->screenscraperId === null) {
+            throw ValidationException::because('Console not mapped to ScreenScraper');
+        }
+    }
+
+    /**
+     * Fetch a provider record, translating any transport failure into a domain one
+     * so the provider's own message — which quotes the credentialed URL — is never
+     * relayed to the client.
+     */
+    private function fetchProviderPayload(int $providerId): array
+    {
         try {
-            $this->filesystem->deleteFile($console, (string) $game->file_path);
-            $game->delete();
+            $payload = $this->screenScraper->fetchById($providerId);
         } catch (Throwable $e) {
-            logger()->error('Delete failed', ['game' => $game->id, 'message' => $e->getMessage()]);
-
-            return $this->jsonError($response, 'Delete failed', 500);
+            throw ProviderException::unavailable($e->getMessage());
         }
 
-        return $this->json($response, ['status' => 'ok']);
+        if (!$payload) {
+            throw ProviderException::emptyResult($providerId);
+        }
+
+        return $payload;
     }
 
     /**
-     * Derive a searchable name from a ROM filename by stripping the extension,
-     * bracketed tag groups ("(Europe)", "[!]"), a leading product-code prefix
-     * ("SLUS-20576.", "SLES_527.25.", "SCUS-97112 - "), and trailing disc hints.
+     * Swap each artwork URL for its locally cached copy where the download worked.
      */
-    private function cleanName(string $filename): string
+    private function withCachedMedia(array $payload, string $md5): array
     {
-        $base = pathinfo($filename, PATHINFO_FILENAME);
+        $local = $this->mediaCache->downloadFor(
+            $md5,
+            Collection::make(MediaKind::cases())
+                ->mapWithKeys(fn(MediaKind $kind) => [
+                    $kind->value => Arr::get($payload, $kind->payloadKey()),
+                ])
+                ->all(),
+        );
 
-        $base = preg_replace('/\s*[\(\[][^\)\]]*[\)\]]/', '', $base) ?? $base;
-        $base = preg_replace('/^[A-Z]{3,5}[-_][0-9]{3,5}(\.[0-9]+)?\s*[-.]\s*/', '', $base) ?? $base;
-        $base = preg_replace('/\s*[-_]\s*Disc\s*\d+.*$/i', '', $base) ?? $base;
+        foreach (MediaKind::cases() as $kind) {
+            $payload[$kind->payloadKey()] = Arr::get($local, $kind->value)
+                ?? Arr::get($payload, $kind->payloadKey());
+        }
 
-        return trim(Str::of($base)->replaceMatches('/\s+/', ' ')->toString());
+        return $payload;
     }
 
     /**
-     * Report an upstream provider failure without echoing its message — Guzzle's
-     * text appends the request URL, which carries the ScreenScraper credentials.
+     * Reject a move whose destination is unknown, unchanged, or already occupied.
      */
-    private function providerFailed(Response $response, Throwable $e): Response
+    private function assertMovable(Console $console, Game $game, string $subfolder): void
     {
-        logger()->error('ScreenScraper request failed', [
-            'exception' => get_class($e),
-            'message'   => $e->getMessage(),
-        ]);
+        $allowed = Collection::make($this->filesystem->listSubfolders($console))->prepend('');
 
-        return $this->jsonError($response, 'Metadata provider is unavailable', 502);
+        if (!$allowed->contains($subfolder)) {
+            throw ValidationException::because('Unknown destination folder');
+        }
+
+        if ($this->filesystem->relativeFolder($console, $game->file_path) === $subfolder) {
+            throw ValidationException::because('Game is already in that folder');
+        }
+
+        if ($this->filesystem->exists($console, $subfolder, (string) $game->file_name)) {
+            throw new ConflictException(
+                'A file named "' . $game->file_name . '" already exists there'
+            );
+        }
     }
 
-    private function json(Response $response, array $body, int $status = 200): Response
+    /**
+     * Point the row at the new path, undoing the disk move if that write fails.
+     */
+    private function recordMove(Game $game, string $from, string $to): void
     {
-        $response->getBody()->write(json_encode($body, JSON_THROW_ON_ERROR));
+        try {
+            $game->update(['file_path' => $to]);
+        } catch (Throwable $e) {
+            if (@rename($to, $from)) {
+                logger()->error('Move rolled back after a failed database update', [
+                    'game'    => $game->id,
+                    'message' => $e->getMessage(),
+                ]);
 
-        return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
-    }
+                throw StorageException::moveFailed();
+            }
 
-    private function jsonError(Response $response, string $message, int $status): Response
-    {
-        return $this->json($response, ['error' => $message], $status);
+            logger()->error('Move left disk and database out of sync', [
+                'game'        => $game->id,
+                'row_path'    => $from,
+                'actual_path' => $to,
+                'message'     => $e->getMessage(),
+            ]);
+
+            throw StorageException::moveOutOfSync();
+        }
     }
 }

@@ -17,6 +17,9 @@ mkdir -p /app/web/storage/games /app/web/storage/tmp
 # Ensure PHP-FPM (www-data) can write to storage, database, and games dirs
 chown -R www-data:www-data /app/web/storage /app/web/database /data
 
+# Bring the schema up to date before serving any request
+su -s /bin/sh www-data -c 'php /app/web/console migrate'
+
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D
 

@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { formatSize } from '@/Helpers/format'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 const props = defineProps<{
   console: string
@@ -165,7 +166,7 @@ function sendChunk(opts: {
     form.append('chunk',        opts.chunk, opts.filename)
 
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `/consoles/${props.console}/upload-chunk`)
+    xhr.open('POST', route('console.uploadChunk', { console: props.console }))
     for (const [name, value] of Object.entries(apiHeaders())) {
       xhr.setRequestHeader(name, value)
     }

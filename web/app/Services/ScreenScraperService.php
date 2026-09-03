@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\MediaKind;
 use App\Support\Console;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -21,8 +22,6 @@ class ScreenScraperService
 
     /** Region preference for box art / screenshots — English-speaking first. */
     private const MEDIA_REGION_PRIORITY = ['us', 'wor', 'eu', 'uk', 'au', 'ss'];
-
-    public function __construct() {}
 
     /**
      * Look up a single game by ROM md5 + console system id.
@@ -74,7 +73,7 @@ class ScreenScraperService
                 'rom_name'    => Arr::get($jeu, 'rom.romfilename'),
                 'region'      => $this->firstRegion($jeu),
                 'year'        => $this->extractYear($this->pickLocalized(Arr::get($jeu, 'dates', []), 'text')),
-                'cover_url'   => $this->pickMedia(Arr::get($jeu, 'medias', []), ['box-2D', 'box-3D']),
+                'cover_url'   => $this->pickMedia(Arr::get($jeu, 'medias', []), MediaKind::Cover->screenScraperTypes()),
             ])
             ->filter(fn(array $c) => $c['provider_id'] !== '')
             ->values()
@@ -105,9 +104,9 @@ class ScreenScraperService
             'provider_id'  => (string) Arr::get($jeu, 'id', ''),
             'title'        => $this->pickLocalized(Arr::get($jeu, 'noms', []), 'text'),
             'description'  => $this->pickLocalized(Arr::get($jeu, 'synopsis', []), 'text', 'langue'),
-            'cover_url'    => $this->pickMedia(Arr::get($jeu, 'medias', []), ['box-2D', 'box-3D']),
-            'logo_url'     => $this->pickMedia(Arr::get($jeu, 'medias', []), ['wheel', 'wheel-hd', 'wheel-carbon', 'wheel-steel']),
-            'backdrop_url' => $this->pickMedia(Arr::get($jeu, 'medias', []), ['fanart', 'background', 'sstitle', 'ss', 'screenmarquee']),
+            'cover_url'    => $this->pickMedia(Arr::get($jeu, 'medias', []), MediaKind::Cover->screenScraperTypes()),
+            'logo_url'     => $this->pickMedia(Arr::get($jeu, 'medias', []), MediaKind::Logo->screenScraperTypes()),
+            'backdrop_url' => $this->pickMedia(Arr::get($jeu, 'medias', []), MediaKind::Backdrop->screenScraperTypes()),
             'release_date' => $this->pickLocalized(Arr::get($jeu, 'dates', []), 'text'),
             'genre'        => $this->flattenGenres(Arr::get($jeu, 'genres', [])),
             'region'       => $this->firstRegion($jeu),

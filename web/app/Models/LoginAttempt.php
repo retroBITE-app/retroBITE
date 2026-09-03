@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
 /**
  * Failed-login counter for one client address.
  */
@@ -15,7 +13,6 @@ class LoginAttempt extends Model
     protected $primaryKey   = 'ip';
     protected $keyType      = 'string';
     public    $incrementing = false;
-    public    $timestamps   = false;
 
     protected $fillable = [
         'ip',

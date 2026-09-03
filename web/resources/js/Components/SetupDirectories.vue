@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 type ConsoleEntry = { key: string; name: string }
 
@@ -48,7 +49,7 @@ async function create() {
     form.append('subfolders[]', '') // empty → create root folder
 
     try {
-      const res = await fetch(`/consoles/${key}/mkdir`, {
+      const res = await fetch(route('console.mkdir', { console: key }), {
         method:  'POST',
         headers: {
           'Content-Type':     'application/x-www-form-urlencoded',

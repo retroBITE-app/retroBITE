@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3'
+import { route } from '@/routes'
 
 defineOptions({ layout: false })
 
@@ -13,7 +14,7 @@ const form = useForm({
 })
 
 function submit() {
-  form.post('/login')
+  form.post(route('login.submit'))
 }
 </script>
 

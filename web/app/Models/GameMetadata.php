@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
 class GameMetadata extends Model
 {
     protected $table        = 'game_metadata';
     protected $primaryKey   = 'md5';
     public    $keyType      = 'string';
     public    $incrementing = false;
-    public    $timestamps   = false;
 
     protected $fillable = [
         'md5',

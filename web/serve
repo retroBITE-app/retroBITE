@@ -46,6 +46,12 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
+# $_ENV is only populated when variables_order includes E, which the distro
+# php.ini often omits — App\Support\Env covers that, but the migration below and
+# the server both want the same view of the environment.
+echo -e "${YELLOW}Applying migrations...${RESET}"
+php -d variables_order=EGPCS console migrate
+
 echo ""
 echo -e "  ${CYAN}App${RESET}  → ${BOLD}http://localhost:${PHP_PORT}${RESET}   ← open this"
 echo -e "  ${GREEN}Vite${RESET} → ${BOLD}http://localhost:${VITE_PORT}${RESET}  (HMR asset server — do not open directly)"
@@ -55,6 +61,7 @@ echo ""
 
 # Start PHP built-in server
 php \
+    -d variables_order=EGPCS \
     -d upload_max_filesize=60M \
     -d post_max_size=70M \
     -d max_execution_time=0 \

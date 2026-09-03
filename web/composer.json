@@ -1,6 +1,6 @@
 {
     "name": "retrobite/web",
-    "description": "retroBITE web interface — Slim 4 + Inertia.js",
+    "description": "retroBITE web interface \u2014 Slim 4 + Inertia.js",
     "type": "project",
     "require": {
         "php": "^8.3",
@@ -19,11 +19,23 @@
         },
         "files": [
             "app/Helpers/config.php",
+            "app/Helpers/route.php",
             "app/Helpers/logger.php"
         ]
     },
     "config": {
         "optimize-autoloader": true,
         "sort-packages": true
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
     }
 }

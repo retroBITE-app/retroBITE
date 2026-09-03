@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 type FieldMeta = {
   type:      'text' | 'number' | 'text[]'
@@ -90,7 +91,7 @@ async function save() {
   }
 
   try {
-    const res = await fetch(`/settings/${props.group}/${encodeURIComponent(props.itemKey)}`, {
+    const res = await fetch(route('settings.save', { group: props.group, key: props.itemKey }), {
       method:  'POST',
       headers: {
         'Content-Type':     'application/json',

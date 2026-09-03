@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { apiHeaders } from '@/Helpers/http'
+import { route } from '@/routes'
 
 const props = defineProps<{
   console:     string
@@ -64,7 +65,7 @@ async function create() {
       form.append('subfolders[]', r)
     }
 
-    const res = await fetch(`/consoles/${props.console}/mkdir`, {
+    const res = await fetch(route('console.mkdir', { console: props.console }), {
       method:  'POST',
       headers: {
         'Content-Type':     'application/x-www-form-urlencoded',
