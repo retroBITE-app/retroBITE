@@ -20,11 +20,12 @@ rm -rf /app/web/public/build
 # Install PHP deps (volume-mounted, so not baked into image)
 composer install --no-interaction --working-dir=/app/web
 
+# Bring the schema up to date before serving any request. Runs as root, so the
+# chown below has to follow it — the migration creates the SQLite file.
+php /app/web/console migrate
+
 # Ensure writable dirs are owned by www-data
 chown -R www-data:www-data /app/web/storage /app/web/database /data
-
-# Bring the schema up to date before serving any request
-su -s /bin/sh www-data -c 'php /app/web/console migrate'
 
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D
