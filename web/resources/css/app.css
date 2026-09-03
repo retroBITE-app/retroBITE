@@ -1,6 +1,44 @@
 @import 'tailwindcss';
 
 /*
+ * Open Sans, self-hosted as a single variable face.
+ *
+ * Self-hosting is required, not preferred: docker/web/nginx.conf sets
+ * `style-src 'self' 'unsafe-inline'` with no `font-src`, so a Google Fonts
+ * import is blocked in Docker while working fine under ./serve — the worst
+ * failure mode to debug.
+ *
+ * Served straight out of public/, so the URL is stable and unhashed, matching
+ * how /logo.png already works.
+ *
+ * The ranges are Open Sans's published wght and wdth axes. `format('woff2')`
+ * without `tech(variations)` is deliberate: browsers read variability from the
+ * font itself, and the older `woff2-variations` keyword is refused by some.
+ */
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/open-sans-variable.woff2') format('woff2');
+  font-weight: 300 800;
+  font-stretch: 75% 100%;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * The italic face ships alongside but is not loaded — the design uses no
+ * italics anywhere and the file is another 313 KB. Uncomment to enable.
+ *
+ * @font-face {
+ *   font-family: 'Open Sans';
+ *   src: url('/fonts/open-sans-italic-variable.woff2') format('woff2');
+ *   font-weight: 300 800;
+ *   font-stretch: 75% 100%;
+ *   font-style: italic;
+ *   font-display: swap;
+ * }
+ */
+
+/*
  * Design tokens, transcribed from redesign/retroBITE.dc.html.
  *
  * The canvas carries no tokens of its own — roughly sixty raw hexes, several of
@@ -56,6 +94,11 @@
 
   /* Overlay ground, for `bg-scrim/72` */
   --color-scrim: #080809;
+
+  /* Open Sans carries the interface. --font-mono is left at Tailwind's system
+     stack on purpose: file paths, MD5 hashes and ports need to stay aligned, and
+     19 existing font-mono uses depend on it. */
+  --font-sans: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
 
   /* Micro-label sizes, replacing the text-[10px] / text-[11px] arbitrary values */
   --text-2xs: 0.6875rem; /* 11px */
