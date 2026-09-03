@@ -1,4 +1,75 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/*
+ * Design tokens, transcribed from redesign/retroBITE.dc.html.
+ *
+ * The canvas carries no tokens of its own — roughly sixty raw hexes, several of
+ * them a shade apart (#26262a and #232326 are both "border"). They collapse to
+ * the semantic set below. The `_ds/nocturne-*` folder next to the canvas is
+ * scaffold the design tool emitted and the canvas never reads; ignore it.
+ *
+ * Tailwind's own palette stays available on purpose: only the login page speaks
+ * this language so far, and the rest of the app is still zinc + emerald.
+ *
+ * `--spacing` is deliberately NOT redefined. Utilities like `min-h-125` and
+ * `min-h-88.75` in Pages/Games/Show.vue are computed as N x --spacing, so moving
+ * the base would silently resize them.
+ *
+ * `static` keeps every token in :root even when no utility references it, so the
+ * hand-written gradients and scanline overlays can reach them through var().
+ */
+@theme static {
+  /* Grounds, darkest first */
+  --color-ground: #0c0c0d;
+  --color-sunken: #141416;
+  --color-surface: #17171a;
+  --color-hover: #1c1c1f;
+  --color-raised: #202024;
+
+  /* Lines, faintest first */
+  --color-line: #232326;
+  --color-line-strong: #26262a;
+  --color-line-input: #2c2c31;
+  --color-line-bright: #3a3a40;
+
+  /* Warm text ramp, brightest first. fg-faint is the design's most-used text colour. */
+  --color-fg-bright: #f0e6d2;
+  --color-fg: #e9e6dd;
+  --color-fg-soft: #cfcabd;
+  --color-fg-muted: #a5a09a;
+  --color-fg-dim: #9a948d;
+  --color-fg-faint: #8b867e;
+  --color-fg-cool: #9a9aa1;
+
+  /* Amber accent. accent-tint is the base of every rgba() fill in the design,
+     so `bg-accent-tint/10` and `border-accent-tint/55` replace its 28 literals. */
+  --color-accent-light: #f5d089;
+  --color-accent-bright: #f0c14b;
+  --color-accent: #e8b44a;
+  --color-accent-tint: #e0a83c;
+  --color-accent-deep: #c9902a;
+  --color-accent-muted: #a09879;
+
+  /* Feedback. The design has no success colour — it uses the accent for that. */
+  --color-danger: #c98b7f;
+  --color-warn: #b9724a;
+
+  /* Overlay ground, for `bg-scrim/72` */
+  --color-scrim: #080809;
+
+  /* Micro-label sizes, replacing the text-[10px] / text-[11px] arbitrary values */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-3xs: 0.625rem; /* 10px */
+}
+
+@layer base {
+  /* The page ground, set once. AppLayout and the login page each painted their
+     own until now. */
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-fg);
+  }
+}
 
 /* Global scrollbar styling — dark zinc theme */
 * {

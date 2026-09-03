@@ -9,8 +9,8 @@
     "typecheck": "vue-tsc -b --noEmit",
     "lint": "eslint resources/js eslint.config.js",
     "lint:fix": "eslint resources/js eslint.config.js --fix",
-    "format": "prettier --write \"resources/js/**/*.{ts,vue}\"",
-    "format:check": "prettier --check \"resources/js/**/*.{ts,vue}\""
+    "format": "prettier --write \"resources/**/*.{ts,vue,css}\"",
+    "format:check": "prettier --check \"resources/**/*.{ts,vue,css}\""
   },
   "dependencies": {
     "@inertiajs/vue3": "^2.0.0",
