@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+PHP_PORT="${PHP_PORT:-8080}"
+VITE_PORT="${VITE_PORT:-5173}"
+
+RESET="\033[0m"
+BOLD="\033[1m"
+GREEN="\033[0;32m"
+CYAN="\033[0;36m"
+YELLOW="\033[0;33m"
+
+cleanup() {
+    echo -e "\n${YELLOW}Stopping servers...${RESET}"
+    kill 0
+}
+trap cleanup SIGINT SIGTERM
+
+echo -e "${BOLD}retroBITE${RESET} local dev"
+echo "──────────────────────────"
+
+# Ensure storage/games symlink exists
+if [ ! -L "storage/games" ]; then
+    echo -e "${YELLOW}Creating storage/games symlink...${RESET}"
+    ln -s ../games storage/games
+fi
+
+# Install PHP dependencies
+if [ ! -d "vendor" ]; then
+    if [ -f "composer.lock" ]; then
+        echo -e "${YELLOW}Installing PHP dependencies...${RESET}"
+        composer install --no-interaction
+    else
+        echo -e "${YELLOW}No composer.lock found — resolving dependencies...${RESET}"
+        composer update --no-interaction
+    fi
+else
+    composer dump-autoload --quiet
+fi
+
+# Install Node dependencies
+if [ ! -d "node_modules" ]; then
+    echo -e "${YELLOW}Installing Node dependencies...${RESET}"
+    npm install
+fi
+
+# $_ENV is only populated when variables_order includes E, which the distro
+# php.ini often omits — App\Support\Env covers that, but the migration below and
+# the server both want the same view of the environment.
+echo -e "${YELLOW}Applying migrations...${RESET}"
+php -d variables_order=EGPCS console migrate
+
+echo ""
+echo -e "  ${CYAN}App${RESET}  → ${BOLD}http://localhost:${PHP_PORT}${RESET}   ← open this"
+echo -e "  ${GREEN}Vite${RESET} → ${BOLD}http://localhost:${VITE_PORT}${RESET}  (HMR asset server — do not open directly)"
+echo ""
+echo -e "Press ${BOLD}Ctrl+C${RESET} to stop"
+echo ""
+
+# Start PHP built-in server
+php \
+    -d variables_order=EGPCS \
+    -d upload_max_filesize=60M \
+    -d post_max_size=70M \
+    -d max_execution_time=0 \
+    -S "0.0.0.0:${PHP_PORT}" -t public public/index.php \
+    2>&1 \
+    | while IFS= read -r line; do echo -e "${CYAN}[php]${RESET}  $line"; done &
+
+# Start Vite HMR server
+npm run dev -- --port "$VITE_PORT" 2>&1 \
+    | while IFS= read -r line; do echo -e "${GREEN}[vite]${RESET} $line"; done &
+
+wait

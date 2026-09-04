@@ -1,0 +1,150 @@
+@import 'tailwindcss';
+
+/*
+ * Open Sans, self-hosted as a single variable face.
+ *
+ * Self-hosting is required, not preferred: docker/web/nginx.conf sets
+ * `style-src 'self' 'unsafe-inline'` with no `font-src`, so a Google Fonts
+ * import is blocked in Docker while working fine under ./serve — the worst
+ * failure mode to debug.
+ *
+ * Served straight out of public/, so the URL is stable and unhashed, matching
+ * how /logo.png already works.
+ *
+ * The ranges are Open Sans's published wght and wdth axes. `format('woff2')`
+ * without `tech(variations)` is deliberate: browsers read variability from the
+ * font itself, and the older `woff2-variations` keyword is refused by some.
+ */
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/open-sans-variable.woff2') format('woff2');
+  font-weight: 300 800;
+  font-stretch: 75% 100%;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * The italic face ships alongside but is not loaded — the design uses no
+ * italics anywhere and the file is another 313 KB. Uncomment to enable.
+ *
+ * @font-face {
+ *   font-family: 'Open Sans';
+ *   src: url('/fonts/open-sans-italic-variable.woff2') format('woff2');
+ *   font-weight: 300 800;
+ *   font-stretch: 75% 100%;
+ *   font-style: italic;
+ *   font-display: swap;
+ * }
+ */
+
+/*
+ * Design tokens, transcribed from redesign/retroBITE.dc.html.
+ *
+ * The canvas carries no tokens of its own — roughly sixty raw hexes, several of
+ * them a shade apart (#26262a and #232326 are both "border"). They collapse to
+ * the semantic set below. The `_ds/nocturne-*` folder next to the canvas is
+ * scaffold the design tool emitted and the canvas never reads; ignore it.
+ *
+ * Every screen now speaks this language; Tailwind's own palette stays available
+ * but nothing in resources/js references it any more.
+ *
+ * `--spacing` is deliberately NOT redefined. Utilities like `min-h-125` and
+ * `min-h-88.75` in Pages/Games/Show.vue are computed as N x --spacing, so moving
+ * the base would silently resize them.
+ *
+ * `static` keeps every token in :root even when no utility references it, so the
+ * hand-written gradients and scanline overlays can reach them through var().
+ */
+@theme static {
+  /* Grounds, darkest first */
+  --color-ground: #0c0c0d;
+  --color-sunken: #141416;
+  --color-surface: #17171a;
+  --color-hover: #1c1c1f;
+  --color-raised: #202024;
+
+  /* Lines, faintest first */
+  --color-line: #232326;
+  --color-line-strong: #26262a;
+  --color-line-input: #2c2c31;
+  --color-line-bright: #3a3a40;
+
+  /* Warm text ramp, brightest first. fg-faint is the design's most-used text colour. */
+  --color-fg-bright: #f0e6d2;
+  --color-fg: #e9e6dd;
+  --color-fg-soft: #cfcabd;
+  --color-fg-muted: #a5a09a;
+  --color-fg-dim: #9a948d;
+  --color-fg-faint: #8b867e;
+  --color-fg-cool: #9a9aa1;
+
+  /* Amber accent. accent-tint is the base of every rgba() fill in the design,
+     so `bg-accent-tint/10` and `border-accent-tint/55` replace its 28 literals. */
+  --color-accent-light: #f5d089;
+  --color-accent-bright: #f0c14b;
+  --color-accent: #e8b44a;
+  --color-accent-tint: #e0a83c;
+  --color-accent-deep: #c9902a;
+  --color-accent-muted: #a09879;
+
+  /* Feedback. The design has no success colour — it uses the accent for that. */
+  --color-danger: #c98b7f;
+  --color-warn: #b9724a;
+
+  /* Overlay ground, for `bg-scrim/72` */
+  --color-scrim: #080809;
+
+  /* Open Sans carries the interface. --font-mono is left at Tailwind's system
+     stack on purpose: file paths, MD5 hashes and ports need to stay aligned, and
+     19 existing font-mono uses depend on it. */
+  --font-sans: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* Micro-label sizes, replacing the text-[10px] / text-[11px] arbitrary values */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-3xs: 0.625rem; /* 10px */
+}
+
+@layer base {
+  /* The page ground, set once. AppLayout and the login page each painted their
+     own until now. */
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-fg);
+  }
+}
+
+/*
+ * The CRT scanline overlay. The design lays it over every piece of key art —
+ * the login pane, the dashboard hero and the game hero — so it lives here rather
+ * than as an arbitrary value repeated at each site.
+ */
+@utility scanlines {
+  background-image: repeating-linear-gradient(180deg, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px);
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+/* Global scrollbar styling, on the warm ramp like everything else */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-bright) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-line-bright);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-fg-faint);
+}

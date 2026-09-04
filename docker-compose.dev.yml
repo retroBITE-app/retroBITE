@@ -1,0 +1,55 @@
+services:
+  retrobite-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.dev
+    container_name: web-dev
+    env_file:
+      - .env
+    ports:
+      - "${WEB_PORT:-80}:80"
+    volumes:
+      - ./web:/app/web
+      - ./games:/games
+      - retrobite-data:/data
+    restart: always
+
+  # Opt-in: `docker compose -f docker-compose.dev.yml --profile vite up`.
+  # Skip it if you already run `npm run dev` on the host — both bind VITE_PORT.
+  retrobite-vite:
+    image: node:22-alpine
+    container_name: retrobite-vite
+    profiles: ["vite"]
+    working_dir: /app/web
+    env_file:
+      - .env
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    ports:
+      - "${VITE_PORT:-5173}:${VITE_PORT:-5173}"
+    volumes:
+      - ./web:/app/web
+    restart: always
+
+  retrobite-share:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: share
+    env_file:
+      - .env
+    # network_mode: host
+    volumes:
+      - ./games:/storage/games
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    ports:
+      - "139:139"     # SMB
+      - "446:445"     # SMB
+      - "20:20"       # FTP data
+      - "21:21"       # FTP control
+      - "21100-21110:21100-21110"  # FTP passive
+    restart: always
+
+volumes:
+  retrobite-data:

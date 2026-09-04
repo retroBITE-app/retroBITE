@@ -1,0 +1,10 @@
+/vendor/
+/node_modules/
+/public/build/
+/public/storage/
+/database/*.db
+/database/*.db-shm
+/database/*.db-wal
+/storage/
+*.tsbuildinfo
+.phpunit.result.cache

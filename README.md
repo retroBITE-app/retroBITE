@@ -2,43 +2,56 @@
   <a href="https://github.com/mattiasghodsian/retroBite/">
     <img alt="retroBite" src="retroBite.png" height="150">
   </a>
-  <h2 align="center">Retro Image File Server</h2>
-  <p align="center">A Docker-based network file server for hosting and streaming retro game images over your local network.</p>
+  <p align="center">A clean, self-hosted collection manager for retro games. Pair your ROMs with rich metadata and artwork, then serve your library over the local network directly to your devices.</p>
 </p>
 
 ## Features
 
 - **SMB/CIFS** with SMBv1 compatibility for older consoles
 - **FTP Server** with anonymous access and passive mode
+- **Web Interface** for browsing, uploading, and managing your collections
 - and more coming
 
+## Disclaimer
+retroBITE is intended for use with backups you have legally made from media you own. We do not endorse or condone piracy in any form. Only use this software with ROMs you have the legal right to possess.
+
 ## Project Background
-This project was created to provide a dockerized container for streaming game files over local network to various retro consoles. While other solutions existed, none offered the combination of features and Docker support I needed. retroBite is an experimental project that aims to simplify retro gaming over local network.
-
-## Consoles
-
-Please read the [`CONSOLES.md`](CONSOLES.md) file for supported consoles, their protocols, and how to connect each of them.
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `USER` | `retro` | SMB and FTP username |
-| `PASS` | `retro123` | SMB and FTP password |
-| `HOST_IP` | (auto) | Host IP for FTP passive mode |
-
+retroBITE was born out of necessity. What started as a hunt for a Docker setup to network-load games onto personal consoles quickly grew when available projects fell short. It naturally evolved from a simple server script into a full collection management hub.
 
 ## Built With
-
 - **Samba** - SMB/CIFS file sharing
 - **vsftpd** - FTP server
 - **Ubuntu 22.04** - Base image
+- **PHP 8.3 + Slim 4** - Web interface backend
+- **Vue 3 + TypeScript** - Web interface frontend
+- **Inertia.js** - Server-driven SPA bridge
+- **Tailwind CSS** - Styling
+- **SQLite** - Database
 
-## Add Cover Art
-- [OPL Manager](https://oplmanager.com/site/) GUI (Winows)
-- [OPL PC Tools](https://github.com/brainstream/OPL-PC-Tools) GUI (Winows/Linux)
-- [PS2 Game Manager](https://github.com/dheison0/ps2-game-manager) CLI (Go)
+## Deployment & Usage
+retroBITE is designed to run exclusively as a Docker container. To ensure stability and ease of use, we do not provide support or assistance for manual installations outside of Docker.
 
-## Big thanks to 
+### Quick Start
 
-- [libretro](https://github.com/libretro/retroarch-assets/tree/master/xmb/retrosystem/png) for reto console assets
+1. Clone this repository.
+
+2. Copy `.env.example` to `.env` and adjust the settings to match your local setup.
+
+3. Run the provided `docker-compose.yml` file
+
+```bash
+docker-compose up -d
+```
+For local devopment
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+4. Connect your retro console to the network share to load ROMs directly over your local network. See [`CONSOLES.md`](CONSOLES.md) for per-console setup instructions.
+
+5. Access the web interface at http://localhost:8080
+
+## Credits
+- [Libretro](https://github.com/libretro/retroarch-assets/tree/master/xmb/retrosystem/png): Sourced console iconography.
+- AI/LLM Tools: Assisted in the creation of original project assets.
+- Our Contributors: Made with ❤️ by the community.

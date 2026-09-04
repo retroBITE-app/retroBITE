@@ -5,3 +5,11 @@
 *~
 
 games/
+redesign/
+web/node_modules/
+web/vendor/
+web/public/build/
+web/database/*.db
+web/database/*.db-wal
+web/database/*.db-shm
+web/storage/

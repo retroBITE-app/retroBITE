@@ -1,0 +1,38 @@
+# Stage 1: Build Vue/Vite frontend
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json* ./
+RUN npm install
+COPY web/ .
+RUN npm run build
+
+# Stage 2: PHP-FPM + Nginx runtime
+FROM php:8.4-fpm-alpine AS runner
+
+RUN apk add --no-cache nginx sqlite sqlite-dev \
+    && docker-php-ext-install pdo_sqlite
+
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app/web
+COPY web/composer.json web/composer.lock* ./
+RUN composer update --no-dev --no-interaction --optimize-autoloader
+
+COPY web/ .
+RUN mkdir -p storage/games storage/tmp database
+COPY --from=frontend-builder /app/web/public/build ./public/build
+
+# Nginx server block
+COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf
+
+# PHP config overrides
+COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
+COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
+COPY docker/web/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/entrypoint.sh"]
