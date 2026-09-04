@@ -27,7 +27,17 @@ final class SessionMiddleware
     {
         $this->start($request);
 
-        Inertia::share(['csrf_token' => Csrf::token()]);
+        Inertia::share([
+            'csrf_token' => Csrf::token(),
+            'app'        => [
+                'name'     => (string) config('about.name'),
+                'version'  => (string) config('about.version'),
+                'repo_url' => (string) config('about.repo_url'),
+            ],
+            'ui'         => [
+                'scanlines' => (bool) config('interface.appearance.scanlines'),
+            ],
+        ]);
 
         return $this->withTokenCookie($handler->handle($request), $request);
     }

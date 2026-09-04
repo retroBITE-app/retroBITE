@@ -13,6 +13,7 @@ declare(strict_types=1);
  *   - url     — scalar string restricted to http(s) or a root-relative path
  *   - number  — integer (cast on save)
  *   - text[]  — list of strings
+ *   - bool    — on/off; never mark one `required`, since false reads as empty
  */
 
 return [
@@ -38,6 +39,15 @@ return [
             'name'  => ['type' => 'text',   'label' => 'Name',        'required' => true],
             'codes' => ['type' => 'text[]', 'label' => 'Match codes', 'required' => true],
             'icon'  => ['type' => 'url',    'label' => 'Icon URL'],
+        ],
+    ],
+
+    // Rendered as its own panel rather than the card grid — SettingsItemCard has
+    // nothing to draw for a boolean.
+    'interface' => [
+        'label'  => 'Interface',
+        'schema' => [
+            'scanlines' => ['type' => 'bool', 'label' => 'CRT scanline overlay'],
         ],
     ],
 ];

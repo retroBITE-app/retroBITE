@@ -79,7 +79,7 @@ return [
         'folder'           => 'xbox',
         'icon'             => '/images/consoles/Microsoft - Xbox.png',
         'file_icon'        => '/images/consoles/Microsoft - Xbox-content.png',
-        'file_extensions'  => ['iso', 'xbe'],
+        'file_extensions'  => ['iso', 'xbe', 'xiso'],
         'bios_extensions'  => ['bin', 'rom'],
         'exclude_files'    => [],
         'screenscraper_id' => 32,

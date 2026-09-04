@@ -5,9 +5,24 @@ import { ref } from 'vue'
  * Copies text to the clipboard, with a fallback for the plain-HTTP LAN case —
  * navigator.clipboard needs a secure context and silently no-ops without one.
  */
-const props = defineProps<{ text: string }>()
+const props = withDefaults(
+  defineProps<{
+    text: string
+    label?: string
+    /** `outline` is the design's secondary action, `menu` a dropdown row, `plain` a list row. */
+    variant?: 'plain' | 'outline' | 'menu'
+  }>(),
+  { label: 'Copy', variant: 'plain' },
+)
 
 const copied = ref(false)
+
+const VARIANTS = {
+  plain: 'rounded px-2 py-1 text-xs text-fg-faint hover:bg-hover hover:text-fg-soft',
+  outline:
+    'rounded-lg border border-line-input px-3.5 py-2 text-[13px] text-fg-soft hover:border-line-bright hover:text-fg',
+  menu: 'flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-[13px] text-fg-soft hover:bg-raised',
+} as const
 
 /**
  * Copy, then flash confirmation for a moment.
@@ -54,9 +69,11 @@ async function writeToClipboard(text: string): Promise<boolean> {
 <template>
   <button
     type="button"
-    class="shrink-0 cursor-pointer rounded px-2 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+    :class="VARIANTS[props.variant]"
+    class="shrink-0 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
     @click="copy"
   >
-    {{ copied ? 'Copied' : 'Copy' }}
+    <slot name="icon" />
+    {{ copied ? 'Copied' : props.label }}
   </button>
 </template>

@@ -1,25 +1,28 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
+
 /**
- * Project identity — one place for the repo URL and version, which the sidebar
- * and login page each hardcoded.
+ * Project identity — name, version and repo url, read from the shared props so
+ * config/about.php stays the single source.
  *
- * Carries no colour of its own: the sidebar is still on the zinc palette while
- * the login page is on the redesign's warm ramp, so the caller sets it.
+ * Carries no colour of its own: the caller sets it.
  */
-const REPO_URL = 'https://github.com/mattiasghodsian/retroBite'
-const VERSION = 'v0.0.1'
+const page = usePage()
+
+const identity = computed(() => page.props.app)
 </script>
 
 <template>
   <p class="text-xs">
     <a
-      :href="REPO_URL"
+      :href="identity.repo_url"
       target="_blank"
       rel="noopener noreferrer"
       class="transition-colors hover:text-accent"
     >
-      retroBITE
+      {{ identity.name }}
     </a>
-    {{ VERSION }}
+    {{ identity.version }}
   </p>
 </template>

@@ -30,13 +30,13 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>()
     <template #header>
       <h2
         class="text-base font-semibold"
-        :class="variant === 'danger' ? 'text-red-400' : 'text-zinc-100'"
+        :class="variant === 'danger' ? 'text-danger' : 'text-fg-bright'"
       >
         {{ title }}
       </h2>
     </template>
 
-    <p class="text-sm text-zinc-300">{{ message }}</p>
+    <p class="text-[13px] leading-relaxed text-fg-soft">{{ message }}</p>
 
     <AlertBox v-if="warning" tone="error" size="sm" class="mt-3">{{ warning }}</AlertBox>
 

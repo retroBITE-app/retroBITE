@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Game;
+use App\Repositories\GameMetadataRepository;
 use App\Repositories\GameRepository;
 use App\Support\Console;
 use Illuminate\Database\Capsule\Manager as Capsule;
@@ -29,6 +30,52 @@ final class GameRepositoryTest extends DatabaseTestCase
         Capsule::table('games')->delete();
 
         parent::tearDown();
+    }
+
+    /**
+     * The card query gained a metadata join. game_metadata is keyed by md5, so
+     * it matches at most once per game — the counts must be untouched by it.
+     */
+    public function test_the_metadata_join_does_not_inflate_the_counts(): void
+    {
+        $this->seedGame('Ico.iso', '', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+        $this->seedGame('Sotc.iso', '', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+        $this->seedGame('scph39001.bin', 'BIOS');
+        (new GameMetadataRepository())->upsert('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ['title' => 'Ico']);
+
+        $row = $this->games->consoleCounts()['ps2'];
+
+        $this->assertSame(2, $row['game_count']);
+        $this->assertSame(1, $row['bios_count']);
+        $this->assertSame(1, $row['identified_count']);
+    }
+
+    /**
+     * BIOS images occupy disk and are counted in the size, but they are not
+     * games — so they must never count as identified.
+     */
+    public function test_bytes_cover_every_file_and_bios_is_never_identified(): void
+    {
+        $this->seedGame('Ico.iso', '', 'cccccccccccccccccccccccccccccccc', 1_000);
+        $this->seedGame('scph39001.bin', 'BIOS', 'cccccccccccccccccccccccccccccccc', 500);
+        (new GameMetadataRepository())->upsert('cccccccccccccccccccccccccccccccc', ['title' => 'Ico']);
+
+        $row = $this->games->consoleCounts()['ps2'];
+
+        $this->assertSame(1_500, $row['bytes'], 'BIOS images occupy disk too');
+        $this->assertSame(1, $row['identified_count'], 'the BIOS row shares the md5 but is not a game');
+    }
+
+    public function test_the_card_carries_its_folder_and_figures(): void
+    {
+        $this->seedGame('Ico.iso', '', null, 2_048);
+
+        $card = $this->console->toCardArray($this->games->consoleCounts()->get('ps2'));
+
+        $this->assertStringEndsWith('/ps2', $card['path']);
+        $this->assertSame(1, $card['game_count']);
+        $this->assertSame(0, $card['identified_count']);
+        $this->assertSame(2_048, $card['bytes']);
     }
 
     public function test_counts_games_and_bios_separately(): void
@@ -109,14 +156,39 @@ final class GameRepositoryTest extends DatabaseTestCase
     /**
      * Insert a game row whose path sits in the given subfolder of ps2.
      */
-    private function seedGame(string $fileName, string $subfolder): void
+    /**
+     * The folder on disk is lowercase "bios" in practice. SQLite's LIKE matches
+     * it either way, so the model must too — otherwise the payload disagrees
+     * with every count on the page.
+     */
+    public function test_bios_detection_ignores_the_folder_case(): void
     {
+        $this->seedGame('scph39001.bin', 'bios');
+        $this->seedGame('scph10000.bin', 'BIOS');
+        $this->seedGame('Ico.iso', '');
+
+        $flags = $this->games->allForConsoleFolders($this->console, [])
+            ->mapWithKeys(fn(Game $game) => [$game->file_name => $game->isBios()])
+            ->all();
+
+        $this->assertTrue($flags['scph39001.bin'], 'a lowercase bios folder still holds BIOS files');
+        $this->assertTrue($flags['scph10000.bin']);
+        $this->assertFalse($flags['Ico.iso']);
+        $this->assertSame(2, $this->games->consoleCounts()['ps2']['bios_count']);
+    }
+
+    private function seedGame(
+        string $fileName,
+        string $subfolder,
+        ?string $md5 = null,
+        int $size = 1024,
+    ): void {
         $this->games->upsert(
             $this->console->key,
             $fileName,
             $this->console->path($subfolder) . '/' . $fileName,
-            1024,
-            null,
+            $size,
+            $md5,
         );
     }
 }

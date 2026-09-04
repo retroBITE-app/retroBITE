@@ -49,10 +49,10 @@ async function checkStatus(): Promise<void> {
 <template>
   <div class="space-y-4">
     <div class="flex items-center justify-between">
-      <h2 class="text-xl font-semibold text-zinc-100">Network shares</h2>
+      <h2 class="text-base font-medium text-fg-bright">Network shares</h2>
       <button
         type="button"
-        class="cursor-pointer text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+        class="cursor-pointer text-xs text-fg-dim transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
         @click="checkStatus"
       >
         Refresh

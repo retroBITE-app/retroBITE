@@ -28,8 +28,11 @@ class ScreenScraperService
     /** Statuses that mean "no such game" rather than a failure. */
     private const MISS_STATUSES = [400, 404];
 
-    private const CONNECT_TIMEOUT = 5;
-    private const TIMEOUT         = 15;
+    /** Connect timeout, in seconds. ScreenScraper is regularly slow to answer. */
+    private const CONNECT_TIMEOUT = 15;
+
+    /** Total request timeout, in seconds. */
+    private const TIMEOUT = 45;
 
     /**
      * Look up a single game by ROM md5 + console system id.
@@ -295,8 +298,8 @@ class ScreenScraperService
     {
         try {
             return Http::withUserAgent(self::SOFTNAME)
-                ->connectTimeout(self::CONNECT_TIMEOUT)
-                ->timeout(self::TIMEOUT)
+                ->connectTimeout((int) config('settings.screenscraper.connect_timeout', self::CONNECT_TIMEOUT))
+                ->timeout((int) config('settings.screenscraper.timeout', self::TIMEOUT))
                 ->get($url, $query);
         } catch (ConnectionException $e) {
             throw new RuntimeException('ScreenScraper HTTP error: ' . $this->redact($e->getMessage()));

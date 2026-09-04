@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
- * The one button. Replaces six copies of the primary class string, six of the
- * secondary, seven of the ghost, and nine hand-rolled `busy ? 'Verb…' : 'Verb'`
- * labels.
+ * The one button. The design fills nothing solid — actions are outlined or bare,
+ * with the amber ramp carrying the primary weight.
  */
 withDefaults(
   defineProps<{
     variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+    size?: 'sm' | 'md'
     busy?: boolean
     busyLabel?: string
     disabled?: boolean
@@ -14,6 +14,7 @@ withDefaults(
   }>(),
   {
     variant: 'primary',
+    size: 'md',
     busy: false,
     disabled: false,
     type: 'button',
@@ -21,10 +22,15 @@ withDefaults(
 )
 
 const VARIANTS = {
-  primary: 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium',
-  secondary: 'bg-zinc-700 hover:bg-zinc-600 text-white font-medium',
-  danger: 'bg-red-600 hover:bg-red-500 text-white font-medium',
-  ghost: 'text-zinc-400 hover:text-zinc-200',
+  primary: 'border border-accent-tint/55 text-accent hover:bg-accent-tint/12',
+  secondary: 'border border-line-strong text-fg-soft hover:border-line-bright hover:text-fg',
+  danger: 'border border-danger/50 text-danger hover:bg-danger/10',
+  ghost: 'border border-transparent text-fg-cool hover:text-fg',
+} as const
+
+const SIZES = {
+  sm: 'px-2 py-1 text-xs',
+  md: 'px-3.5 py-2 text-[13px]',
 } as const
 </script>
 
@@ -32,8 +38,8 @@ const VARIANTS = {
   <button
     :type="type"
     :disabled="disabled || busy"
-    :class="VARIANTS[variant]"
-    class="px-4 py-2 rounded-md text-sm cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    :class="[VARIANTS[variant], SIZES[size]]"
+    class="cursor-pointer rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
   >
     <template v-if="busy && busyLabel">{{ busyLabel }}</template>
     <slot v-else />

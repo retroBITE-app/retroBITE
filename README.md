@@ -2,7 +2,7 @@
   <a href="https://github.com/mattiasghodsian/retroBite/">
     <img alt="retroBite" src="retroBite.png" height="150">
   </a>
-  <p align="center">A Docker-based ROM server with a web UI for hosting, streaming, and managing retro collections over your local network.</p>
+  <p align="center">A clean, self-hosted collection manager for retro games. Pair your ROMs with rich metadata and artwork, then serve your library over the local network directly to your devices.</p>
 </p>
 
 ## Features
@@ -16,7 +16,7 @@
 retroBITE is intended for use with backups you have legally made from media you own. We do not endorse or condone piracy in any form. Only use this software with ROMs you have the legal right to possess.
 
 ## Project Background
-This project was created to provide a dockerized container for streaming rom files over a local network to various retro consoles, paired with a web interface for managing your collections. While other solutions existed, none offered the combination of features, Docker support, and a browser-based UI that I needed. retroBITE is an experimental project that aims to simplify retro gaming over a local network.
+retroBITE was born out of necessity. What started as a hunt for a Docker setup to network-load games onto personal consoles quickly grew when available projects fell short. It naturally evolved from a simple server script into a full collection management hub.
 
 ## Built With
 - **Samba** - SMB/CIFS file sharing

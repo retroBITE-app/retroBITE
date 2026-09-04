@@ -53,10 +53,10 @@ function isLocked(value: string, locked: string[]): boolean {
       class="flex items-center gap-3 rounded-md px-3 py-2 transition-colors"
       :class="
         isLocked(option.value, lockedValues)
-          ? 'text-zinc-600 cursor-not-allowed'
+          ? 'cursor-not-allowed text-fg-faint opacity-60'
           : isPicked(option.value, modelValue)
-            ? 'bg-zinc-700 text-zinc-100 cursor-pointer'
-            : 'text-zinc-400 hover:bg-zinc-800 cursor-pointer'
+            ? 'cursor-pointer bg-line-strong text-fg-bright'
+            : 'cursor-pointer text-fg-cool hover:bg-hover hover:text-fg'
       "
     >
       <input
@@ -64,7 +64,7 @@ function isLocked(value: string, locked: string[]): boolean {
         :value="option.value"
         :checked="isPicked(option.value, modelValue)"
         :disabled="disabled || isLocked(option.value, lockedValues)"
-        class="accent-emerald-500"
+        class="accent-accent-deep"
         @change="emit('update:modelValue', option.value)"
       />
       <span :class="mono ? 'font-mono text-sm' : 'text-sm'">{{ option.label }}</span>

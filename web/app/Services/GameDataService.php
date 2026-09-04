@@ -38,6 +38,7 @@ class GameDataService
             'file_name'     => $game->file_name,
             'file_size'     => $game->file_size,
             'file_md5'      => $game->file_md5,
+            'is_bios'       => $game->isBios(),
             'identified_at' => $meta?->fetched_at,
         ];
     }

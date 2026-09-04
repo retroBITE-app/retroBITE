@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Label, control and error message, wired together so the label actually points
- * at its input — only the login form did that before.
+ * Label, control and error message, wired together so the label points at its
+ * input. Labels are the design's mono micro-caps.
  */
 defineProps<{
   label: string
@@ -15,14 +15,17 @@ defineProps<{
 
 <template>
   <div>
-    <label :for="$props.for" class="mb-1 block text-xs font-medium text-zinc-400">
+    <label
+      :for="$props.for"
+      class="mb-1.5 block font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase"
+    >
       {{ label }}
-      <span v-if="required" class="text-red-400" aria-hidden="true">*</span>
+      <span v-if="required" class="text-danger" aria-hidden="true">*</span>
     </label>
 
     <slot />
 
-    <p v-if="error" class="mt-1 text-xs text-red-400">{{ error }}</p>
-    <p v-else-if="hint" class="mt-1 text-xs text-zinc-500">{{ hint }}</p>
+    <p v-if="error" class="mt-1.5 text-xs text-danger">{{ error }}</p>
+    <p v-else-if="hint" class="mt-1.5 text-xs text-fg-faint">{{ hint }}</p>
   </div>
 </template>

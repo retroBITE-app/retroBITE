@@ -49,6 +49,33 @@ final class EnumsTest extends TestCase
         $this->assertSame(7, SettingFieldType::Number->coerce('7'));
     }
 
+    /**
+     * The toggle posts a real boolean, but a checkbox or a query string would
+     * send "on" or "false" — both must land as the right boolean.
+     */
+    public function test_boolean_coercion_reads_the_usual_wire_forms(): void
+    {
+        $this->assertTrue(SettingFieldType::Boolean->coerce(true));
+        $this->assertTrue(SettingFieldType::Boolean->coerce('true'));
+        $this->assertTrue(SettingFieldType::Boolean->coerce('on'));
+        $this->assertTrue(SettingFieldType::Boolean->coerce('1'));
+        $this->assertFalse(SettingFieldType::Boolean->coerce(false));
+        $this->assertFalse(SettingFieldType::Boolean->coerce('false'));
+        $this->assertFalse(SettingFieldType::Boolean->coerce('0'));
+        $this->assertFalse(SettingFieldType::Boolean->coerce(null));
+    }
+
+    /**
+     * Only a missing value is empty for a boolean — false is a real answer, and
+     * treating it as empty would make a required toggle impossible to switch off.
+     */
+    public function test_a_false_boolean_is_not_empty(): void
+    {
+        $this->assertFalse(SettingFieldType::Boolean->isEmpty(false));
+        $this->assertTrue(SettingFieldType::Boolean->isEmpty(null));
+        $this->assertNull(SettingFieldType::Boolean->validate(false));
+    }
+
     public function test_list_coercion_drops_blanks_and_reindexes(): void
     {
         $this->assertSame(['iso', 'bin'], SettingFieldType::TextList->coerce(['iso', '', 'bin']));

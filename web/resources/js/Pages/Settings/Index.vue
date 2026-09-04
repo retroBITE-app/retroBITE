@@ -2,25 +2,37 @@
 import { computed, ref } from 'vue'
 import { router } from '@inertiajs/vue3'
 import PageHeader from '@/Components/PageHeader.vue'
+import SettingsAbout from '@/Components/SettingsAbout.vue'
 import SettingsEditModal from '@/Components/SettingsEditModal.vue'
+import SettingsInterface from '@/Components/SettingsInterface.vue'
+import SettingsItemCard from '@/Components/SettingsItemCard.vue'
 import AlertBox from '@/Components/UI/AlertBox.vue'
-import BaseButton from '@/Components/UI/BaseButton.vue'
 import EmptyState from '@/Components/UI/EmptyState.vue'
 import { useApiAction } from '@/Composables/useApiAction'
 import { route } from '@/routes'
-import type { FieldMeta, SettingsGroup } from '@/Types/api'
+import type { AboutData, SettingsGroup } from '@/Types/api'
 
-/** Fields the card summary skips: the title, and anything that is an image URL. */
-const SUMMARY_SKIP = new Set(['icon', 'file_icon', 'name'])
+/** About is content rather than an overridable group, so it gets its own tab slug. */
+const ABOUT_TAB = 'about'
 
-/** How many fields a card summarises. */
-const SUMMARY_LIMIT = 3
+/** Groups that render as their own panel instead of the item card grid. */
+const PANEL_GROUPS = new Set(['interface'])
 
-const props = defineProps<{ groups: SettingsGroup[] }>()
+const props = defineProps<{ groups: SettingsGroup[]; about: AboutData }>()
 
-const activeSlug = ref(props.groups[0]?.slug ?? '')
+const activeSlug = ref(ABOUT_TAB)
 const editingKey = ref<string | null>(null)
 const resetting = ref<string | null>(null)
+
+const tabs = computed(() => [
+  { slug: ABOUT_TAB, label: 'About', count: '' },
+  ...props.groups.map((group) => ({
+    slug: group.slug,
+    label: group.label,
+    // A panel group holds one item, so its count would read "1" and mean nothing.
+    count: PANEL_GROUPS.has(group.slug) ? '' : String(Object.keys(group.items).length),
+  })),
+])
 
 const activeGroup = computed(
   () => props.groups.find((group) => group.slug === activeSlug.value) ?? null,
@@ -38,41 +50,10 @@ const editingLabel = computed(() => {
   return typeof name === 'string' && name ? name : (editingKey.value ?? '')
 })
 
-const summaryFields = computed(() =>
-  Object.keys(activeGroup.value?.schema ?? {})
-    .filter((field) => !SUMMARY_SKIP.has(field))
-    .slice(0, SUMMARY_LIMIT),
-)
-
 const reset = useApiAction(
   () => route('settings.reset', { group: activeSlug.value, key: resetting.value ?? '' }),
   { fallback: 'Reset failed' },
 )
-
-/**
- * Does this item currently have a stored override?
- */
-function isOverridden(key: string): boolean {
-  return activeGroup.value?.overrides.includes(key) ?? false
-}
-
-/**
- * Label for a schema field, falling back to its key.
- */
-function fieldLabel(schema: Record<string, FieldMeta>, field: string): string {
-  return schema[field]?.label ?? field
-}
-
-/**
- * Render a stored value for the card summary.
- */
-function preview(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.join(', ') || '—'
-  }
-
-  return value === null || value === undefined || value === '' ? '—' : String(value)
-}
 
 /**
  * Drop an item's override and pull the refreshed groups back in.
@@ -94,88 +75,50 @@ async function resetItem(key: string): Promise<void> {
 
 <template>
   <div>
-    <PageHeader>
+    <PageHeader kicker="Global">
       <template #title>
-        <h1 class="text-2xl font-semibold text-zinc-100">Settings</h1>
+        <h1 class="text-[26px] font-medium tracking-[-0.01em] text-fg-bright">Settings</h1>
       </template>
     </PageHeader>
 
-    <div class="mb-6 flex items-center gap-1 border-b border-zinc-800">
+    <div class="mb-6 flex gap-[22px] overflow-x-auto border-b border-raised">
       <button
-        v-for="group in groups"
-        :key="group.slug"
+        v-for="tab in tabs"
+        :key="tab.slug"
         type="button"
         :class="
-          activeSlug === group.slug
-            ? 'border-emerald-500 text-zinc-100'
-            : 'border-transparent text-zinc-500 hover:text-zinc-300'
+          activeSlug === tab.slug
+            ? 'text-fg-bright shadow-[inset_0_-2px_0_var(--color-accent)]'
+            : 'text-fg-muted hover:text-fg-soft'
         "
-        class="-mb-px cursor-pointer border-b-2 px-4 py-2 text-sm font-medium transition-colors"
-        @click="activeSlug = group.slug"
+        class="shrink-0 cursor-pointer pb-[11px] text-[13.5px] whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+        @click="activeSlug = tab.slug"
       >
-        {{ group.label }}
-        <span v-if="group.overrides.length" class="ml-1.5 text-xs text-emerald-400">
-          ({{ group.overrides.length }})
-        </span>
+        {{ tab.label }}
+        <span v-if="tab.count" class="ml-1.5 font-mono text-2xs opacity-75">{{ tab.count }}</span>
       </button>
     </div>
 
     <AlertBox v-if="reset.error.value" class="mb-4">{{ reset.error.value }}</AlertBox>
 
-    <EmptyState v-if="!activeGroup" message="No overridable settings are declared." />
+    <SettingsAbout v-if="activeSlug === ABOUT_TAB" :about="props.about" />
 
-    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-      <div
+    <EmptyState v-else-if="!activeGroup" message="No overridable settings are declared." />
+
+    <SettingsInterface v-else-if="PANEL_GROUPS.has(activeGroup.slug)" :group="activeGroup" />
+
+    <div v-else class="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+      <SettingsItemCard
         v-for="(item, key) in activeGroup.items"
         :key="key"
-        class="flex flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800/50"
-      >
-        <div class="flex items-center justify-between gap-3 border-b border-zinc-700/60 px-5 py-4">
-          <div class="flex min-w-0 items-center gap-3">
-            <img
-              v-if="typeof item.icon === 'string' && item.icon"
-              :src="item.icon"
-              :alt="String(item.name ?? key)"
-              class="h-8 w-8 shrink-0 object-contain opacity-80"
-            />
-            <div class="min-w-0">
-              <p class="truncate text-sm font-semibold text-zinc-100">
-                {{ item.name ?? key }}
-              </p>
-              <p class="truncate font-mono text-xs text-zinc-500">{{ key }}</p>
-            </div>
-          </div>
-
-          <span
-            v-if="isOverridden(String(key))"
-            class="shrink-0 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 ring-1 ring-inset ring-emerald-500/20"
-          >
-            Overridden
-          </span>
-        </div>
-
-        <dl class="flex-1 space-y-1 px-5 py-3 text-xs">
-          <div v-for="field in summaryFields" :key="field" class="flex gap-2">
-            <dt class="w-28 shrink-0 uppercase tracking-wider text-zinc-500">
-              {{ fieldLabel(activeGroup.schema, field) }}
-            </dt>
-            <dd class="truncate font-mono text-zinc-300">{{ preview(item[field]) }}</dd>
-          </div>
-        </dl>
-
-        <div class="flex items-center justify-end gap-2 border-t border-zinc-700/60 px-5 py-3">
-          <BaseButton
-            v-if="isOverridden(String(key))"
-            variant="ghost"
-            :busy="resetting === String(key)"
-            busy-label="Resetting…"
-            @click="resetItem(String(key))"
-          >
-            Reset
-          </BaseButton>
-          <BaseButton variant="secondary" @click="editingKey = String(key)">Edit</BaseButton>
-        </div>
-      </div>
+        :item-key="String(key)"
+        :item="item"
+        :schema="activeGroup.schema"
+        :overridden="activeGroup.overrides.includes(String(key))"
+        :resetting="resetting === String(key)"
+        @edit="editingKey = String(key)"
+        @reset="resetItem(String(key))"
+      />
     </div>
 
     <SettingsEditModal

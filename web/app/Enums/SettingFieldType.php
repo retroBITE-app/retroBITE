@@ -16,6 +16,7 @@ enum SettingFieldType: string
     case Number   = 'number';
     case TextList = 'text[]';
     case Url      = 'url';
+    case Boolean  = 'bool';
 
     /**
      * Human-readable name for the UI.
@@ -27,6 +28,7 @@ enum SettingFieldType: string
             self::Number   => 'Number',
             self::TextList => 'List of text',
             self::Url      => 'URL',
+            self::Boolean  => 'On or off',
         };
     }
 
@@ -46,6 +48,7 @@ enum SettingFieldType: string
         return match ($this) {
             self::Number         => $value === null || $value === '' ? null : (int) $value,
             self::TextList       => $this->coerceList($value),
+            self::Boolean        => (bool) filter_var($value, FILTER_VALIDATE_BOOLEAN),
             self::Text, self::Url => $value === null ? null : (string) $value,
         };
     }
@@ -91,6 +94,10 @@ enum SettingFieldType: string
      */
     public function isEmpty(mixed $value): bool
     {
+        if ($this === self::Boolean) {
+            return $value === null;
+        }
+
         return $value === null || $value === '' || (is_array($value) && $value === []);
     }
 

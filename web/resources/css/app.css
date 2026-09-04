@@ -46,8 +46,8 @@
  * the semantic set below. The `_ds/nocturne-*` folder next to the canvas is
  * scaffold the design tool emitted and the canvas never reads; ignore it.
  *
- * Tailwind's own palette stays available on purpose: only the login page speaks
- * this language so far, and the rest of the app is still zinc + emerald.
+ * Every screen now speaks this language; Tailwind's own palette stays available
+ * but nothing in resources/js references it any more.
  *
  * `--spacing` is deliberately NOT redefined. Utilities like `min-h-125` and
  * `min-h-88.75` in Pages/Games/Show.vue are computed as N x --spacing, so moving
@@ -125,10 +125,10 @@
   pointer-events: none;
 }
 
-/* Global scrollbar styling — dark zinc theme */
+/* Global scrollbar styling, on the warm ramp like everything else */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-zinc-700) transparent;
+  scrollbar-color: var(--color-line-bright) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -141,10 +141,10 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: var(--color-zinc-700);
+  background-color: var(--color-line-bright);
   border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-zinc-600);
+  background-color: var(--color-fg-faint);
 }

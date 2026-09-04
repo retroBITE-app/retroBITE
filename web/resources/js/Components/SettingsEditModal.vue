@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { PhPlus, PhX } from '@phosphor-icons/vue'
 import AlertBox from '@/Components/UI/AlertBox.vue'
 import BaseButton from '@/Components/UI/BaseButton.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -178,19 +179,20 @@ async function submit(): Promise<void> {
               title="Remove"
               aria-label="Remove entry"
               :disabled="save.busy.value"
-              class="h-8 w-8 shrink-0 cursor-pointer rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-red-400 disabled:opacity-40"
+              class="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md text-fg-faint transition-colors hover:bg-hover hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
               @click="removeListItem(field.key, index)"
             >
-              ✕
+              <PhX :size="14" />
             </button>
           </div>
           <button
             type="button"
             :disabled="save.busy.value"
-            class="cursor-pointer text-xs text-emerald-400 transition-colors hover:text-emerald-300 disabled:opacity-40"
+            class="flex cursor-pointer items-center gap-1 text-xs text-accent transition-colors hover:text-accent-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
             @click="addListItem(field.key)"
           >
-            + Add
+            <PhPlus :size="12" />
+            Add
           </button>
         </div>
       </FormField>

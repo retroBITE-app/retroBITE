@@ -128,20 +128,32 @@ final class Console
     }
 
     /**
-     * Card-shaped payload for console lists on Dashboard and Consoles/Index.
+     * Card-shaped payload for the console list and the layout's sidebar.
      *
-     * @param array{game_count?: int, bios_count?: int}|null $counts
-     * @return array{key: string, name: string, icon: string, game_count: int, bios_count: int}
+     * @param array{game_count?: int, bios_count?: int, identified_count?: int, bytes?: int}|null $counts
+     * @return array{key: string, name: string, icon: string, path: string, game_count: int, bios_count: int, identified_count: int, bytes: int}
      */
     public function toCardArray(?array $counts = null): array
     {
         return [
-            'key'        => $this->key,
-            'name'       => $this->name,
-            'icon'       => $this->icon,
-            'game_count' => (int) Arr::get($counts ?? [], 'game_count', 0),
-            'bios_count' => (int) Arr::get($counts ?? [], 'bios_count', 0),
+            'key'              => $this->key,
+            'name'             => $this->name,
+            'icon'             => $this->icon,
+            'path'             => $this->libraryPath(),
+            'game_count'       => (int) Arr::get($counts ?? [], 'game_count', 0),
+            'bios_count'       => (int) Arr::get($counts ?? [], 'bios_count', 0),
+            'identified_count' => (int) Arr::get($counts ?? [], 'identified_count', 0),
+            'bytes'            => (int) Arr::get($counts ?? [], 'bytes', 0),
         ];
+    }
+
+    /**
+     * This console's folder as the user sees it, e.g. "games/gc" — relative to
+     * the library root, since the absolute path is a container detail.
+     */
+    public function libraryPath(): string
+    {
+        return basename((string) config('settings.games_path')) . '/' . $this->folder;
     }
 
     /**
@@ -158,6 +170,7 @@ final class Console
             'icon'         => $this->icon,
             'file_icon'    => $this->fileIcon,
             'folder'       => $this->folder,
+            'path'         => $this->libraryPath(),
             'cover_aspect' => Arr::get($meta, 'cover_aspect'),
             'cover_height' => Arr::get($meta, 'cover_height'),
         ];

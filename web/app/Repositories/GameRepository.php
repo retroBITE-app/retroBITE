@@ -200,22 +200,31 @@ class GameRepository
      * Aggregated in SQL rather than by hydrating every row: the dashboard and the
      * console list both call this on every render.
      *
-     * @return Collection<string, array{game_count: int, bios_count: int}>
+     * The metadata join is one row at most per game — game_metadata is keyed by
+     * md5 — so it cannot inflate the counts.
+     *
+     * @return Collection<string, array{game_count: int, bios_count: int, identified_count: int, bytes: int}>
      */
     public function consoleCounts(): Collection
     {
-        $biosMatch = "file_path LIKE '%" . Game::BIOS_SEGMENT . "%'";
+        $biosMatch = "games.file_path LIKE '%" . Game::BIOS_SEGMENT . "%'";
+        $isGame    = "CASE WHEN {$biosMatch} THEN 0 ELSE 1 END";
 
         return Game::query()
-            ->selectRaw('console')
-            ->selectRaw("SUM(CASE WHEN {$biosMatch} THEN 0 ELSE 1 END) AS game_count")
+            ->leftJoin('game_metadata', 'games.file_md5', '=', 'game_metadata.md5')
+            ->selectRaw('games.console AS console')
+            ->selectRaw("SUM({$isGame}) AS game_count")
             ->selectRaw("SUM(CASE WHEN {$biosMatch} THEN 1 ELSE 0 END) AS bios_count")
-            ->groupBy('console')
+            ->selectRaw("SUM(CASE WHEN game_metadata.md5 IS NULL THEN 0 ELSE {$isGame} END) AS identified_count")
+            ->selectRaw('COALESCE(SUM(games.file_size), 0) AS total_bytes')
+            ->groupBy('games.console')
             ->get()
             ->keyBy('console')
             ->map(fn(Game $row) => [
-                'game_count' => (int) $row->game_count,
-                'bios_count' => (int) $row->bios_count,
+                'game_count'       => (int) $row->game_count,
+                'bios_count'       => (int) $row->bios_count,
+                'identified_count' => (int) $row->identified_count,
+                'bytes'            => (int) $row->total_bytes,
             ]);
     }
 
@@ -244,6 +253,81 @@ class GameRepository
             'bios_count' => (int) ($row->bios_count ?? 0),
             'bytes'      => (int) ($row->total_bytes ?? 0),
         ];
+    }
+
+    /**
+     * The most recently added games, newest first.
+     *
+     * `first_seen_at` is only written on insert, so a rescan does not reshuffle
+     * this list.
+     *
+     * @return EloquentCollection<int, Game>
+     */
+    public function recentlyAdded(int $limit): EloquentCollection
+    {
+        return Game::query()
+            ->with('metadata')
+            ->whereRaw($this->gameOnly())
+            ->orderByDesc('first_seen_at')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Games with no provider metadata, newest first.
+     *
+     * A file that was never hashed cannot have metadata, so a null md5 counts as
+     * unidentified alongside a hash nothing has matched yet.
+     *
+     * @return EloquentCollection<int, Game>
+     */
+    public function unidentified(int $limit): EloquentCollection
+    {
+        return $this->unidentifiedQuery()
+            ->orderByDesc('first_seen_at')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * How much of the library carries provider metadata.
+     *
+     * Kept apart from librarySummary(), which the login page and the sidebar run
+     * on every render and which does not need the join.
+     *
+     * @return array{identified: int, unidentified: int}
+     */
+    public function identificationCounts(): array
+    {
+        $total       = (int) Game::query()->whereRaw($this->gameOnly())->count();
+        $unidentified = (int) $this->unidentifiedQuery()->count();
+
+        return [
+            'identified'   => $total - $unidentified,
+            'unidentified' => $unidentified,
+        ];
+    }
+
+    /**
+     * Games lacking metadata, without an order or a limit.
+     *
+     * @return Builder<Game>
+     */
+    private function unidentifiedQuery(): Builder
+    {
+        return Game::query()
+            ->whereRaw($this->gameOnly())
+            ->where(fn(Builder $query) => $query
+                ->whereNull('file_md5')
+                ->orWhereDoesntHave('metadata'));
+    }
+
+    /**
+     * SQL excluding BIOS images, which are library rows but not games.
+     */
+    private function gameOnly(): string
+    {
+        return "file_path NOT LIKE '%" . Game::BIOS_SEGMENT . "%'";
     }
 
     /**

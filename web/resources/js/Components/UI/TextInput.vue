@@ -41,10 +41,10 @@ const emit = defineEmits<{ 'update:modelValue': [string] }>()
       bare
         ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-[13.5px] text-fg placeholder-fg-faint'
         : [
-            'w-full rounded-md border bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600',
+            'w-full rounded-lg border bg-sunken px-3 py-2.5 text-[13px] text-fg placeholder-fg-faint',
             invalid
-              ? 'border-red-500/70 focus:border-red-500'
-              : 'border-zinc-700 focus:border-emerald-500',
+              ? 'border-danger/70 focus:border-danger'
+              : 'border-line-strong focus:border-accent-deep',
           ],
       mono ? 'font-mono' : '',
     ]"

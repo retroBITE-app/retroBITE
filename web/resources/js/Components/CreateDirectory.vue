@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { PhPlus, PhX } from '@phosphor-icons/vue'
 import AlertBox from '@/Components/UI/AlertBox.vue'
 import BaseButton from '@/Components/UI/BaseButton.vue'
 import BaseModal from '@/Components/UI/BaseModal.vue'
@@ -73,8 +74,8 @@ async function submit(): Promise<void> {
     @close="modal.hide"
   >
     <div class="space-y-4">
-      <p class="text-xs text-zinc-500">
-        Create one or more folders under <span class="font-mono text-zinc-400">{{ folder }}/</span>.
+      <p class="text-xs text-fg-dim">
+        Create one or more folders under <span class="font-mono text-fg-soft">{{ folder }}/</span>.
         Use <span class="font-mono">nested/path</span> for sub-subfolders.
       </p>
 
@@ -82,10 +83,10 @@ async function submit(): Promise<void> {
         <div v-for="(row, index) in list.rows.value" :key="index" class="flex items-center gap-2">
           <div
             class="flex flex-1 items-center overflow-hidden rounded-md border"
-            :class="isInvalid(row) ? 'border-red-500/70' : 'border-zinc-700'"
+            :class="isInvalid(row) ? 'border-danger/70' : 'border-line-strong'"
           >
             <span
-              class="shrink-0 border-r border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-500"
+              class="shrink-0 border-r border-line-strong bg-hover px-3 py-2 font-mono text-[13px] text-fg-dim"
             >
               {{ folder }}/
             </span>
@@ -94,7 +95,7 @@ async function submit(): Promise<void> {
               type="text"
               placeholder="folder-name"
               :disabled="create.busy.value"
-              class="flex-1 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 placeholder-zinc-600 outline-none disabled:opacity-50"
+              class="flex-1 bg-sunken px-3 py-2 font-mono text-[13px] text-fg placeholder-fg-faint outline-none disabled:opacity-50"
               @input="list.update(index, ($event.target as HTMLInputElement).value)"
             />
           </div>
@@ -103,10 +104,10 @@ async function submit(): Promise<void> {
             title="Remove"
             aria-label="Remove folder"
             :disabled="create.busy.value"
-            class="h-8 w-8 shrink-0 cursor-pointer rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-red-400 disabled:opacity-40"
+            class="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-md text-fg-faint transition-colors hover:bg-hover hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
             @click="list.remove(index)"
           >
-            ✕
+            <PhX :size="14" />
           </button>
         </div>
       </div>
@@ -114,10 +115,11 @@ async function submit(): Promise<void> {
       <button
         type="button"
         :disabled="create.busy.value"
-        class="cursor-pointer text-xs text-emerald-400 transition-colors hover:text-emerald-300 disabled:opacity-40"
+        class="flex cursor-pointer items-center gap-1 text-xs text-accent transition-colors hover:text-accent-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
         @click="list.add"
       >
-        + Add folder
+        <PhPlus :size="12" />
+        Add folder
       </button>
 
       <AlertBox v-if="anyInvalid" size="sm">

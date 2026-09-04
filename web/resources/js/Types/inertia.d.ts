@@ -1,5 +1,5 @@
 import type { PageProps as InertiaPageProps } from '@inertiajs/core'
-import type { SidebarData } from '@/Types/api'
+import type { AppIdentity, SidebarData, UiPreferences } from '@/Types/api'
 
 /**
  * Props SessionMiddleware and AuthMiddleware share with every page, so reading
@@ -8,6 +8,8 @@ import type { SidebarData } from '@/Types/api'
 declare module '@inertiajs/core' {
   interface PageProps extends InertiaPageProps {
     csrf_token: string
+    app: AppIdentity
+    ui: UiPreferences
     auth?: { user: string | null }
     sidebar?: SidebarData
   }

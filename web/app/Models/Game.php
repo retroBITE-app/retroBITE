@@ -33,10 +33,14 @@ class Game extends Model
 
     /**
      * Does this file sit in a BIOS folder rather than being a game?
+     *
+     * Matched without regard to case, because the folder on disk is whatever the
+     * user named it — "bios" in practice — and the SQL predicates that share
+     * this constant match case-insensitively through SQLite's LIKE.
      */
     public function isBios(): bool
     {
-        return Str::contains((string) $this->file_path, self::BIOS_SEGMENT);
+        return Str::contains((string) $this->file_path, self::BIOS_SEGMENT, ignoreCase: true);
     }
 
     /**

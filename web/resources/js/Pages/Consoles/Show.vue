@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
+import { PhArrowLeft, PhArrowsClockwise, PhMagnifyingGlass } from '@phosphor-icons/vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
 import CreateDirectory from '@/Components/CreateDirectory.vue'
 import FileUploader from '@/Components/FileUploader.vue'
-import PageHeader from '@/Components/PageHeader.vue'
 import BaseButton from '@/Components/UI/BaseButton.vue'
 import EmptyState from '@/Components/UI/EmptyState.vue'
 import TextInput from '@/Components/UI/TextInput.vue'
@@ -85,6 +85,15 @@ const canDeleteFolder = computed(
 
 const currentFolderCount = computed(
   () => props.folders.find((pill) => pill.value === singleSelection.value)?.count ?? 0,
+)
+
+/** What this listing holds — the whole console until a folder pill narrows it. */
+const listedBytes = computed(() =>
+  props.games.reduce((total, game) => total + (game.file_size ?? 0), 0),
+)
+
+const unidentifiedCount = computed(
+  () => props.games.filter((game) => !game.is_bios && game.identified_at === null).length,
 )
 
 /**
@@ -187,22 +196,38 @@ function onCoverLoad(event: Event): void {
 
 <template>
   <div>
-    <PageHeader>
-      <template #title>
-        <div class="flex items-center gap-4">
-          <Link
-            :href="route('consoles')"
-            class="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
-          >
-            ← Back
-          </Link>
-          <img :src="meta.icon" :alt="meta.name" class="h-8 w-8 object-contain opacity-80" />
-          <h1 class="text-2xl font-semibold text-zinc-100">{{ meta.name }}</h1>
-        </div>
-      </template>
+    <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
+      <Link
+        :href="route('consoles')"
+        class="flex items-center gap-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+      >
+        <PhArrowLeft :size="15" />
+        Consoles
+      </Link>
 
-      <template #actions>
-        <TextInput v-model="query" placeholder="Search titles, publisher, filename…" class="w-64" />
+      <span aria-hidden="true" class="h-[22px] w-px bg-line-strong" />
+
+      <img :src="meta.icon" :alt="meta.name" class="h-8.5 w-8.5 shrink-0 object-contain" />
+      <h1 class="text-[21px] font-medium text-fg-bright">{{ meta.name }}</h1>
+      <p class="font-mono text-2xs text-fg-faint">
+        {{ meta.path }} · {{ formatSize(listedBytes) }}
+      </p>
+
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        <!-- The toolbar's own field shape: no visible label, so IconField (which
+             always renders one) does not fit. -->
+        <div
+          class="flex w-[230px] items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.75 py-1.75 transition-colors focus-within:border-accent-deep"
+        >
+          <PhMagnifyingGlass :size="14" class="shrink-0 text-fg-faint" />
+          <TextInput
+            v-model="query"
+            bare
+            aria-label="Search this console"
+            placeholder="Title, publisher, filename"
+          />
+        </div>
+
         <CreateDirectory
           :console-key="props.console"
           :console-name="meta.name"
@@ -216,38 +241,49 @@ function onCoverLoad(event: Event): void {
           :upload-dirs="upload_dirs"
           @done="router.reload()"
         />
-        <BaseButton :busy="scanning" busy-label="Scanning…" @click="scan"
-          >Scan directory</BaseButton
+        <BaseButton
+          class="flex items-center gap-1.5"
+          :busy="scanning"
+          busy-label="Scanning…"
+          @click="scan"
         >
-      </template>
-    </PageHeader>
+          <PhArrowsClockwise :size="14" />
+          Scan
+        </BaseButton>
+      </div>
+    </div>
 
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <button
-        v-for="pill in folders"
-        :key="pill.value || 'all'"
-        type="button"
-        :title="pill.value === '' ? 'Show all' : 'Click to select, Ctrl/Cmd+Click to toggle'"
-        :class="
-          isActive(pill.value)
-            ? 'bg-zinc-700 text-zinc-100'
-            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-        "
-        class="cursor-pointer rounded px-3 py-1 text-xs font-medium transition-colors"
-        @click="onPillClick(pill.value, $event)"
-      >
-        {{ pill.label }}
-        <span class="ml-1 text-zinc-500">{{ pill.count }}</span>
-      </button>
+    <div class="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-raised pb-3.5">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button
+          v-for="pill in folders"
+          :key="pill.value || 'all'"
+          type="button"
+          :title="pill.value === '' ? 'Show all' : 'Click to select, Ctrl/Cmd+Click to toggle'"
+          :class="
+            isActive(pill.value) ? 'bg-line-strong text-fg-bright' : 'text-fg-muted hover:text-fg'
+          "
+          class="cursor-pointer rounded-[7px] px-2.75 py-1.25 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          @click="onPillClick(pill.value, $event)"
+        >
+          {{ pill.label }}
+          <span class="ml-1.5 font-mono text-2xs opacity-80">{{ pill.count }}</span>
+        </button>
+      </div>
 
-      <button
-        v-if="canDeleteFolder"
-        type="button"
-        class="ml-auto cursor-pointer rounded px-3 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
-        @click="openDelete"
-      >
-        Delete folder
-      </button>
+      <div class="ml-auto flex items-center gap-3.5">
+        <span v-if="unidentifiedCount" class="font-mono text-2xs text-fg-faint uppercase">
+          {{ unidentifiedCount }} unidentified
+        </span>
+        <button
+          v-if="canDeleteFolder"
+          type="button"
+          class="cursor-pointer rounded-[7px] px-2.5 py-1 text-xs text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          @click="openDelete"
+        >
+          Delete folder
+        </button>
+      </div>
     </div>
 
     <EmptyState
@@ -264,9 +300,11 @@ function onCoverLoad(event: Event): void {
           :href="route('game', { console: props.console, game: game.file_name })"
           class="flex flex-col gap-2"
         >
+          <!-- Height and placeholder ratio come from the console's own config: a
+               SNES box is wide and flat where a PS2 case is tall. -->
           <div
             :style="game.cover_url ? { height: coverHeight } : placeholderStyle"
-            class="relative flex w-fit items-center justify-center overflow-hidden rounded-lg border-2 border-zinc-700 bg-zinc-800 transition-colors group-hover:border-emerald-500/60"
+            class="relative flex w-fit items-center justify-center overflow-hidden rounded-[10px] border border-line-strong bg-sunken transition-colors group-hover:border-accent-tint/50"
           >
             <img
               v-if="game.cover_url"
@@ -275,18 +313,35 @@ function onCoverLoad(event: Event): void {
               class="block h-full w-auto"
               @load="onCoverLoad"
             />
-            <img
+            <div
               v-else
-              :src="meta.file_icon"
-              :alt="meta.name"
-              class="h-16 w-16 object-contain opacity-30"
-            />
+              class="flex h-full w-full flex-col items-center justify-center gap-3 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]"
+            >
+              <img
+                :src="meta.file_icon"
+                :alt="meta.name"
+                class="h-14 w-14 object-contain opacity-25"
+              />
+              <span
+                v-if="!game.is_bios"
+                class="font-mono text-3xs tracking-[0.08em] text-fg-faint uppercase"
+              >
+                Unidentified
+              </span>
+            </div>
+
+            <span
+              v-if="game.is_bios"
+              class="absolute top-2 right-2 rounded-[5px] border border-line-input bg-scrim/80 px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
+            >
+              BIOS
+            </span>
           </div>
 
           <div class="w-full min-w-0 px-0.5">
             <p
               :title="game.title ?? game.file_name"
-              class="truncate text-sm text-zinc-200 transition-colors group-hover:text-white"
+              class="truncate text-[13px] text-fg transition-colors group-hover:text-fg-bright"
             >
               {{ game.title ?? game.file_name }}
             </p>
@@ -296,9 +351,9 @@ function onCoverLoad(event: Event): void {
                 :src="game.region_meta.icon"
                 :alt="game.region_meta.name"
                 :title="game.region_meta.name"
-                class="w-6 shrink-0 border border-zinc-700"
+                class="w-6 shrink-0 border border-line-input"
               />
-              <span class="text-xs text-zinc-500">{{ formatSize(game.file_size) }}</span>
+              <span class="font-mono text-2xs text-fg-dim">{{ formatSize(game.file_size) }}</span>
             </div>
           </div>
         </Link>

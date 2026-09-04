@@ -9,6 +9,7 @@ use App\Support\CappedFileSink;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 /**
  * Downloads provider media (cover / logo / backdrop) to a local dir served by
@@ -32,11 +33,14 @@ class MediaCacheService
      * Options every request shares. Redirects are followed by hand so each hop's
      * host is re-checked, and the protocol allowlist blocks file://, dict:// and
      * the rest of curl's repertoire.
+     *
+     * Merge these with array_replace, never with `[...]`: unpacking renumbers
+     * integer keys, so every CURLOPT_* would arrive as 0, 1, 2 and curl would
+     * reject the whole array.
      */
     private const CURL_OPTIONS = [
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_CONNECTTIMEOUT => 5,
     ];
 
     /**
@@ -81,9 +85,21 @@ class MediaCacheService
             return $this->commit($tmpPath, $contentType, $md5, $kind);
         } catch (RuntimeException $e) {
             logger()->debug('Media download skipped', [
-                'kind'    => $kind->value,
-                'md5'     => $md5,
-                'reason'  => $e->getMessage(),
+                'kind'   => $kind->value,
+                'md5'    => $md5,
+                'reason' => $e->getMessage(),
+            ]);
+
+            return null;
+        } catch (Throwable $e) {
+            // Caching artwork is best-effort; the identification it belongs to
+            // must still succeed. Logged louder than a skip because reaching
+            // here means a bug, not a bad URL.
+            logger()->error('Media download failed unexpectedly', [
+                'kind'      => $kind->value,
+                'md5'       => $md5,
+                'exception' => $e::class,
+                'reason'    => $e->getMessage(),
             ]);
 
             return null;
@@ -115,6 +131,23 @@ class MediaCacheService
     }
 
     /**
+     * The shared options with this request's own merged over them.
+     *
+     * @param array<int, mixed> $extra
+     * @return array<int, mixed>
+     */
+    private function curlOptions(array $extra): array
+    {
+        // The artwork comes from the same host as the metadata, so it waits just
+        // as long for a connection.
+        $connect = [
+            CURLOPT_CONNECTTIMEOUT => (int) config('settings.screenscraper.connect_timeout', 15),
+        ];
+
+        return array_replace(self::CURL_OPTIONS, $connect, $extra);
+    }
+
+    /**
      * Where this URL redirects to, or null when it does not redirect.
      *
      * @throws RuntimeException When it redirects without saying where.
@@ -122,12 +155,11 @@ class MediaCacheService
     private function redirectTarget(string $url): ?string
     {
         $curl = curl_init($url);
-        curl_setopt_array($curl, [
-            ...self::CURL_OPTIONS,
+        curl_setopt_array($curl, $this->curlOptions([
             CURLOPT_NOBODY         => true,
             CURLOPT_TIMEOUT        => 10,
             CURLOPT_RETURNTRANSFER => true,
-        ]);
+        ]));
 
         curl_exec($curl);
         $status   = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
@@ -186,11 +218,10 @@ class MediaCacheService
     private function transfer(string $url, CappedFileSink $sink): array
     {
         $curl = curl_init($url);
-        curl_setopt_array($curl, [
-            ...self::CURL_OPTIONS,
+        curl_setopt_array($curl, $this->curlOptions([
             CURLOPT_TIMEOUT       => 30,
             CURLOPT_WRITEFUNCTION => fn($handle, string $chunk): int => $sink->write($chunk),
-        ]);
+        ]));
 
         curl_exec($curl);
         $status      = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);

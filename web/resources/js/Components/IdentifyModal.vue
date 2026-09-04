@@ -129,8 +129,8 @@ function studioLine(candidate: ProviderCandidate): string {
     <AlertBox v-else-if="error">{{ error }}</AlertBox>
 
     <div v-else-if="!hasResults">
-      <p class="text-center text-sm text-zinc-300">No matches found for this ROM.</p>
-      <p class="mt-1 text-center text-xs text-zinc-600">Try searching with a custom title.</p>
+      <p class="text-center text-[13px] text-fg-soft">No matches found for this ROM.</p>
+      <p class="mt-1 text-center text-xs text-fg-faint">Try searching with a custom title.</p>
 
       <form class="mt-5 flex gap-2" @submit.prevent="load">
         <TextInput v-model="searchName" placeholder="e.g. Super Mario Sunshine" class="flex-1" />
@@ -142,10 +142,10 @@ function studioLine(candidate: ProviderCandidate): string {
       <section v-if="md5Match">
         <div class="mb-2 flex items-center gap-2">
           <span
-            class="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_var(--color-emerald-500)]"
+            class="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_6px_var(--color-accent-deep)]"
             aria-hidden="true"
           />
-          <h3 class="text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+          <h3 class="font-mono text-3xs tracking-[0.14em] text-accent uppercase">
             Exact MD5 match
           </h3>
         </div>
@@ -153,28 +153,31 @@ function studioLine(candidate: ProviderCandidate): string {
         <button
           type="button"
           :disabled="assigning !== null"
-          class="flex w-full cursor-pointer gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-left transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex w-full cursor-pointer gap-3 rounded-[10px] border border-accent-tint/40 bg-accent-tint/6 p-3 text-left transition-colors hover:border-accent-tint/70 hover:bg-accent-tint/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
           @click="pick(md5Match.provider_id, 'md5')"
         >
           <img
             v-if="md5Match.cover_url"
             :src="md5Match.cover_url"
             :alt="md5Match.title ?? ''"
-            class="w-50 h-auto shrink-0 self-start rounded bg-zinc-800 object-contain"
+            class="h-auto w-50 shrink-0 self-start rounded border border-line-strong bg-sunken object-contain"
           />
-          <div v-else class="aspect-5/7 w-24 shrink-0 rounded bg-zinc-800" />
+          <div
+            v-else
+            class="aspect-5/7 w-24 shrink-0 rounded border border-line-strong bg-sunken"
+          />
 
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium text-zinc-100">
+            <p class="truncate text-[13px] text-fg-bright">
               {{ md5Match.title ?? '(no title)' }}
             </p>
-            <p class="mt-0.5 text-xs text-zinc-500">{{ detailLine(md5Match) }}</p>
-            <p class="mt-0.5 truncate text-xs text-zinc-600">{{ studioLine(md5Match) }}</p>
+            <p class="mt-0.5 font-mono text-2xs text-fg-dim">{{ detailLine(md5Match) }}</p>
+            <p class="mt-0.5 truncate text-xs text-fg-faint">{{ studioLine(md5Match) }}</p>
           </div>
 
           <span
             v-if="assigning === `md5:${md5Match.provider_id}`"
-            class="shrink-0 self-center text-xs text-emerald-400"
+            class="shrink-0 self-center font-mono text-2xs text-accent"
           >
             Assigning…
           </span>
@@ -182,8 +185,8 @@ function studioLine(candidate: ProviderCandidate): string {
       </section>
 
       <section v-if="candidates.length">
-        <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-          Name matches <span class="font-normal text-zinc-600">({{ candidates.length }})</span>
+        <h3 class="mb-2 font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">
+          Name matches <span class="text-fg-dim">({{ candidates.length }})</span>
         </h3>
 
         <div class="space-y-1.5">
@@ -192,30 +195,33 @@ function studioLine(candidate: ProviderCandidate): string {
             :key="candidate.provider_id"
             type="button"
             :disabled="assigning !== null"
-            class="flex w-full cursor-pointer gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 text-left transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex w-full cursor-pointer gap-3 rounded-[10px] border border-line-strong bg-surface p-3 text-left transition-colors hover:border-line-bright hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
             @click="pick(candidate.provider_id, 'name')"
           >
             <img
               v-if="candidate.cover_url"
               :src="candidate.cover_url"
               :alt="candidate.title ?? ''"
-              class="w-50 h-auto shrink-0 self-start rounded bg-zinc-800 object-contain"
+              class="h-auto w-50 shrink-0 self-start rounded border border-line-strong bg-sunken object-contain"
             />
-            <div v-else class="aspect-5/7 w-20 shrink-0 rounded bg-zinc-800" />
+            <div
+              v-else
+              class="aspect-5/7 w-20 shrink-0 rounded border border-line-strong bg-sunken"
+            />
 
             <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-medium text-zinc-100">
+              <p class="truncate text-[13px] text-fg-bright">
                 {{ candidate.title ?? '(no title)' }}
               </p>
-              <p class="mt-0.5 text-xs text-zinc-500">{{ detailLine(candidate) }}</p>
-              <p v-if="candidate.rom_name" class="mt-0.5 truncate font-mono text-xs text-zinc-600">
+              <p class="mt-0.5 font-mono text-2xs text-fg-dim">{{ detailLine(candidate) }}</p>
+              <p v-if="candidate.rom_name" class="mt-0.5 truncate font-mono text-2xs text-fg-faint">
                 {{ candidate.rom_name }}
               </p>
             </div>
 
             <span
               v-if="assigning === `name:${candidate.provider_id}`"
-              class="shrink-0 self-center text-xs text-emerald-400"
+              class="shrink-0 self-center font-mono text-2xs text-accent"
             >
               Assigning…
             </span>
@@ -225,7 +231,7 @@ function studioLine(candidate: ProviderCandidate): string {
     </div>
 
     <template #footer>
-      <p class="mr-auto text-xs text-zinc-600">Powered by ScreenScraper.fr</p>
+      <p class="mr-auto font-mono text-2xs text-fg-faint">Powered by ScreenScraper.fr</p>
       <BaseButton
         v-if="!lookup.busy.value && !error"
         variant="ghost"

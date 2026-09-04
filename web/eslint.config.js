@@ -33,6 +33,8 @@ export default tseslint.config(
         FileList: 'readonly',
         Event: 'readonly',
         DragEvent: 'readonly',
+        KeyboardEvent: 'readonly',
+        MediaQueryListEvent: 'readonly',
         MouseEvent: 'readonly',
         Node: 'readonly',
         HTMLElement: 'readonly',

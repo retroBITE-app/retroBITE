@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useForm } from '@inertiajs/vue3'
+import { useForm, usePage } from '@inertiajs/vue3'
 import { PhEye, PhEyeSlash, PhLockSimple, PhSignIn, PhUser } from '@phosphor-icons/vue'
 import IconField from '@/Components/UI/IconField.vue'
 import { route } from '@/routes'
 import type { HostStat } from '@/Types/api'
 
 defineOptions({ layout: false })
+
+const page = usePage()
+
+const scanlines = computed(() => page.props.ui.scanlines)
 
 const props = defineProps<{
   error?: string | null
@@ -60,7 +64,7 @@ function submit(): void {
       "
     />
 
-    <div class="scanlines fixed inset-0" />
+    <div v-if="scanlines" class="scanlines fixed inset-0" />
 
     <!-- Vignette that seats the stats against the artwork. -->
     <div

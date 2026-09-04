@@ -37,6 +37,11 @@ return [
         'user'         => Env::get('SCREENSCRAPER_USER', ''),
         'password'     => Env::get('SCREENSCRAPER_PASSWORD', ''),
         'endpoint'     => 'https://api.screenscraper.fr/api2',
+
+        // The provider is regularly slow, and a timeout mid-identification loses
+        // the whole lookup. Raise these when it is having a bad day.
+        'connect_timeout' => (int) Env::get('SCREENSCRAPER_CONNECT_TIMEOUT', 15),
+        'timeout'         => (int) Env::get('SCREENSCRAPER_TIMEOUT', 45),
     ],
 
     // Root paths
