@@ -114,6 +114,21 @@ export type SettingsGroup = {
   overrides: string[]
 }
 
+/** The library volume's fill, from HostSummaryService::storageMeter(). */
+export type StorageMeter = {
+  used: string
+  /** Null when the volume's capacity cannot be read. */
+  total: string | null
+  /** Null alongside a null total — there is no denominator to divide by. */
+  percent: number | null
+}
+
+/** What the layout's sidebar renders, shared with every authenticated page. */
+export type SidebarData = {
+  consoles: ConsoleCard[]
+  storage: StorageMeter
+}
+
 /** One figure in the login page's "on this host" block. */
 export type HostStat = {
   value: string

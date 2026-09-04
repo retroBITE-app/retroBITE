@@ -6,6 +6,7 @@ namespace App\Middleware;
 
 use App\Http\ApiResponse;
 use App\Inertia\Inertia;
+use App\Services\SidebarService;
 use App\Support\Session;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -19,8 +20,12 @@ use Slim\Psr7\Response;
  */
 final class AuthMiddleware
 {
+    public function __construct(
+        private SidebarService $sidebar,
+    ) {}
+
     /**
-     * Gate the request, sharing the current user when it passes.
+     * Gate the request, sharing what the layout needs when it passes.
      */
     public function __invoke(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
@@ -28,7 +33,13 @@ final class AuthMiddleware
             return $this->challenge($request);
         }
 
-        Inertia::share(['auth' => ['user' => Session::username()]]);
+        Inertia::share([
+            'auth' => ['user' => Session::username()],
+            // A closure, so the sidebar's queries only run when a page actually
+            // renders — never on the JSON endpoints, and not on a partial reload
+            // that did not ask for it.
+            'sidebar' => fn(): array => $this->sidebar->payload(),
+        ]);
 
         return $handler->handle($request);
     }

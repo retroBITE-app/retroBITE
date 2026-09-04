@@ -8,7 +8,7 @@ use App\Repositories\GameRepository;
 use App\Support\Console;
 
 /**
- * Whole-host figures for the login page's art pane.
+ * Whole-host figures: the login page's art pane and the sidebar's storage meter.
  */
 class HostSummaryService
 {
@@ -53,6 +53,29 @@ class HostSummaryService
     }
 
     /**
+     * Library size against the volume's capacity, for the sidebar's meter.
+     *
+     * `total` and `percent` are null when the volume cannot be read — the caller
+     * shows the figure without a bar rather than guessing a denominator.
+     *
+     * @param ?string $volume Path to measure; defaults to the library root.
+     * @return array{used: string, total: ?string, percent: ?int}
+     */
+    public function storageMeter(?string $volume = null): array
+    {
+        $used  = $this->games->librarySummary()['bytes'];
+        $total = $this->diskTotalBytes($volume);
+
+        return [
+            'used'    => $this->formatBytes($used),
+            'total'   => $total === null ? null : $this->formatBytes($total),
+            'percent' => $total === null || $total <= 0
+                ? null
+                : min(100, (int) round($used / $total * 100)),
+        ];
+    }
+
+    /**
      * Pick the singular or plural label for a count.
      */
     private function plural(int $count, string $one, string $many): string
@@ -65,10 +88,21 @@ class HostSummaryService
      */
     private function diskTotal(): ?string
     {
-        $path  = (string) config('settings.games_path');
+        $bytes = $this->diskTotalBytes();
+
+        return $bytes === null ? null : $this->formatBytes($bytes);
+    }
+
+    /**
+     * Capacity of the volume holding the library in bytes, or null when the path
+     * does not exist or the filesystem refuses to report it.
+     */
+    private function diskTotalBytes(?string $volume = null): ?int
+    {
+        $path  = $volume ?? (string) config('settings.games_path');
         $bytes = is_dir($path) ? @disk_total_space($path) : false;
 
-        return $bytes === false ? null : $this->formatBytes((int) $bytes);
+        return $bytes === false ? null : (int) $bytes;
     }
 
     /**
