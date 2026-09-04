@@ -97,11 +97,11 @@ function isActive(href: string): boolean {
             :href="route('console', { console: console.key })"
             class="flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-fg-cool transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
           >
-            <span
-              class="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md border border-line-input bg-raised"
-            >
-              <img :src="console.icon" :alt="console.name" class="h-3.5 w-3.5 object-contain" />
-            </span>
+            <img
+              :src="console.icon"
+              :alt="console.name"
+              class="h-[22px] w-[26px] shrink-0 object-contain"
+            />
             <span class="flex-1 truncate text-[13px]">{{ console.name }}</span>
             <span class="font-mono text-2xs text-fg-faint">{{ console.game_count }}</span>
           </Link>
