@@ -1,30 +1,38 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Link, usePage, router } from '@inertiajs/vue3'
+import { computed } from 'vue'
+import { Link, router, usePage } from '@inertiajs/vue3'
+import {
+  PhGameController,
+  PhSignOut,
+  PhSlidersHorizontal,
+  PhSquaresFour,
+} from '@phosphor-icons/vue'
 import AppBrand from '@/Components/AppBrand.vue'
 import { route } from '@/routes'
 
-const page = usePage()
-const open = ref(false)
-
 const NAV = [
-  { href: route('dashboard'), label: 'Dashboard' },
-  { href: route('consoles'), label: 'Consoles' },
-  { href: route('settings'), label: 'Settings' },
+  { href: route('dashboard'), label: 'Dashboard', icon: PhSquaresFour },
+  { href: route('consoles'), label: 'Consoles', icon: PhGameController },
+  { href: route('settings'), label: 'Settings', icon: PhSlidersHorizontal },
 ]
 
-const authUser = computed(() => page.props.auth?.user ?? null)
+const page = usePage()
 
-/**
- * Sign out and land on the login page.
- */
+const authUser = computed(() => page.props.auth?.user ?? null)
+const consoles = computed(() => page.props.sidebar?.consoles ?? [])
+const storage = computed(() => page.props.sidebar?.storage ?? null)
+
+/** Two characters for the avatar tile, matching the design's lowercase "rb". */
+const initials = computed(() => (authUser.value ?? 'rb').slice(0, 2).toLowerCase())
+
 function logout(): void {
   router.post(route('logout'))
 }
 
 /**
  * Is this nav item the current page? The dashboard needs an exact match, since
- * every other path starts with its "/".
+ * every other path starts with its "/". Prefix matching keeps Consoles lit while
+ * viewing one console or one game.
  */
 function isActive(href: string): boolean {
   return href === route('dashboard') ? page.url === href : page.url.startsWith(href)
@@ -32,87 +40,116 @@ function isActive(href: string): boolean {
 </script>
 
 <template>
-  <button
-    class="fixed top-4 left-4 z-50 cursor-pointer flex lg:hidden items-center justify-center w-10 h-10 rounded-md bg-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-    aria-label="Toggle menu"
-    @click="open = !open"
-  >
-    <!-- Hamburger icon -->
-    <svg
-      v-if="!open"
-      xmlns="http://www.w3.org/2000/svg"
-      class="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="2"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-    <!-- Close icon -->
-    <svg
-      v-else
-      xmlns="http://www.w3.org/2000/svg"
-      class="w-5 h-5"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      stroke-width="2"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  </button>
-
-  <!-- Backdrop (mobile only) -->
-  <div v-if="open" class="fixed inset-0 z-30 bg-black/50 lg:hidden" @click="open = false" />
-
-  <!-- Sidebar -->
   <aside
-    class="fixed inset-y-0 left-0 z-40 w-60 flex flex-col bg-zinc-900 border-r border-zinc-800 transition-transform duration-200 lg:relative lg:translate-x-0 lg:shrink-0"
-    :class="open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+    class="sticky top-0 z-30 flex w-full shrink-0 flex-col border-b border-line bg-sunken lg:h-screen lg:w-[244px] lg:overflow-y-auto lg:border-r lg:border-b-0"
   >
-    <!-- Logo -->
-    <div class="px-5 py-6 border-b border-zinc-800">
-      <img src="/logo.png" alt="retroBITE" class="h-20 mx-auto w-auto" />
+    <div class="flex items-center justify-between px-4 pt-3 pb-2.5 lg:px-5 lg:pt-5 lg:pb-4">
+      <Link :href="route('dashboard')" aria-label="retroBITE home">
+        <img src="/images/logo.webp" alt="retroBITE" class="block h-auto w-[132px]" />
+      </Link>
+
+      <!--
+        The design has no logout below its breakpoint, which would strand a
+        signed-in user on a phone. This is the mobile-only stand-in; the desktop
+        one lives in the user chip.
+      -->
+      <button
+        type="button"
+        aria-label="Sign out"
+        class="shrink-0 cursor-pointer rounded-md p-1.5 text-fg-muted transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep lg:hidden"
+        @click="logout"
+      >
+        <PhSignOut :size="18" />
+      </button>
     </div>
 
-    <!-- Nav -->
-    <nav class="flex-1 px-3 py-4 space-y-0.5">
+    <nav
+      class="flex gap-1 overflow-x-auto px-3 pb-2.5 lg:flex-col lg:gap-0.5 lg:overflow-x-visible lg:px-2.5 lg:pb-0"
+      aria-label="Main"
+    >
       <Link
         v-for="item in NAV"
         :key="item.href"
         :href="item.href"
-        class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+        class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
         :class="
           isActive(item.href)
-            ? 'bg-emerald-500/10 text-emerald-400'
-            : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+            ? 'bg-accent-tint/13 text-accent shadow-[inset_2px_0_0_var(--color-accent-deep)]'
+            : 'text-fg-cool hover:bg-hover hover:text-fg'
         "
-        @click="open = false"
+        :aria-current="isActive(item.href) ? 'page' : undefined"
       >
+        <component :is="item.icon" :size="17" />
         {{ item.label }}
       </Link>
     </nav>
 
-    <!-- Footer -->
-    <div class="px-4 py-4 border-t border-zinc-800 flex items-center gap-3">
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-zinc-300 truncate">{{ authUser }}</p>
-        <AppBrand class="text-zinc-600" />
-      </div>
-      <button
-        title="Sign out"
-        class="shrink-0 cursor-pointer flex items-center justify-center w-8 h-8 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
-        @click="logout"
+    <!-- Everything below is desktop-only, as drawn. -->
+    <template v-if="consoles.length">
+      <p
+        class="hidden px-5 pt-5 pb-2 font-mono text-3xs tracking-[0.18em] text-fg-faint uppercase lg:block"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75"
+        Installed
+      </p>
+      <ul class="hidden shrink-0 flex-col gap-px px-2.5 lg:flex">
+        <li v-for="console in consoles" :key="console.key">
+          <Link
+            :href="route('console', { console: console.key })"
+            class="flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-fg-cool transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          >
+            <span
+              class="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md border border-line-input bg-raised"
+            >
+              <img :src="console.icon" :alt="console.name" class="h-3.5 w-3.5 object-contain" />
+            </span>
+            <span class="flex-1 truncate text-[13px]">{{ console.name }}</span>
+            <span class="font-mono text-2xs text-fg-faint">{{ console.game_count }}</span>
+          </Link>
+        </li>
+      </ul>
+    </template>
+
+    <div class="mt-auto hidden shrink-0 border-t border-line px-5 pt-4 pb-4.5 lg:block">
+      <template v-if="storage">
+        <div
+          class="flex justify-between font-mono text-3xs tracking-[0.08em] text-fg-muted uppercase"
+        >
+          <span>Storage</span>
+          <span>{{ storage.total ? `${storage.used} / ${storage.total}` : storage.used }}</span>
+        </div>
+        <!-- No bar without a capacity to divide by; the figure still stands. -->
+        <div
+          v-if="storage.percent !== null"
+          class="mt-2 mb-4 h-1 overflow-hidden rounded-sm bg-raised"
+        >
+          <div
+            class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
+            :style="{ width: `${storage.percent}%` }"
           />
-        </svg>
-      </button>
+        </div>
+        <div v-else class="mb-4" />
+      </template>
+
+      <div class="flex items-center gap-2.5">
+        <span
+          aria-hidden="true"
+          class="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md border border-line-input bg-raised font-mono text-2xs text-fg-muted"
+        >
+          {{ initials }}
+        </span>
+        <div class="min-w-0 flex-1 leading-tight">
+          <p class="truncate text-xs text-fg-soft">{{ authUser }}</p>
+          <AppBrand class="text-fg-faint" />
+        </div>
+        <button
+          type="button"
+          aria-label="Sign out"
+          class="shrink-0 cursor-pointer rounded-md p-1 text-fg-muted transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          @click="logout"
+        >
+          <PhSignOut :size="16" />
+        </button>
+      </div>
     </div>
   </aside>
 </template>

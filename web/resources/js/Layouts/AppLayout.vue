@@ -5,14 +5,16 @@ defineProps<{ noPadding?: boolean }>()
 </script>
 
 <template>
-  <div class="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
+  <!--
+    The page scrolls and the sidebar sticks, rather than a fixed shell with an
+    inner scroller. That is what lets the sidebar be a sticky top bar on narrow
+    screens and a full-height column on wide ones.
+  -->
+  <div class="flex min-h-screen flex-col text-fg lg:flex-row">
     <AppSidebar />
 
-    <!-- Content -->
-    <main class="flex-1 flex flex-col overflow-hidden">
-      <div class="flex-1 overflow-y-auto" :class="noPadding ? '' : 'p-8'">
-        <slot />
-      </div>
+    <main class="min-w-0 flex-1" :class="noPadding ? '' : 'p-5 lg:p-8'">
+      <slot />
     </main>
   </div>
 </template>
