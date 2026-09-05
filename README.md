@@ -8,7 +8,7 @@
 ## Features
 
 - **SMB/CIFS** with SMBv1 compatibility for older consoles
-- **FTP Server** with anonymous access and passive mode
+- **FTP Server** with passive mode, confined to the library
 - **Web Interface** for browsing, uploading, and managing your collections
 - and more coming
 
@@ -49,7 +49,7 @@ docker compose -f docker-compose.dev.yml up --build
 
 4. Connect your retro console to the network share to load ROMs directly over your local network. See [`CONSOLES.md`](CONSOLES.md) for per-console setup instructions.
 
-5. Access the web interface at http://localhost:8080
+5. Access the web interface at http://localhost (or `WEB_PORT` from your `.env`)
 
 ## Credits
 - [Libretro](https://github.com/libretro/retroarch-assets/tree/master/xmb/retrosystem/png): Sourced console iconography.

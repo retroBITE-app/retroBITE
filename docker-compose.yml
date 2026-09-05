@@ -13,17 +13,17 @@ services:
       - retrobite-data:/data
     restart: on-failure
 
-  retrobite:
+  retrobite-share:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: retrobite
+    container_name: retrobite-share
     env_file:
       - .env
     restart: on-failure
     network_mode: host
     volumes:
-      - ./games:/storage/games
+      - ./games:/games
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN

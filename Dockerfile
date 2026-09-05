@@ -32,6 +32,4 @@ EXPOSE 139 445
 # FTP ports
 EXPOSE 20 21 21100-21110
 
-VOLUME ["/games"]
-
 ENTRYPOINT ["/entrypoint.sh"]

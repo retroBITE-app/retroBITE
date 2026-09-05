@@ -2,6 +2,7 @@
 *.log
 *.tmp
 *.swp
+*.zip
 *~
 CLAUDE.md
 .vscode/

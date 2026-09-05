@@ -44,7 +44,7 @@ Instructions for setting up network connectivity for various retro gaming consol
 2. Launch Nintendont
 3. Press B for settings
 4. Enable network loading
-5. Set SMB share path: `smb://192.168.50.250/games`
+5. Set SMB share path: `smb://192.168.50.250/gc`
 
 ## Nintendo Wii (SMB)
 

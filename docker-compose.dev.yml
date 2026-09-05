@@ -39,13 +39,13 @@ services:
       - .env
     # network_mode: host
     volumes:
-      - ./games:/storage/games
+      - ./games:/games
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
     ports:
       - "139:139"     # SMB
-      - "446:445"     # SMB
+      - "445:445"     # SMB
       - "20:20"       # FTP data
       - "21:21"       # FTP control
       - "21100-21110:21100-21110"  # FTP passive

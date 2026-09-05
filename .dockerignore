@@ -3,6 +3,7 @@
 *.tmp
 *.swp
 *~
+*.zip
 
 games/
 redesign/
