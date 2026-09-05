@@ -11,6 +11,7 @@ const PATHS = {
   'consoles.install': '/consoles/install',
   'console': '/consoles/{console}',
   'console.scan': '/consoles/{console}/scan',
+  'console.hash': '/consoles/{console}/hash',
   'console.uploadChunk': '/consoles/{console}/upload-chunk',
   'console.mkdir': '/consoles/{console}/mkdir',
   'console.folder.destroy': '/consoles/{console}/folder/{folder:.+}',

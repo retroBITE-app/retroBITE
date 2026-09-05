@@ -31,6 +31,7 @@ return [
     'consoles.install'       => ['method' => 'POST',   'path' => '/consoles/install',                         'handler' => [ConsoleController::class, 'install']],
     'console'                => ['method' => 'GET',    'path' => '/consoles/{console}',                       'handler' => [ConsoleController::class, 'show']],
     'console.scan'           => ['method' => 'POST',   'path' => '/consoles/{console}/scan',                  'handler' => [ConsoleController::class, 'scan']],
+    'console.hash'           => ['method' => 'POST',   'path' => '/consoles/{console}/hash',                  'handler' => [ConsoleController::class, 'hash']],
     'console.uploadChunk'    => ['method' => 'POST',   'path' => '/consoles/{console}/upload-chunk',          'handler' => [ConsoleController::class, 'uploadChunk']],
     'console.mkdir'          => ['method' => 'POST',   'path' => '/consoles/{console}/mkdir',                 'handler' => [ConsoleController::class, 'mkdir']],
     'console.folder.destroy' => ['method' => 'DELETE', 'path' => '/consoles/{console}/folder/{folder:.+}',    'handler' => [ConsoleController::class, 'deleteFolder']],

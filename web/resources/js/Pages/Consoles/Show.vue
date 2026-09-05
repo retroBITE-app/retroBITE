@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { PhArrowLeft, PhArrowsClockwise, PhMagnifyingGlass } from '@phosphor-icons/vue'
 import ConfirmDialog from '@/Components/ConfirmDialog.vue'
@@ -12,7 +12,7 @@ import Toast from '@/Components/UI/Toast.vue'
 import { useApiAction } from '@/Composables/useApiAction'
 import { formatSize } from '@/Helpers/format'
 import { route } from '@/routes'
-import type { ConsoleMeta, FolderPill, Game, SelectOption } from '@/Types/api'
+import type { ConsoleMeta, FolderPill, Game, HashProgress, SelectOption } from '@/Types/api'
 
 /** Fallbacks for a console that declares no cover geometry. */
 const DEFAULT_COVER_HEIGHT = 280
@@ -26,11 +26,21 @@ const props = defineProps<{
   folders: FolderPill[]
   folder: string
   upload_dirs: SelectOption[]
+  pending_hash: number
 }>()
 
 const query = ref('')
 const scanning = ref(false)
 const deleteOpen = ref(false)
+const pending = ref(props.pending_hash)
+const hashing = ref(false)
+
+let stopped = false
+
+const hashBatch = useApiAction<HashProgress>(
+  () => route('console.hash', { console: props.console }),
+  { fallback: 'Hashing failed' },
+)
 
 const deleteFolder = useApiAction(
   () =>
@@ -143,7 +153,8 @@ function onPillClick(value: string, event: MouseEvent): void {
 }
 
 /**
- * Rescan the console directory and reload the page with what it found.
+ * Rescan the console directory and reload the page with what it found. Scanning
+ * only indexes; the hashing the library still needs runs afterwards.
  */
 function scan(): void {
   scanning.value = true
@@ -151,9 +162,75 @@ function scan(): void {
   router.post(
     route('console.scan', { console: props.console }),
     {},
-    { onFinish: () => (scanning.value = false) },
+    {
+      onFinish: () => {
+        scanning.value = false
+        void hashBacklog()
+      },
+    },
   )
 }
+
+/**
+ * Digest the console's unhashed files, one time-boxed batch per request.
+ *
+ * Hashing a shelf of ISOs runs far longer than a request may, so the server
+ * returns after a budget and reports what is left; this repeats until the
+ * backlog is empty, a batch makes no progress, or the page goes away.
+ */
+async function hashBacklog(): Promise<void> {
+  if (hashing.value) {
+    return
+  }
+
+  hashing.value = true
+
+  try {
+    for (;;) {
+      const batch = await hashBatch.run()
+
+      if (stopped || batch === null || batch.hashed === 0) {
+        break
+      }
+
+      pending.value = batch.remaining
+
+      if (batch.remaining === 0) {
+        // The rows now carry an md5, so the listing can show what matched.
+        router.reload()
+
+        break
+      }
+    }
+  } finally {
+    hashing.value = false
+  }
+}
+
+// Inertia reuses this component across its own visits, so the backlog is read
+// from the fresh props rather than only from the first mount.
+watch(
+  () => props.pending_hash,
+  (count) => {
+    pending.value = count
+
+    if (count > 0) {
+      void hashBacklog()
+    }
+  },
+)
+
+// Picked up on load rather than only after a scan, so an upload or an
+// interrupted run finishes on its own the next time the page is open.
+onMounted(() => {
+  if (pending.value > 0) {
+    void hashBacklog()
+  }
+})
+
+onUnmounted(() => {
+  stopped = true
+})
 
 /**
  * Open the delete confirmation, but only for a deletable selection.
@@ -272,6 +349,16 @@ function onCoverLoad(event: Event): void {
       </div>
 
       <div class="ml-auto flex items-center gap-3.5">
+        <span
+          v-if="hashing"
+          class="flex items-center gap-2 font-mono text-2xs text-accent uppercase"
+        >
+          <span
+            class="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-line-bright border-t-accent"
+            aria-hidden="true"
+          />
+          Hashing · {{ pending }} left
+        </span>
         <span v-if="unidentifiedCount" class="font-mono text-2xs text-fg-faint uppercase">
           {{ unidentifiedCount }} unidentified
         </span>

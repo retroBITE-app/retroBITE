@@ -10,8 +10,7 @@ declare(strict_types=1);
  */
 
 use App\Database\Bootstrap;
-use App\Repositories\GameRepository;
-use App\Services\FilesystemService;
+use App\Services\LibraryScanService;
 use App\Support\Console as ConsoleMeta;
 use Illuminate\Container\Container;
 
@@ -63,22 +62,21 @@ function commandScan(Container $container, ?string $consoleKey): int
         return fail($consoleKey === null ? 'No installed consoles.' : "Unknown console: {$consoleKey}");
     }
 
-    $filesystem = $container->make(FilesystemService::class);
-    $games      = $container->make(GameRepository::class);
+    $scanner = $container->make(LibraryScanService::class);
 
     foreach ($targets as $console) {
-        $found = 0;
+        $indexed = $scanner->index($console);
 
-        foreach ($filesystem->scanConsoleDir($console) as $file) {
-            $games->scanUpsert($console->key, $file);
-            $found++;
-        }
+        // No execution limit out here, so the CLI hashes the whole backlog in one
+        // pass rather than in the batches the web UI has to poll for.
+        $hashed = $scanner->hashPending($console, budgetSeconds: 0.0);
 
         line(sprintf(
-            '%-12s %d found, %d pruned',
+            '%-12s %d found, %d pruned, %d hashed',
             $console->key,
-            $found,
-            $games->pruneMissing($console),
+            $indexed['found'],
+            $indexed['pruned'],
+            $hashed['hashed'],
         ));
     }
 

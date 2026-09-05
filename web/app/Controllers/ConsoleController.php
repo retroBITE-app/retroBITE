@@ -15,6 +15,7 @@ use App\Services\ChunkedUploadService;
 use App\Services\ConsoleFolderService;
 use App\Services\FilesystemService;
 use App\Services\GameDataService;
+use App\Services\LibraryScanService;
 use App\Support\Console;
 use App\Support\PathRules;
 use App\Support\UploadChunk;
@@ -31,6 +32,7 @@ class ConsoleController
         private GameDataService $gameData,
         private ChunkedUploadService $uploads,
         private ConsoleFolderService $folders,
+        private LibraryScanService $scanner,
     ) {}
 
     /**
@@ -79,33 +81,32 @@ class ConsoleController
         $subfolders = $this->filesystem->listSubfolders($console);
 
         return Inertia::render($request, $response, 'Consoles/Show', [
-            'console'     => $console->key,
-            'meta'        => $console->toMetaArray(),
-            'games'       => $this->gameData->enrichGames(
+            'console'      => $console->key,
+            'meta'         => $console->toMetaArray(),
+            'games'        => $this->gameData->enrichGames(
                 $this->games->allForConsoleFolders($console, $this->requestedFolders($request))
             ),
-            'extensions'  => $console->allExtensions(),
-            'folders'     => $this->games->folderCounts($console, $subfolders),
-            'folder'      => Input::query($request)->string('folder'),
-            'upload_dirs' => $console->folderOptions($subfolders),
+            'extensions'   => $console->allExtensions(),
+            'folders'      => $this->games->folderCounts($console, $subfolders),
+            'folder'       => Input::query($request)->string('folder'),
+            'upload_dirs'  => $console->folderOptions($subfolders),
+            'pending_hash' => $this->games->awaitingHashCount($console),
         ]);
     }
 
     /**
-     * Scan the filesystem for games and update DB metadata, then drop rows whose
-     * file is no longer on disk so the database matches the directory.
+     * Index the console directory and drop rows whose file is no longer on disk,
+     * so the database matches the directory.
+     *
+     * Deliberately does not hash: that is `hash()` below, which the page polls.
      */
     public function scan(Request $request, Response $response, array $args): Response
     {
         $console = $this->resolve->console($args);
-        $mounted = is_dir($console->path());
+        $result  = $this->scanner->index($console);
 
-        foreach ($this->filesystem->scanConsoleDir($console) as $file) {
-            $this->games->scanUpsert($console->key, $file);
-        }
-
-        if ($mounted && ($pruned = $this->games->pruneMissing($console)) > 0) {
-            logger()->info('Pruned missing games', ['console' => $console->key, 'removed' => $pruned]);
+        if ($result['pruned'] > 0) {
+            logger()->info('Pruned missing games', ['console' => $console->key, 'removed' => $result['pruned']]);
         }
 
         return Inertia::redirect(
@@ -113,6 +114,19 @@ class ConsoleController
             route('console', ['console' => $console->key]),
             $request->getMethod(),
         );
+    }
+
+    /**
+     * Hash one batch of the console's unhashed games and report the backlog.
+     *
+     * Kept to a time budget so no single request outlives its execution limit;
+     * the caller repeats it while `remaining` is above zero.
+     */
+    public function hash(Request $request, Response $response, array $args): Response
+    {
+        $console = $this->resolve->console($args);
+
+        return ApiResponse::status($response, ResponseStatus::Ok, $this->scanner->hashPending($console));
     }
 
     /**

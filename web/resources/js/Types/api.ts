@@ -212,6 +212,15 @@ export type HostStat = {
   label: string
 }
 
+/** One batch of ConsoleController::hash(), from LibraryScanService::hashPending(). */
+export type HashProgress = {
+  status: string
+  /** Files digested by this batch. */
+  hashed: number
+  /** Files still waiting, so the caller knows whether to poll again. */
+  remaining: number
+}
+
 /** The error shape every failing endpoint returns. */
 export type ApiError = {
   error: string

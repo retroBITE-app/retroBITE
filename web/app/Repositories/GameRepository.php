@@ -172,24 +172,31 @@ class GameRepository
     }
 
     /**
-     * Delete this console's rows whose file is gone from disk. Returns the number
-     * of rows removed.
+     * Delete this console's rows that the scan just completed did not yield.
+     * Returns the number of rows removed.
      *
-     * Meant to run right after a scan, which refreshes file_path first, so a file
-     * moved outside the app gets its path corrected rather than mistaken for a
-     * missing one. Metadata is keyed by md5 and deliberately left alone — it
-     * re-associates on its own if the file ever comes back.
+     * Keyed on what the scan saw rather than on whether the file still exists,
+     * because those differ: a file the console has since stopped accepting —
+     * newly listed in `exclude_files`, or an extension dropped from the config —
+     * is still on disk, and an existence check kept it in the library forever.
+     *
+     * The scan refreshes file_path first, so a file moved between subfolders
+     * keeps its id and is not mistaken for a removed one. Metadata is keyed by
+     * md5 and deliberately left alone — it re-associates if the file returns.
+     *
+     * @param string[] $scannedIds Ids yielded by the scan, from scanUpsert().
      */
-    public function pruneMissing(Console $console): int
+    public function pruneExcept(Console $console, array $scannedIds): int
     {
-        $missing = Game::select(['id', 'file_path'])
+        $keep = array_flip($scannedIds);
+
+        $stale = Game::query()
             ->where('console', $console->key)
-            ->get()
-            ->reject(fn(Game $game) => is_file((string) $game->file_path))
-            ->pluck('id');
+            ->pluck('id')
+            ->reject(fn(string $id) => isset($keep[$id]));
 
         // Chunked so a large library cannot exceed SQLite's bound-variable limit.
-        return (int) $missing
+        return (int) $stale
             ->chunk(500)
             ->sum(fn(Collection $chunk) => Game::whereIn('id', $chunk->values()->all())->delete());
     }
@@ -331,23 +338,68 @@ class GameRepository
     }
 
     /**
-     * Upsert a scanned file, reusing the stored md5 when the file is unchanged.
+     * Record a scanned file without hashing it.
      *
-     * Hashing a multi-GB ISO is the slow part of scan; skipping it when
-     * file_md5 is already set and file_size matches keeps repeat scans fast
-     * and lets a second scan fill in anything a prior timeout missed.
+     * Hashing a multi-GB ISO took longer than one request is allowed to run, so
+     * a scan only indexes; hashPending() fills file_md5 in afterwards. A stored
+     * hash survives only while file_size still matches — a changed size means
+     * the old digest describes a file that is gone.
+     *
+     * @return string The row's id, which pruneExcept() needs to keep it.
      */
-    public function scanUpsert(string $console, \SplFileInfo $file): void
+    public function scanUpsert(string $console, \SplFileInfo $file): string
     {
         $id       = (string) GameId::make($console, $file->getFilename());
         $existing = $this->find($id);
         $size     = $file->getSize();
 
-        $md5 = ($existing && $existing->file_md5 !== null && (int) $existing->file_size === $size)
-            ? $existing->file_md5
-            : (md5_file($file->getPathname()) ?: null);
+        $md5 = ($existing && (int) $existing->file_size === $size) ? $existing->file_md5 : null;
 
         $this->upsert($console, $file->getFilename(), $file->getPathname(), $size, $md5);
+
+        return $id;
+    }
+
+    /**
+     * This console's games still awaiting a hash, oldest-seen first so repeated
+     * batches walk the backlog instead of re-picking the same rows.
+     *
+     * @return EloquentCollection<int, Game>
+     */
+    public function awaitingHash(Console $console, int $limit): EloquentCollection
+    {
+        return $this->awaitingHashQuery($console)
+            ->orderBy('first_seen_at')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * How many of this console's games still have no md5.
+     */
+    public function awaitingHashCount(Console $console): int
+    {
+        return (int) $this->awaitingHashQuery($console)->count();
+    }
+
+    /**
+     * Store a digest computed outside the scan pass.
+     */
+    public function storeMd5(string $id, string $md5): void
+    {
+        Game::whereKey($id)->update(['file_md5' => $md5]);
+    }
+
+    /**
+     * Unhashed rows for one console, without an order or a limit.
+     *
+     * @return Builder<Game>
+     */
+    private function awaitingHashQuery(Console $console): Builder
+    {
+        return Game::query()
+            ->where('console', $console->key)
+            ->whereNull('file_md5');
     }
 
     /**

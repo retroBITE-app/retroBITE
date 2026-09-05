@@ -64,12 +64,9 @@ class ChunkedUploadService
             throw UploadException::sizeMismatch($chunk->fileSize, (int) $actualSize);
         }
 
-        $this->games->upsert(
-            $console->key,
-            $chunk->filename,
-            $destination,
-            $actualSize,
-            md5_file($destination) ?: null,
-        );
+        // Left unhashed on purpose: a 60 GB upload cannot be digested inside the
+        // request that finishes it. LibraryScanService::hashPending() picks the
+        // row up, the same way it does for a freshly scanned file.
+        $this->games->upsert($console->key, $chunk->filename, $destination, $actualSize);
     }
 }
