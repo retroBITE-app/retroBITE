@@ -6,13 +6,13 @@ return [
     'usa' => [
         'name'     => 'USA',
         'flag'     => 'US',
-        'codes'    => ['USA', 'US', 'U', 'NTSC-U', 'NTSC', 'NA', 'America'],
+        'codes'    => ['USA', 'US', 'U', 'NTSC-U', 'NTSC', 'NA', 'America', 'USA, Australia'],
         'icon'     => '/images/regions/usa.png',
     ],
     'europe' => [
         'name'     => 'Europe',
         'flag'     => 'EU',
-        'codes'    => ['Europe', 'EUR', 'E', 'PAL', 'En,Fr,De', 'En,Fr,De,Es,It'],
+        'codes'    => ['Europe', 'EUR', 'E', 'PAL', 'En,Fr,De', 'En,Fr,De,Es,It', 'USA, Europe', 'USA,Europe'],
         'icon'     => '/images/regions/eu.png',
     ],
     'japan' => [
