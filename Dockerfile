@@ -1,16 +1,26 @@
-FROM ubuntu:22.04
+FROM debian:bookworm-slim
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Samba, FTP server, and utilities
-RUN apt-get update && apt-get install -y \
+# Docs, man pages and locales are dead weight in a file server. Excluding them at
+# unpack time is cheaper and more complete than deleting them afterwards.
+RUN printf '%s\n' \
+        'path-exclude /usr/share/doc/*' \
+        'path-include /usr/share/doc/*/copyright' \
+        'path-exclude /usr/share/man/*' \
+        'path-exclude /usr/share/locale/*' \
+        > /etc/dpkg/dpkg.cfg.d/01-nodoc
+
+# --no-install-recommends is what keeps samba-vfs-modules out, and with it the Ceph,
+# Gluster and Boost libraries a plain SMB share never loads. Safe because smb.conf
+# declares no `vfs objects`, so only the builtins inside samba-libs are ever used.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     samba \
     samba-common-bin \
     vsftpd \
-    supervisor \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /var/cache/debconf/*
 
 # Create shared directory for games with console-specific folders
 RUN mkdir -p /games/ps2 /games/ps3 /games/gc /games/wii /games/xbox /games/dreamcast && \
@@ -21,7 +31,6 @@ RUN mkdir -p /games/ps2 /games/ps3 /games/gc /games/wii /games/xbox /games/dream
 # Copy files
 COPY docker/smb.conf /etc/samba/smb.conf
 COPY docker/vsftpd.conf /etc/vsftpd.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh

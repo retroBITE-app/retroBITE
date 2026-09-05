@@ -43,6 +43,9 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
+    # Reaps zombies and forwards signals as PID 1, so the entrypoint's supervisor
+    # does not have to.
+    init: true
     ports:
       - "139:139"     # SMB
       - "445:445"     # SMB

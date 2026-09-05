@@ -21,7 +21,7 @@ retroBITE was born out of necessity. What started as a hunt for a Docker setup t
 ## Built With
 - **Samba** - SMB/CIFS file sharing
 - **vsftpd** - FTP server
-- **Ubuntu 22.04** - Base image
+- **Debian 12 (bookworm-slim)** - Base image
 - **PHP 8.3 + Slim 4** - Web interface backend
 - **Vue 3 + TypeScript** - Web interface frontend
 - **Inertia.js** - Server-driven SPA bridge

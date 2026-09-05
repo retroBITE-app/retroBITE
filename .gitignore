@@ -3,6 +3,8 @@
 *.tmp
 *.swp
 *.zip
+*.elf
+*.ELF
 *~
 CLAUDE.md
 .vscode/

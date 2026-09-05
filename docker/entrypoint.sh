@@ -41,5 +41,56 @@ fi
 chown -R :users /games
 chmod -R 775 /games
 
-# Start supervisor to manage all services
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+# Three daemons, kept alive. supervisord did this before, but it is a Python
+# program and pulled a CPython runtime in purely to run three execs. Docker's own
+# init (`init: true` in compose) reaps zombies and forwards signals, so all this
+# has to do is start them and put back whichever one dies.
+declare -A COMMANDS=(
+    [smbd]="/usr/sbin/smbd --foreground --no-process-group"
+    [nmbd]="/usr/sbin/nmbd --foreground --no-process-group"
+    [vsftpd]="/usr/sbin/vsftpd /etc/vsftpd.conf"
+)
+declare -A PIDS=()
+
+# Launch one daemon and remember its pid.
+start_service() {
+    local name="$1"
+
+    ${COMMANDS[$name]} &
+    PIDS[$name]=$!
+
+    echo "→ started $name (pid ${PIDS[$name]})"
+}
+
+# Stop everything on the way out, so `docker stop` is prompt rather than a
+# ten-second wait for SIGKILL.
+stop_services() {
+    trap - TERM INT
+
+    echo "→ stopping"
+    for name in "${!PIDS[@]}"; do
+        kill "${PIDS[$name]}" 2>/dev/null || true
+    done
+    wait
+
+    exit 0
+}
+
+trap stop_services TERM INT
+
+for name in "${!COMMANDS[@]}"; do
+    start_service "$name"
+done
+
+# `wait -n` returns as soon as any one of them exits; whichever it was gets
+# restarted, matching supervisord's autorestart.
+while true; do
+    wait -n || true
+
+    for name in "${!PIDS[@]}"; do
+        if ! kill -0 "${PIDS[$name]}" 2>/dev/null; then
+            echo "⚠ $name exited, restarting"
+            start_service "$name"
+        fi
+    done
+done

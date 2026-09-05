@@ -4,6 +4,8 @@
 *.swp
 *~
 *.zip
+*.elf
+*.ELF
 
 games/
 redesign/
