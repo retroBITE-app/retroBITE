@@ -109,6 +109,16 @@ class GameRepository
     }
 
     /**
+     * Delete every game row for a console. Metadata is keyed by md5 and left
+     * behind, exactly as pruneExcept() leaves it — it re-associates if the file
+     * comes back.
+     */
+    public function deleteByConsole(Console $console): int
+    {
+        return (int) Game::where('console', $console->key)->delete();
+    }
+
+    /**
      * Rows matching one folder value, counted in the database rather than by
      * re-filtering a full table read once per subfolder.
      */

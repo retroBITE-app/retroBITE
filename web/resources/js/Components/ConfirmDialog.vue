@@ -7,7 +7,7 @@ withDefaults(
   defineProps<{
     open: boolean
     title: string
-    message: string
+    message?: string
     warning?: string
     confirmLabel?: string
     cancelLabel?: string
@@ -15,6 +15,7 @@ withDefaults(
     variant?: 'danger' | 'default'
   }>(),
   {
+    message: '',
     confirmLabel: 'Confirm',
     cancelLabel: 'Cancel',
     busy: false,
@@ -36,7 +37,11 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>()
       </h2>
     </template>
 
-    <p class="text-sm leading-relaxed text-fg-soft">{{ message }}</p>
+    <!-- A slot so a caller can list what is about to go, rather than squeezing it
+         into one string. Falls back to the message every other caller passes. -->
+    <slot>
+      <p class="text-sm leading-relaxed text-fg-soft">{{ message }}</p>
+    </slot>
 
     <AlertBox v-if="warning" tone="error" size="sm" class="mt-3">{{ warning }}</AlertBox>
 

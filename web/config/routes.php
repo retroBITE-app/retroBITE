@@ -29,6 +29,7 @@ return [
 
     'consoles'               => ['method' => 'GET',    'path' => '/consoles',                                 'handler' => [ConsoleController::class, 'index']],
     'consoles.install'       => ['method' => 'POST',   'path' => '/consoles/install',                         'handler' => [ConsoleController::class, 'install']],
+    'consoles.destroy'       => ['method' => 'DELETE', 'path' => '/consoles',                                 'handler' => [ConsoleController::class, 'destroy']],
     'console'                => ['method' => 'GET',    'path' => '/consoles/{console}',                       'handler' => [ConsoleController::class, 'show']],
     'console.scan'           => ['method' => 'POST',   'path' => '/consoles/{console}/scan',                  'handler' => [ConsoleController::class, 'scan']],
     'console.hash'           => ['method' => 'POST',   'path' => '/consoles/{console}/hash',                  'handler' => [ConsoleController::class, 'hash']],

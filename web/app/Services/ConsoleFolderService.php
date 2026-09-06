@@ -13,7 +13,8 @@ use Illuminate\Support\Arr;
 use Throwable;
 
 /**
- * Creates and removes the subfolders a console's library is organised into.
+ * Creates and removes a console's own root folder and the subfolders its library
+ * is organised into.
  */
 class ConsoleFolderService
 {
@@ -79,6 +80,45 @@ class ConsoleFolderService
         }
 
         return $failures;
+    }
+
+    /**
+     * Delete each named console's root folder and then its game rows — the
+     * inverse of install(), and bulk for the same reason. Disk first, so the rows
+     * survive a failed rmdir and the library stays listable.
+     *
+     * @param array<int, mixed> $consoleKeys
+     * @return array{removed: int, failures: array<string, string>} Rows removed, plus console key => reason for the ones that failed.
+     */
+    public function uninstall(array $consoleKeys): array
+    {
+        $removed  = 0;
+        $failures = [];
+
+        foreach ($consoleKeys as $key) {
+            $console = Console::tryFrom(is_scalar($key) ? (string) $key : null);
+
+            if ($console === null) {
+                $failures[(string) $key] = 'Unknown console';
+                continue;
+            }
+
+            if (!$console->installed()) {
+                $failures[$console->key] = 'Not installed';
+                continue;
+            }
+
+            if (!$this->filesystem->deleteConsoleRoot($console)) {
+                logger()->error('Could not delete console', ['console' => $console->key]);
+
+                $failures[$console->key] = 'Could not delete the directory';
+                continue;
+            }
+
+            $removed += $this->games->deleteByConsole($console);
+        }
+
+        return ['removed' => $removed, 'failures' => $failures];
     }
 
     /**

@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Services\FilesystemService;
 use App\Support\Console;
+use App\Support\SettingsOverrides;
+use Illuminate\Database\Capsule\Manager as Capsule;
 use RuntimeException;
 
 /**
@@ -100,6 +102,44 @@ final class FilesystemContainmentTest extends DatabaseTestCase
     {
         $this->assertFalse($this->filesystem->deleteDir($this->console, ''));
         $this->assertDirectoryExists($this->console->path());
+    }
+
+    public function test_deletes_a_console_root_and_everything_under_it(): void
+    {
+        $this->filesystem->createDir($this->console, 'DVD/Nested');
+        touch($this->console->path('DVD/Nested/Deep.iso'));
+        touch($this->console->path('Root.iso'));
+
+        $this->assertTrue($this->filesystem->deleteConsoleRoot($this->console));
+        $this->assertDirectoryDoesNotExist($this->console->path());
+        $this->assertDirectoryExists((string) config('settings.games_path'));
+    }
+
+    public function test_refuses_to_delete_a_console_root_that_is_not_there(): void
+    {
+        $this->assertTrue($this->filesystem->deleteConsoleRoot($this->console));
+        $this->assertFalse($this->filesystem->deleteConsoleRoot($this->console));
+    }
+
+    /**
+     * The one case that could take the whole library with it: a console whose
+     * folder resolves to nothing puts the shared games path where its root goes.
+     */
+    public function test_refuses_to_delete_a_console_root_that_resolves_to_the_games_path(): void
+    {
+        Capsule::table('settings')->insert([
+            'group'      => 'consoles',
+            'key'        => 'ps2',
+            'value'      => json_encode(['folder' => '']),
+            'updated_at' => time(),
+        ]);
+        SettingsOverrides::invalidate();
+
+        $rootless = Console::tryFrom('ps2') ?? self::fail('ps2 must be a known console');
+
+        $this->assertSame(realpath((string) config('settings.games_path')), realpath($rootless->path()));
+        $this->assertFalse($this->filesystem->deleteConsoleRoot($rootless));
+        $this->assertDirectoryExists((string) config('settings.games_path'));
     }
 
     public function test_refuses_to_move_a_file_in_from_outside_the_console_root(): void

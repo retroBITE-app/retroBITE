@@ -191,4 +191,19 @@ final class GameRepositoryTest extends DatabaseTestCase
             $md5,
         );
     }
+    /**
+     * Deleting a console must not reach past it — the bulk delete sends several
+     * keys, and one over-broad predicate there would empty the whole library.
+     */
+    public function test_delete_by_console_leaves_other_consoles_alone(): void
+    {
+        $this->insertGame('ps2', 'Ico.iso', '/games/ps2/Ico.iso');
+        $this->insertGame('ps2', 'Nested.iso', '/games/ps2/DVD/Nested.iso');
+        $this->insertGame('gc', 'Pikmin.iso', '/games/gc/Pikmin.iso');
+
+        $this->assertSame(2, $this->games->deleteByConsole($this->console));
+        $this->assertSame(0, Game::where('console', 'ps2')->count());
+        $this->assertSame(1, Game::where('console', 'gc')->count());
+    }
+
 }

@@ -273,6 +273,44 @@ class FilesystemService
     }
 
     /**
+     * Recursively delete a console's own root directory, reporting whether it
+     * went. Separate from deleteDir() because the root is the one path
+     * assertWithin() refuses, and a console whose folder resolved to blank would
+     * put the shared games path here.
+     */
+    public function deleteConsoleRoot(Console $console): bool
+    {
+        if (trim($console->folder, '/') === '') {
+            return false;
+        }
+
+        $target = realpath($console->path()) ?: null;
+
+        if ($target === null || !is_dir($target)) {
+            return false;
+        }
+
+        if ($target === (realpath((string) config('settings.games_path')) ?: null)) {
+            logger()->warning('Refused to delete the games path as a console root', [
+                'console' => $console->key,
+                'path'    => $target,
+            ]);
+
+            return false;
+        }
+
+        try {
+            $this->assertWithin($console, $target, allowRoot: true);
+        } catch (RuntimeException) {
+            return false;
+        }
+
+        $this->emptyDir($target);
+
+        return @rmdir($target);
+    }
+
+    /**
      * The absolute path of a subfolder that may be deleted, or null when it may
      * not be — unknown, the console root itself, or outside the console.
      */

@@ -9,6 +9,7 @@ const PATHS = {
   'dashboard': '/',
   'consoles': '/consoles',
   'consoles.install': '/consoles/install',
+  'consoles.destroy': '/consoles',
   'console': '/consoles/{console}',
   'console.scan': '/consoles/{console}/scan',
   'console.hash': '/consoles/{console}/hash',

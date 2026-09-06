@@ -6,7 +6,7 @@ defineProps<{ kicker?: string }>()
 </script>
 
 <template>
-  <div class="flex items-center justify-between gap-4">
+  <div class="mb-6 flex items-center justify-between gap-4">
     <div class="min-w-0">
       <p v-if="kicker" class="mb-1.5 kicker text-fg-faint">
         {{ kicker }}

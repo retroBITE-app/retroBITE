@@ -73,6 +73,30 @@ class ConsoleController
     }
 
     /**
+     * Uninstall one or more consoles — their directories and every game row under
+     * them. Bulk-shaped like install(), so one card's delete and a whole
+     * selection share a single endpoint and a single failure shape.
+     */
+    public function destroy(Request $request, Response $response): Response
+    {
+        $result = $this->folders->uninstall(Input::body($request)->list('consoles'));
+
+        if ($result['failures'] !== []) {
+            return ApiResponse::error(
+                $response,
+                'Some consoles could not be deleted',
+                422,
+                'delete_failed',
+                $result['failures'],
+            );
+        }
+
+        return ApiResponse::status($response, ResponseStatus::Ok, [
+            'games_removed' => $result['removed'],
+        ]);
+    }
+
+    /**
      * Show games for a console, filtered by a disk-derived subfolder selection.
      */
     public function show(Request $request, Response $response, array $args): Response

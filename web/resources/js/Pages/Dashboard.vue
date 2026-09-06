@@ -57,8 +57,8 @@ function gameHref(game: DashboardGame): string {
 </script>
 
 <template>
-  <div class="flex flex-col gap-8">
-    <PageHeader :kicker="greeting">
+  <div class="flex flex-col gap-6">
+    <PageHeader :kicker="greeting" class="-mb-2!">
       <template #title>
         <h1 class="text-display font-medium tracking-display text-fg-bright">Your collection</h1>
       </template>
