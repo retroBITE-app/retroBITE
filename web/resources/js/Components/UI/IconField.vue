@@ -36,12 +36,12 @@ const emit = defineEmits<{ 'update:modelValue': [string] }>()
 <template>
   <div>
     <div class="flex items-baseline gap-3">
-      <label :for="id" class="text-3xs tracking-[0.16em] text-fg-dim uppercase">{{ label }}</label>
+      <label :for="id" class="kicker-sans text-fg-dim uppercase">{{ label }}</label>
       <slot name="label-aside" />
     </div>
 
     <div
-      class="mt-2 flex items-center gap-[9px] rounded-[9px] border bg-surface px-3 transition-colors focus-within:border-accent-deep"
+      class="mt-2 flex items-center gap-2.25 rounded-lg border bg-surface px-3 transition-colors focus-within:border-accent-deep"
       :class="error ? 'border-danger/70' : 'border-line-input'"
     >
       <component :is="icon" :size="15" class="shrink-0 text-fg-muted" />
@@ -55,13 +55,13 @@ const emit = defineEmits<{ 'update:modelValue': [string] }>()
         :disabled="disabled"
         :autocomplete="autocomplete"
         :invalid="Boolean(error)"
-        class="py-[11px]"
+        class="py-2.75"
         @update:model-value="emit('update:modelValue', $event)"
       />
 
       <slot name="trailing" />
     </div>
 
-    <p v-if="error" class="mt-1.5 text-2xs text-danger">{{ error }}</p>
+    <p v-if="error" class="mt-1.5 text-xs text-danger">{{ error }}</p>
   </div>
 </template>

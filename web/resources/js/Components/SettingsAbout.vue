@@ -51,24 +51,24 @@ function display(url: string): string {
 
 <template>
   <div>
-    <div class="grid items-start gap-[22px] lg:grid-cols-[1.35fr_1fr]">
-      <div class="rounded-xl border border-line bg-sunken px-[22px] py-5">
+    <div class="grid items-start gap-5.5 lg:grid-cols-[1.35fr_1fr]">
+      <div class="rounded-xl border border-line bg-sunken px-5.5 py-5">
         <div class="flex items-center gap-2.5">
           <PhHardDrives :size="18" class="text-accent" />
-          <p class="text-[17px] font-medium text-fg-bright">{{ props.about.name }}</p>
+          <p class="text-lg font-medium text-fg-bright">{{ props.about.name }}</p>
         </div>
         <p
           v-for="(paragraph, index) in props.about.summary"
           :key="index"
-          class="mt-3 max-w-[78ch] text-[13.5px] leading-[1.7] text-fg-soft text-pretty"
+          class="mt-3 max-w-[78ch] text-sm leading-relaxed text-fg-soft text-pretty"
         >
           {{ paragraph }}
         </p>
       </div>
 
       <div class="overflow-hidden rounded-xl border border-line bg-sunken">
-        <div class="border-b border-line px-[18px] py-4">
-          <p class="font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">Version</p>
+        <div class="border-b border-line px-4.5 py-4">
+          <p class="kicker text-fg-faint">Version</p>
           <p class="mt-1.5 font-mono text-xl text-fg-bright">{{ props.about.version }}</p>
         </div>
 
@@ -76,14 +76,14 @@ function display(url: string): string {
           <div
             v-for="row in props.about.build"
             :key="row.key"
-            class="flex justify-between gap-3 border-b border-line/70 px-[18px] py-2.5 text-xs"
+            class="flex justify-between gap-3 border-b border-line/70 px-4.5 py-2.5 text-sm"
           >
             <dt class="text-fg-dim">{{ row.key }}</dt>
             <dd class="truncate font-mono text-fg-soft">{{ row.value }}</dd>
           </div>
         </dl>
 
-        <div class="flex flex-col gap-2 px-[18px] py-4">
+        <div class="flex flex-col gap-2 px-4.5 py-4">
           <a
             v-for="link in props.about.links"
             :key="link.url"
@@ -94,8 +94,8 @@ function display(url: string): string {
           >
             <component :is="icon(link.icon)" :size="16" class="shrink-0 text-accent" />
             <span class="min-w-0 flex-1">
-              <span class="block text-xs text-fg-soft">{{ link.label }}</span>
-              <span class="mt-0.5 block truncate font-mono text-2xs text-fg-dim">
+              <span class="block text-sm text-fg-soft">{{ link.label }}</span>
+              <span class="mt-0.5 block truncate font-mono text-xs text-fg-dim">
                 {{ display(link.url) }}
               </span>
             </span>
@@ -105,9 +105,9 @@ function display(url: string): string {
       </div>
     </div>
 
-    <div class="mt-[30px]">
-      <h2 class="text-base font-medium text-fg-bright">Credits</h2>
-      <p class="mt-1.5 mb-4 text-xs text-fg-dim">
+    <div class="mt-7.5">
+      <h2 class="text-lg font-medium text-fg-bright">Credits</h2>
+      <p class="mt-1.5 mb-4 text-sm text-fg-dim">
         Libraries, data and files used to make {{ props.about.name }} work.
       </p>
 
@@ -115,13 +115,13 @@ function display(url: string): string {
         <li
           v-for="credit in props.about.credits"
           :key="credit.name"
-          class="rounded-[10px] border border-line bg-sunken px-3.5 py-3"
+          class="rounded-xl border border-line bg-sunken px-3.5 py-3"
         >
           <div class="flex items-center gap-2.5">
             <component :is="icon(credit.icon)" :size="15" class="shrink-0 text-fg-muted" />
-            <p class="min-w-0 truncate text-[13px] text-fg-soft">{{ credit.name }}</p>
+            <p class="min-w-0 truncate text-sm text-fg-soft">{{ credit.name }}</p>
           </div>
-          <p class="mt-2 text-2xs leading-[1.5] text-fg-dim text-pretty">{{ credit.role }}</p>
+          <p class="mt-2 text-xs leading-normal text-fg-dim text-pretty">{{ credit.role }}</p>
         </li>
       </ul>
     </div>

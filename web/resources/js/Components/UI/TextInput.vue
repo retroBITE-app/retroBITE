@@ -39,9 +39,9 @@ const emit = defineEmits<{ 'update:modelValue': [string] }>()
     :aria-invalid="invalid || undefined"
     :class="[
       bare
-        ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-[13.5px] text-fg placeholder-fg-faint'
+        ? 'min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-fg placeholder-fg-faint'
         : [
-            'w-full rounded-lg border bg-sunken px-3 py-2.5 text-[13px] text-fg placeholder-fg-faint',
+            'w-full rounded-lg border bg-sunken px-3 py-2.5 text-sm text-fg placeholder-fg-faint',
             invalid
               ? 'border-danger/70 focus:border-danger'
               : 'border-line-strong focus:border-accent-deep',

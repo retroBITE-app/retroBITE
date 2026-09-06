@@ -96,14 +96,14 @@ function text(value: unknown): string {
       <span
         v-else
         aria-hidden="true"
-        class="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line-input bg-[linear-gradient(155deg,var(--color-raised),var(--color-surface))] font-mono text-3xs text-accent-muted"
+        class="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line-input bg-[linear-gradient(155deg,var(--color-raised),var(--color-surface))] font-mono text-xs text-accent-muted"
       >
         {{ itemKey.slice(0, TILE_LENGTH).toUpperCase() }}
       </span>
 
       <div class="min-w-0 flex-1">
-        <p class="truncate text-sm text-fg-bright">{{ title }}</p>
-        <p class="mt-0.5 truncate font-mono text-2xs text-fg-dim">{{ subtitle }}</p>
+        <p class="truncate text-base text-fg-bright">{{ title }}</p>
+        <p class="mt-0.5 truncate font-mono text-xs text-fg-dim">{{ subtitle }}</p>
       </div>
 
       <button
@@ -118,14 +118,14 @@ function text(value: unknown): string {
 
     <div class="flex-1 px-4 pt-3.5 pb-4">
       <template v-for="field in filledListFields" :key="field">
-        <p class="mt-3 font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase first:mt-0">
+        <p class="mt-3 kicker text-fg-faint first:mt-0">
           {{ label(field) }}
         </p>
-        <div class="mt-2 flex flex-wrap gap-[5px]">
+        <div class="mt-2 flex flex-wrap gap-1.25">
           <span
             v-for="(chip, index) in chips(field)"
             :key="index"
-            class="rounded border border-line-strong bg-hover px-1.5 py-[3px] font-mono text-2xs text-fg-muted"
+            class="rounded border border-line-strong bg-hover px-1.5 py-0.75 font-mono text-xs text-fg-muted"
           >
             {{ chip }}
           </span>
@@ -134,10 +134,10 @@ function text(value: unknown): string {
 
       <dl v-if="detailFields.length" class="mt-3.5 space-y-1.5">
         <div v-for="field in detailFields" :key="field" class="flex items-baseline gap-3">
-          <dt class="font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">
+          <dt class="kicker text-fg-faint">
             {{ label(field) }}
           </dt>
-          <dd class="min-w-0 flex-1 truncate text-right font-mono text-2xs text-fg-muted">
+          <dd class="min-w-0 flex-1 truncate text-right font-mono text-xs text-fg-muted">
             {{ line(field) }}
           </dd>
         </div>
@@ -148,9 +148,7 @@ function text(value: unknown): string {
       v-if="overridden"
       class="flex items-center gap-2.5 border-t border-line bg-sunken px-4 py-2.5"
     >
-      <span
-        class="rounded border border-accent-tint/40 px-1.5 py-0.5 font-mono text-[9px] tracking-[0.12em] text-accent uppercase"
-      >
+      <span class="rounded border border-accent-tint/40 px-1.5 py-0.5 kicker text-accent">
         Overridden
       </span>
       <BaseButton

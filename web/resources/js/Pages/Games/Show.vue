@@ -130,25 +130,26 @@ function onClickOutside(event: MouseEvent): void {
 <template>
   <div class="pb-14">
     <!-- Hero: the backdrop runs to the edges and the detail block is pulled up
-         over its lower half, so the poster and title sit on the art. -->
+         over its lower half, so the poster and title sit on the art.
+         These two heights are load-bearing: the detail block below pulls up by
+         -mt-[190px] / lg:-mt-[450px], which is each of these minus the intended
+         overlap. Change one and change the other. -->
     <div class="relative h-[300px] lg:h-[560px]">
       <div
         v-if="game.backdrop_url"
         class="absolute inset-0 bg-cover bg-[position:50%_28%]"
         :style="{ backgroundImage: `url(${game.backdrop_url})` }"
       />
-      <div
-        class="absolute inset-0 bg-[linear-gradient(180deg,rgb(12_12_13/0.55)_0%,rgb(12_12_13/0.6)_45%,var(--color-ground)_100%)]"
-      />
+      <div class="absolute inset-0 hero-fade-y" />
       <div v-if="game.backdrop_url && scanlines" class="scanlines absolute inset-0" />
 
       <!-- pl-14 clears the floating hamburger, which sits at top-4 left-4. -->
       <div
-        class="absolute top-4 right-4 left-4 flex items-center gap-3.5 pl-14 lg:top-[22px] lg:right-[30px] lg:left-[30px] lg:pl-0"
+        class="absolute top-4 right-4 left-4 flex items-center gap-3.5 pl-14 lg:top-5.5 lg:inset-x-7.5 lg:pl-0"
       >
         <Link
           :href="route('console', { console: props.console })"
-          class="flex items-center gap-1.5 rounded-lg border border-line-input bg-scrim/60 px-2.75 py-1.5 text-[13px] text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          class="flex items-center gap-1.5 rounded-lg border border-line-input bg-scrim/60 px-2.75 py-1.5 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
         >
           <PhArrowLeft :size="14" />
           {{ meta.name }}
@@ -159,7 +160,7 @@ function onClickOutside(event: MouseEvent): void {
             type="button"
             :aria-expanded="actionsOpen"
             aria-haspopup="menu"
-            class="flex cursor-pointer items-center gap-1.75 rounded-lg border border-line-input bg-scrim/60 px-3 py-1.75 text-[13px] text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+            class="flex cursor-pointer items-center gap-1.75 rounded-lg border border-line-input bg-scrim/60 px-3 py-1.75 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
             @click="actionsOpen = !actionsOpen"
           >
             <PhDotsThree :size="14" />
@@ -170,14 +171,14 @@ function onClickOutside(event: MouseEvent): void {
           <div
             v-show="actionsOpen"
             role="menu"
-            class="absolute top-10 right-0 z-20 w-[214px] rounded-[10px] border border-line-input bg-surface p-1.25 shadow-2xl"
+            class="absolute top-10 right-0 z-20 w-[214px] rounded-xl border border-line-input bg-surface p-1.25 shadow-2xl"
           >
             <button
               v-for="action in ACTIONS"
               :key="action.kind"
               type="button"
               role="menuitem"
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-[13px] text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+              class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
               @click="openAction(action.kind)"
             >
               <component :is="action.icon" :size="15" class="text-fg-muted" />
@@ -193,7 +194,7 @@ function onClickOutside(event: MouseEvent): void {
             <button
               type="button"
               role="menuitem"
-              class="flex w-full cursor-pointer items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-[13px] text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+              class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
               @click="openAction('delete')"
             >
               <PhTrash :size="15" />
@@ -205,7 +206,7 @@ function onClickOutside(event: MouseEvent): void {
     </div>
 
     <div
-      class="relative -mt-[190px] grid items-start gap-[18px] px-4 lg:-mt-[450px] lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-[26px] lg:px-8"
+      class="relative -mt-[190px] grid items-start gap-4.5 px-4 lg:-mt-[450px] lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6.5 lg:px-8"
     >
       <!-- The cover keeps its own proportions: object-contain never crops, and
            the placeholder takes its shape from the console's config. -->
@@ -214,19 +215,19 @@ function onClickOutside(event: MouseEvent): void {
           v-if="game.cover_url"
           :src="game.cover_url"
           :alt="game.title ?? game.file_name"
-          class="h-auto w-full rounded-[10px] border border-line-input object-contain shadow-[0_18px_40px_rgb(0_0_0/0.55)]"
+          class="h-auto w-full rounded-xl border border-line-input object-contain shadow-lift"
         />
         <div
           v-else
           :style="{ aspectRatio: meta.cover_aspect ?? '5/7' }"
-          class="flex w-full items-center justify-center rounded-[10px] border border-line-input bg-sunken shadow-[0_18px_40px_rgb(0_0_0/0.55)]"
+          class="flex w-full items-center justify-center rounded-xl border border-line-input bg-sunken shadow-lift"
         >
           <img :src="meta.file_icon" :alt="meta.name" class="h-20 w-20 object-contain opacity-25" />
         </div>
       </div>
 
       <div class="min-w-0">
-        <p class="font-mono text-3xs tracking-[0.2em] text-accent uppercase">{{ kicker }}</p>
+        <p class="kicker text-accent">{{ kicker }}</p>
 
         <div class="mt-2 flex flex-wrap items-end gap-x-3.5 gap-y-1">
           <img
@@ -235,29 +236,29 @@ function onClickOutside(event: MouseEvent): void {
             :alt="game.title ?? game.file_name"
             class="h-auto w-28 shrink-0"
           />
-          <h1 class="text-2xl font-medium tracking-[-0.015em] text-fg-bright lg:text-[34px]">
+          <h1 class="text-2xl font-medium tracking-display text-fg-bright lg:text-[34px]">
             {{ game.title ?? game.file_name }}
           </h1>
         </div>
 
-        <p class="mt-1.5 font-mono text-xs break-all text-fg-soft">{{ game.file_name }}</p>
+        <p class="mt-1.5 font-mono text-sm break-all text-fg-soft">{{ game.file_name }}</p>
 
         <div class="mt-4 flex flex-wrap items-center gap-1.75">
-          <!-- 26.5px is exactly the badges' height beside it: a 16.5px line box,
-               their 8px of padding and 2px of border. Stated outright because no
-               spacing step lands on it. The width follows, since region flags
-               are not all one shape. -->
+          <!-- 26px is exactly the badges' height beside it: text-xs's 16px line
+               box, their 8px of padding and 2px of border. Stated outright
+               because no spacing step lands on it. The width follows, since
+               region flags are not all one shape. -->
           <img
             v-if="game.region_meta?.icon"
             :src="game.region_meta.icon"
             :alt="game.region_meta.name"
             :title="game.region_meta.name"
-            class="h-[26.5px] w-auto shrink-0 border-2 border-line-input"
+            class="h-6.5 w-auto shrink-0 border-2 border-line-input"
           />
           <span
             v-for="chip in chips"
             :key="chip"
-            class="rounded-[5px] border border-line-strong bg-surface px-2 py-1 font-mono text-2xs text-fg-muted"
+            class="rounded-md border border-line-strong bg-surface px-2 py-1 font-mono text-xs text-fg-muted"
           >
             {{ chip }}
           </span>
@@ -268,14 +269,14 @@ function onClickOutside(event: MouseEvent): void {
           class="mt-5 grid w-fit max-w-full grid-cols-[repeat(2,max-content)] gap-x-8.5 gap-y-2 lg:grid-cols-[repeat(4,max-content)]"
         >
           <div v-for="row in detailRows" :key="row.key">
-            <dt class="font-mono text-3xs tracking-[0.14em] text-fg-dim uppercase">
+            <dt class="kicker text-fg-dim">
               {{ row.key }}
             </dt>
-            <dd class="mt-1.25 text-[13px] text-fg-bright">{{ row.value }}</dd>
+            <dd class="mt-1.25 text-sm text-fg-bright">{{ row.value }}</dd>
           </div>
         </dl>
 
-        <p class="mt-5 max-w-[100ch] text-[13.5px] leading-[1.65] text-fg-muted text-pretty">
+        <p class="mt-5 max-w-[100ch] text-sm leading-relaxed text-fg-muted text-pretty">
           {{ game.description ?? 'No metadata yet — use Identify to fetch it.' }}
         </p>
       </div>
@@ -287,9 +288,9 @@ function onClickOutside(event: MouseEvent): void {
           class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-raised px-4.5 py-3.75"
         >
           <PhFileArchive :size="17" class="text-fg-muted" />
-          <h2 class="text-base font-medium text-fg-bright">File</h2>
+          <h2 class="text-lg font-medium text-fg-bright">File</h2>
           <!-- No copy control here: the Actions menu already offers Copy path. -->
-          <span class="ml-auto font-mono text-2xs break-all text-fg-dim">{{ libraryPath }}</span>
+          <span class="ml-auto font-mono text-xs break-all text-fg-dim">{{ libraryPath }}</span>
         </div>
 
         <dl class="grid grid-cols-2 border-b border-raised lg:grid-cols-4">
@@ -303,19 +304,19 @@ function onClickOutside(event: MouseEvent): void {
               'lg:border-r lg:last:border-r-0',
             ]"
           >
-            <dt class="font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">
+            <dt class="kicker text-fg-faint">
               {{ row.key }}
             </dt>
-            <dd class="mt-1.75 font-mono text-sm text-fg-bright">{{ row.value }}</dd>
+            <dd class="mt-1.75 font-mono text-base text-fg-bright">{{ row.value }}</dd>
           </div>
         </dl>
 
         <div class="px-4.5 py-3.5">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">MD5</span>
+            <span class="kicker text-fg-faint">MD5</span>
             <CopyButton v-if="game.file_md5" :text="game.file_md5" />
           </div>
-          <p class="mt-1.75 font-mono text-xs break-all text-fg-soft">
+          <p class="mt-1.75 font-mono text-sm break-all text-fg-soft">
             {{ game.file_md5 ?? 'Not hashed yet — scan the directory to compute it.' }}
           </p>
         </div>

@@ -67,8 +67,8 @@ function isLocked(value: string, locked: string[]): boolean {
         class="accent-accent-deep"
         @change="emit('update:modelValue', option.value)"
       />
-      <span :class="mono ? 'font-mono text-sm' : 'text-sm'">{{ option.label }}</span>
-      <span v-if="isLocked(option.value, lockedValues)" class="text-xs">{{ lockedNote }}</span>
+      <span :class="mono ? 'font-mono text-base' : 'text-base'">{{ option.label }}</span>
+      <span v-if="isLocked(option.value, lockedValues)" class="text-sm">{{ lockedNote }}</span>
     </label>
   </div>
 </template>

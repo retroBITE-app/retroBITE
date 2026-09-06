@@ -27,13 +27,13 @@ const identifiedPercent = computed(() =>
         class="h-11 w-11 shrink-0 object-contain"
       />
       <div class="min-w-0">
-        <p class="truncate text-[15px] text-fg-bright">{{ props.console.name }}</p>
-        <p class="mt-0.5 truncate font-mono text-2xs text-fg-dim">{{ props.console.path }}</p>
+        <p class="truncate text-base text-fg-bright">{{ props.console.name }}</p>
+        <p class="mt-0.5 truncate font-mono text-xs text-fg-dim">{{ props.console.path }}</p>
       </div>
     </div>
 
     <div class="px-4 pb-3.5">
-      <div class="flex justify-between font-mono text-3xs tracking-[0.1em] text-fg-faint uppercase">
+      <div class="flex justify-between kicker text-fg-faint">
         <span>Identified</span>
         <span>{{ identifiedPercent === null ? '—' : `${identifiedPercent}%` }}</span>
       </div>
@@ -48,7 +48,7 @@ const identifiedPercent = computed(() =>
     </div>
 
     <div
-      class="mt-auto flex items-center gap-3.5 border-t border-line bg-sunken px-4 py-2.5 font-mono text-2xs text-fg-dim"
+      class="mt-auto flex items-center gap-3.5 border-t border-line bg-sunken px-4 py-2.5 font-mono text-xs text-fg-dim"
     >
       <span
         >{{ props.console.game_count }}

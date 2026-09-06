@@ -276,25 +276,23 @@ function onCoverLoad(event: Event): void {
     <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
       <Link
         :href="route('consoles')"
-        class="flex items-center gap-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+        class="flex items-center gap-1.5 text-sm text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
       >
         <PhArrowLeft :size="15" />
         Consoles
       </Link>
 
-      <span aria-hidden="true" class="h-[22px] w-px bg-line-strong" />
+      <span aria-hidden="true" class="h-5.5 w-px bg-line-strong" />
 
       <img :src="meta.icon" :alt="meta.name" class="h-8.5 w-8.5 shrink-0 object-contain" />
       <h1 class="text-[21px] font-medium text-fg-bright">{{ meta.name }}</h1>
-      <p class="font-mono text-2xs text-fg-faint">
-        {{ meta.path }} · {{ formatSize(listedBytes) }}
-      </p>
+      <p class="font-mono text-xs text-fg-faint">{{ meta.path }} · {{ formatSize(listedBytes) }}</p>
 
       <div class="ml-auto flex flex-wrap items-center gap-2">
         <!-- The toolbar's own field shape: no visible label, so IconField (which
              always renders one) does not fit. -->
         <div
-          class="flex w-[230px] items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.75 py-1.75 transition-colors focus-within:border-accent-deep"
+          class="flex w-[262px] items-center gap-2 rounded-lg border border-line-strong bg-surface px-2.75 py-1.75 transition-colors focus-within:border-accent-deep"
         >
           <PhMagnifyingGlass :size="14" class="shrink-0 text-fg-faint" />
           <TextInput
@@ -340,18 +338,18 @@ function onCoverLoad(event: Event): void {
           :class="
             isActive(pill.value) ? 'bg-line-strong text-fg-bright' : 'text-fg-muted hover:text-fg'
           "
-          class="cursor-pointer rounded-[7px] px-2.75 py-1.25 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          class="cursor-pointer rounded-lg px-2.75 py-1.25 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
           @click="onPillClick(pill.value, $event)"
         >
           {{ pill.label }}
-          <span class="ml-1.5 font-mono text-2xs opacity-80">{{ pill.count }}</span>
+          <span class="ml-1.5 font-mono text-xs opacity-80">{{ pill.count }}</span>
         </button>
       </div>
 
       <div class="ml-auto flex items-center gap-3.5">
         <span
           v-if="hashing"
-          class="flex items-center gap-2 font-mono text-2xs text-accent uppercase"
+          class="flex items-center gap-2 font-mono text-xs text-accent uppercase"
         >
           <span
             class="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-line-bright border-t-accent"
@@ -359,13 +357,13 @@ function onCoverLoad(event: Event): void {
           />
           Hashing · {{ pending }} left
         </span>
-        <span v-if="unidentifiedCount" class="font-mono text-2xs text-fg-faint uppercase">
+        <span v-if="unidentifiedCount" class="font-mono text-xs text-fg-faint uppercase">
           {{ unidentifiedCount }} unidentified
         </span>
         <button
           v-if="canDeleteFolder"
           type="button"
-          class="cursor-pointer rounded-[7px] px-2.5 py-1 text-xs text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          class="cursor-pointer rounded-lg px-2.5 py-1 text-sm text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
           @click="openDelete"
         >
           Delete folder
@@ -391,7 +389,7 @@ function onCoverLoad(event: Event): void {
                SNES box is wide and flat where a PS2 case is tall. -->
           <div
             :style="game.cover_url ? { height: coverHeight } : placeholderStyle"
-            class="relative flex w-fit items-center justify-center overflow-hidden rounded-[10px] border border-line-strong bg-sunken transition-colors group-hover:border-accent-tint/50"
+            class="relative flex w-fit items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken transition-colors group-hover:border-accent-tint/50"
           >
             <img
               v-if="game.cover_url"
@@ -409,17 +407,12 @@ function onCoverLoad(event: Event): void {
                 :alt="meta.name"
                 class="h-14 w-14 object-contain opacity-25"
               />
-              <span
-                v-if="!game.is_bios"
-                class="font-mono text-3xs tracking-[0.08em] text-fg-faint uppercase"
-              >
-                Unidentified
-              </span>
+              <span v-if="!game.is_bios" class="kicker text-fg-faint"> Unidentified </span>
             </div>
 
             <span
               v-if="game.is_bios"
-              class="absolute top-2 right-2 rounded-[5px] border border-line-input bg-scrim/80 px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
+              class="absolute top-2 right-2 rounded-md border border-line-input bg-scrim/80 px-1.5 py-0.5 font-mono text-xs text-fg-muted"
             >
               BIOS
             </span>
@@ -428,7 +421,7 @@ function onCoverLoad(event: Event): void {
           <div class="w-full min-w-0 px-0.5">
             <p
               :title="game.title ?? game.file_name"
-              class="truncate text-[13px] text-fg transition-colors group-hover:text-fg-bright"
+              class="truncate text-sm text-fg transition-colors group-hover:text-fg-bright"
             >
               {{ game.title ?? game.file_name }}
             </p>
@@ -440,7 +433,7 @@ function onCoverLoad(event: Event): void {
                 :title="game.region_meta.name"
                 class="w-6 shrink-0 border border-line-input"
               />
-              <span class="font-mono text-2xs text-fg-dim">{{ formatSize(game.file_size) }}</span>
+              <span class="font-mono text-xs text-fg-dim">{{ formatSize(game.file_size) }}</span>
             </div>
           </div>
         </Link>

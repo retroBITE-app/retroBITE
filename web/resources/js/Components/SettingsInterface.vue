@@ -55,13 +55,13 @@ async function apply(value: boolean): Promise<void> {
 
 <template>
   <div class="max-w-[900px] md:grid md:grid-cols-2 md:gap-3.5">
-    <div class="rounded-xl border border-line bg-sunken px-[18px] py-4">
+    <div class="rounded-xl border border-line bg-sunken px-4.5 py-4">
       <div class="flex items-center gap-2.5">
         <PhMonitorPlay :size="17" class="text-accent" />
-        <p class="flex-1 text-sm text-fg-bright">{{ props.group.label }}</p>
+        <p class="flex-1 text-base text-fg-bright">{{ props.group.label }}</p>
       </div>
 
-      <p class="mt-2.5 text-xs leading-relaxed text-fg-dim">
+      <p class="mt-2.5 text-sm leading-relaxed text-fg-dim">
         Applies to every artwork backdrop in the app.
       </p>
 
@@ -73,8 +73,8 @@ async function apply(value: boolean): Promise<void> {
           @update:model-value="apply"
         />
         <div class="flex-1">
-          <p class="text-[13px] text-fg-soft">{{ label }}</p>
-          <p class="mt-0.5 text-2xs text-fg-faint">
+          <p class="text-sm text-fg-soft">{{ label }}</p>
+          <p class="mt-0.5 text-xs text-fg-faint">
             Fine horizontal lines over key art and hero images
           </p>
         </div>

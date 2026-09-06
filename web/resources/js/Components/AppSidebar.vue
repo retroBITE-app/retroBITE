@@ -173,7 +173,7 @@ function isActive(href: string): boolean {
   <aside
     id="app-sidebar"
     :inert="!isColumn && !open"
-    class="fixed inset-y-0 left-0 z-40 flex w-[272px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-line bg-sunken transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:bottom-auto lg:z-30 lg:h-screen lg:w-[244px] lg:translate-x-0"
+    class="fixed inset-y-0 left-0 z-40 flex w-[292px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-line bg-sunken transition-transform duration-200 motion-reduce:transition-none lg:sticky lg:bottom-auto lg:z-30 lg:h-screen lg:w-[268px] lg:translate-x-0"
     :class="open ? 'translate-x-0' : '-translate-x-full'"
   >
     <div class="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
@@ -197,10 +197,10 @@ function isActive(href: string): boolean {
         v-for="item in NAV"
         :key="item.href"
         :href="item.href"
-        class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+        class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
         :class="
           isActive(item.href)
-            ? 'bg-accent-tint/13 text-accent shadow-[inset_2px_0_0_var(--color-accent-deep)]'
+            ? 'bg-accent-tint/13 text-accent shadow-rail'
             : 'text-fg-cool hover:bg-hover hover:text-fg'
         "
         :aria-current="isActive(item.href) ? 'page' : undefined"
@@ -211,17 +211,15 @@ function isActive(href: string): boolean {
     </nav>
 
     <template v-if="consoles.length">
-      <p class="px-5 pt-5 pb-2 font-mono text-3xs tracking-[0.18em] text-fg-faint uppercase">
-        Installed
-      </p>
+      <p class="px-5 pt-5 pb-2 kicker text-fg-faint">Installed</p>
       <ul class="flex shrink-0 flex-col gap-px px-2.5">
         <li v-for="console in consoles" :key="console.key">
           <Link
             :href="route('console', { console: console.key })"
-            class="flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+            class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
             :class="
               activeConsole === console.key
-                ? 'bg-accent-tint/13 text-accent shadow-[inset_2px_0_0_var(--color-accent-deep)]'
+                ? 'bg-accent-tint/13 text-accent shadow-rail'
                 : 'text-fg-cool hover:bg-hover hover:text-fg'
             "
             :aria-current="activeConsole === console.key ? 'page' : undefined"
@@ -229,11 +227,11 @@ function isActive(href: string): boolean {
             <img
               :src="console.icon"
               :alt="console.name"
-              class="h-[22px] w-[26px] shrink-0 object-contain"
+              class="h-5.5 w-6.5 shrink-0 object-contain"
             />
-            <span class="flex-1 truncate text-[13px]">{{ console.name }}</span>
+            <span class="flex-1 truncate text-sm">{{ console.name }}</span>
             <span
-              class="font-mono text-2xs"
+              class="font-mono text-xs"
               :class="activeConsole === console.key ? 'text-accent-muted' : 'text-fg-faint'"
             >
               {{ console.game_count }}
@@ -245,9 +243,7 @@ function isActive(href: string): boolean {
 
     <div class="mt-auto shrink-0 border-t border-line px-5 pt-4 pb-4.5">
       <template v-if="storage">
-        <div
-          class="flex justify-between font-mono text-3xs tracking-[0.08em] text-fg-muted uppercase"
-        >
+        <div class="flex justify-between kicker text-fg-muted">
           <span>Storage</span>
           <span>{{ storage.total ? `${storage.used} / ${storage.total}` : storage.used }}</span>
         </div>
@@ -267,12 +263,12 @@ function isActive(href: string): boolean {
       <div class="flex items-center gap-2.5">
         <span
           aria-hidden="true"
-          class="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md border border-line-input bg-raised font-mono text-2xs text-fg-muted"
+          class="grid h-6.5 w-6.5 shrink-0 place-items-center rounded-md border border-line-input bg-raised font-mono text-xs text-fg-muted"
         >
           {{ initials }}
         </span>
         <div class="min-w-0 flex-1 leading-tight">
-          <p class="truncate text-xs text-fg-soft">{{ authUser }}</p>
+          <p class="truncate text-sm text-fg-soft">{{ authUser }}</p>
           <AppBrand class="text-fg-faint" />
         </div>
         <button

@@ -77,25 +77,25 @@ async function resetItem(key: string): Promise<void> {
   <div>
     <PageHeader kicker="Global">
       <template #title>
-        <h1 class="text-[26px] font-medium tracking-[-0.01em] text-fg-bright">Settings</h1>
+        <h1 class="text-display font-medium tracking-display text-fg-bright">Settings</h1>
       </template>
     </PageHeader>
 
-    <div class="mb-6 flex gap-[22px] overflow-x-auto border-b border-raised">
+    <div class="mb-6 flex gap-5.5 overflow-x-auto border-b border-raised">
       <button
         v-for="tab in tabs"
         :key="tab.slug"
         type="button"
         :class="
           activeSlug === tab.slug
-            ? 'text-fg-bright shadow-[inset_0_-2px_0_var(--color-accent)]'
+            ? 'text-fg-bright shadow-underline'
             : 'text-fg-muted hover:text-fg-soft'
         "
-        class="shrink-0 cursor-pointer pb-[11px] text-[13.5px] whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+        class="shrink-0 cursor-pointer pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
         @click="activeSlug = tab.slug"
       >
         {{ tab.label }}
-        <span v-if="tab.count" class="ml-1.5 font-mono text-2xs opacity-75">{{ tab.count }}</span>
+        <span v-if="tab.count" class="ml-1.5 font-mono text-xs opacity-75">{{ tab.count }}</span>
       </button>
     </div>
 

@@ -188,7 +188,7 @@ async function submit(): Promise<void> {
           <button
             type="button"
             :disabled="save.busy.value"
-            class="flex cursor-pointer items-center gap-1 text-xs text-accent transition-colors hover:text-accent-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
+            class="flex cursor-pointer items-center gap-1 text-sm text-accent transition-colors hover:text-accent-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
             @click="addListItem(field.key)"
           >
             <PhPlus :size="12" />

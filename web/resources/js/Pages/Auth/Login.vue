@@ -83,13 +83,13 @@ function submit(): void {
       <div class="flex w-full max-w-[372px] flex-col">
         <img src="/images/logo.webp" alt="retroBITE" class="mx-auto block h-auto w-[148px]" />
 
-        <p class="mt-9 text-center text-3xs tracking-[0.2em] text-fg-faint uppercase">Sign in</p>
+        <p class="mt-9 text-center kicker-sans text-fg-faint uppercase">Sign in</p>
         <h1
-          class="mt-2 text-center text-[25px] leading-tight font-medium tracking-[-0.01em] text-fg"
+          class="mt-2 text-center text-display leading-tight font-medium tracking-display text-fg"
         >
           Welcome back
         </h1>
-        <p class="mt-2 text-center text-[13.5px] leading-relaxed text-fg-dim">
+        <p class="mt-2 text-center text-sm leading-relaxed text-fg-dim">
           Your library, achievements and console files are waiting.
         </p>
 
@@ -98,7 +98,7 @@ function submit(): void {
           <p
             v-if="props.error"
             role="alert"
-            class="rounded-[9px] border border-danger/40 bg-danger/10 px-4 py-3 text-[13px] text-danger"
+            class="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
           >
             {{ props.error }}
           </p>
@@ -140,7 +140,7 @@ function submit(): void {
           <button
             type="submit"
             :disabled="form.processing"
-            class="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-[9px] border border-accent-tint/55 bg-accent-tint/10 px-4 py-3 text-sm text-accent transition-colors hover:bg-accent-tint/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
+            class="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-accent-tint/55 bg-accent-tint/10 px-4 py-3 text-base text-accent transition-colors hover:bg-accent-tint/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
           >
             <PhSignIn :size="16" />
             {{ form.processing ? 'Signing in…' : 'Sign in' }}
@@ -155,11 +155,11 @@ function submit(): void {
       form instead of sitting on top of it.
     -->
     <div v-if="props.stats?.length" class="relative z-10 mt-12 shrink-0 text-center">
-      <p class="text-3xs tracking-[0.2em] text-fg-dim uppercase">On this host</p>
+      <p class="kicker-sans text-fg-dim uppercase">On this host</p>
       <dl class="mt-3 flex flex-wrap justify-center gap-x-9 gap-y-3">
         <div v-for="stat in props.stats" :key="stat.label">
-          <dd class="font-mono text-lg text-fg">{{ stat.value }}</dd>
-          <dt class="mt-0.5 text-2xs text-fg-muted">{{ stat.label }}</dt>
+          <dd class="font-mono text-xl text-fg">{{ stat.value }}</dd>
+          <dt class="mt-0.5 text-xs text-fg-muted">{{ stat.label }}</dt>
         </div>
       </dl>
     </div>

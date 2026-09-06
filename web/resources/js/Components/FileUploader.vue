@@ -281,22 +281,22 @@ function readError(xhr: XMLHttpRequest): string {
           @drop="onDrop"
           @click="fileInput?.click()"
         >
-          <p class="text-[13px] text-fg-soft">
+          <p class="text-sm text-fg-soft">
             {{
               selectedFiles.length ? 'Drop more files or click to add' : 'Drag & drop files here'
             }}
           </p>
-          <p v-if="!selectedFiles.length" class="mt-1 text-xs text-fg-faint">or click to browse</p>
+          <p v-if="!selectedFiles.length" class="mt-1 text-sm text-fg-faint">or click to browse</p>
         </div>
 
         <input ref="fileInput" type="file" multiple class="hidden" @change="onFileInput" />
 
         <div class="mt-3 flex flex-wrap items-center gap-1.5">
-          <span class="text-xs text-fg-dim">Accepted:</span>
+          <span class="text-sm text-fg-dim">Accepted:</span>
           <span
             v-for="extension in acceptedExtensions"
             :key="extension"
-            class="rounded border border-line-strong bg-hover px-1.5 py-0.5 font-mono text-2xs text-fg-muted"
+            class="rounded border border-line-strong bg-hover px-1.5 py-0.5 font-mono text-xs text-fg-muted"
           >
             .{{ extension }}
           </span>
@@ -305,16 +305,16 @@ function readError(xhr: XMLHttpRequest): string {
 
       <div v-if="selectedFiles.length">
         <div class="mb-2 flex items-center justify-between">
-          <p class="text-xs text-fg-muted">
+          <p class="text-sm text-fg-muted">
             {{ selectedFiles.length }} file{{ selectedFiles.length > 1 ? 's' : '' }}
-            <span class="ml-1 font-mono text-2xs text-fg-faint"
+            <span class="ml-1 font-mono text-xs text-fg-faint"
               >{{ formatSize(totalSize) }} total</span
             >
           </p>
           <button
             type="button"
             :disabled="uploading"
-            class="cursor-pointer text-xs text-fg-faint transition-colors hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
+            class="cursor-pointer text-sm text-fg-faint transition-colors hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
             @click="selectedFiles = []"
           >
             Clear all
@@ -327,14 +327,14 @@ function readError(xhr: XMLHttpRequest): string {
             :key="file.name + file.size"
             class="flex items-center justify-between rounded-md border border-line-strong bg-surface px-3 py-2"
           >
-            <span class="mr-2 min-w-0 truncate text-[13px] text-fg-soft">{{ file.name }}</span>
+            <span class="mr-2 min-w-0 truncate text-sm text-fg-soft">{{ file.name }}</span>
             <div class="flex shrink-0 items-center gap-2">
-              <span class="font-mono text-2xs text-fg-dim">{{ formatSize(file.size) }}</span>
+              <span class="font-mono text-xs text-fg-dim">{{ formatSize(file.size) }}</span>
               <button
                 type="button"
                 aria-label="Remove file"
                 :disabled="uploading"
-                class="cursor-pointer text-xs leading-none text-fg-faint transition-colors hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
+                class="cursor-pointer leading-none text-fg-faint transition-colors hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
                 @click="removeFile(index)"
               >
                 <PhX :size="12" />
@@ -345,7 +345,7 @@ function readError(xhr: XMLHttpRequest): string {
       </div>
 
       <div v-if="uploadDirs.length > 1">
-        <p class="mb-2 font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">Upload to</p>
+        <p class="mb-2 kicker text-fg-faint">Upload to</p>
         <OptionList
           v-model="selectedDir"
           :options="uploadDirs"
@@ -355,7 +355,7 @@ function readError(xhr: XMLHttpRequest): string {
       </div>
 
       <div v-if="uploading" class="space-y-1.5">
-        <div class="flex justify-between font-mono text-2xs text-fg-muted">
+        <div class="flex justify-between font-mono text-xs text-fg-muted">
           <span class="mr-2 truncate">{{ statusText }}</span>
           <span class="shrink-0">{{ progress }}%</span>
         </div>

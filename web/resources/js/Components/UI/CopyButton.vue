@@ -18,10 +18,10 @@ const props = withDefaults(
 const copied = ref(false)
 
 const VARIANTS = {
-  plain: 'rounded px-2 py-1 text-xs text-fg-faint hover:bg-hover hover:text-fg-soft',
+  plain: 'rounded px-2 py-1 text-sm text-fg-faint hover:bg-hover hover:text-fg-soft',
   outline:
-    'rounded-lg border border-line-input px-3.5 py-2 text-[13px] text-fg-soft hover:border-line-bright hover:text-fg',
-  menu: 'flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-[13px] text-fg-soft hover:bg-raised',
+    'rounded-lg border border-line-input px-3.5 py-2 text-sm text-fg-soft hover:border-line-bright hover:text-fg',
+  menu: 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft hover:bg-raised',
 } as const
 
 /**

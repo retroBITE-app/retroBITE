@@ -68,12 +68,12 @@ function failureLines(): string[] {
     <EmptyState v-if="consoles.length === 0" message="Every console is already installed." />
 
     <div v-else class="space-y-4">
-      <p class="text-xs leading-relaxed text-fg-dim">
+      <p class="text-sm leading-relaxed text-fg-dim">
         Folders are created under the games path. Subfolders can be added later from the console
         page.
       </p>
 
-      <div class="max-h-[300px] space-y-1 overflow-y-auto pr-1">
+      <div class="max-h-75 space-y-1 overflow-y-auto pr-1">
         <label
           v-for="entry in consoles"
           :key="entry.key"
@@ -102,8 +102,8 @@ function failureLines(): string[] {
           >
             <PhCheck v-if="picked.has(entry.key)" :size="11" weight="bold" />
           </span>
-          <span class="flex-1 text-[13.5px]">{{ entry.name }}</span>
-          <span class="font-mono text-2xs text-fg-faint">{{ entry.key }}/</span>
+          <span class="flex-1 text-sm">{{ entry.name }}</span>
+          <span class="font-mono text-xs text-fg-faint">{{ entry.key }}/</span>
         </label>
       </div>
 
@@ -116,7 +116,7 @@ function failureLines(): string[] {
     </div>
 
     <template #footer>
-      <p v-if="consoles.length > 0" class="mr-auto font-mono text-2xs text-fg-faint">
+      <p v-if="consoles.length > 0" class="mr-auto font-mono text-xs text-fg-faint">
         {{ picked.count.value }} selected
       </p>
       <BaseButton variant="ghost" :disabled="install.busy.value" @click="modal.hide">

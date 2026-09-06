@@ -25,34 +25,34 @@ defineProps<{
 </script>
 
 <template>
-  <div class="flex flex-col overflow-hidden rounded-[10px] border border-line bg-sunken">
+  <div class="flex flex-col overflow-hidden rounded-xl border border-line bg-sunken">
     <div class="flex items-center justify-between border-b border-line/70 px-3.5 py-3">
-      <h3 class="text-[13px] text-fg-bright">{{ label }}</h3>
+      <h3 class="text-sm text-fg-bright">{{ label }}</h3>
       <StatusDot :online="online" :label="label" />
     </div>
 
     <div class="space-y-4 px-3.5 py-3.5">
-      <dl class="grid grid-cols-2 gap-4 text-xs">
+      <dl class="grid grid-cols-2 gap-4 text-sm">
         <div>
           <dt class="text-fg-faint">Host</dt>
-          <dd class="mt-0.5 font-mono text-[13px] text-fg-soft">{{ hostIp }}</dd>
+          <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ hostIp }}</dd>
         </div>
         <div>
           <dt class="text-fg-faint">Ports</dt>
-          <dd class="mt-0.5 font-mono text-[13px] text-fg-soft">{{ ports }}</dd>
+          <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ ports }}</dd>
         </div>
         <div>
           <dt class="text-fg-faint">Credentials</dt>
-          <dd class="mt-0.5 font-mono text-[13px] text-fg-soft">{{ username }} / ******</dd>
+          <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ username }} / ******</dd>
         </div>
         <div v-if="note">
           <dt class="text-fg-faint">Notes</dt>
-          <dd class="mt-0.5 text-[13px] text-fg-soft">{{ note }}</dd>
+          <dd class="mt-0.5 text-sm text-fg-soft">{{ note }}</dd>
         </div>
       </dl>
 
       <div>
-        <p class="mb-2 font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">Shares</p>
+        <p class="mb-2 kicker text-fg-faint">Shares</p>
 
         <EmptyState v-if="shares.length === 0" message="No consoles installed yet." />
 
@@ -70,8 +70,8 @@ defineProps<{
             />
             <PhFolder v-else :size="15" class="shrink-0 text-fg-faint" aria-hidden="true" />
 
-            <span class="min-w-0 flex-1 truncate text-[13px] text-fg-soft">{{ share.name }}</span>
-            <span class="shrink-0 font-mono text-2xs text-fg-dim">{{
+            <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ share.name }}</span>
+            <span class="min-w-0 shrink truncate font-mono text-xs text-fg-dim">{{
               connection(share.folder)
             }}</span>
 

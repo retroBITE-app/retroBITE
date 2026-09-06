@@ -74,7 +74,7 @@ async function submit(): Promise<void> {
     @close="modal.hide"
   >
     <div class="space-y-4">
-      <p class="text-xs text-fg-dim">
+      <p class="text-sm text-fg-dim">
         Create one or more folders under <span class="font-mono text-fg-soft">{{ folder }}/</span>.
         Use <span class="font-mono">nested/path</span> for sub-subfolders.
       </p>
@@ -86,7 +86,7 @@ async function submit(): Promise<void> {
             :class="isInvalid(row) ? 'border-danger/70' : 'border-line-strong'"
           >
             <span
-              class="shrink-0 border-r border-line-strong bg-hover px-3 py-2 font-mono text-[13px] text-fg-dim"
+              class="shrink-0 border-r border-line-strong bg-hover px-3 py-2 font-mono text-sm text-fg-dim"
             >
               {{ folder }}/
             </span>
@@ -95,7 +95,7 @@ async function submit(): Promise<void> {
               type="text"
               placeholder="folder-name"
               :disabled="create.busy.value"
-              class="flex-1 bg-sunken px-3 py-2 font-mono text-[13px] text-fg placeholder-fg-faint outline-none disabled:opacity-50"
+              class="flex-1 bg-sunken px-3 py-2 font-mono text-sm text-fg placeholder-fg-faint outline-none disabled:opacity-50"
               @input="list.update(index, ($event.target as HTMLInputElement).value)"
             />
           </div>
@@ -115,7 +115,7 @@ async function submit(): Promise<void> {
       <button
         type="button"
         :disabled="create.busy.value"
-        class="flex cursor-pointer items-center gap-1 text-xs text-accent transition-colors hover:text-accent-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
+        class="flex cursor-pointer items-center gap-1 text-sm text-accent transition-colors hover:text-accent-light focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep disabled:opacity-40"
         @click="list.add"
       >
         <PhPlus :size="12" />

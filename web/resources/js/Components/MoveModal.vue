@@ -63,12 +63,12 @@ async function submit(): Promise<void> {
     <div class="space-y-4">
       <!-- Read from the prop, never looked up in `folders` — a nested current
            folder must still display correctly. -->
-      <p class="text-[13px] text-fg-muted">
+      <p class="text-sm text-fg-muted">
         Currently in <span class="font-mono text-fg-soft">{{ folderLabel }}</span>
       </p>
 
       <div>
-        <p class="mb-2 font-mono text-3xs tracking-[0.14em] text-fg-faint uppercase">Move to</p>
+        <p class="mb-2 kicker text-fg-faint">Move to</p>
         <OptionList
           v-model="selected"
           :options="folders"

@@ -37,21 +37,17 @@ const href = computed(() =>
     />
 
     <!-- Reads left-to-right, so the text side is darkened hardest. -->
-    <div
-      class="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(10_10_11/0.94)_0%,rgb(10_10_11/0.72)_46%,rgb(10_10_11/0.15)_100%)]"
-    />
+    <div class="pointer-events-none absolute inset-0 hero-fade-x" />
     <div v-if="scanlines" class="scanlines absolute inset-0" />
 
     <div class="relative mt-auto w-full p-6">
-      <p class="font-mono text-3xs tracking-[0.2em] text-accent uppercase">
-        Recently added · {{ props.game.console_name }}
-      </p>
+      <p class="kicker text-accent">Recently added · {{ props.game.console_name }}</p>
 
-      <h2 class="mt-2 truncate text-[28px] font-medium tracking-[-0.01em] text-fg-bright">
+      <h2 class="mt-2 truncate text-[28px] font-medium tracking-display text-fg-bright">
         {{ props.game.title ?? props.game.file_name }}
       </h2>
 
-      <p class="mt-1 truncate font-mono text-xs text-fg-muted">
+      <p class="mt-1 truncate font-mono text-sm text-fg-muted">
         {{ libraryPath }} · {{ formatSize(props.game.file_size) }} ·
         {{ formatRelative(props.game.first_seen_at) }}
       </p>
@@ -59,7 +55,7 @@ const href = computed(() =>
       <div class="mt-4">
         <Link
           :href="href"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-accent-tint/60 px-3.5 py-2 text-[13px] text-accent transition-colors hover:bg-accent-tint/14 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-accent-tint/60 px-3.5 py-2 text-sm text-accent transition-colors hover:bg-accent-tint/14 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
         >
           View details
           <PhArrowRight :size="13" />

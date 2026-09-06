@@ -22,8 +22,8 @@ const TONES = {
 } as const
 
 const SIZES = {
-  sm: 'px-3 py-2 text-xs',
-  md: 'px-4 py-3 text-[13px]',
+  sm: 'px-3 py-2 text-sm',
+  md: 'px-4 py-3 text-sm',
 } as const
 </script>
 

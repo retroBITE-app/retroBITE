@@ -6,9 +6,9 @@ defineProps<{ kicker?: string }>()
 </script>
 
 <template>
-  <div class="mb-6 flex items-center justify-between gap-4">
+  <div class="flex items-center justify-between gap-4">
     <div class="min-w-0">
-      <p v-if="kicker" class="mb-1.5 font-mono text-3xs tracking-[0.2em] text-fg-faint uppercase">
+      <p v-if="kicker" class="mb-1.5 kicker text-fg-faint">
         {{ kicker }}
       </p>
       <slot name="title" />

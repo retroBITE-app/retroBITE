@@ -24,7 +24,7 @@ const kicker = computed(() => {
   <div>
     <PageHeader :kicker="kicker">
       <template #title>
-        <h1 class="text-[26px] font-medium tracking-[-0.01em] text-fg-bright">Consoles</h1>
+        <h1 class="text-display font-medium tracking-display text-fg-bright">Consoles</h1>
       </template>
       <template #actions>
         <SetupDirectories :consoles="available" @done="router.reload()" />

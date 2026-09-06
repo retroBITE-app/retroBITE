@@ -14,7 +14,7 @@ const identity = computed(() => page.props.app)
 </script>
 
 <template>
-  <p class="text-xs">
+  <p class="text-sm">
     <a
       :href="identity.repo_url"
       target="_blank"

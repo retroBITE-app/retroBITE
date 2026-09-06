@@ -49,12 +49,12 @@ function dismiss(busy: boolean): void {
       >
         <div
           v-if="title || $slots.header"
-          class="flex items-start justify-between gap-4 border-b border-line px-[18px] py-4"
+          class="flex items-start justify-between gap-4 border-b border-line px-4.5 py-4"
         >
           <slot name="header">
             <div class="min-w-0">
-              <h2 class="text-base font-medium text-fg-bright">{{ title }}</h2>
-              <p v-if="subtitle" class="mt-0.5 truncate font-mono text-2xs text-fg-faint">
+              <h2 class="text-lg font-medium text-fg-bright">{{ title }}</h2>
+              <p v-if="subtitle" class="mt-0.5 truncate font-mono text-xs text-fg-faint">
                 {{ subtitle }}
               </p>
             </div>
@@ -71,13 +71,13 @@ function dismiss(busy: boolean): void {
           </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto px-[18px] py-5">
+        <div class="flex-1 overflow-y-auto px-4.5 py-5">
           <slot />
         </div>
 
         <div
           v-if="$slots.footer"
-          class="flex items-center justify-end gap-2 border-t border-line bg-sunken px-[18px] py-3.5"
+          class="flex items-center justify-end gap-2 border-t border-line bg-sunken px-4.5 py-3.5"
         >
           <slot name="footer" />
         </div>

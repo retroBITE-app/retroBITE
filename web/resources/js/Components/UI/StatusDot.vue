@@ -19,13 +19,13 @@ defineProps<{
     />
     <span
       v-else-if="online"
-      class="h-2 w-2 shrink-0 rounded-full bg-accent shadow-[0_0_6px_var(--color-accent-deep)]"
+      class="h-2 w-2 shrink-0 rounded-full bg-accent shadow-glow"
       aria-hidden="true"
     />
     <span v-else class="h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
 
     <span
-      class="text-xs"
+      class="text-sm"
       :class="online === null ? 'text-fg-faint' : online ? 'text-accent' : 'text-danger'"
     >
       {{ online === null ? 'Checking…' : online ? label + ' online' : label + ' offline' }}
