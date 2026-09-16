@@ -1,25 +1,38 @@
 #!/bin/sh
 set -e
 
-# Match www-data UID/GID to host user so bind-mounted files just work
-HOST_UID=$(stat -c '%u' /games 2>/dev/null || echo "0")
-HOST_GID=$(stat -c '%g' /games 2>/dev/null || echo "0")
-if [ "$HOST_UID" != "0" ]; then
-    deluser www-data 2>/dev/null || true
-    addgroup -g "$HOST_GID" -S www-data 2>/dev/null || true
-    adduser -u "$HOST_UID" -G www-data -S -D -H www-data 2>/dev/null || true
-fi
-addgroup www-data users 2>/dev/null || true
+GAMES_DIR=/app/storage/app/games
 
-# Ensure storage subdirs exist
-mkdir -p /app/web/storage/games /app/web/storage/tmp
+# Ensure storage subdirs exist. The framework dirs are in .dockerignore, so the
+# image ships the tree empty — Laravel does not create them itself and throws on
+# the first request that writes a view cache or a session.
+mkdir -p "$GAMES_DIR" \
+         /app/storage/framework/cache/data \
+         /app/storage/framework/sessions \
+         /app/storage/framework/views \
+         /app/storage/logs
 
-# Bring the schema up to date before serving any request. Runs as root, so the
-# chown below has to follow it — the migration creates the SQLite file.
-php /app/web/console migrate
+# Sets WEB_USER / WEB_GROUP from the owner of the bind-mounted games dir.
+. /usr/local/bin/user-setup.sh "$GAMES_DIR"
 
-# Ensure PHP-FPM (www-data) can write to storage, database, and games dirs
-chown -R www-data:www-data /app/web/storage /app/web/database /data
+# The DB lives on the /data volume, not in the image layer, so it survives
+# `docker compose down`. DB_DATABASE is pointed here by compose. migrate creates
+# the schema but not the file.
+mkdir -p /data
+touch /data/database.sqlite
+
+# Bring the schema up to date before serving any request. --force because
+# migrate prompts for confirmation when APP_ENV=production.
+php /app/artisan migrate --force
+
+# Guarantee a login exists on a fresh install. No-ops once any user exists.
+php /app/artisan db:seed --class=DefaultUserSeeder --force
+
+# After migrate, which runs as root and would otherwise leave a root-owned
+# laravel.log behind. bootstrap/cache is where Laravel writes packages.php,
+# services.php and the config/route caches — root-owned it throws
+# "must be present and writable".
+chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache /data
 
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D

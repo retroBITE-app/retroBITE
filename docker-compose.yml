@@ -6,10 +6,12 @@ services:
     container_name: retrobite-web
     env_file:
       - .env
+    environment:
+      DB_DATABASE: /data/database.sqlite
     ports:
-      - "${WEB_PORT:-80}:80"
+      - "81:80"
     volumes:
-      - ./games:/games
+      - ${GAMES_PATH:-./games}:/app/storage/app/games
       - retrobite-data:/data
     restart: on-failure
 
@@ -23,21 +25,21 @@ services:
     restart: on-failure
     network_mode: host
     volumes:
-      - ./games:/games
+      - ${GAMES_PATH:-./games}:/games
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
     # Reaps zombies and forwards signals as PID 1, so the entrypoint's supervisor
     # does not have to.
     init: true
-
-volumes:
-  retrobite-data:
-
-    # Optional: if you prefer bridge network instead of host
+    # Optional: if you prefer bridge network instead of host, drop
+    # network_mode above and uncomment these.
     # ports:
     #   - "139:139"     # SMB
     #   - "445:445"     # SMB
     #   - "20:20"       # FTP data
     #   - "21:21"       # FTP control
     #   - "21100-21110:21100-21110"  # FTP passive ports
+
+volumes:
+  retrobite-data:

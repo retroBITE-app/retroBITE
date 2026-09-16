@@ -6,28 +6,20 @@ services:
     container_name: web-dev
     env_file:
       - .env
+    environment:
+      DB_DATABASE: /data/database.sqlite
     ports:
-      - "${WEB_PORT:-80}:80"
+      - 81:80
     volumes:
-      - ./web:/app/web
-      - ./games:/games
+      - .:/app
+      - ${GAMES_PATH:-./games}:/app/storage/app/games
+      # Compiled Blade must NOT be shared with the host. Livewire compiles each
+      # single-file component to storage/framework/views/livewire/views/<hash>
+      # and embeds an absolute path — /app here, /home/... on the host. With the
+      # repo bind-mounted, whichever side compiled last makes the other 500 with
+      # "filemtime(): stat failed".
+      - retrobite-views:/app/storage/framework/views
       - retrobite-data:/data
-    restart: always
-
-  # Opt-in: `docker compose -f docker-compose.dev.yml --profile vite up`.
-  # Skip it if you already run `npm run dev` on the host — both bind VITE_PORT.
-  retrobite-vite:
-    image: node:22-alpine
-    container_name: retrobite-vite
-    profiles: ["vite"]
-    working_dir: /app/web
-    env_file:
-      - .env
-    command: sh -c "npm install --no-audit --no-fund && npm run dev"
-    ports:
-      - "${VITE_PORT:-5173}:${VITE_PORT:-5173}"
-    volumes:
-      - ./web:/app/web
     restart: always
 
   retrobite-share:
@@ -37,22 +29,20 @@ services:
     container_name: share
     env_file:
       - .env
-    # network_mode: host
+    network_mode: host
     volumes:
-      - ./games:/games
+      - ${GAMES_PATH:-./games}:/games
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
     # Reaps zombies and forwards signals as PID 1, so the entrypoint's supervisor
     # does not have to.
     init: true
-    ports:
-      - "139:139"     # SMB
-      - "445:445"     # SMB
-      - "20:20"       # FTP data
-      - "21:21"       # FTP control
-      - "21100-21110:21100-21110"  # FTP passive
+    # No `ports:` — host networking publishes 139, 445, 20, 21 and the passive
+    # range 21100-21110 directly. Docker ignores port mappings under host mode,
+    # so listing them here only misleads.
     restart: always
 
 volumes:
   retrobite-data:
+  retrobite-views:

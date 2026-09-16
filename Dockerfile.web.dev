@@ -1,18 +1,25 @@
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
-RUN apk add --no-cache nginx sqlite sqlite-dev \
-    && docker-php-ext-install pdo_sqlite
+# php:8.5-fpm-alpine already has pdo_sqlite, sqlite3 and OPcache compiled in —
+# passing them to docker-php-ext-install builds no module and fails the copy.
+# unzip and git are for Composer's dist path.
+RUN apk add --no-cache nginx sqlite unzip git libzip \
+    && apk add --no-cache --virtual .build-deps libzip-dev \
+    && docker-php-ext-install bcmath zip pcntl \
+    && apk del .build-deps
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /app/web
+WORKDIR /app
 
 # Nginx + PHP-FPM config (not volume-mounted, so bake them in)
 COPY docker/web/nginx.dev.conf /etc/nginx/http.d/default.conf
 COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
 COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/web/opcache.dev.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
 COPY docker/web/entrypoint.dev.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh
 
 EXPOSE 80
 

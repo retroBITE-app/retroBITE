@@ -1,1 +1,0 @@
-ALTER TABLE games ADD COLUMN file_md5 TEXT;

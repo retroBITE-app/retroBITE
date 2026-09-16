@@ -1,31 +1,36 @@
 #!/bin/sh
 set -e
 
-# Match www-data UID/GID to host user so bind-mounted files just work
-HOST_UID=$(stat -c '%u' /app/web)
-HOST_GID=$(stat -c '%g' /app/web)
-if [ "$HOST_UID" != "0" ]; then
-    deluser www-data 2>/dev/null || true
-    addgroup -g "$HOST_GID" -S www-data 2>/dev/null || true
-    adduser -u "$HOST_UID" -G www-data -S -D -H www-data 2>/dev/null || true
-fi
-addgroup www-data users 2>/dev/null || true
-
 # Ensure storage subdirs exist
-mkdir -p /app/web/storage/games /app/web/storage/tmp /app/web/database
+mkdir -p /app/storage/app/games \
+         /app/storage/framework/cache/data \
+         /app/storage/framework/sessions \
+         /app/storage/framework/views \
+         /app/storage/logs \
+         /app/bootstrap/cache
 
-# Remove any stale production build so Vite.php falls back to the dev server
-rm -rf /app/web/public/build
+# Sets WEB_USER / WEB_GROUP from the owner of the bind-mounted source tree.
+. /usr/local/bin/user-setup.sh /app
 
-# Install PHP deps (volume-mounted, so not baked into image)
-composer install --no-interaction --working-dir=/app/web
+# Remove any stale production build so Vite's dev server is used instead.
+# Otherwise Laravel finds public/build/manifest.json and serves the old bundle,
+# ignoring the dev server entirely.
+rm -rf /app/public/build
 
-# Bring the schema up to date before serving any request. Runs as root, so the
-# chown below has to follow it — the migration creates the SQLite file.
-php /app/web/console migrate
+# Install PHP deps (volume-mounted, so not baked into the image)
+composer install --no-interaction --working-dir=/app
 
-# Ensure writable dirs are owned by www-data
-chown -R www-data:www-data /app/web/storage /app/web/database /data
+# The DB lives on the /data volume so it survives `docker compose down`.
+mkdir -p /data
+touch /data/database.sqlite
+
+php /app/artisan migrate --force
+
+# Guarantee a login exists on a fresh install. No-ops once any user exists.
+php /app/artisan db:seed --class=DefaultUserSeeder --force
+
+# After migrate, which runs as root and would otherwise leave root-owned files.
+chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache /data
 
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D

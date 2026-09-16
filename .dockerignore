@@ -1,18 +1,35 @@
+# Secrets. Without this, COPY . . bakes the live APP_KEY into every image layer.
 .env
-*.log
-*.tmp
-*.swp
-*~
-*.zip
-*.elf
-*.ELF
+.env.*
+!.env.example
 
-games/
-redesign/
-web/node_modules/
-web/vendor/
-web/public/build/
-web/database/*.db
-web/database/*.db-wal
-web/database/*.db-shm
-web/storage/
+# Rebuilt inside the image
+vendor/
+node_modules/
+
+# Live data. The DB belongs on the /data volume, never in an image layer.
+database/*.sqlite
+database/*.sqlite-journal
+
+# Runtime state
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/framework/testing/*
+storage/app/games/*
+
+# Not needed at runtime
+tests/
+.git
+.gitignore
+.gitattributes
+.github/
+.claude/
+.agents/
+.editorconfig
+phpunit.xml
+phpstan.neon
+pint.json
+*.md
+retroBite.png
