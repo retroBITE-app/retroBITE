@@ -1,0 +1,16 @@
+<?php
+
+return [
+    'order' => 40,
+    'name' => 'GameCube',
+    'brand' => 'Nintendo',
+    'folder' => 'gc',
+    'icon' => '/images/consoles/Nintendo - GameCube.png',
+    'file_icon' => '/images/consoles/Nintendo - GameCube-content.png',
+    'file_extensions' => ['iso', 'gcm', 'ciso', 'gcz', 'nkit.iso', 'rvz'],
+    'bios_extensions' => ['bin'],
+    'exclude_files' => [],
+    'screenscraper_id' => 13,
+    'cover_aspect' => '5/7',
+    'cover_height' => 280,
+];

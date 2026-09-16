@@ -1,0 +1,16 @@
+<?php
+
+return [
+    'order' => 110,
+    'name' => 'PlayStation Portable',
+    'brand' => 'Sony',
+    'folder' => 'psp',
+    'icon' => '/images/consoles/Sony - PlayStation Portable.png',
+    'file_icon' => '/images/consoles/Sony - PlayStation Portable-content.png',
+    'file_extensions' => ['iso', 'cso', 'pbp', 'chd'],
+    'bios_extensions' => ['bin'],
+    'exclude_files' => [],
+    'screenscraper_id' => 61,
+    'cover_aspect' => '3/5',
+    'cover_height' => 260,
+];
