@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+C*E.md
 
 # Rebuilt inside the image
 vendor/

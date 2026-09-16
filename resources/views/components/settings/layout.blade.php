@@ -1,20 +1,40 @@
-<div class="flex items-start max-md:flex-col">
-    <div class="me-10 w-full pb-4 md:w-[220px]">
-        <flux:navlist aria-label="{{ __('Settings') }}">
-            <flux:navlist.item :href="route('profile.edit')" wire:navigate>{{ __('Profile') }}</flux:navlist.item>
-            <flux:navlist.item :href="route('security.edit')" wire:navigate>{{ __('Security') }}</flux:navlist.item>
-            <flux:navlist.item :href="route('appearance.edit')" wire:navigate>{{ __('Appearance') }}</flux:navlist.item>
-        </flux:navlist>
+@props(['heading' => '', 'subheading' => ''])
+
+@php
+    $tabs = [
+        ['label' => __('Profile'), 'route' => 'profile.edit', 'active' => request()->routeIs('profile.*')],
+        ['label' => __('Security'), 'route' => 'security.edit', 'active' => request()->routeIs('security.*')],
+    ];
+@endphp
+
+<div class="mb-6 flex gap-5.5 overflow-x-auto border-b border-raised">
+    @foreach ($tabs as $tab)
+        <a
+            href="{{ route($tab['route']) }}"
+            wire:navigate
+            @class([
+                'shrink-0 cursor-pointer pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+                'text-fg-bright shadow-underline' => $tab['active'],
+                'text-fg-muted hover:text-fg-soft' => ! $tab['active'],
+            ])
+        >
+            {{ $tab['label'] }}
+        </a>
+    @endforeach
+</div>
+
+@if (filled($heading) || filled($subheading))
+    <div class="mb-5">
+        @if (filled($heading))
+            <p class="text-base text-fg-bright">{{ $heading }}</p>
+        @endif
+
+        @if (filled($subheading))
+            <p class="mt-0.5 text-sm text-fg-faint">{{ $subheading }}</p>
+        @endif
     </div>
+@endif
 
-    <flux:separator class="md:hidden" />
-
-    <div class="flex-1 self-stretch max-md:pt-6">
-        <flux:heading>{{ $heading ?? '' }}</flux:heading>
-        <flux:subheading>{{ $subheading ?? '' }}</flux:subheading>
-
-        <div class="mt-5 w-full max-w-lg">
-            {{ $slot }}
-        </div>
-    </div>
+<div class="w-full max-w-lg" data-settings-fields>
+    {{ $slot }}
 </div>

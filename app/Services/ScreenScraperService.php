@@ -251,10 +251,10 @@ class ScreenScraperService
      */
     private function credentials(): array
     {
-        $credentials = (array) config('settings.screenscraper');
+        $credentials = (array) config('screenscraper');
 
         if (Arr::get($credentials, 'dev_id') === '' || Arr::get($credentials, 'dev_password') === '') {
-            throw new RuntimeException('ScreenScraper dev credentials missing — see config/settings.php.');
+            throw new RuntimeException('ScreenScraper dev credentials missing — see config/screenscraper.php.');
         }
 
         return $credentials;
@@ -298,8 +298,8 @@ class ScreenScraperService
     {
         try {
             return Http::withUserAgent(self::SOFTNAME)
-                ->connectTimeout((int) config('settings.screenscraper.connect_timeout', self::CONNECT_TIMEOUT))
-                ->timeout((int) config('settings.screenscraper.timeout', self::TIMEOUT))
+                ->connectTimeout((int) config('screenscraper.connect_timeout', self::CONNECT_TIMEOUT))
+                ->timeout((int) config('screenscraper.timeout', self::TIMEOUT))
                 ->get($url, $query);
         } catch (ConnectionException $e) {
             throw new RuntimeException('ScreenScraper HTTP error: ' . $this->redact($e->getMessage()));

@@ -1,9 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
-use App\Support\Obfuscated;
-
 return [
 
     /*
@@ -28,6 +24,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Interface
+    |--------------------------------------------------------------------------
+    |
+    | The CRT scanline overlay drawn across key art and the login backdrop.
+    | Part of the look rather than decoration you can ignore — set false for a
+    | flat presentation.
+    |
+    */
+
+    'interface' => [
+        'scanlines' => (bool) env('UI_SCANLINES', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Library
     |--------------------------------------------------------------------------
     |
@@ -41,35 +52,4 @@ return [
     */
 
     'games_path' => storage_path('app/games'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | ScreenScraper
-    |--------------------------------------------------------------------------
-    |
-    | Metadata and artwork provider — https://www.screenscraper.fr
-    |
-    | The dev credentials identify retroBITE itself to the provider and ship
-    | with the source, so they are concealed rather than committed in plain
-    | text; see App\Support\Obfuscated for what that does and does not buy you.
-    |
-    | The user credentials are per-installation and belong in the environment.
-    | Without them the API still answers, but on the much smaller anonymous
-    | quota.
-    |
-    */
-
-    'screenscraper' => [
-        'dev_id' => Obfuscated::reveal('AAQfHw4='),
-        'dev_password' => Obfuscated::reveal('ICkQAFwOCCY9KDw='),
-        'user' => env('SCREENSCRAPER_USER', ''),
-        'password' => env('SCREENSCRAPER_PASSWORD', ''),
-        'endpoint' => env('SCREENSCRAPER_ENDPOINT', 'https://api.screenscraper.fr/api2'),
-
-        // The provider is regularly slow, and a timeout mid-identification
-        // loses the whole lookup. Raise these when it is having a bad day.
-        'connect_timeout' => (int) env('SCREENSCRAPER_CONNECT_TIMEOUT', 15),
-        'timeout' => (int) env('SCREENSCRAPER_TIMEOUT', 45),
-    ],
-
 ];

@@ -9,8 +9,6 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::livewire('settings/appearance', 'settings.appearance')->name('appearance.edit');
-
     Route::livewire('settings/security', 'settings.security')
         ->middleware([
             'password.confirm',

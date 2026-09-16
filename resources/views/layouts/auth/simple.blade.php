@@ -3,16 +3,47 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-white antialiased dark:bg-linear-to-b dark:from-neutral-950 dark:to-neutral-900">
-        <div class="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
-            <div class="flex w-full max-w-sm flex-col gap-2">
-                <a href="{{ route('login') }}" class="flex flex-col items-center gap-2 font-medium" wire:navigate>
-                    <span class="flex h-9 w-9 mb-1 items-center justify-center rounded-md">
-                        <x-app-logo-icon class="size-9 fill-current text-black dark:text-white" />
-                    </span>
-                    <span class="sr-only">{{ config('app.name', 'Laravel') }}</span>
-                </a>
-                <div class="flex flex-col gap-6">
+    <body class="min-h-screen antialiased">
+
+        @if (! empty($backdrop))
+            <div class="fixed inset-0 bg-cover bg-[position:50%_22%]" style="background-image: url('{{ $backdrop }}')"></div>
+        @endif
+
+        <div
+            class="fixed inset-0"
+            style="
+                background: radial-gradient(
+                    ellipse 75% 65% at 50% 45%,
+                    color-mix(in srgb, var(--color-ground) 88%, transparent) 0%,
+                    color-mix(in srgb, var(--color-ground) 62%, transparent) 55%,
+                    color-mix(in srgb, var(--color-ground) 28%, transparent) 100%
+                );
+            "
+        ></div>
+
+        @if (config('settings.interface.scanlines'))
+            <div class="scanlines fixed inset-0"></div>
+        @endif
+
+        <div
+            class="pointer-events-none fixed inset-0"
+            style="
+                background: linear-gradient(
+                    0deg,
+                    color-mix(in srgb, var(--color-ground) 88%, transparent) 0%,
+                    color-mix(in srgb, var(--color-ground) 40%, transparent) 22%,
+                    transparent 45%
+                );
+            "
+        ></div>
+
+        <div class="relative flex min-h-screen flex-col px-5 py-12">
+            <div class="relative z-10 flex flex-1 items-center justify-center">
+                <div class="flex w-full max-w-[372px] flex-col">
+                    <a href="{{ route('login') }}" wire:navigate>
+                        <img src="/images/logo.webp" alt="{{ config('app.name') }}" class="mx-auto block h-auto w-[148px]" />
+                    </a>
+
                     {{ $slot }}
                 </div>
             </div>

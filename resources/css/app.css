@@ -8,59 +8,383 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-
-    --color-zinc-50: #fafafa;
-    --color-zinc-100: #f5f5f5;
-    --color-zinc-200: #e5e5e5;
-    --color-zinc-300: #d4d4d4;
-    --color-zinc-400: #a3a3a3;
-    --color-zinc-500: #737373;
-    --color-zinc-600: #525252;
-    --color-zinc-700: #404040;
-    --color-zinc-800: #262626;
-    --color-zinc-900: #171717;
-    --color-zinc-950: #0a0a0a;
-
-    --color-accent: var(--color-neutral-800);
-    --color-accent-content: var(--color-neutral-800);
-    --color-accent-foreground: var(--color-white);
+/*
+ * Open Sans, self-hosted as a single variable face.
+ *
+ * Self-hosting is required, not preferred: docker/web/nginx.conf sets
+ * `style-src 'self' 'unsafe-inline'` with no `font-src`, so a Google Fonts
+ * import is blocked in Docker while working fine under `npm run dev` — the
+ * worst failure mode to debug.
+ *
+ * Served straight out of public/, so the URL is stable and unhashed.
+ *
+ * The ranges are Open Sans's published wght and wdth axes. `format('woff2')`
+ * without `tech(variations)` is deliberate: browsers read variability from the
+ * font itself, and the older `woff2-variations` keyword is refused by some.
+ */
+@font-face {
+    font-family: 'Open Sans';
+    src: url('/fonts/open-sans-variable.woff2') format('woff2');
+    font-weight: 300 800;
+    font-stretch: 75% 100%;
+    font-style: normal;
+    font-display: swap;
 }
 
-@layer theme {
-    .dark {
-        --color-accent: var(--color-white);
-        --color-accent-content: var(--color-white);
-        --color-accent-foreground: var(--color-neutral-800);
-    }
+/*
+ * The italic face ships alongside but is not loaded — the design uses no
+ * italics anywhere and the file is another 313 KB. Uncomment to enable.
+ *
+ * @font-face {
+ *   font-family: 'Open Sans';
+ *   src: url('/fonts/open-sans-italic-variable.woff2') format('woff2');
+ *   font-weight: 300 800;
+ *   font-stretch: 75% 100%;
+ *   font-style: italic;
+ *   font-display: swap;
+ * }
+ */
+
+/*
+ * Design tokens, carried over from the previous retroBITE build.
+ *
+ * `--spacing` is deliberately NOT redefined. The design leans on fractional
+ * utilities — px-2.75, py-1.75, px-4.5, pt-6.5, gap-8.5, w-13 and the rest —
+ * each computed as N x --spacing, so moving the base reflows every one.
+ *
+ * `static` keeps every token in :root even when no utility references it, so
+ * the hand-written gradients and scanline overlays can reach them through
+ * var().
+ */
+@theme static {
+    /* Grounds, darkest first */
+    --color-ground: #0c0c0d;
+    --color-sunken: #141416;
+    --color-surface: #17171a;
+    --color-hover: #1c1c1f;
+    --color-raised: #202024;
+
+    /* Lines, faintest first */
+    --color-line: #232326;
+    --color-line-strong: #26262a;
+    --color-line-input: #2c2c31;
+    --color-line-bright: #3a3a40;
+
+    /* Warm text ramp, brightest first. Ratios on bg-sunken: faint 6.35,
+       dim 7.62, muted 8.83, cool 8.25. */
+    --color-fg-bright: #f0e6d2;
+    --color-fg: #e9e6dd;
+    --color-fg-soft: #cfcabd;
+    --color-fg-muted: #b8b3ab;
+    --color-fg-dim: #aca69d;
+    --color-fg-faint: #9d978e;
+    --color-fg-cool: #adadb4;
+
+    /* Amber accent. accent-tint is the base of every rgba() fill in the
+       design, so `bg-accent-tint/10` and `border-accent-tint/55` carry it. */
+    --color-accent-light: #f5d089;
+    --color-accent-bright: #f0c14b;
+    --color-accent: #e8b44a;
+    --color-accent-tint: #e0a83c;
+    --color-accent-deep: #c9902a;
+    --color-accent-muted: #a09879;
+
+    /* Feedback. The design has no success colour — it uses the accent. */
+    --color-danger: #c98b7f;
+    --color-warn: #cf8759;
+
+    /* Overlay ground, for `bg-scrim/72` */
+    --color-scrim: #080809;
+
+    /* Open Sans carries the interface. --font-mono is left at Tailwind's
+       system stack on purpose: file paths, MD5 hashes and ports need to stay
+       aligned. */
+    --font-sans: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
+
+    /* Display headings carry a touch of negative tracking. Stock
+       `tracking-tight` is -0.025em, two and a half times this — the design
+       wants a hair, not a squeeze. */
+    --tracking-display: -0.01em;
+
+    /* Above stock's top step (--tracking-widest is 0.1em), so a real new rung. */
+    --tracking-kicker: 0.14em;
+
+    /* The page-title size. */
+    --text-display: 1.625rem; /* 26px */
+    --text-display--line-height: 1.2;
+
+    /* Named for the job each does, because a raw box-shadow at a call site
+       tells you nothing about which of them it is meant to be. */
+    --shadow-lift: 0 18px 40px rgb(0 0 0 / 0.55);
+    --shadow-glow: 0 0 6px var(--color-accent-deep);
+    --shadow-rail: inset 2px 0 0 var(--color-accent-deep);
+    --shadow-underline: inset 0 -2px 0 var(--color-accent);
+
+    /* Flux paints its components off the zinc ramp. Remapping it onto the
+       warm grounds above is what makes every flux: component inherit this
+       design without touching a single call site. */
+    --color-zinc-50: #f0e6d2;
+    --color-zinc-100: #e9e6dd;
+    --color-zinc-200: #cfcabd;
+    --color-zinc-300: #b8b3ab;
+    --color-zinc-400: #9d978e;
+    --color-zinc-500: #6d6a64;
+    --color-zinc-600: #3a3a40;
+    --color-zinc-700: #2c2c31;
+    --color-zinc-800: #202024;
+    --color-zinc-900: #17171a;
+    --color-zinc-950: #0c0c0d;
+
+    /* Flux's accent trio. accent-foreground is the ground colour so that the
+       rare solid-amber surface reads as dark-on-amber. */
+    --color-accent-content: #e8b44a;
+    --color-accent-foreground: #0c0c0d;
+}
+
+/*
+ * Flux's stylesheet ships its own `.dark` block setting the accent to white
+ * (vendor/livewire/flux/dist/flux.css). It is unlayered, so it outranks @theme
+ * regardless of import order — the accent has to be restated here or every
+ * accent-coloured Flux control, and `shadow-underline`, renders white.
+ */
+.dark {
+    --color-accent: #e8b44a;
+    --color-accent-content: #e8b44a;
+    --color-accent-foreground: #0c0c0d;
 }
 
 @layer base {
+    /*
+     * The page ground, set once.
+     *
+     * There is no light theme: the previous build had none, and the amber ramp
+     * has no light-mode counterpart to fall back to. The <html> element carries
+     * a hardcoded `dark` class so Flux's dark variants resolve.
+     */
+    html {
+        color-scheme: dark;
+    }
+
+    body {
+        background-color: var(--color-ground);
+        color: var(--color-fg);
+    }
 
     *,
     ::after,
     ::before,
     ::backdrop,
     ::file-selector-button {
-        border-color: var(--color-gray-200, currentColor);
+        border-color: var(--color-line, currentColor);
     }
 }
 
+/*
+ * The small mono caps that head a column, a card section or a field group.
+ * Colour stays at the call site, because that genuinely varies.
+ */
+@utility kicker {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+}
+
+/* The same kicker in the interface face rather than mono. */
+@utility kicker-sans {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+}
+
+/*
+ * The two key-art scrims: a fade from the artwork into the page ground so the
+ * title block sits on something readable. Utilities rather than inline values
+ * because Tailwind's `/alpha` modifier does not work inside a raw gradient —
+ * these need color-mix(), and 200 characters of it does not belong in a class
+ * attribute.
+ */
+@utility hero-fade-y {
+    background-image: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-ground) 55%, transparent) 0%,
+        color-mix(in srgb, var(--color-ground) 60%, transparent) 45%,
+        var(--color-ground) 100%
+    );
+}
+
+@utility hero-fade-x {
+    background-image: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-scrim) 94%, transparent) 0%,
+        color-mix(in srgb, var(--color-scrim) 72%, transparent) 46%,
+        color-mix(in srgb, var(--color-scrim) 15%, transparent) 100%
+    );
+}
+
+/*
+ * Fades artwork out towards the left, so a card can carry its backdrop on the
+ * right without the text side having to fight it.
+ *
+ * A mask rather than a gradient overlay on purpose: the card's own background
+ * shows through, so it still works when `hover:bg-hover` changes it.
+ */
+@utility art-fade-l {
+    -webkit-mask-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 34%,
+        rgb(0 0 0 / 0.5) 62%,
+        #000 100%
+    );
+    mask-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 34%,
+        rgb(0 0 0 / 0.5) 62%,
+        #000 100%
+    );
+}
+
+/*
+ * The CRT scanline overlay. The design lays it over every piece of key art, so
+ * it lives here rather than as an arbitrary value repeated at each site.
+ */
+@utility scanlines {
+    background-image: repeating-linear-gradient(180deg, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px);
+    opacity: 0.32;
+    pointer-events: none;
+}
+
+/*
+ * Flux components.
+ *
+ * The design fills nothing solid — actions are outlined or bare, with the
+ * amber ramp carrying the primary weight. Flux's primary button is solid by
+ * default, so it is restyled here rather than at every call site.
+ */
+@layer components {
+    [data-flux-button].bg-\[var\(--color-accent\)\] {
+        background-color: color-mix(in srgb, var(--color-accent-tint) 10%, transparent) !important;
+        border: 1px solid color-mix(in srgb, var(--color-accent-tint) 55%, transparent) !important;
+        color: var(--color-accent) !important;
+        box-shadow: none !important;
+    }
+
+    [data-flux-button].bg-\[var\(--color-accent\)\]:hover {
+        background-color: color-mix(in srgb, var(--color-accent-tint) 18%, transparent) !important;
+    }
+
+    /*
+     * Active nav row: amber wash plus a 2px rail down the left edge. The rail
+     * is what makes the current section readable at a glance without a solid
+     * fill, which the design never uses.
+     *
+     * Scoped to [data-flux-sidebar-item] rather than any sidebar anchor: the
+     * logo links to the dashboard too, so a looser selector painted it as the
+     * active nav row.
+     */
+    [data-flux-sidebar-item][data-current] {
+        background-color: color-mix(in srgb, var(--color-accent-tint) 13%, transparent);
+        color: var(--color-accent);
+        box-shadow: var(--shadow-rail);
+    }
+
+    [data-flux-button].bg-red-500 {
+        background-color: transparent !important;
+        border: 1px solid color-mix(in srgb, var(--color-danger) 50%, transparent) !important;
+        color: var(--color-danger) !important;
+        box-shadow: none !important;
+    }
+
+    [data-flux-button].bg-red-500:hover {
+        background-color: color-mix(in srgb, var(--color-danger) 10%, transparent) !important;
+    }
+}
+
+/*
+ * Field labels are the design's micro-caps, not sentence-case text.
+ *
+ * The previous build drew them two ways: IconField (auth) used the sans face,
+ * FormField (settings) used mono. Sans is the default here; the settings pane
+ * opts into mono via the wrapper below.
+ */
+[data-flux-label] {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+    color: var(--color-fg-dim);
+}
+
+[data-settings-fields] [data-flux-label] {
+    font-family: var(--font-mono);
+    color: var(--color-fg-faint);
+}
+
+/* Controls sit on the surface with a quiet border that warms on focus. */
+[data-flux-control] {
+    background-color: var(--color-surface);
+    border-color: var(--color-line-input);
+    color: var(--color-fg);
+}
+
+[data-flux-control]::placeholder {
+    color: var(--color-fg-faint);
+}
+
+/* Inputs sit on the sunken ground with a quiet border that warms on focus. */
 [data-flux-field]:not(ui-radio, ui-checkbox) {
     @apply grid gap-2;
 }
 
 [data-flux-label] {
-    @apply  !mb-0 !leading-tight;
+    @apply !mb-0 !leading-tight;
 }
 
 input:focus[data-flux-control],
 textarea:focus[data-flux-control],
 select:focus[data-flux-control] {
-    @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
+    @apply outline-hidden ring-2 ring-accent-deep ring-offset-2 ring-offset-ground;
 }
 
-/* \[:where(&)\]:size-4 {
-    @apply size-4;
-} */
+/*
+ * The floating drawer toggle hides while the drawer is open: the drawer covers
+ * the corner it sits in, and closing is handled by the drawer's own control,
+ * the backdrop, or Escape.
+ *
+ * Driven off the sidebar's own state attributes rather than duplicating that
+ * state in Alpine — Flux drops `data-flux-sidebar-collapsed-mobile` when the
+ * drawer opens.
+ */
+body:has([data-flux-sidebar][data-flux-sidebar-on-mobile]:not([data-flux-sidebar-collapsed-mobile])) [data-sidebar-toggle] {
+    display: none;
+}
+
+/* Global scrollbar styling, on the warm ramp like everything else */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-bright) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-bright);
+    border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-fg-faint);
+}

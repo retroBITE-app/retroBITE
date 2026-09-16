@@ -27,6 +27,7 @@ class FortifyServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureAuthentication();
+        $this->configurePasswordConfirmation();
         $this->configureViews();
         $this->configureRateLimiting();
     }
@@ -59,6 +60,19 @@ class FortifyServiceProvider extends ServiceProvider
             return Hash::check((string) $request->input('password'), $user->password)
                 ? $user
                 : null;
+        });
+    }
+
+    /**
+     * Confirm a password against the authenticated user directly.
+     *
+     * Fortify's default action looks the user up by Fortify::username(), which
+     * is the virtual "login" field here and resolves to null on the model.
+     */
+    private function configurePasswordConfirmation(): void
+    {
+        Fortify::confirmPasswordsUsing(function (User $user, ?string $password) {
+            return Hash::check((string) $password, $user->password);
         });
     }
 
