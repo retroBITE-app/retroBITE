@@ -3,7 +3,10 @@ FROM composer:latest AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
 # --no-scripts: package:discover needs artisan, which is not here yet.
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction
+# --ignore-platform-req=ext-intl: this stage only downloads packages, and the
+# composer image has no intl. The runtime image does, which is where it matters.
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction \
+    --ignore-platform-req=ext-intl
 
 FROM node:22-bookworm-slim AS frontend-builder
 
@@ -24,10 +27,13 @@ FROM php:8.5-fpm-alpine AS runner
 
 # php:8.5-fpm-alpine already has pdo_sqlite, sqlite3 and OPcache compiled in —
 # passing them to docker-php-ext-install builds no module and fails the copy.
-# unzip and git are for Composer's dist path.
-RUN apk add --no-cache nginx su-exec unzip git libzip \
-    && apk add --no-cache --virtual .build-deps libzip-dev \
-    && docker-php-ext-install bcmath zip pcntl pdo_mysql \
+# unzip and git are for Composer's dist path. intl is not optional despite
+# sounding like it: Illuminate\Support\Number throws without it, and both the
+# dashboard and the docs library format file sizes through it. icu-libs has to
+# stay in the final image — icu-dev is only needed to build the extension.
+RUN apk add --no-cache nginx su-exec unzip git libzip icu-libs \
+    && apk add --no-cache --virtual .build-deps libzip-dev icu-dev \
+    && docker-php-ext-install bcmath zip pcntl pdo_mysql intl \
     && apk del .build-deps
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
