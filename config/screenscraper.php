@@ -10,4 +10,11 @@ return [
     'endpoint' => env('SCREENSCRAPER_ENDPOINT', 'https://api.screenscraper.fr/api2'),
     'connect_timeout' => (int) env('SCREENSCRAPER_CONNECT_TIMEOUT', 15),
     'timeout' => (int) env('SCREENSCRAPER_TIMEOUT', 45),
+
+    /*
+     * Seconds to leave between two API calls. ScreenScraper asks scraper
+     * authors for at least one; 1.2 is what the established clients use. Set to
+     * 0 to disable, which the test suite does so it is not paced by a sleep.
+     */
+    'min_interval' => (float) env('SCREENSCRAPER_MIN_INTERVAL', 1.2),
 ];
