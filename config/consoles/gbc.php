@@ -7,7 +7,7 @@ return [
     'folder' => 'gbc',
     'icon' => '/images/consoles/Nintendo - Game Boy Color.png',
     'file_icon' => '/images/consoles/Nintendo - Game Boy Color-content.png',
-    'file_extensions' => ['gbc', 'gb', 'sgb'],
+    'file_extensions' => ['gbc', 'gb', 'sgb', 'zip', '7z'],
     'bios_extensions' => ['bin'],
     'exclude_files' => [],
     'screenscraper_id' => 10,

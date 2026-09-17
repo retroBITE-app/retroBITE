@@ -7,7 +7,7 @@ return [
     'folder' => 'ps2',
     'icon' => '/images/consoles/Sony - PlayStation 2.png',
     'file_icon' => '/images/consoles/Sony - PlayStation 2-content.png',
-    'file_extensions' => ['iso', 'bin', 'img', 'mdf', 'nrg', 'zso'],
+    'file_extensions' => ['iso', 'bin', 'img', 'mdf', 'nrg', 'zso', 'chd', 'cso'],
     'bios_extensions' => ['bin'],
     'exclude_files' => ['games.bin'],
     'screenscraper_id' => 58,

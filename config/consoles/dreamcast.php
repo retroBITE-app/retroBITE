@@ -7,7 +7,7 @@ return [
     'folder' => 'dreamcast',
     'icon' => '/images/consoles/Sega - Dreamcast.png',
     'file_icon' => '/images/consoles/Sega - Dreamcast-content.png',
-    'file_extensions' => ['cdi', 'gdi', 'chd', 'iso'],
+    'file_extensions' => ['cdi', 'gdi', 'chd', 'iso', 'cue', 'm3u'],
     'bios_extensions' => ['bin'],
     'exclude_files' => [],
     'screenscraper_id' => 23,

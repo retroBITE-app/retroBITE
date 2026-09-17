@@ -1,0 +1,16 @@
+<?php
+
+return [
+    'order' => 1310,
+    'name' => 'Thomson MO/TO',
+    'brand' => 'Thomson',
+    'folder' => 'thomson',
+    'icon' => '/images/consoles/Thomson - MOTO.png',
+    'file_icon' => '/images/consoles/Thomson - MOTO-content.png',
+    'file_extensions' => ['fd', 'sap', 'k7', 'm7', 'm5', 'rom', 'zip'],
+    'bios_extensions' => ['bin'],
+    'exclude_files' => [],
+    'screenscraper_id' => 141,
+    'cover_aspect' => '2/3',
+    'cover_height' => 280,
+];

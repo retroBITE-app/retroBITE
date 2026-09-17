@@ -10,7 +10,7 @@ return [
     'file_extensions' => ['pkg', 'iso', 'ps3'],
     'bios_extensions' => ['bin', 'pup'],
     'exclude_files' => [],
-    'screenscraper_id' => 57,
+    'screenscraper_id' => 59,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
 ];

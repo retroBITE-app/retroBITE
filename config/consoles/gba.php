@@ -7,7 +7,7 @@ return [
     'folder' => 'gba',
     'icon' => '/images/consoles/Nintendo - Game Boy Advance.png',
     'file_icon' => '/images/consoles/Nintendo - Game Boy Advance-content.png',
-    'file_extensions' => ['gba', 'agb', 'mb'],
+    'file_extensions' => ['gba', 'agb', 'mb', 'zip', '7z'],
     'bios_extensions' => ['bin'],
     'exclude_files' => [],
     'screenscraper_id' => 12,

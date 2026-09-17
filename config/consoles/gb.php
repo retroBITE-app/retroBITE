@@ -7,7 +7,7 @@ return [
     'folder' => 'gb',
     'icon' => '/images/consoles/Nintendo - Game Boy.png',
     'file_icon' => '/images/consoles/Nintendo - Game Boy-content.png',
-    'file_extensions' => ['gb', 'gbc', 'sgb'],
+    'file_extensions' => ['gb', 'gbc', 'sgb', 'zip', '7z'],
     'bios_extensions' => ['bin'],
     'exclude_files' => [],
     'screenscraper_id' => 9,

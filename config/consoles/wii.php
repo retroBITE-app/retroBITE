@@ -7,7 +7,7 @@ return [
     'folder' => 'wii',
     'icon' => '/images/consoles/Nintendo - Wii.png',
     'file_icon' => '/images/consoles/Nintendo - Wii-content.png',
-    'file_extensions' => ['iso', 'wbfs', 'wad', 'dol'],
+    'file_extensions' => ['iso', 'wbfs', 'wad', 'dol', 'gcm', 'gcz', 'ciso', 'rvz', 'm3u'],
     'bios_extensions' => ['bin'],
     'exclude_files' => [],
     'screenscraper_id' => 16,

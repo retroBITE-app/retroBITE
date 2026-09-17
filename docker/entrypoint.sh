@@ -53,10 +53,41 @@ if [ -n "$HOST_IP" ]; then
     sed -i "s/^pasv_address=.*/pasv_address=$HOST_IP/" /etc/vsftpd.conf
 fi
 
-# The console subdirectories smb.conf publishes as separate shares. Created
-# here, not in the Dockerfile: /games is a bind mount, so anything made at
-# build time is shadowed the moment the volume is attached.
-mkdir -p /games/ps2 /games/ps3 /games/gc /games/wii /games/xbox /games/dreamcast
+# The console subdirectories served over the network. Created here, not in the
+# Dockerfile: /games is a bind mount, so anything made at build time is shadowed
+# the moment the volume is attached.
+#
+# This is the only place the list lives. GAME_FOLDERS creates the directories;
+# SMB_SHARES is the subset that also gets its own SMB share, because a loader
+# like OPL connects to a share named after the console rather than browsing
+# /games. FTP-only consoles need the directory but no share of their own.
+GAME_FOLDERS=${GAME_FOLDERS:-ps2 ps3 gc wii xbox dreamcast}
+SMB_SHARES=${SMB_SHARES:-ps2 gc wii}
+
+for folder in $GAME_FOLDERS; do
+    mkdir -p "/games/$folder"
+done
+
+# Generated fresh each boot so a changed SMB_SHARES never leaves a stale share
+# behind. smb.conf includes this file; an empty one is valid.
+: > /etc/samba/shares.conf
+for share in $SMB_SHARES; do
+    cat >> /etc/samba/shares.conf <<SHARE
+[$share]
+   comment = retroBite $share Library
+   path = /games/$share
+   browseable = yes
+   writable = yes
+   guest ok = no
+   valid users = @users
+   read only = no
+   create mask = 0775
+   directory mask = 0775
+   min protocol = NT1
+   max protocol = SMB3
+
+SHARE
+done
 
 # Ensure games directory has correct permissions
 chown -R :users /games

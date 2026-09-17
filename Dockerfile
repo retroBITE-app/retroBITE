@@ -26,10 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/debconf/*
 
-# Create shared directory for games with console-specific folders
-RUN mkdir -p /games/ps2 /games/ps3 /games/gc /games/wii /games/xbox /games/dreamcast && \
-    chmod -R 777 /games
-
 # FTP user will be created dynamically in entrypoint to match SMB user
 
 # Copy files

@@ -12,7 +12,7 @@ return [
     'folder' => 'snes',
     'icon' => '/images/consoles/Nintendo - Super Nintendo Entertainment System.png',
     'file_icon' => '/images/consoles/Nintendo - Super Nintendo Entertainment System-content.png',
-    'file_extensions' => ['smc', 'sfc', 'fig', 'swc', 'bs'],
+    'file_extensions' => ['smc', 'sfc', 'fig', 'swc', 'bs', 'gd3', 'gd7', 'dx2', 'bsx', 'zip', '7z'],
     'bios_extensions' => ['rom'],
     'exclude_files' => [],
     'screenscraper_id' => 4,

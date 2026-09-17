@@ -1,0 +1,16 @@
+<?php
+
+return [
+    'order' => 1170,
+    'name' => 'Sinclair ZX81',
+    'brand' => 'Sinclair',
+    'folder' => 'zx81',
+    'icon' => '/images/consoles/Sinclair - ZX 81.png',
+    'file_icon' => '/images/consoles/Sinclair - ZX 81-content.png',
+    'file_extensions' => ['tzx', 'p', 'zip', '7z'],
+    'bios_extensions' => ['bin'],
+    'exclude_files' => [],
+    'screenscraper_id' => 77,
+    'cover_aspect' => '2/3',
+    'cover_height' => 280,
+];

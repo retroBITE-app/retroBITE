@@ -7,7 +7,7 @@ return [
     'folder' => 'gc',
     'icon' => '/images/consoles/Nintendo - GameCube.png',
     'file_icon' => '/images/consoles/Nintendo - GameCube-content.png',
-    'file_extensions' => ['iso', 'gcm', 'ciso', 'gcz', 'nkit.iso', 'rvz'],
+    'file_extensions' => ['iso', 'gcm', 'ciso', 'gcz', 'nkit.iso', 'rvz', 'm3u'],
     'bios_extensions' => ['bin'],
     'exclude_files' => [],
     'screenscraper_id' => 13,

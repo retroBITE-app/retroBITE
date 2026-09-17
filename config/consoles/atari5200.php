@@ -1,0 +1,16 @@
+<?php
+
+return [
+    'order' => 310,
+    'name' => 'Atari 5200',
+    'brand' => 'Atari',
+    'folder' => 'atari5200',
+    'icon' => '/images/consoles/Atari - 5200.png',
+    'file_icon' => '/images/consoles/Atari - 5200-content.png',
+    'file_extensions' => ['rom', 'xfd', 'atr', 'atx', 'cdm', 'cas', 'car', 'bin', 'a52', 'xex', 'zip', '7z'],
+    'bios_extensions' => [],
+    'exclude_files' => [],
+    'screenscraper_id' => 40,
+    'cover_aspect' => '2/3',
+    'cover_height' => 280,
+];
