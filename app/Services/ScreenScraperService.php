@@ -15,6 +15,7 @@ use App\Exceptions\ScreenScraper\ServerError;
 use App\Exceptions\ScreenScraper\SoftwareBlacklisted;
 use App\Exceptions\ScreenScraper\ThreadLimitReached;
 use App\Support\Console;
+use App\Support\Matching\MediaFetch;
 use App\Support\ScreenScraperQuota;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -197,6 +198,65 @@ class ScreenScraperService
         $jeu = Arr::get($response, 'response.jeu');
 
         return is_array($jeu) ? $this->normalize($jeu) : null;
+    }
+
+    /**
+     * Fetch one media file.
+     *
+     * The URL is the stripped one from normalize(); credentials go back on
+     * here, so nothing stored or logged ever carries them.
+     *
+     * Passing the checksum of a copy we already hold turns the request into a
+     * question: the provider answers with the literal text MD5OK and no bytes
+     * when it matches. That is worth doing even though the metadata response
+     * already carried the checksum, because it also covers a file that changed
+     * upstream since the last scrape.
+     *
+     * @throws ScreenScraperException
+     */
+    public function fetchMedia(string $url, ?string $knownMd5 = null): MediaFetch
+    {
+        $credentials = $this->credentials();
+
+        // Media shares the account's thread and per-minute allowance with the
+        // metadata calls, so it is paced the same way.
+        $this->throttle();
+
+        $query = array_filter([
+            'devid' => Arr::get($credentials, 'dev_id'),
+            'devpassword' => Arr::get($credentials, 'dev_password'),
+            'softname' => self::SOFTNAME,
+            'ssid' => Arr::get($credentials, 'user'),
+            'sspassword' => Arr::get($credentials, 'password'),
+            'md5' => $knownMd5 !== null ? strtolower($knownMd5) : null,
+        ], fn (mixed $value) => $value !== '' && $value !== null);
+
+        // Merged into the URL rather than passed alongside it: Guzzle replaces
+        // an existing query string when given a separate array, which would
+        // strip the jeuid and media parameters that say what to fetch and
+        // leave every request asking for nothing.
+        $response = $this->send($this->withQuery($url, $query));
+        $body = $response->body();
+
+        if ($error = $this->classify($response->status(), $this->readableBody($body))) {
+            throw $error;
+        }
+
+        // Short, plain-text answers rather than an image. Checked by length
+        // first so a small image is never mistaken for one of them.
+        if (strlen($body) <= 16) {
+            $marker = strtoupper(trim($body));
+
+            if (in_array($marker, ['MD5OK', 'CRCOK', 'SHA1OK'], true)) {
+                return MediaFetch::unchanged();
+            }
+
+            if ($marker === 'NOMEDIA' || $marker === '') {
+                return MediaFetch::absent();
+            }
+        }
+
+        return MediaFetch::downloaded($body);
     }
 
     /**
@@ -499,6 +559,30 @@ class ScreenScraperService
     }
 
     /**
+     * Add parameters to a URL that already carries some.
+     *
+     * Guzzle replaces an existing query string when handed a separate array,
+     * which would strip the jeuid and media parameters that say what to fetch
+     * and leave every media request asking for nothing at all.
+     *
+     * @param  array<string, mixed>  $extra
+     */
+    private function withQuery(string $url, array $extra): string
+    {
+        $parts = parse_url($url);
+
+        if ($parts === false) {
+            return $url;
+        }
+
+        parse_str($parts['query'] ?? '', $query);
+
+        $base = ($parts['scheme'] ?? 'https').'://'.($parts['host'] ?? '').($parts['path'] ?? '');
+
+        return $base.'?'.http_build_query([...$query, ...$extra]);
+    }
+
+    /**
      * Absolute URL for one API endpoint.
      *
      * @param  array<string, mixed>  $credentials
@@ -514,11 +598,15 @@ class ScreenScraperService
      * Issue the request, translating a transport failure into a redacted one.
      *
      *
-     * @param  array<string, mixed>  $query
+     * A null query leaves the URL's own query string alone. An array — even
+     * an empty one — replaces it, which silently strips everything the URL
+     * already carried.
+     *
+     * @param  array<string, mixed>|null  $query
      *
      * @throws ServerError
      */
-    private function send(string $url, array $query): Response
+    private function send(string $url, ?array $query = null): Response
     {
         try {
             return Http::withUserAgent(self::SOFTNAME)

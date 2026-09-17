@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /*
@@ -16,6 +17,14 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
+    ->beforeEach(function () {
+        // No test may reach the network. A fake whose URL pattern does not
+        // match otherwise falls through to the real ScreenScraper API, which
+        // answers with something plausible and hides the bug the test was
+        // written to catch — that is exactly how a stripped query string got
+        // past a green suite once already.
+        Http::preventStrayRequests();
+    })
     ->in('Feature');
 
 /*

@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Exceptions\ScreenScraper\ScreenScraperException;
+use App\Models\AppSetting;
 use App\Models\Game;
 use App\Services\GameMatcher;
 use App\Support\Matching\MatchOutcome;
@@ -68,6 +69,16 @@ class MatchGame implements ShouldQueue
             ])->dispatch();
 
             return;
+        }
+
+        if (
+            in_array($result->outcome, [MatchOutcome::Matched, MatchOutcome::Merged], true)
+            && $result->game !== null
+            && AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true)
+        ) {
+            // The list travels with the result, so fetching artwork costs no
+            // second metadata request: the answer already held every URL.
+            ScrapeGameMedia::dispatch($result->game->id, $result->medias);
         }
 
         Log::info('Match attempt finished.', [

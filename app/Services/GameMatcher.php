@@ -33,7 +33,10 @@ final class GameMatcher
         'cso', 'zso', 'pbp', 'wbfs', 'gcm', 'gcz', 'ciso', 'rvz', 'toc',
     ];
 
-    public function __construct(private readonly ScreenScraperService $provider) {}
+    public function __construct(
+        private readonly ScreenScraperService $provider,
+        private readonly MediaLibrary $media,
+    ) {}
 
     /**
      * @throws ScreenScraperException when the provider could not be asked at all
@@ -116,14 +119,19 @@ final class GameMatcher
         if ($existing !== null) {
             return DB::transaction(function () use ($game, $existing, $payload) {
                 $game->files()->update(['game_id' => $existing->id]);
-                // Any media rows go with the game through the cascade. In the
-                // automatic flow there are none: artwork is only fetched once a
-                // game has been identified, which is after this point.
+
+                // The surviving game keeps its own artwork; the placeholder's
+                // is removed from disk as well as from the table, or the files
+                // would be left behind with nothing pointing at them. In the
+                // automatic flow there is none — artwork is fetched after a
+                // game is identified, which is after this point — but a merge
+                // done by hand months later is a different story.
+                $this->media->forgetAll($game);
                 $game->delete();
 
                 $this->applyDiscNumbers($existing, $payload);
 
-                return MatchResult::merged($existing);
+                return MatchResult::merged($existing, $this->mediasIn($payload));
             });
         }
 
@@ -144,7 +152,20 @@ final class GameMatcher
 
         $this->applyDiscNumbers($game, $payload);
 
-        return MatchResult::matched($game->refresh());
+        return MatchResult::matched($game->refresh(), $this->mediasIn($payload));
+    }
+
+    /**
+     * The media list from an answer, ready to hand to the artwork job.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<int, array<string, mixed>>
+     */
+    private function mediasIn(array $payload): array
+    {
+        $medias = Arr::get($payload, 'medias');
+
+        return is_array($medias) ? $medias : [];
     }
 
     /**

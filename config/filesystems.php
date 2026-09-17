@@ -58,6 +58,20 @@ return [
             'report' => false,
         ],
 
+        // Artwork retroBite downloaded and owns. Kept out of the games tree on
+        // purpose: that one is exported over SMB and FTP, and a console
+        // browsing its own folder should not be wading through box art.
+        //
+        // Unlike `games`, this disk is written to — everything under it can be
+        // deleted and fetched again without losing anything.
+        'media' => [
+            'driver' => 'local',
+            'root' => storage_path('app/media'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
         // The markdown knowledge base. Outside app/public for the same reason
         // as `games`: attachments are reached through an authed route, never a
         // guessable URL. Nothing but App\Support\DocPath resolves a path here.
