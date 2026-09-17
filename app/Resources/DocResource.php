@@ -136,8 +136,9 @@ final class DocResource
     /**
      * File size for the meta line.
      *
-     * Hand-rolled rather than Number::fileSize(), which needs the intl
-     * extension — and neither the php-fpm-alpine runtime nor CI has it.
+     * Hand-rolled rather than Number::fileSize(). That needed the intl
+     * extension, which the runtime image and CI now both carry — so this is
+     * kept only because it works, not because it has to exist.
      */
     public function humanSize(): string
     {

@@ -1,15 +1,50 @@
 FROM php:8.5-fpm-alpine
 
-# php:8.5-fpm-alpine already has pdo_sqlite, sqlite3 and OPcache compiled in —
-# passing them to docker-php-ext-install builds no module and fails the copy.
-# unzip and git are for Composer's dist path. intl is not optional despite
-# sounding like it: Illuminate\Support\Number throws without it, and both the
-# dashboard and the docs library format file sizes through it. icu-libs has to
-# stay in the final image — icu-dev is only needed to build the extension.
-RUN apk add --no-cache nginx su-exec unzip git libzip icu-libs \
-    && apk add --no-cache --virtual .build-deps libzip-dev icu-dev \
-    && docker-php-ext-install bcmath zip pcntl pdo_mysql intl \
-    && apk del .build-deps
+# php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
+# ctype/curl/dom/fileinfo/filter/hash/mbstring/openssl/pcre/pdo/session/
+# tokenizer/xml set Laravel's requirements list names. Passing an already
+# compiled extension to docker-php-ext-install builds no module and fails the
+# copy, so those must be left off the list below.
+#
+# What is added here is everything else Laravel's own Docker image (Sail)
+# ships, so a feature that needs an extension is never a rebuild away.
+# Deliberately not included: xdebug and pcov (development and coverage tooling
+# that slows a runtime image down), swoole (an alternative server, not
+# compatible with the php-fpm model here), imagick (~150 MB of ImageMagick for
+# what gd already covers) and mongodb and imap (no such database here, and imap
+# left PHP core after 8.3).
+#
+# Runtime libraries must survive .build-deps being removed: an extension links
+# against them at build time and fails at *runtime* without them, so a missing
+# one shows up as a 500 rather than a failed build. That is why icu-libs,
+# libpng, libjpeg-turbo, freetype, libpq, libldap and libmemcached-libs are in
+# the first list rather than the virtual one.
+#
+# unzip and git are for Composer's dist path.
+RUN apk add --no-cache \
+        nginx su-exec unzip git \
+        libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
+        libmemcached-libs gettext libwebp \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS libzip-dev icu-dev libpng-dev libjpeg-turbo-dev \
+        freetype-dev postgresql-dev openldap-dev libmemcached-dev zlib-dev \
+        gettext-dev libxml2-dev linux-headers libwebp-dev \
+    # gd without this builds silently without JPEG support and only fatals when
+    # something calls imagecreatefromjpeg().
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j"$(nproc)" \
+        bcmath calendar exif ftp gd gettext intl ldap pcntl pdo_mysql \
+        pdo_pgsql pgsql shmop soap sockets sysvmsg sysvsem sysvshm zip \
+    # PECL rather than bundled. igbinary and msgpack are the serializers redis
+    # and memcached use, so they are built first.
+    && pecl install igbinary msgpack redis \
+    && docker-php-ext-enable igbinary msgpack redis \
+    # memcached asks for the libmemcached path unless it is answered; the empty
+    # line takes the default.
+    && yes '' | pecl install memcached \
+    && docker-php-ext-enable memcached \
+    && apk del .build-deps \
+    && rm -rf /tmp/pear
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
