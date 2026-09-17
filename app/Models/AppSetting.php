@@ -26,6 +26,13 @@ class AppSetting extends Model
     public const AUTO_QUEUE_MEDIA_SCRAPE = 'auto_queue_media_scrape';
 
     /**
+     * Which regional copy of a piece of artwork to keep.
+     *
+     * Empty means no preference, which falls back to the neutral entries first.
+     */
+    public const MEDIA_REGION = 'media_region';
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

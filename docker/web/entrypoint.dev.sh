@@ -21,6 +21,15 @@ rm -rf /app/public/build
 # Install PHP deps (volume-mounted, so not baked into the image)
 composer install --no-interaction --working-dir=/app
 
+# Node deps go into the container's own node_modules volume, not the host's:
+# package.json pins linux-x64-gnu binaries and this is musl, so the two trees
+# cannot be shared. Skipped when it is already populated, since npm ci would
+# throw the whole thing away on every restart.
+if [ ! -d /app/node_modules/vite ]; then
+    echo "Installing node dependencies ..."
+    npm install --prefix /app --no-audit --no-fund
+fi
+
 # MariaDB accepts connections well after its container reports started, and
 # migrate does not retry.
 echo "Waiting for ${DB_HOST:-retrobite-db}:${DB_PORT:-3306} ..."
@@ -46,15 +55,28 @@ php /app/artisan db:seed --class=MediaTypePreferenceSeeder --force
 # After migrate, which runs as root and would otherwise leave root-owned files.
 chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 
-# Queue workers. One for scraping, because ScreenScraper allows a plain account
-# a single thread; a few for media and hashing, which are disk-bound instead.
-su-exec "$WEB_USER" php /app/artisan queue:work \
-    --queue=scraper --sleep=3 --tries=3 --max-time=3600 &
+# queue:listen rather than queue:work, which is the whole difference here.
+# work keeps one booted application in memory for its whole life, so a job runs
+# whatever the code was when the worker started — edit a job class and the
+# container happily keeps running the old one, with nothing to say so. listen
+# boots a fresh application per job, which costs a little time and is exactly
+# the right trade while the source is bind-mounted.
+#
+# One for scraping, because ScreenScraper allows a plain account a single
+# thread; a few for media and hashing, which are disk-bound instead.
+su-exec "$WEB_USER" php /app/artisan queue:listen \
+    --queue=scraper --sleep=3 --tries=3 &
 
 for _ in 1 2 3; do
-    su-exec "$WEB_USER" php /app/artisan queue:work \
-        --queue=media,default --sleep=3 --tries=3 --max-time=3600 &
+    su-exec "$WEB_USER" php /app/artisan queue:listen \
+        --queue=media,default --sleep=3 --tries=3 &
 done
+
+# Vite, in here rather than on the host, so working on the frontend needs
+# nothing installed locally. Starting it writes public/hot, which Laravel reads
+# to point asset URLs at the dev server instead of the built bundle — which is
+# also why the built bundle was removed above.
+su-exec "$WEB_USER" npm run dev --prefix /app &
 
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D

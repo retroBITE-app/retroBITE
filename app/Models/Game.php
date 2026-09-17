@@ -117,6 +117,63 @@ class Game extends Model
             ->first();
     }
 
+    /**
+     * Why this game cannot be put to the provider, or null when it can.
+     *
+     * Returned as a reason rather than a boolean so the interface can say what
+     * is wrong instead of offering a button that quietly does nothing.
+     */
+    public function blockedFromLookup(): ?string
+    {
+        if ($this->status === GameStatus::Matched) {
+            return __('Already identified.');
+        }
+
+        $console = $this->console();
+
+        if ($console === null || $console->screenscraperId === null) {
+            return __('This console is not mapped to ScreenScraper.');
+        }
+
+        if ($this->identifiableFile() === null) {
+            // A playlist and its cuesheets with no data track left, or every
+            // file gone missing since the last scan.
+            return __('No file here is one the provider can identify.');
+        }
+
+        return null;
+    }
+
+    public function canBeIdentified(): bool
+    {
+        return $this->blockedFromLookup() === null;
+    }
+
+    /**
+     * Why artwork cannot be fetched for this game, or null when it can.
+     *
+     * Two separate conditions, and the second is not about this game at all:
+     * with no media type switched on the job has nothing to ask for and would
+     * return having done nothing.
+     */
+    public function blockedFromMediaScrape(): ?string
+    {
+        if ($this->screenscraper_id === null) {
+            return __('Identify the game first — artwork is fetched by provider id.');
+        }
+
+        if (MediaTypePreference::enabledTypes() === []) {
+            return __('No media types are switched on. Choose some in Settings → Media.');
+        }
+
+        return null;
+    }
+
+    public function canFetchMedia(): bool
+    {
+        return $this->blockedFromMediaScrape() === null;
+    }
+
     /** @param  Builder<Game>  $query */
     public function scopeAwaitingLookup(Builder $query): void
     {

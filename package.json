@@ -1,6 +1,7 @@
 {
-    "$schema": "https://www.schemastore.org/package.json",
+    "name": "retrobite",
     "private": true,
+    "$schema": "https://www.schemastore.org/package.json",
     "type": "module",
     "scripts": {
         "build": "vp build",

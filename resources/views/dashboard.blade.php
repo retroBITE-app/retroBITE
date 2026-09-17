@@ -2,6 +2,7 @@
     use App\Enums\GameStatus;
     use App\Enums\ShareProtocol;
     use App\Models\Game;
+    use App\Models\ConsoleSourceFolder;
     use App\Models\GameFile;
     use App\Services\NetworkService;
     use App\Support\Console;
@@ -26,14 +27,18 @@
 
     $hero = $recent[0] ?? null;
 
+    // The consoles somebody put in their library, not every directory that
+    // happens to exist under the ROM root.
+    $consoles = ConsoleSourceFolder::consoles();
+
     $games = Game::count();
     $identified = Game::where('status', GameStatus::Matched)->count();
     $bytes = (int) GameFile::whereNull('missing_since')->sum('size_bytes');
 
     $cells = [
-        ['label' => 'Games', 'value' => (string) $games, 'sub' => trans_choice('across :count console|across :count consoles', Console::allInstalled()->count(), ['count' => Console::allInstalled()->count()])],
+        ['label' => 'Games', 'value' => (string) $games, 'sub' => trans_choice('across :count console|across :count consoles', $consoles->count(), ['count' => $consoles->count()])],
         ['label' => 'Identified', 'value' => (string) $identified, 'sub' => __(':count still unmatched', ['count' => $games - $identified])],
-        ['label' => 'Consoles', 'value' => (string) Console::allInstalled()->count(), 'sub' => 'installed'],
+        ['label' => 'Consoles', 'value' => (string) $consoles->count(), 'sub' => __('in your library')],
         ['label' => 'Storage', 'value' => Number::fileSize($bytes, 1), 'sub' => __('on disk')],
     ];
 
@@ -58,7 +63,7 @@
     $status = app(NetworkService::class)->status();
     $hostIp = config('settings.network.host_ip');
     $shareUser = config('settings.network.username');
-    $shares = Console::allInstalled();
+    $shares = $consoles;
 
     $hour = (int) now()->format('G');
     $greeting = $hour >= 17 ? __('Good evening') : ($hour >= 12 ? __('Good afternoon') : __('Good morning'));

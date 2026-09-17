@@ -1,8 +1,11 @@
 <?php
 
 use App\Enums\GameStatus;
+use App\Jobs\MatchGame;
+use App\Jobs\ScrapeGameMedia;
 use App\Models\Game;
 use App\Support\Console;
+use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -61,6 +64,51 @@ new #[Title('Games')] class extends Component
             ->values();
     }
 
+    /**
+     * Put one game to the provider now.
+     *
+     * Queued rather than run here: the scraper queue paces its requests, and a
+     * page should not sit waiting on somebody else's server.
+     */
+    public function identify(int $id): void
+    {
+        $game = Game::find($id);
+
+        if ($game === null) {
+            return;
+        }
+
+        if ($reason = $game->blockedFromLookup()) {
+            Flux::toast(variant: 'warning', text: $reason);
+
+            return;
+        }
+
+        MatchGame::dispatch($game->id);
+
+        Flux::toast(text: __('Identifying :title.', ['title' => $game->title]));
+    }
+
+    /** Fetch artwork for one game now. */
+    public function fetchMedia(int $id): void
+    {
+        $game = Game::find($id);
+
+        if ($game === null) {
+            return;
+        }
+
+        if ($reason = $game->blockedFromMediaScrape()) {
+            Flux::toast(variant: 'warning', text: $reason);
+
+            return;
+        }
+
+        ScrapeGameMedia::dispatch($game->id);
+
+        Flux::toast(text: __('Fetching artwork for :title.', ['title' => $game->title]));
+    }
+
     public function clear(): void
     {
         $this->reset('query', 'console', 'status');
@@ -111,6 +159,7 @@ new #[Title('Games')] class extends Component
                             <th class="px-4 py-2.5 font-medium">{{ __('Console') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Files') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Status') }}</th>
+                            <th class="px-4 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -129,6 +178,23 @@ new #[Title('Games')] class extends Component
                                         App\Enums\GameStatus::Unmatched => 'amber',
                                         default => 'zinc',
                                     }">{{ $game->status->label() }}</flux:badge>
+                                </td>
+                                <td class="px-4 py-2.5 text-right">
+                                    @if ($game->canBeIdentified())
+                                        <flux:button size="xs" variant="ghost" icon="sparkles"
+                                                     wire:click="identify({{ $game->id }})"
+                                                     wire:loading.attr="disabled"
+                                                     wire:target="identify({{ $game->id }})">
+                                            {{ __('Identify') }}
+                                        </flux:button>
+                                    @elseif ($game->canFetchMedia())
+                                        <flux:button size="xs" variant="ghost" icon="photo"
+                                                     wire:click="fetchMedia({{ $game->id }})"
+                                                     wire:loading.attr="disabled"
+                                                     wire:target="fetchMedia({{ $game->id }})">
+                                            {{ __('Artwork') }}
+                                        </flux:button>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach

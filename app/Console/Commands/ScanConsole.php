@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Exceptions\ScanAborted;
+use App\Jobs\MatchGame;
 use App\Jobs\ScanConsoleFolder;
+use App\Models\ConsoleSourceFolder;
 use App\Services\LibraryScanner;
 use App\Support\Console as ConsoleConfig;
 use Illuminate\Console\Command;
@@ -13,7 +15,7 @@ use Illuminate\Console\Command;
 class ScanConsole extends Command
 {
     protected $signature = 'retrobite:scan
-                            {console? : Console key, e.g. psx. Omit to scan every installed console.}
+                            {console? : Console key, e.g. psx. Omit to scan every console in the library.}
                             {--queue : Queue the scan instead of running it here.}';
 
     protected $description = 'Read a console folder and record the games and files on it';
@@ -22,10 +24,10 @@ class ScanConsole extends Command
     {
         $consoles = $this->argument('console') !== null
             ? array_filter([ConsoleConfig::tryFrom((string) $this->argument('console'))])
-            : ConsoleConfig::allInstalled()->all();
+            : ConsoleSourceFolder::consoles()->all();
 
         if ($consoles === []) {
-            $this->error('No such console, or no console has a folder yet.');
+            $this->error('No such console, or nothing has been added to the library yet.');
 
             return self::FAILURE;
         }
@@ -49,8 +51,13 @@ class ScanConsole extends Command
                 continue;
             }
 
+            $queued = MatchGame::queueAwaiting($console->key);
+
             $this->info($console->name);
-            $this->table(array_keys($result->toArray()), [array_values($result->toArray())]);
+            $this->table(
+                [...array_keys($result->toArray()), 'queued_for_lookup'],
+                [[...array_values($result->toArray()), $queued]],
+            );
         }
 
         return $failed ? self::FAILURE : self::SUCCESS;

@@ -3,6 +3,7 @@
 use App\Enums\MediaKind;
 use App\Models\AppSetting;
 use App\Models\MediaTypePreference;
+use App\Support\MediaRegions;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -16,6 +17,9 @@ new #[Title('Media settings')] class extends Component
 
     public bool $autoQueue = true;
 
+    /** '' means no preference. */
+    public string $region = '';
+
     public function mount(): void
     {
         $this->enabled = MediaTypePreference::query()
@@ -25,6 +29,18 @@ new #[Title('Media settings')] class extends Component
             ->all();
 
         $this->autoQueue = AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true);
+        $this->region = MediaRegions::preferred();
+    }
+
+    /**
+     * Region codes with a label, preference first.
+     *
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function regions(): array
+    {
+        return MediaRegions::labels();
     }
 
     /**
@@ -48,6 +64,7 @@ new #[Title('Media settings')] class extends Component
         }
 
         AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, $this->autoQueue);
+        AppSetting::put(AppSetting::MEDIA_REGION, $this->region);
 
         Flux::toast(variant: 'success', text: __('Media settings saved.'));
     }
@@ -62,6 +79,16 @@ new #[Title('Media settings')] class extends Component
                 <flux:switch wire:model="autoQueue"
                              :label="__('Fetch artwork automatically')"
                              :description="__('Queues a download as soon as a game is identified. Turn it off to fetch on demand instead.')" />
+            </div>
+
+            <div class="rounded-xl border border-line bg-surface p-5">
+                <flux:select wire:model="region" :label="__('Preferred region')"
+                             :description="__('Artwork often exists for several regions. One copy is kept — this one when it exists, otherwise World, Europe, the United States and Japan in that order.')">
+                    <flux:select.option value="">{{ __('No preference') }}</flux:select.option>
+                    @foreach ($this->regions as $code => $label)
+                        <flux:select.option value="{{ $code }}">{{ $label }}</flux:select.option>
+                    @endforeach
+                </flux:select>
             </div>
 
             <div class="rounded-xl border border-line bg-surface p-5">

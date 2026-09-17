@@ -98,28 +98,33 @@ server to verify through.
 Bind-mounts the source, so PHP changes take effect without a rebuild:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
-Frontend assets are built into the image. To iterate on CSS with hot reload, run
-the Vite dev server on the host alongside the containers:
+The development stack runs everything in the web container — PHP-FPM, nginx,
+the queue workers and the Vite dev server — so nothing has to be installed on
+the host to work on this.
 
-```bash
-npm run dev
-```
-
-It listens on **port 1337** (set in `vite.config.js`, with `strictPort` so a
+Vite listens on **port 1337** (fixed in `vite.config.js` with `strictPort`, so a
 clash fails loudly rather than drifting to another port). Starting it writes
-`public/hot`, which the container reads through the bind mount — so Laravel
-serves asset URLs pointing at the dev server instead of the built bundle. Stop
-Vite and the file is removed, and the built bundle takes over again.
+`public/hot`, which Laravel reads to point asset URLs at the dev server instead
+of the built bundle; stop the container and the built bundle takes over again.
 
-Run artisan commands inside the container with the provided wrapper:
+The container keeps its own `node_modules` in a volume rather than sharing the
+host's through the bind mount: `package.json` pins `linux-x64-gnu` binaries and
+the image is Alpine, which is musl.
 
-```bash
-./artisan.sh migrate
-./artisan.sh tinker
-```
+Queue workers run under `queue:listen` here, not `queue:work`. `work` keeps one
+booted application in memory for its whole life, so a job runs whatever the code
+was when the worker started — edit a job class and the container keeps running
+the old one with nothing to say so. `listen` boots a fresh application per job.
+
+The entrypoint scripts are copied into the image rather than bind-mounted, so
+changing one needs `--build`; a plain restart runs the old script.
+
+The two stacks are separate Compose projects and both publish port 81, so they
+are alternatives rather than companions — bring one down before starting the
+other.
 
 ### Where things live
 

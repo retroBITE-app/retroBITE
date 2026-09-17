@@ -63,6 +63,11 @@ class ScanConsoleFolder implements ShouldQueue
             return;
         }
 
-        Log::info('Scan finished.', $result->toArray());
+        // Recording what is on disk is only half of it. Without this the
+        // library fills with placeholders named after their filenames and
+        // nothing ever identifies them.
+        $queued = MatchGame::queueAwaiting($console->key);
+
+        Log::info('Scan finished.', $result->toArray() + ['queued_for_lookup' => $queued]);
     }
 }

@@ -14,20 +14,27 @@ use Livewire\Component;
 
 new #[Title('Consoles')] class extends Component
 {
-    /** The console being added, while the folder picker is open. */
+    public const MODAL = 'add-console';
+
+    /** Narrows the list of consoles to choose from. 135 of them is a lot to scroll. */
+    public string $search = '';
+
+    /** The console being added, once one has been chosen and its folder is missing. */
     public string $adding = '';
 
     public string $chosenFolder = '';
 
-    public bool $showAvailable = false;
-
     /**
-     * Consoles with a folder on disk, with their library counts.
+     * The consoles in the library, with their counts.
+     *
+     * Not every console with a directory on disk: a collection copied wholesale
+     * leaves a hundred folders behind, and listing all of them buries the four
+     * that hold games.
      *
      * @return Collection<int, array<string, mixed>>
      */
     #[Computed]
-    public function installed(): Collection
+    public function added(): Collection
     {
         $counts = Game::query()
             ->selectRaw('console, count(*) as games, sum(status = ?) as identified', ['matched'])
@@ -35,7 +42,7 @@ new #[Title('Consoles')] class extends Component
             ->get()
             ->keyBy('console');
 
-        return Console::allInstalled()->map(fn (Console $console) => [
+        return ConsoleSourceFolder::consoles()->map(fn (Console $console) => [
             'console' => $console,
             'games' => (int) ($counts[$console->key]->games ?? 0),
             'identified' => (int) ($counts[$console->key]->identified ?? 0),
@@ -44,14 +51,27 @@ new #[Title('Consoles')] class extends Component
     }
 
     /**
-     * Everything retroBite knows about that has no folder yet.
+     * Consoles not in the library yet, narrowed by the search box.
      *
      * @return Collection<int, Console>
      */
     #[Computed]
-    public function available(): Collection
+    public function choices(): Collection
     {
-        return Console::allAvailable()->sortBy('name')->values();
+        $needle = trim(mb_strtolower($this->search));
+
+        return Console::all()
+            ->reject(fn (Console $console) => ConsoleSourceFolder::has($console))
+            ->filter(function (Console $console) use ($needle) {
+                if ($needle === '') {
+                    return true;
+                }
+
+                // Brand as well as name, so "sega" finds the Mega Drive.
+                return str_contains(mb_strtolower($console->name.' '.$console->brand.' '.$console->key), $needle);
+            })
+            ->sortBy('name')
+            ->values();
     }
 
     /**
@@ -62,12 +82,12 @@ new #[Title('Consoles')] class extends Component
     #[Computed]
     public function folders(): Collection
     {
-        $taken = Console::allInstalled()
-            ->map(fn (Console $console) => ConsoleSourceFolder::pathFor($console))
-            ->filter()
-            ->all();
-
-        return LibraryFolders::available($taken);
+        return LibraryFolders::available(
+            ConsoleSourceFolder::consoles()
+                ->map(fn (Console $console) => ConsoleSourceFolder::pathFor($console))
+                ->filter()
+                ->all()
+        );
     }
 
     /**
@@ -87,14 +107,28 @@ new #[Title('Consoles')] class extends Component
         ];
     }
 
+    public function openAdd(): void
+    {
+        $this->reset('search', 'adding', 'chosenFolder');
+
+        Flux::modal(self::MODAL)->show();
+    }
+
+    public function closeAdd(): void
+    {
+        $this->reset('search', 'adding', 'chosenFolder');
+
+        Flux::modal(self::MODAL)->close();
+    }
+
     /**
-     * Start adding a console.
+     * Choose a console to add.
      *
-     * Convention first: if games_path/{folder} is already there, nothing needs
-     * asking. Only when it is missing does the picker open, which is the whole
-     * reason the picker exists.
+     * Convention first: when games_path/{folder} is already there, nothing
+     * needs asking and the scan starts. The picker is only for the case it is
+     * not, which is the whole reason it exists.
      */
-    public function add(string $key): void
+    public function choose(string $key): void
     {
         $console = Console::tryFrom($key);
 
@@ -103,7 +137,9 @@ new #[Title('Consoles')] class extends Component
         }
 
         if ($console->installed()) {
-            $this->scan($key);
+            ConsoleSourceFolder::add($console);
+            $this->closeAdd();
+            $this->scan($console->key);
 
             return;
         }
@@ -112,20 +148,12 @@ new #[Title('Consoles')] class extends Component
         $this->chosenFolder = '';
     }
 
-    public function cancelAdd(): void
-    {
-        $this->adding = '';
-        $this->chosenFolder = '';
-    }
-
     /** Point a console at a folder that is not where convention says. */
     public function useFolder(): void
     {
         $console = Console::tryFrom($this->adding);
 
-        $this->validate([
-            'chosenFolder' => ['required', 'string'],
-        ]);
+        $this->validate(['chosenFolder' => ['required', 'string']]);
 
         if ($console === null || ! LibraryFolders::contains($this->chosenFolder)) {
             $this->addError('chosenFolder', __('That folder is not inside the library.'));
@@ -133,20 +161,35 @@ new #[Title('Consoles')] class extends Component
             return;
         }
 
-        ConsoleSourceFolder::updateOrCreate(
-            ['console' => $console->key],
-            ['path' => trim($this->chosenFolder, '/')],
-        );
+        ConsoleSourceFolder::add($console, $this->chosenFolder);
 
         $key = $console->key;
-        $this->cancelAdd();
+        $this->closeAdd();
 
         Flux::toast(variant: 'success', text: __(':console now reads from :folder.', [
             'console' => $console->name,
-            'folder' => trim($this->chosenFolder, '/') ?: $console->folder,
+            'folder' => trim($this->chosenFolder, '/'),
         ]));
 
         $this->scan($key);
+    }
+
+    /** Take a console out of the library. Its games and files stay. */
+    public function remove(string $key): void
+    {
+        $console = Console::tryFrom($key);
+
+        if ($console === null) {
+            return;
+        }
+
+        ConsoleSourceFolder::forget($console);
+
+        unset($this->added, $this->choices);
+
+        Flux::toast(text: __(':console removed from your library. Nothing on disk was touched.', [
+            'console' => $console->name,
+        ]));
     }
 
     /** Queue a scan. Never runs here: a large library takes minutes to walk. */
@@ -160,7 +203,7 @@ new #[Title('Consoles')] class extends Component
 
         ScanConsoleFolder::dispatch($console->key);
 
-        unset($this->queued);
+        unset($this->queued, $this->added);
 
         Flux::toast(text: __('Scanning :console. The library fills in as it goes.', ['console' => $console->name]));
     }
@@ -174,8 +217,8 @@ new #[Title('Consoles')] class extends Component
                 <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Consoles') }}</h1>
             </div>
 
-            <flux:button size="sm" variant="ghost" wire:click="$toggle('showAvailable')">
-                {{ $showAvailable ? __('Hide the rest') : __('Add a console') }}
+            <flux:button size="sm" variant="primary" icon="plus" wire:click="openAdd">
+                {{ __('Add console') }}
             </flux:button>
         </div>
 
@@ -187,23 +230,28 @@ new #[Title('Consoles')] class extends Component
                 @foreach ($this->queued as $label => $count)
                     @if ($count > 0)
                         <p class="text-sm text-fg">
-                            <span class="font-medium text-fg-bright">{{ $count }}</span>
-                            {{ __(ucfirst($label)) }}
+                            <span class="font-medium text-fg-bright">{{ $count }}</span> {{ __(ucfirst($label)) }}
                         </p>
                     @endif
                 @endforeach
             </div>
         @endif
 
-        @if ($this->installed->isEmpty())
-            <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
-                <p class="text-sm text-fg-soft">{{ __('No console has a folder yet.') }}</p>
-                <p class="mt-1 text-sm text-fg-faint">{{ __('Add one below and point it at your ROMs.') }}</p>
+        @if ($this->added->isEmpty())
+            <div class="rounded-xl border border-dashed border-line-input px-6 py-12 text-center">
+                <p class="text-sm text-fg-soft">{{ __('Your library is empty.') }}</p>
+                <p class="mt-1 text-sm text-fg-faint">
+                    {{ __('Add the consoles you want to see. A folder on disk does not put one here by itself.') }}
+                </p>
+                <flux:button size="sm" variant="primary" icon="plus" class="mt-5" wire:click="openAdd">
+                    {{ __('Add console') }}
+                </flux:button>
             </div>
         @else
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                @foreach ($this->installed as $row)
-                    <div class="flex items-center gap-4 rounded-xl border border-line bg-surface p-4">
+                @foreach ($this->added as $row)
+                    <div wire:key="added-{{ $row['console']->key }}"
+                         class="group flex items-center gap-4 rounded-xl border border-line bg-surface p-4">
                         <img src="{{ $row['console']->icon }}" alt="" class="size-12 shrink-0 object-contain" />
 
                         <div class="min-w-0 flex-1">
@@ -217,58 +265,97 @@ new #[Title('Consoles')] class extends Component
                             <p class="mt-0.5 truncate font-mono text-xs text-fg-faint">{{ $row['folder'] }}</p>
                         </div>
 
-                        <flux:button size="sm" variant="ghost" wire:click="scan('{{ $row['console']->key }}')">
-                            {{ __('Scan') }}
-                        </flux:button>
+                        <div class="flex shrink-0 items-center gap-1">
+                            <flux:button size="sm" variant="ghost" wire:click="scan('{{ $row['console']->key }}')">
+                                {{ __('Scan') }}
+                            </flux:button>
+
+                            <flux:dropdown position="bottom" align="end">
+                                <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
+                                <flux:menu>
+                                    <flux:menu.item icon="trash" variant="danger"
+                                                    wire:click="remove('{{ $row['console']->key }}')"
+                                                    wire:confirm="{{ __('Remove :console from your library? Its games stay and nothing on disk is touched.', ['console' => $row['console']->name]) }}">
+                                        {{ __('Remove') }}
+                                    </flux:menu.item>
+                                </flux:menu>
+                            </flux:dropdown>
+                        </div>
                     </div>
                 @endforeach
             </div>
         @endif
+    </div>
 
-        @if ($showAvailable)
-            <div class="rounded-xl border border-line bg-surface p-5">
-                <p class="kicker mb-3 text-fg-faint">{{ __('Not set up yet') }}</p>
+    <flux:modal :name="$this::MODAL" wire:close="closeAdd" class="w-full max-w-lg">
+        @if ($adding === '')
+            <div class="flex flex-col gap-4">
+                <div>
+                    <flux:heading size="lg">{{ __('Add a console') }}</flux:heading>
+                    <flux:text class="mt-2">{{ __('Only the ones you add appear in your library.') }}</flux:text>
+                </div>
 
-                <div class="flex flex-wrap gap-2">
-                    @foreach ($this->available as $console)
-                        <flux:button size="sm" variant="ghost" wire:click="add('{{ $console->key }}')">
-                            {{ $console->name }}
-                        </flux:button>
-                    @endforeach
+                <flux:input wire:model.live.debounce.200ms="search" icon="magnifying-glass"
+                            :placeholder="__('Search by name or brand')" size="sm" autofocus />
+
+                @if ($this->choices->isEmpty())
+                    <p class="rounded-lg border border-dashed border-line-input px-4 py-6 text-center text-sm text-fg-faint">
+                        {{ $search === '' ? __('Every console is already in your library.') : __('Nothing matches that.') }}
+                    </p>
+                @else
+                    <div class="-mx-2 max-h-96 overflow-y-auto px-2">
+                        @foreach ($this->choices as $console)
+                            <button type="button" wire:key="choice-{{ $console->key }}"
+                                    wire:click="choose('{{ $console->key }}')"
+                                    class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover">
+                                <img src="{{ $console->icon }}" alt="" class="size-8 shrink-0 object-contain" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm text-fg-bright">{{ $console->name }}</span>
+                                    <span class="block truncate text-xs text-fg-faint">{{ $console->brand }}</span>
+                                </span>
+                                @if ($console->installed())
+                                    {{-- Its folder is already there, so adding it asks nothing. --}}
+                                    <flux:badge size="sm" color="green">{{ __('Folder found') }}</flux:badge>
+                                @endif
+                            </button>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        @else
+            @php($console = App\Support\Console::tryFrom($adding))
+            <div class="flex flex-col gap-5">
+                <div>
+                    <flux:heading size="lg">{{ __('Where are the ROMs?') }}</flux:heading>
+                    <flux:text class="mt-2">
+                        {{ __('There is no :folder folder, so pick the one that holds :console.', [
+                            'folder' => $console?->folder ?? $adding,
+                            'console' => $console?->name ?? $adding,
+                        ]) }}
+                    </flux:text>
+                </div>
+
+                @if ($this->folders->isEmpty())
+                    <p class="rounded-lg border border-dashed border-line-input px-4 py-6 text-center text-sm text-fg-faint">
+                        {{ __('No folders under the library root. Add one over the network share first.') }}
+                    </p>
+                @else
+                    <flux:select wire:model="chosenFolder" :label="__('Folder')">
+                        <flux:select.option value="">{{ __('Choose…') }}</flux:select.option>
+                        @foreach ($this->folders as $folder)
+                            <flux:select.option value="{{ $folder }}">{{ $folder }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                    <flux:error name="chosenFolder" />
+                @endif
+
+                <div class="flex justify-end gap-2">
+                    <flux:button size="sm" variant="ghost" wire:click="$set('adding', '')">{{ __('Back') }}</flux:button>
+                    <flux:button size="sm" variant="primary" wire:click="useFolder" :disabled="$this->folders->isEmpty()">
+                        {{ __('Use this folder') }}
+                    </flux:button>
                 </div>
             </div>
         @endif
-    </div>
-
-    <flux:modal name="pick-folder" :open="$adding !== ''" wire:close="cancelAdd" class="max-w-lg">
-        <div class="flex flex-col gap-5">
-            <div>
-                <flux:heading size="lg">{{ __('Where are the ROMs?') }}</flux:heading>
-                <flux:text class="mt-2">
-                    {{ __('There is no :folder folder, so pick the one that holds them.', ['folder' => $adding]) }}
-                </flux:text>
-            </div>
-
-            @if ($this->folders->isEmpty())
-                <p class="rounded-lg border border-dashed border-line-input px-4 py-6 text-center text-sm text-fg-faint">
-                    {{ __('No folders under the library root. Add one over the network share first.') }}
-                </p>
-            @else
-                <flux:select wire:model="chosenFolder" :label="__('Folder')">
-                    <flux:select.option value="">{{ __('Choose…') }}</flux:select.option>
-                    @foreach ($this->folders as $folder)
-                        <flux:select.option value="{{ $folder }}">{{ $folder }}</flux:select.option>
-                    @endforeach
-                </flux:select>
-                <flux:error name="chosenFolder" />
-            @endif
-
-            <div class="flex justify-end gap-2">
-                <flux:button size="sm" variant="ghost" wire:click="cancelAdd">{{ __('Cancel') }}</flux:button>
-                <flux:button size="sm" variant="primary" wire:click="useFolder" :disabled="$this->folders->isEmpty()">
-                    {{ __('Use this folder') }}
-                </flux:button>
-            </div>
-        </div>
     </flux:modal>
 </section>

@@ -47,7 +47,7 @@
             </flux:sidebar.nav>
 
 
-            @php($installed = App\Support\Console::allInstalled())
+            @php($installed = App\Models\ConsoleSourceFolder::consoles())
 
             @if ($installed->isNotEmpty())
                 {{--

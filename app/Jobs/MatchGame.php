@@ -43,6 +43,27 @@ class MatchGame implements ShouldQueue
         $this->onQueue('scraper');
     }
 
+    /**
+     * Queue a lookup for every game on a console still waiting for one.
+     *
+     * One job per game rather than per file: a four-disc set is one game and
+     * one question. Games already looked up and not found are left alone —
+     * asking again spends the failed-lookup allowance, which is ten times
+     * scarcer than the ordinary one, to be told the same thing.
+     *
+     * @return int how many were queued
+     */
+    public static function queueAwaiting(string $console): int
+    {
+        $ids = Game::query()->awaitingLookup()->forConsole($console)->pluck('id');
+
+        foreach ($ids as $id) {
+            self::dispatch($id);
+        }
+
+        return $ids->count();
+    }
+
     public function handle(GameMatcher $matcher): void
     {
         $game = Game::find($this->gameId);
@@ -54,7 +75,7 @@ class MatchGame implements ShouldQueue
         try {
             $result = $matcher->match($game, $this->withChecksums);
         } catch (ScreenScraperException $e) {
-            $this->backOff($e);
+            $this->waitAndRetry($e);
 
             return;
         }
@@ -90,8 +111,12 @@ class MatchGame implements ShouldQueue
 
     /**
      * Put the job back rather than fail it, when the provider says to wait.
+     *
+     * Not called backOff: PHP matches method names without regard to case, so
+     * that collides with the backoff() the queue looks for on every job, and
+     * the framework reaching a private method of that name is fatal at dispatch.
      */
-    private function backOff(ScreenScraperException $e): void
+    private function waitAndRetry(ScreenScraperException $e): void
     {
         if (! $e->retryable()) {
             Log::error('Match abandoned.', ['game' => $this->gameId, 'reason' => $e->getMessage()]);

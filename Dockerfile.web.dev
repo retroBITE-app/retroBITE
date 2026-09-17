@@ -20,9 +20,11 @@ FROM php:8.5-fpm-alpine
 # libpng, libjpeg-turbo, freetype, libpq, libldap and libmemcached-libs are in
 # the first list rather than the virtual one.
 #
-# unzip and git are for Composer's dist path.
+# unzip and git are for Composer's dist path. nodejs and npm are here so the
+# whole development stack runs in this container and nothing has to be
+# installed on the host to work on the frontend.
 RUN apk add --no-cache \
-        nginx su-exec unzip git \
+        nginx su-exec unzip git nodejs npm \
         libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
         libmemcached-libs gettext libwebp \
     && apk add --no-cache --virtual .build-deps \

@@ -1,3 +1,8 @@
+# Its own project, so bringing this up does not replace the production
+# stack's containers: both files name a service retrobite-db, and without
+# this they fight over the same container.
+name: retrobite-dev
+
 services:
   retrobite-web:
     build:
@@ -15,6 +20,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-retrobite}
     ports:
       - 81:80
+      # Vite. Fixed by vite.config.js with strictPort, so a clash fails loudly.
+      - 1337:1337
     volumes:
       - .:/app
       - ${GAMES_PATH:-./games}:/app/storage/app/games
@@ -25,6 +32,10 @@ services:
       # Livewire compiles single-file components to absolute paths, so sharing
       # this directory between host and container invalidates every cached view.
       - retrobite-views:/app/storage/framework/views
+      # The container's own node_modules. package.json pins linux-x64-gnu
+      # binaries and Alpine is musl, so sharing the host's tree through the
+      # bind mount above hands Vite libraries it cannot load.
+      - retrobite-node:/app/node_modules
     depends_on:
       retrobite-db:
         condition: service_healthy
@@ -72,3 +83,4 @@ volumes:
   retrobite-db:
   retrobite-media:
   retrobite-views:
+  retrobite-node:

@@ -13,6 +13,7 @@ use App\Models\Game;
 use App\Models\MediaTypePreference;
 use App\Services\MediaLibrary;
 use App\Services\ScreenScraperService;
+use App\Support\MediaRegions;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -65,13 +66,20 @@ class ScrapeGameMedia implements ShouldQueue
         try {
             $medias = $this->medias ?? $this->refetch($provider, $game);
         } catch (ScreenScraperException $e) {
-            $this->backOff($e);
+            $this->waitAndRetry($e);
 
             return;
         }
 
+        // One copy of each type, not every region the provider holds: otherwise
+        // the same cover lands four times in four languages and the interface
+        // picks between them at random.
+        $medias = MediaRegions::onePerType($medias);
+
         $stored = 0;
         $skipped = 0;
+        /** @var array<string, string> $outcomes */
+        $outcomes = [];
 
         foreach ($medias as $entry) {
             $type = (string) ($entry['type'] ?? '');
@@ -89,40 +97,70 @@ class ScrapeGameMedia implements ShouldQueue
                 continue;
             }
 
+            // The checksum of the copy WE hold, if any — never the provider's
+            // own. Sending back the md5 it just gave us is a question it always
+            // answers MD5OK to, and MD5OK means no bytes: every media with a
+            // checksum in the metadata was skipped and nothing was ever stored.
+            $held = $game->media()
+                ->where('screenscraper_type', $type)
+                ->when(isset($entry['region']), fn ($q) => $q->where('region', $entry['region']))
+                ->value('md5');
+
             try {
-                $fetch = $provider->fetchMedia($url, $entry['md5'] ?? null);
+                $fetch = $provider->fetchMedia($url, $held);
             } catch (ScreenScraperException $e) {
                 // Only conditions that apply to the whole account stop the
                 // job — the next type would meet the same wall. Anything that
                 // is wrong with this one URL is skipped, because losing a
                 // screenshot is not a reason to lose the box art too.
                 if ($this->appliesToEveryRequest($e)) {
-                    $this->backOff($e);
+                    $this->waitAndRetry($e);
 
                     return;
                 }
 
                 Log::warning('Skipping one media type.', ['game' => $game->id, 'type' => $type, 'reason' => $e->getMessage()]);
+                $outcomes[$type] = 'failed: '.$e->getMessage();
                 $skipped++;
 
                 continue;
             } catch (Throwable $e) {
                 Log::warning('Skipping one media type.', ['game' => $game->id, 'type' => $type, 'reason' => $e->getMessage()]);
+                $outcomes[$type] = 'failed: '.$e->getMessage();
                 $skipped++;
 
                 continue;
             }
 
             if ($fetch->contents === null) {
+                $outcomes[$type] = $fetch->unchanged ? 'unchanged' : 'not held by the provider';
                 $skipped++;
 
                 continue;
             }
 
             if ($library->store($game, $entry, $fetch->contents) !== null) {
+                $outcomes[$type] = 'stored';
                 $stored++;
+            } else {
+                $outcomes[$type] = 'already held';
+                $skipped++;
             }
         }
+
+        // One record per scrape rather than per file: twenty rows a game would
+        // bury the thing somebody opens this to find out — which type came
+        // back with what.
+        activity('screenscraper')
+            ->performedOn($game)
+            ->withProperties([
+                'endpoint' => 'mediaJeu.php',
+                'requested' => $wanted,
+                'outcomes' => $outcomes,
+                'stored' => $stored,
+                'skipped' => $skipped,
+            ])
+            ->log('media scrape');
 
         Log::info('Media scrape finished.', ['game' => $game->id, 'stored' => $stored, 'skipped' => $skipped]);
     }
@@ -152,7 +190,14 @@ class ScrapeGameMedia implements ShouldQueue
             || $e instanceof SoftwareBlacklisted;
     }
 
-    private function backOff(ScreenScraperException $e): void
+    /**
+     * Put the job back rather than fail it, when the provider says to wait.
+     *
+     * Not called backOff: PHP matches method names without regard to case, so
+     * that collides with the backoff() the queue looks for on every job, and
+     * the framework reaching a private method of that name is fatal at dispatch.
+     */
+    private function waitAndRetry(ScreenScraperException $e): void
     {
         if (! $e->retryable()) {
             $this->fail($e);
