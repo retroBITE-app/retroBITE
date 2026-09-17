@@ -6,6 +6,7 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
     Route::livewire('settings/profile', 'settings.profile')->name('profile.edit');
+    Route::livewire('settings/media', 'settings.media')->name('media.edit');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

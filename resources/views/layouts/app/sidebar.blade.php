@@ -29,6 +29,9 @@
                 <flux:sidebar.item icon="puzzle-piece" :href="route('consoles.index')" :current="request()->routeIs('consoles.*')" wire:navigate>
                     {{ __('Consoles') }}
                 </flux:sidebar.item>
+                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.*')" wire:navigate>
+                    {{ __('Games') }}
+                </flux:sidebar.item>
 
                 <flux:sidebar.item icon="wrench-screwdriver" :href="route('builder.index')" :current="request()->routeIs('builder.*')" wire:navigate>
                     {{ __('Builder') }}
@@ -38,7 +41,7 @@
                     {{ __('Docs') }}
                 </flux:sidebar.item>
 
-                <flux:sidebar.item icon="adjustments-horizontal" :href="route('profile.edit')" :current="request()->routeIs('profile.*') || request()->routeIs('security.*')" wire:navigate>
+                <flux:sidebar.item icon="adjustments-horizontal" :href="route('profile.edit')" :current="request()->routeIs('profile.*') || request()->routeIs('security.*') || request()->routeIs('media.edit')" wire:navigate>
                     {{ __('Settings') }}
                 </flux:sidebar.item>
             </flux:sidebar.nav>

@@ -1,32 +1,58 @@
 @php
+    use App\Enums\GameStatus;
     use App\Enums\ShareProtocol;
+    use App\Models\Game;
+    use App\Models\GameFile;
     use App\Services\NetworkService;
     use App\Support\Console;
+    use Illuminate\Support\Number;
 
-    // Placeholder library data. There is no Game model yet; these rows stand in
-    // for it so the dashboard reads as designed. Every field maps 1:1 to what
-    // the previous build passed in, so swapping in real records is a
-    // substitution rather than a rewrite.
-    $recent = [
-        ['title' => 'Gran Turismo 3: A-Spec', 'console' => 'PlayStation 2', 'path' => 'games/ps2', 'size' => '4.1 GB', 'added' => '2 hours ago'],
-        ['title' => 'The Wind Waker', 'console' => 'GameCube', 'path' => 'games/gc', 'size' => '1.3 GB', 'added' => 'yesterday'],
-        ['title' => 'Super Metroid', 'console' => 'Super Nintendo', 'path' => 'games/snes', 'size' => '3.0 MB', 'added' => '3 days ago'],
-    ];
+    // Real records now. The shape is unchanged from the placeholder rows this
+    // replaced, so the markup below did not have to move.
+    $recent = Game::query()
+        ->with('files')
+        ->latest('id')
+        ->take(3)
+        ->get()
+        ->map(fn (Game $game) => [
+            'title' => $game->title,
+            'console' => $game->console()?->name ?? $game->console,
+            'path' => $game->console()?->libraryPath() ?? $game->console,
+            'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
+            'added' => $game->created_at?->diffForHumans() ?? '',
+            'id' => $game->id,
+        ])
+        ->all();
 
-    $hero = $recent[0];
+    $hero = $recent[0] ?? null;
+
+    $games = Game::count();
+    $identified = Game::where('status', GameStatus::Matched)->count();
+    $bytes = (int) GameFile::whereNull('missing_since')->sum('size_bytes');
 
     $cells = [
-        ['label' => 'Games', 'value' => '20', 'sub' => 'across 10 consoles'],
-        ['label' => 'Identified', 'value' => '14', 'sub' => '6 still unmatched'],
+        ['label' => 'Games', 'value' => (string) $games, 'sub' => trans_choice('across :count console|across :count consoles', Console::allInstalled()->count(), ['count' => Console::allInstalled()->count()])],
+        ['label' => 'Identified', 'value' => (string) $identified, 'sub' => __(':count still unmatched', ['count' => $games - $identified])],
         ['label' => 'Consoles', 'value' => (string) Console::allInstalled()->count(), 'sub' => 'installed'],
-        ['label' => 'Storage', 'value' => '412 GB', 'sub' => 'of 1.8 TB'],
+        ['label' => 'Storage', 'value' => Number::fileSize($bytes, 1), 'sub' => __('on disk')],
     ];
 
-    $unmatched = [
-        ['file' => 'SLUS_203.12.iso', 'console' => 'ps2', 'size' => '3.8 GB', 'added' => '2 hours ago'],
-        ['file' => 'unknown_disc_02.gcm', 'console' => 'gc', 'size' => '1.3 GB', 'added' => 'yesterday'],
-        ['file' => 'rom_hack_final.sfc', 'console' => 'snes', 'size' => '2.0 MB', 'added' => '3 days ago'],
-    ];
+    // Files the provider could not name. Their game rows still carry the
+    // filename as a stand-in title, which is what makes them recognisable here.
+    $unmatched = Game::query()
+        ->where('status', GameStatus::Unmatched)
+        ->with(['files' => fn ($q) => $q->whereNull('missing_since')])
+        ->latest('id')
+        ->take(5)
+        ->get()
+        ->map(fn (Game $game) => [
+            'file' => $game->files->first()?->filename ?? $game->title,
+            'console' => $game->console,
+            'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
+            'added' => $game->created_at?->diffForHumans() ?? '',
+            'id' => $game->id,
+        ])
+        ->all();
 
     // Real, not dummy: probes the share container over TCP.
     $status = app(NetworkService::class)->status();
@@ -59,13 +85,24 @@
                 @endif
 
                 <div class="relative mt-auto w-full p-6">
-                    <p class="kicker text-accent">{{ __('Recently added') }} · {{ $hero['console'] }}</p>
+                    @if ($hero === null)
+                        {{-- A library nobody has scanned yet. --}}
+                        <p class="kicker text-accent">{{ __('Nothing here yet') }}</p>
 
-                    <h2 class="mt-2 truncate text-[28px] font-medium tracking-display text-fg-bright">{{ $hero['title'] }}</h2>
+                        <h2 class="mt-2 truncate text-[28px] font-medium tracking-display text-fg-bright">{{ __('Add a console') }}</h2>
 
-                    <p class="mt-1 truncate font-mono text-sm text-fg-muted">
-                        {{ $hero['path'] }} · {{ $hero['size'] }} · {{ $hero['added'] }}
-                    </p>
+                        <p class="mt-1 truncate font-mono text-sm text-fg-muted">
+                            {{ __('Point it at your ROMs and scan') }}
+                        </p>
+                    @else
+                        <p class="kicker text-accent">{{ __('Recently added') }} · {{ $hero['console'] }}</p>
+
+                        <h2 class="mt-2 truncate text-[28px] font-medium tracking-display text-fg-bright">{{ $hero['title'] }}</h2>
+
+                        <p class="mt-1 truncate font-mono text-sm text-fg-muted">
+                            {{ $hero['path'] }} · {{ $hero['size'] }} · {{ $hero['added'] }}
+                        </p>
+                    @endif
 
                     <div class="mt-4">
                         <a
@@ -83,7 +120,7 @@
             <div class="flex min-w-0 flex-col gap-2.5">
                 @foreach ($recent as $game)
                     <a
-                        href="{{ route('consoles.index') }}"
+                        href="{{ route('games.show', $game['id']) }}"
                         wire:navigate
                         class="relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border border-line bg-surface p-2.5 transition-colors hover:border-line-input hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                     >
@@ -138,7 +175,7 @@
                         </span>
 
                         <a
-                            href="{{ route('consoles.index') }}"
+                            href="{{ route('games.show', $game['id']) }}"
                             wire:navigate
                             class="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-tint/50 px-2.5 py-1.5 text-sm text-accent transition-colors hover:bg-accent-tint/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         >

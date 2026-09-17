@@ -4,6 +4,7 @@
     $tabs = [
         ['label' => __('Profile'), 'route' => 'profile.edit', 'active' => request()->routeIs('profile.*')],
         ['label' => __('Security'), 'route' => 'security.edit', 'active' => request()->routeIs('security.*')],
+        ['label' => __('Media'), 'route' => 'media.edit', 'active' => request()->routeIs('media.edit')],
     ];
 @endphp
 
