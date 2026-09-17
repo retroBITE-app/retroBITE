@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-
 final class DownloadDocController extends Controller
 {
     public function __construct(private readonly DocPath $paths) {}
