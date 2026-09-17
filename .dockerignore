@@ -19,6 +19,7 @@ storage/framework/sessions/*
 storage/framework/views/*
 storage/framework/testing/*
 storage/app/games/*
+storage/app/docs/*
 
 # Not needed at runtime
 tests/

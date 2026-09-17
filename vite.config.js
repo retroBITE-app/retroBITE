@@ -26,6 +26,7 @@ export default defineConfig({
                 '**/.claude/**',
                 '**/.cursor/**',
                 '**/.junie/**',
+                '**/storage/app/**',
                 '**/storage/framework/views/**',
                 '**/vendor/**',
             ],

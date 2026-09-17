@@ -58,6 +58,30 @@ return [
             'report' => false,
         ],
 
+        // The markdown knowledge base. Outside app/public for the same reason
+        // as `games`: attachments are reached through an authed route, never a
+        // guessable URL. Nothing but App\Support\DocPath resolves a path here.
+        //
+        // storage_path() rather than config('settings.docs_path'), which is the
+        // same directory: config files load alphabetically, so settings.php is
+        // not loaded yet when this one is evaluated and that call returns null.
+        'docs' => [
+            'driver' => 'local',
+            'root' => storage_path('app/docs'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+
+            // Group-writable, unlike the local driver's 0700/0600 default. The
+            // point of a file-backed knowledge base is that the files are also
+            // reachable from a text editor on the host, and www-data is put in
+            // the `users` group by docker/web/user-setup.sh for exactly that.
+            'permissions' => [
+                'file' => ['public' => 0664, 'private' => 0664],
+                'dir' => ['public' => 0775, 'private' => 0775],
+            ],
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

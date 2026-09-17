@@ -7,6 +7,7 @@ GAMES_DIR=/app/storage/app/games
 # image ships the tree empty — Laravel does not create them itself and throws on
 # the first request that writes a view cache or a session.
 mkdir -p "$GAMES_DIR" \
+         /app/storage/app/docs \
          /app/storage/framework/cache/data \
          /app/storage/framework/sessions \
          /app/storage/framework/views \

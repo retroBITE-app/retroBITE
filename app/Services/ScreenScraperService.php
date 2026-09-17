@@ -86,7 +86,7 @@ class ScreenScraperService
                 'year'        => $this->extractYear($this->pickLocalized(Arr::get($jeu, 'dates', []), 'text')),
                 'cover_url'   => $this->pickMedia(Arr::get($jeu, 'medias', []), MediaKind::Cover->screenScraperTypes()),
             ])
-            ->filter(fn(array $c) => $c['provider_id'] !== '')
+            ->filter(fn(array $c) => Arr::get($c, 'provider_id') !== '')
             ->values()
             ->all();
     }

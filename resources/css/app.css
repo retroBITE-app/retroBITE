@@ -177,6 +177,12 @@
     ::file-selector-button {
         border-color: var(--color-line, currentColor);
     }
+
+    /* Alpine strips this once it boots; without it a teleported overlay is
+       briefly visible on first paint. */
+    [x-cloak] {
+        display: none !important;
+    }
 }
 
 /*
@@ -303,6 +309,19 @@
     [data-flux-button].bg-red-500:hover {
         background-color: color-mix(in srgb, var(--color-danger) 10%, transparent) !important;
     }
+
+    /*
+     * Flux ships no cursor rule of its own, so every one of its controls reads
+     * as text. Set once here rather than at each call site — a control that
+     * does not look clickable is the same bug wherever it appears.
+     */
+    [data-flux-button]:not([disabled]),
+    [data-flux-menu-item]:not([disabled]),
+    [data-flux-modal-close],
+    [data-flux-sidebar-item],
+    [data-flux-navbar-item] {
+        cursor: pointer;
+    }
 }
 
 /*
@@ -324,6 +343,23 @@
 [data-settings-fields] [data-flux-label] {
     font-family: var(--font-mono);
     color: var(--color-fg-faint);
+}
+
+/*
+ * Flux tints the dialog backdrop rgba(0, 0, 0, 0.10), which is invisible over a
+ * near-black ground — an open modal read as floating on a live page with
+ * nothing dimmed behind it.
+ *
+ * Unlayered, like the .dark block above it: flux.css ships unlayered too, so a
+ * rule in @layer components loses to it no matter the import order.
+ *
+ * The var() carries a literal fallback on purpose — ::backdrop sits in the top
+ * layer and only inherits custom properties from the originating element in
+ * recent browsers, so the token alone cannot be relied on.
+ */
+[data-flux-modal] > dialog::backdrop {
+    background-color: color-mix(in srgb, var(--color-scrim, #080809) 72%, transparent);
+    backdrop-filter: blur(2px);
 }
 
 /* Controls sit on the surface with a quiet border that warms on focus. */
@@ -387,4 +423,253 @@ body:has([data-flux-sidebar][data-flux-sidebar-on-mobile]:not([data-flux-sidebar
 
 *::-webkit-scrollbar-thumb:hover {
     background-color: var(--color-fg-faint);
+}
+
+/*
+ * Rendered markdown.
+ *
+ * There is no @tailwindcss/typography here and deliberately so: prose has to
+ * wear the amber ramp like everything else, and a plugin's own palette would
+ * have to be overridden token by token anyway. Every colour below is a token.
+ *
+ * Scoped to [data-doc-body] rather than a class, matching how
+ * [data-settings-fields] switches the settings pane to mono labels.
+ */
+[data-doc-body] {
+    color: var(--color-fg-soft);
+    font-size: var(--text-sm);
+    line-height: 1.7;
+}
+
+[data-doc-body] > * + * {
+    margin-block-start: 1.1em;
+}
+
+[data-doc-body] h1,
+[data-doc-body] h2,
+[data-doc-body] h3,
+[data-doc-body] h4 {
+    color: var(--color-fg-bright);
+    font-weight: 500;
+    letter-spacing: var(--tracking-display);
+    margin-block-start: 2em;
+}
+
+[data-doc-body] h1 { font-size: var(--text-xl); }
+[data-doc-body] h2 { font-size: var(--text-base); }
+[data-doc-body] h3,
+[data-doc-body] h4 { font-size: var(--text-sm); }
+
+[data-doc-body] > :first-child {
+    margin-block-start: 0;
+}
+
+[data-doc-body] a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+[data-doc-body] a:hover {
+    color: var(--color-accent-bright);
+}
+
+[data-doc-body] strong {
+    color: var(--color-fg-bright);
+    font-weight: 600;
+}
+
+/*
+ * Checklists. The design marks every unordered item with an amber tick rather
+ * than a bullet — "Before you start" is a list of things to have, not prose.
+ */
+[data-doc-body] ul {
+    display: grid;
+    gap: 0.55em;
+    list-style: none;
+    padding: 0;
+}
+
+[data-doc-body] ul > li {
+    display: grid;
+    grid-template-columns: 1.25em 1fr;
+    align-items: start;
+}
+
+[data-doc-body] ul > li::before {
+    content: '✓';
+    color: var(--color-accent-tint);
+    font-size: 0.9em;
+    line-height: 1.7;
+}
+
+/* Numbered steps carry a mono badge, so a procedure reads as a sequence. */
+[data-doc-body] ol {
+    counter-reset: step;
+    display: grid;
+    gap: 0.55em;
+    list-style: none;
+    padding: 0;
+}
+
+[data-doc-body] ol > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 0.75rem;
+    align-items: start;
+}
+
+[data-doc-body] ol > li::before {
+    content: counter(step);
+    display: grid;
+    place-items: center;
+    height: 1.5rem;
+    border: 1px solid var(--color-line-input);
+    border-radius: calc(var(--radius-md, 0.375rem));
+    background-color: var(--color-raised);
+    color: var(--color-fg-faint);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+[data-doc-body] li > ul,
+[data-doc-body] li > ol {
+    margin-block-start: 0.55em;
+}
+
+/* Blockquotes are the design's callout: an amber wash behind a warning glyph. */
+[data-doc-body] blockquote {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-accent-tint) 55%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent-tint) 10%, transparent);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    color: var(--color-fg-soft);
+}
+
+[data-doc-body] blockquote::before {
+    content: '⚠';
+    color: var(--color-warn);
+    line-height: 1.7;
+}
+
+[data-doc-body] blockquote > :first-child {
+    margin-block-start: 0;
+}
+
+[data-doc-body] blockquote strong {
+    color: var(--color-fg-bright);
+}
+
+/*
+/*
+ * The frame sits on the figure rather than the image so the caption bar is
+ * clipped by the same rounded corner, and fit-content keeps the figure the
+ * width of the image rather than the column — otherwise the bar overhangs a
+ * narrow photo.
+ */
+[data-doc-body] figure {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background-color: var(--color-sunken);
+}
+
+[data-doc-body] img {
+    cursor: zoom-in;
+}
+
+[data-doc-body] figure img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* A scrim bar across the foot of the image, not a line of text beneath it. */
+[data-doc-body] figcaption {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    padding: 0.5rem 0.8rem 0.2rem 0.8rem;
+    background-color: color-mix(in srgb, var(--color-scrim) 78%, transparent);
+    backdrop-filter: blur(2px);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+    color: var(--color-fg-soft);
+}
+
+
+[data-doc-body] .doc-video {
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background-color: var(--color-sunken);
+}
+
+[data-doc-body] .doc-video iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* Tables hold part numbers and measurements, so they stay mono and aligned. */
+[data-doc-body] table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+[data-doc-body] th,
+[data-doc-body] td {
+    border: 1px solid var(--color-line);
+    padding: 0.5rem 0.75rem;
+    text-align: start;
+}
+
+[data-doc-body] th {
+    background-color: var(--color-sunken);
+    color: var(--color-fg-dim);
+    font-weight: 500;
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+}
+
+[data-doc-body] code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.3rem;
+    padding: 0.1em 0.35em;
+    color: var(--color-accent-light);
+}
+
+[data-doc-body] pre {
+    background-color: var(--color-sunken);
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+}
+
+[data-doc-body] pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--color-fg);
+}
+
+[data-doc-body] hr {
+    border: 0;
+    border-block-start: 1px solid var(--color-line);
 }

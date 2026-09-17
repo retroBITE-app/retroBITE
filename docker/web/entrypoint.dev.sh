@@ -3,6 +3,7 @@ set -e
 
 # Ensure storage subdirs exist
 mkdir -p /app/storage/app/games \
+         /app/storage/app/docs \
          /app/storage/framework/cache/data \
          /app/storage/framework/sessions \
          /app/storage/framework/views \

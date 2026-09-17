@@ -13,6 +13,7 @@ services:
     volumes:
       - .:/app
       - ${GAMES_PATH:-./games}:/app/storage/app/games
+      - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
       # Compiled Blade must NOT be shared with the host. Livewire compiles each
       # single-file component to storage/framework/views/livewire/views/<hash>
       # and embeds an absolute path — /app here, /home/... on the host. With the

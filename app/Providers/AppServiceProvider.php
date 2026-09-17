@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\DocPath;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // DocPath takes its root as an argument rather than reading config
+        $this->app->singleton(DocPath::class, function (): DocPath {
+            return new DocPath((string) config('settings.docs_path'));
+        });
     }
 
     /**

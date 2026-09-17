@@ -12,6 +12,7 @@ services:
       - "81:80"
     volumes:
       - ${GAMES_PATH:-./games}:/app/storage/app/games
+      - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
       - retrobite-data:/data
     restart: on-failure
 
