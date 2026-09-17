@@ -21,9 +21,18 @@ rm -rf /app/public/build
 # Install PHP deps (volume-mounted, so not baked into the image)
 composer install --no-interaction --working-dir=/app
 
-# The DB lives on the /data volume so it survives `docker compose down`.
-mkdir -p /data
-touch /data/database.sqlite
+# MariaDB accepts connections well after its container reports started, and
+# migrate does not retry.
+echo "Waiting for ${DB_HOST:-retrobite-db}:${DB_PORT:-3306} ..."
+i=0
+until php -r 'exit(@fsockopen(getenv("DB_HOST") ?: "retrobite-db", (int)(getenv("DB_PORT") ?: 3306), $e, $s, 2) ? 0 : 1);'; do
+    i=$((i + 1))
+    if [ "$i" -ge 60 ]; then
+        echo "Database never came up after 120s; giving up." >&2
+        exit 1
+    fi
+    sleep 2
+done
 
 php /app/artisan migrate --force
 
@@ -31,7 +40,17 @@ php /app/artisan migrate --force
 php /app/artisan db:seed --class=DefaultUserSeeder --force
 
 # After migrate, which runs as root and would otherwise leave root-owned files.
-chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache /data
+chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
+
+# Queue workers. One for scraping, because ScreenScraper allows a plain account
+# a single thread; a few for media and hashing, which are disk-bound instead.
+su-exec "$WEB_USER" php /app/artisan queue:work \
+    --queue=scraper --sleep=3 --tries=3 --max-time=3600 &
+
+for _ in 1 2 3; do
+    su-exec "$WEB_USER" php /app/artisan queue:work \
+        --queue=media,default --sleep=3 --tries=3 --max-time=3600 &
+done
 
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D

@@ -7,20 +7,49 @@ services:
     env_file:
       - .env
     environment:
-      DB_DATABASE: /data/database.sqlite
+      DB_CONNECTION: mariadb
+      DB_HOST: retrobite-db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-retrobite}
+      DB_USERNAME: ${DB_USERNAME:-retrobite}
+      DB_PASSWORD: ${DB_PASSWORD:-retrobite}
     ports:
       - 81:80
     volumes:
       - .:/app
       - ${GAMES_PATH:-./games}:/app/storage/app/games
+      # Explicit despite the .:/app bind above, so DOCS_PATH can point outside
+      # the repository.
       - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
-      # Compiled Blade must NOT be shared with the host. Livewire compiles each
-      # single-file component to storage/framework/views/livewire/views/<hash>
-      # and embeds an absolute path — /app here, /home/... on the host. With the
-      # repo bind-mounted, whichever side compiled last makes the other 500 with
-      # "filemtime(): stat failed".
+      - retrobite-media:/app/storage/app/media
+      # Livewire compiles single-file components to absolute paths, so sharing
+      # this directory between host and container invalidates every cached view.
       - retrobite-views:/app/storage/framework/views
-      - retrobite-data:/data
+    depends_on:
+      retrobite-db:
+        condition: service_healthy
+    restart: always
+
+  retrobite-db:
+    image: mariadb:11.4
+    container_name: retrobite-db-dev
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-retrobite}
+      MARIADB_USER: ${DB_USERNAME:-retrobite}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-retrobite}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-retrobite}
+    volumes:
+      - retrobite-db:/var/lib/mysql
+    ports:
+      # Published in development so a GUI client or a host-side `php artisan`
+      # can reach it. The production compose keeps it on the internal network.
+      - "${DB_PORT_HOST:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: always
 
   retrobite-share:
@@ -36,14 +65,10 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
-    # Reaps zombies and forwards signals as PID 1, so the entrypoint's supervisor
-    # does not have to.
     init: true
-    # No `ports:` — host networking publishes 139, 445, 20, 21 and the passive
-    # range 21100-21110 directly. Docker ignores port mappings under host mode,
-    # so listing them here only misleads.
     restart: always
 
 volumes:
-  retrobite-data:
+  retrobite-db:
+  retrobite-media:
   retrobite-views:

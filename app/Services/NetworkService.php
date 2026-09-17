@@ -20,7 +20,7 @@ class NetworkService
      */
     public function status(): array
     {
-        $host   = (string) config('settings.network.host_ip');
+        $host = (string) config('settings.network.host_ip');
         $result = [];
 
         foreach (ShareProtocol::cases() as $protocol) {
@@ -47,8 +47,8 @@ class NetworkService
         }
 
         logger()->debug('Port closed', [
-            'host'  => $host,
-            'port'  => $port,
+            'host' => $host,
+            'port' => $port,
             'errno' => $errno,
             'error' => $errstr,
         ]);

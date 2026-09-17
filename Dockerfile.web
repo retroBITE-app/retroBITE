@@ -25,9 +25,9 @@ FROM php:8.5-fpm-alpine AS runner
 # php:8.5-fpm-alpine already has pdo_sqlite, sqlite3 and OPcache compiled in —
 # passing them to docker-php-ext-install builds no module and fails the copy.
 # unzip and git are for Composer's dist path.
-RUN apk add --no-cache nginx sqlite unzip git libzip \
+RUN apk add --no-cache nginx su-exec unzip git libzip \
     && apk add --no-cache --virtual .build-deps libzip-dev \
-    && docker-php-ext-install bcmath zip pcntl \
+    && docker-php-ext-install bcmath zip pcntl pdo_mysql \
     && apk del .build-deps
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer

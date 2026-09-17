@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -45,6 +46,19 @@ class UserFactory extends Factory
 
     /**
      * Indicate that the model has two-factor authentication configured.
+     *
+     * Fortify stores both columns encrypted and decrypts them on read, so they
+     * are written the same way here — a plaintext secret would throw on the
+     * first read rather than on write, well away from the cause.
      */
-    public function withTwoFactor(): static {}
+    public function withTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'two_factor_secret' => encrypt('ABCDEFGHIJKLMNOP'),
+            'two_factor_recovery_codes' => encrypt(json_encode(
+                Collection::times(8, fn () => Str::random(10).'-'.Str::random(10))->all()
+            )),
+            'two_factor_confirmed_at' => now(),
+        ]);
+    }
 }

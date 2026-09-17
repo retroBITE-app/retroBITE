@@ -7,13 +7,48 @@ services:
     env_file:
       - .env
     environment:
-      DB_DATABASE: /data/database.sqlite
+      DB_CONNECTION: mariadb
+      DB_HOST: retrobite-db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-retrobite}
+      DB_USERNAME: ${DB_USERNAME:-retrobite}
+      DB_PASSWORD: ${DB_PASSWORD:-retrobite}
     ports:
       - "81:80"
     volumes:
       - ${GAMES_PATH:-./games}:/app/storage/app/games
       - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
-      - retrobite-data:/data
+      # Artwork and other media retroBite downloads itself. Unlike the games
+      # mount this one is written to, and it is kept out of the games tree so a
+      # console browsing the share never sees it.
+      - retrobite-media:/app/storage/app/media
+    depends_on:
+      retrobite-db:
+        condition: service_healthy
+    restart: on-failure
+
+  retrobite-db:
+    image: mariadb:11.4
+    container_name: retrobite-mariadb
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-retrobite}
+      MARIADB_USER: ${DB_USERNAME:-retrobite}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-retrobite}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-retrobite}
+    volumes:
+      - retrobite-db:/var/lib/mysql
+    # Not published to the host by default: nothing outside the compose network
+    # needs it, and this box sits on a LAN with consoles on it.
+    expose:
+      - "3306"
+    healthcheck:
+      # The web container's migrate races the database otherwise: the server
+      # reports started long before InnoDB will accept a connection.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: on-failure
 
   retrobite-share:
@@ -30,8 +65,6 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
-    # Reaps zombies and forwards signals as PID 1, so the entrypoint's supervisor
-    # does not have to.
     init: true
     # Optional: if you prefer bridge network instead of host, drop
     # network_mode above and uncomment these.
@@ -43,4 +76,5 @@ services:
     #   - "21100-21110:21100-21110"  # FTP passive ports
 
 volumes:
-  retrobite-data:
+  retrobite-db:
+  retrobite-media:
