@@ -26,9 +26,6 @@ enum FileRole: string
     /** An m3u listing the discs of a multi-disc game. */
     case Playlist = 'playlist';
 
-    /** A system BIOS sitting in the console's folder. Belongs to no game. */
-    case Bios = 'bios';
-
     public function label(): string
     {
         return match ($this) {
@@ -36,20 +33,22 @@ enum FileRole: string
             self::Sheet => 'Cuesheet',
             self::Track => 'Track',
             self::Playlist => 'Disc playlist',
-            self::Bios => 'BIOS',
         };
     }
 
     /**
      * Whether this file is worth spending a provider lookup on.
      *
-     * Tracks are not: they are named by a sheet that already identifies the
-     * game. Playlists and sheets are indexed by ScreenScraper but their entries
-     * are unreliable — a .m3u is on record with the size of the whole disc set
-     * — so a lookup on one is likely to miss and burn the scarce failed quota.
+     * A track counts, and it is often the only thing that does: in a cue/bin
+     * set the .bin holds the data, and it is what ScreenScraper indexes with a
+     * correct size and checksum. Sheets and playlists do not. Both are in the
+     * provider's database, but their entries are contributed and unreliable —
+     * one .m3u is on record carrying the size of the entire four-disc set —
+     * so a lookup on either is likely to miss and burn the failed-lookup
+     * quota, which is ten times scarcer than the ordinary one.
      */
     public function identifiable(): bool
     {
-        return $this === self::Rom;
+        return $this === self::Rom || $this === self::Track;
     }
 }

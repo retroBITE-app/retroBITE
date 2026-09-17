@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Support\Console;
 use Database\Factories\GameFactory;
@@ -96,15 +97,21 @@ class Game extends Model
     /**
      * The one file worth asking the provider about.
      *
-     * A multi-disc game is a playlist, four cuesheets and four tracks; only the
-     * first disc's data file identifies anything, and looking up the others
-     * would spend four requests to learn the same id.
+     * A multi-disc game is a playlist, four cuesheets and four tracks. Every
+     * disc answers to the same provider id, so one lookup settles all of them
+     * and the other eight requests would buy nothing — at a tenfold penalty
+     * whenever one misses.
+     *
+     * A whole image is preferred over a track, and the lowest disc over a
+     * later one, because disc 1 is the entry the provider is most likely to
+     * hold.
      */
     public function identifiableFile(): ?GameFile
     {
         return $this->files()
             ->identifiable()
             ->present()
+            ->orderByRaw('CASE WHEN role = ? THEN 0 ELSE 1 END', [FileRole::Rom->value])
             ->orderByRaw('disc_number IS NULL, disc_number')
             ->orderBy('id')
             ->first();
