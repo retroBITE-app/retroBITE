@@ -3,12 +3,16 @@
     'subheading' => '',
     // A screen's own control for the header row — a save button, usually.
     'actions' => null,
+    // Drop the reading-width cap. For a screen laid out as a grid of cards
+    // rather than a column of fields, where the cap only wastes the page.
+    'wide' => false,
 ])
 
 @php
     $tabs = [
         ['label' => __('User'), 'route' => 'user.edit', 'active' => request()->routeIs('user.*')],
         ['label' => __('Media'), 'route' => 'media.edit', 'active' => request()->routeIs('media.edit')],
+        ['label' => __('Consoles'), 'route' => 'console-config.edit', 'active' => request()->routeIs('console-config.edit')],
     ];
 @endphp
 
@@ -55,8 +59,8 @@
     Twelve columns at lg, so a screen can put two cards side by side rather
     than stacking everything in one narrow strip with the page empty beside it.
     Each screen sets its own spans; the cap is what keeps a line of body text
-    readable at that width.
+    readable at that width, and `wide` is for the screens that have none to keep.
 --}}
-<div class="w-full max-w-5xl" data-settings-fields>
+<div @class(['w-full', 'max-w-5xl' => ! $wide]) data-settings-fields>
     {{ $slot }}
 </div>

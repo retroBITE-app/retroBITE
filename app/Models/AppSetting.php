@@ -48,6 +48,12 @@ class AppSetting extends Model
     public const UI_GAMES_VIEW = 'ui_games_view';
 
     /**
+     * Runtime edits to the shipped console config, keyed by console then by
+     * config key. Absent means every console is as its file declares it.
+     */
+    public const CONSOLE_OVERRIDES = 'console_overrides';
+
+    /**
      * What a key means before anybody has set it.
      *
      * Here rather than at each call site: the auto-queue default was spelled

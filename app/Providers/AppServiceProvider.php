@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\AppSetting;
+use App\Support\ConsoleOverrides;
 use App\Support\DocPath;
 use Carbon\CarbonImmutable;
 use Illuminate\Queue\Events\JobProcessing;
@@ -36,18 +37,27 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Wire the settings table into the two places that read it implicitly.
+     * Wire the settings table into the places that read it implicitly.
      */
     protected function configureRuntimeSettings(): void
     {
-        // Four views ask whether the CRT overlay is on. A directive keeps the
-        // model out of the markup and reads as what it means.
+        /** 
+         * Four views ask whether the CRT overlay is on. A directive keeps the
+         * model out of the markup and reads as what it means. 
+         */
         Blade::if('scanlines', fn (): bool => AppSetting::enabled(AppSetting::UI_SCANLINES));
 
-        // AppSetting memoises for the length of a request, and a queue worker
-        // is one process for many jobs — without this, a setting changed in the
-        // interface would never reach a worker already running.
-        Event::listen(fn (JobProcessing $event) => AppSetting::flush());
+        // Console config overrides, merged over the shipped files.
+        ConsoleOverrides::apply();
+
+        /** AppSetting memoises for the length of a request, and a queue worker
+         * is one process for many jobs — without this, a setting changed in the
+         * interface would never reach a worker already running.
+         */
+        Event::listen(function (JobProcessing $event): void {
+            AppSetting::flush();
+            ConsoleOverrides::apply();
+        });
     }
 
     /**
