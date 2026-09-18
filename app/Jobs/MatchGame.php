@@ -95,7 +95,7 @@ class MatchGame implements ShouldQueue
         if (
             in_array($result->outcome, [MatchOutcome::Matched, MatchOutcome::Merged], true)
             && $result->game !== null
-            && AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true)
+            && AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE)
         ) {
             // The list travels with the result, so fetching artwork costs no
             // second metadata request: the answer already held every URL.

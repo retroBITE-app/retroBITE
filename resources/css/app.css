@@ -319,7 +319,21 @@
     [data-flux-menu-item]:not([disabled]),
     [data-flux-modal-close],
     [data-flux-sidebar-item],
-    [data-flux-navbar-item] {
+    [data-flux-navbar-item],
+    [data-flux-switch]:not([disabled]),
+    [data-flux-checkbox]:not([disabled]),
+    [data-flux-radio]:not([disabled]),
+    select[data-flux-control]:not([disabled]) {
+        cursor: pointer;
+    }
+
+    /*
+     * A field label toggles the control it names, so it is as clickable as the
+     * control — but only for the ones you click. A text input's label moves a
+     * caret, which is what the I-beam is for.
+     */
+    [data-flux-field]:has([data-flux-switch], [data-flux-checkbox], [data-flux-radio]) [data-flux-label],
+    [data-flux-field]:has([data-flux-switch], [data-flux-checkbox], [data-flux-radio]) [data-flux-description] {
         cursor: pointer;
     }
 }
@@ -371,6 +385,90 @@
 
 [data-flux-control]::placeholder {
     color: var(--color-fg-faint);
+}
+
+/*
+ * Pagination.
+ *
+ * Flux paints it from the zinc ramp, which the theme remaps, so the chrome
+ * lands warm on its own. The rest it cannot know: the control ships as a pill
+ * on a filled, bordered tray, which is a second box inside a page already made
+ * of boxes; the page you are on is the one thing here worth the accent; and the
+ * whole thing is drawn a size down from everything around it.
+ *
+ * No rule above it either — the table it follows already ends in a border, and
+ * two lines a few pixels apart read as a mistake.
+ */
+[data-flux-pagination] {
+    border-top-width: 0;
+    padding-top: 0;
+}
+
+/* The count reads beside the buttons, so it moves up with them. */
+[data-flux-pagination] > div:first-child {
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+}
+
+/* The tray the buttons sit in. Stripped to nothing: the numbers carry
+   themselves, and the fill only boxed them in. */
+[data-flux-pagination] > div:has(button),
+[data-flux-pagination] > div:has([aria-current='page']) {
+    background-color: transparent;
+    border-color: transparent;
+    padding: 0;
+    gap: --spacing(1);
+}
+
+/* Every cell, so the row keeps one height whatever it holds. */
+[data-flux-pagination] button,
+[data-flux-pagination] [aria-current='page'],
+[data-flux-pagination] [aria-disabled='true'] {
+    height: --spacing(8);
+    min-width: --spacing(8);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+}
+
+/* The numbers, which need room either side of them. The arrows are square. */
+[data-flux-pagination] button:not(:has(svg)),
+[data-flux-pagination] [aria-current='page'] {
+    padding-inline: --spacing(3);
+}
+
+[data-flux-pagination] button {
+    cursor: pointer;
+}
+
+/* The one solid amber surface in the design, so it reads dark-on-amber — the
+   same treatment the checked switch gets. */
+[data-flux-pagination] [aria-current='page'] {
+    background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
+}
+
+/* Soft, and the same amber as the page it would take you to. */
+[data-flux-pagination] button:hover {
+    background-color: color-mix(in srgb, var(--color-accent-tint) 12%, transparent);
+    color: var(--color-accent);
+}
+
+/*
+ * The switch's checked track.
+ *
+ * Flux puts the accent on the <ui-switch> element itself, as a utility
+ * (`data-checked:bg-(--color-accent)`), which compiles into @layer utilities —
+ * and the unlayered rule above beats any layer whatever the specificity. So the
+ * checked track was painted `surface` while the knob turned `accent-foreground`:
+ * black on black. Restated here, unlayered and one attribute more specific, so
+ * it wins on both counts. It must not move into @layer components.
+ *
+ * The checkboxes never needed this: their accent lands on a child
+ * [data-flux-checkbox-indicator], which carries no data-flux-control.
+ */
+[data-flux-switch][data-checked] {
+    background-color: var(--color-accent);
+    border-color: transparent;
 }
 
 /* Inputs sit on the sunken ground with a quiet border that warms on focus. */
@@ -582,6 +680,12 @@ body:has([data-flux-sidebar][data-flux-sidebar-on-mobile]:not([data-flux-sidebar
 }
 
 [data-doc-body] img {
+    cursor: zoom-in;
+}
+
+/* The marker is the lightbox's own opt-in, so this cannot reach an image that
+   is not wired to one — which repeating a utility at each call site can. */
+[data-lightbox] {
     cursor: zoom-in;
 }
 

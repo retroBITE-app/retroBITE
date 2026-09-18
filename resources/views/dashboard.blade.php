@@ -1,5 +1,6 @@
 @php
     use App\Enums\GameStatus;
+    use App\Enums\MediaKind;
     use App\Enums\ShareProtocol;
     use App\Models\Game;
     use App\Models\ConsoleSourceFolder;
@@ -8,10 +9,10 @@
     use App\Support\Console;
     use Illuminate\Support\Number;
 
-    // Real records now. The shape is unchanged from the placeholder rows this
-    // replaced, so the markup below did not have to move.
+    // Media rides along because both the hero and the cards behind it are key
+    // art when there is any: one query for the lot rather than six.
     $recent = Game::query()
-        ->with('files')
+        ->with(['files', 'media'])
         ->latest('id')
         ->take(3)
         ->get()
@@ -22,6 +23,8 @@
             'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
             'added' => $game->created_at?->diffForHumans() ?? '',
             'id' => $game->id,
+            'cover' => ($cover = $game->artwork(MediaKind::Cover)) ? route('media.show', ['path' => $cover->path]) : null,
+            'backdrop' => ($backdrop = $game->artwork(MediaKind::Backdrop)) ? route('media.show', ['path' => $backdrop->path]) : null,
         ])
         ->all();
 
@@ -79,15 +82,20 @@
         </div>
 
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-            {{-- Hero. No scraped artwork exists yet, so it renders the design's
-                 no-backdrop state: the glyph on the sunken ground. --}}
             <div class="relative flex h-[300px] overflow-hidden rounded-xl border border-line-strong bg-sunken">
-                <flux:icon.photo class="absolute top-1/2 right-8 size-10 -translate-y-1/2 text-line-bright" />
-
-                <div class="hero-fade-x pointer-events-none absolute inset-0"></div>
-                @if (config('settings.interface.scanlines'))
-                    <div class="scanlines absolute inset-0"></div>
+                @if ($hero !== null && $hero['backdrop'] !== null)
+                    <div class="absolute inset-0 bg-cover bg-[position:50%_20%]"
+                         style="background-image: url('{{ $hero['backdrop'] }}')"></div>
+                @else
+                    {{-- The design's no-backdrop state: the glyph on the sunken ground. --}}
+                    <flux:icon.photo class="absolute top-1/2 right-8 size-10 -translate-y-1/2 text-line-bright" aria-hidden="true" />
                 @endif
+
+                {{-- Reads left-to-right, so the text side is darkened hardest. --}}
+                <div class="hero-fade-x pointer-events-none absolute inset-0"></div>
+                @scanlines
+                    <div class="scanlines absolute inset-0"></div>
+                @endscanlines
 
                 <div class="relative mt-auto w-full p-6">
                     @if ($hero === null)
@@ -110,12 +118,15 @@
                     @endif
 
                     <div class="mt-4">
+                        {{-- The hero is a game, so this goes to that game. With
+                             nothing scanned yet there is none to go to, and the
+                             only useful next step is adding a console. --}}
                         <a
-                            href="{{ route('consoles.index') }}"
+                            href="{{ $hero === null ? route('consoles.index') : route('games.show', $hero['id']) }}"
                             wire:navigate
                             class="inline-flex items-center gap-1.5 rounded-lg border border-accent-tint/60 px-3.5 py-2 text-sm text-accent transition-colors hover:bg-accent-tint/14 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         >
-                            {{ __('View details') }}
+                            {{ $hero === null ? __('Add a console') : __('View details') }}
                             <flux:icon.arrow-right variant="micro" />
                         </a>
                     </div>
@@ -129,9 +140,27 @@
                         wire:navigate
                         class="relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border border-line bg-surface p-2.5 transition-colors hover:border-line-input hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                     >
-                        <span aria-hidden="true" class="relative grid h-18 w-13 shrink-0 place-items-center rounded-md border border-line-input bg-sunken">
-                            <flux:icon.photo class="size-4.5 text-fg-faint" />
-                        </span>
+                        {{-- The game's own key art, faded out before it reaches the
+                             text. The mask covers the scanlines too, so they stop
+                             where the art does. --}}
+                        @if ($game['backdrop'] !== null)
+                            <span aria-hidden="true" class="art-fade-l pointer-events-none absolute inset-0">
+                                <span class="absolute inset-0 bg-cover bg-center"
+                                      style="background-image: url('{{ $game['backdrop'] }}')"></span>
+                                @scanlines
+                                    <span class="scanlines absolute inset-0"></span>
+                                @endscanlines
+                            </span>
+                        @endif
+
+                        @if ($game['cover'] !== null)
+                            <img src="{{ $game['cover'] }}" alt=""
+                                 class="relative h-18 w-13 shrink-0 rounded-md border border-line-input object-cover" />
+                        @else
+                            <span aria-hidden="true" class="relative grid h-18 w-13 shrink-0 place-items-center rounded-md border border-line-input bg-sunken">
+                                <flux:icon.photo class="size-4.5 text-fg-faint" />
+                            </span>
+                        @endif
 
                         <span class="relative min-w-0 flex-1">
                             <span class="block truncate text-sm text-fg">{{ $game['title'] }}</span>

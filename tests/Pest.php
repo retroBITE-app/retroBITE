@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AppSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -24,6 +25,11 @@ pest()->extend(TestCase::class)
         // written to catch — that is exactly how a stripped query string got
         // past a green suite once already.
         Http::preventStrayRequests();
+
+        // AppSetting memoises for the length of a request, and that static
+        // outlives RefreshDatabase — which empties the table underneath it and
+        // would otherwise hand the next test the previous one's answer.
+        AppSetting::flush();
     })
     ->in('Feature');
 

@@ -1,3 +1,11 @@
+@props([
+    'title' => null,
+    // A cached artwork URL, or null on a host with nothing scraped yet.
+    'backdrop' => null,
+    // `[['value' => …, 'label' => …], …]`, or empty to show nothing.
+    'stats' => [],
+])
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
     <head>
@@ -21,9 +29,9 @@
             "
         ></div>
 
-        @if (config('settings.interface.scanlines'))
+        @scanlines
             <div class="scanlines fixed inset-0"></div>
-        @endif
+        @endscanlines
 
         <div
             class="pointer-events-none fixed inset-0"
@@ -47,6 +55,24 @@
                     {{ $slot }}
                 </div>
             </div>
+
+            {{-- Pinned to the bottom by being the last row of a column layout
+                 rather than by `fixed`: on a short window it gets pushed down
+                 and scrolls with the form instead of sitting on top of it. --}}
+            @if (! empty($stats))
+                <div class="relative z-10 mt-12 shrink-0 text-center">
+                    <p class="kicker-sans text-fg-dim uppercase">{{ __('On this host') }}</p>
+
+                    <dl class="mt-3 flex flex-wrap justify-center gap-x-9 gap-y-3">
+                        @foreach ($stats as ['value' => $value, 'label' => $label])
+                            <div>
+                                <dd class="font-mono text-xl text-fg">{{ $value }}</dd>
+                                <dt class="mt-0.5 text-xs text-fg-muted">{{ $label }}</dt>
+                            </div>
+                        @endforeach
+                    </dl>
+                </div>
+            @endif
         </div>
 
         @persist('toast')

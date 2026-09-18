@@ -19,7 +19,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-retrobite}
       DB_PASSWORD: ${DB_PASSWORD:-retrobite}
     ports:
-      - 81:80
+      - 82:80
       # Vite. Fixed by vite.config.js with strictPort, so a clash fails loudly.
       - 1337:1337
     volumes:
@@ -54,7 +54,7 @@ services:
     ports:
       # Published in development so a GUI client or a host-side `php artisan`
       # can reach it. The production compose keeps it on the internal network.
-      - "${DB_PORT_HOST:-3307}:3306"
+      - "${DB_PORT_HOST:-3308}:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
+use Illuminate\Support\Collection;
+
 /**
  * The three artwork slots retroBITE caches for a game.
  *
@@ -16,6 +18,19 @@ enum MediaKind: string
     case Cover = 'cover';
     case Logo = 'logo';
     case Backdrop = 'backdrop';
+
+    /**
+     * The slot a provider media type fills, or null when it fills none.
+     *
+     * The provider sends far more types than these three have room for — videos,
+     * manuals, marquees — so null is an ordinary answer, and the caller falls
+     * back to showing the raw type it was given.
+     */
+    public static function fromScreenScraperType(string $type): ?self
+    {
+        return Collection::make(self::cases())
+            ->first(fn (self $kind) => in_array($type, $kind->screenScraperTypes(), true));
+    }
 
     /**
      * Human-readable name for the UI.
@@ -35,6 +50,24 @@ enum MediaKind: string
     public function payloadKey(): string
     {
         return $this->value.'_url';
+    }
+
+    /**
+     * The types that are painted key art rather than a frame grabbed from play.
+     *
+     * Only a backdrop has both kinds: the provider files in-game screenshots
+     * beside real wallpaper, and a screenshot blown up full-bleed reads as a
+     * mistake. Every other slot returns its whole list, since a cover or a logo
+     * is never a screenshot.
+     *
+     * @return string[]
+     */
+    public function keyArtTypes(): array
+    {
+        return match ($this) {
+            self::Backdrop => ['fanart', 'background'],
+            default => $this->screenScraperTypes(),
+        };
     }
 
     /**

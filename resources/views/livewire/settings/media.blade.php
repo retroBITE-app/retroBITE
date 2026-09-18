@@ -2,8 +2,8 @@
 
 use App\Enums\MediaKind;
 use App\Models\AppSetting;
-use App\Models\MediaTypePreference;
 use App\Support\MediaRegions;
+use App\Support\MediaTypes;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -17,19 +17,33 @@ new #[Title('Media settings')] class extends Component
 
     public bool $autoQueue = true;
 
+    public bool $scanlines = true;
+
     /** '' means no preference. */
     public string $region = '';
 
     public function mount(): void
     {
-        $this->enabled = MediaTypePreference::query()
-            ->orderBy('media_type')
-            ->pluck('enabled', 'media_type')
-            ->map(fn ($value) => (bool) $value)
+        $chosen = MediaTypes::enabled();
+
+        $this->enabled = Collection::make(MediaTypes::offered())
+            ->mapWithKeys(fn (string $type): array => [$type => in_array($type, $chosen, true)])
             ->all();
 
-        $this->autoQueue = AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true);
+        $this->autoQueue = AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE);
+        $this->scanlines = AppSetting::enabled(AppSetting::UI_SCANLINES);
         $this->region = MediaRegions::preferred();
+    }
+
+    /**
+     * The catalogue, grouped, so two dozen opaque names read as five lists.
+     *
+     * @return array<int, array{label: string, types: array<int, string>}>
+     */
+    #[Computed]
+    public function groups(): array
+    {
+        return MediaTypes::grouped();
     }
 
     /**
@@ -59,12 +73,11 @@ new #[Title('Media settings')] class extends Component
 
     public function save(): void
     {
-        foreach ($this->enabled as $type => $on) {
-            MediaTypePreference::query()->where('media_type', $type)->update(['enabled' => (bool) $on]);
-        }
+        MediaTypes::remember(Collection::make($this->enabled)->filter()->keys()->all());
 
         AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, $this->autoQueue);
         AppSetting::put(AppSetting::MEDIA_REGION, $this->region);
+        AppSetting::put(AppSetting::UI_SCANLINES, $this->scanlines);
 
         Flux::toast(variant: 'success', text: __('Media settings saved.'));
     }
@@ -73,48 +86,67 @@ new #[Title('Media settings')] class extends Component
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout :heading="__('Media')" :subheading="__('What artwork retroBite fetches, and when')">
-        <form wire:submit="save" class="flex flex-col gap-6">
-            <div class="rounded-xl border border-line bg-surface p-5">
-                <flux:switch wire:model="autoQueue"
-                             :label="__('Fetch artwork automatically')"
-                             :description="__('Queues a download as soon as a game is identified. Turn it off to fetch on demand instead.')" />
+    <x-settings.layout :heading="__('Media')" :subheading="__('What artwork retroBite fetches, when, and how it is drawn')">
+        {{-- Outside the form, bound back to it by id: the header row is where
+             the control belongs, and the whole pane sits between them. --}}
+        <x-slot name="actions">
+            <flux:button variant="primary" type="submit" form="media-settings">{{ __('Save') }}</flux:button>
+        </x-slot>
+
+        <form id="media-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {{-- The short cards stack in their own column so the tall one
+                 beside them has something to sit next to. --}}
+            <div class="flex flex-col gap-6 lg:col-span-5">
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <flux:switch wire:model="autoQueue"
+                                 :label="__('Fetch artwork automatically')"
+                                 :description="__('Queues a download as soon as a game is identified. Turn it off to fetch on demand instead.')" />
+                </div>
+
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <flux:select wire:model="region" :label="__('Preferred region')"
+                                 :description="__('Artwork often exists for several regions. One copy is kept — this one when it exists, otherwise World, Europe, the United States and Japan in that order.')">
+                        <flux:select.option value="">{{ __('No preference') }}</flux:select.option>
+                        @foreach ($this->regions as $code => $label)
+                            <flux:select.option value="{{ $code }}">{{ $label }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                </div>
+
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    {{-- Last in the column, because it is about how artwork is drawn
+                         rather than which of it is fetched. --}}
+                    <flux:switch wire:model="scanlines"
+                                 :label="__('CRT scanlines')"
+                                 :description="__('Lays the faint horizontal banding of a tube over key art and the sign-in backdrop. Part of the look rather than decoration you can ignore — turn it off for a flat presentation.')" />
+                </div>
             </div>
 
-            <div class="rounded-xl border border-line bg-surface p-5">
-                <flux:select wire:model="region" :label="__('Preferred region')"
-                             :description="__('Artwork often exists for several regions. One copy is kept — this one when it exists, otherwise World, Europe, the United States and Japan in that order.')">
-                    <flux:select.option value="">{{ __('No preference') }}</flux:select.option>
-                    @foreach ($this->regions as $code => $label)
-                        <flux:select.option value="{{ $code }}">{{ $label }}</flux:select.option>
-                    @endforeach
-                </flux:select>
-            </div>
-
-            <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-7">
                 <p class="kicker mb-1 text-fg-faint">{{ __('Types to fetch') }}</p>
                 <p class="mb-4 text-sm text-fg-soft">
                     {{ __('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account.') }}
                 </p>
 
-                <div class="grid gap-x-8 gap-y-3 sm:grid-cols-2">
-                    @foreach ($enabled as $type => $on)
-                        <label wire:key="type-{{ $type }}" class="flex items-center gap-3">
-                            <flux:checkbox wire:model="enabled.{{ $type }}" />
-                            <span class="min-w-0 flex-1">
-                                <span class="font-mono text-sm text-fg-bright">{{ $type }}</span>
-                                @if ($this->roles->has($type))
-                                    <span class="ml-2 text-xs text-fg-faint">{{ $this->roles[$type] }}</span>
-                                @endif
-                            </span>
-                        </label>
-                    @endforeach
-                </div>
+                @foreach ($this->groups as ['label' => $label, 'types' => $types])
+                    <p class="kicker mt-5 mb-2 text-fg-dim first:mt-0">{{ __($label) }}</p>
+
+                    <div class="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                        @foreach ($types as $type)
+                            <label wire:key="type-{{ $type }}" class="flex cursor-pointer items-center gap-3">
+                                <flux:checkbox wire:model="enabled.{{ $type }}" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="font-mono text-sm text-fg-bright">{{ $type }}</span>
+                                    @if ($this->roles->has($type))
+                                        <span class="ml-2 text-xs text-fg-faint">{{ $this->roles[$type] }}</span>
+                                    @endif
+                                </span>
+                            </label>
+                        @endforeach
+                    </div>
+                @endforeach
             </div>
 
-            <div>
-                <flux:button variant="primary" type="submit">{{ __('Save') }}</flux:button>
-            </div>
         </form>
     </x-settings.layout>
 </section>

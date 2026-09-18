@@ -28,10 +28,14 @@ new #[Title('Games')] class extends Component
     #[Url(as: 'status', except: '')]
     public string $status = '';
 
+    /** One genre out of the provider's list, or '' for all of them. */
+    #[Url(as: 'genre', except: '')]
+    public string $genre = '';
+
     public function updated(string $property): void
     {
         // Any change to a filter invalidates the page you were on.
-        if (in_array($property, ['query', 'console', 'status'], true)) {
+        if (in_array($property, ['query', 'console', 'status', 'genre'], true)) {
             $this->resetPage();
         }
     }
@@ -44,6 +48,13 @@ new #[Title('Games')] class extends Component
             ->when($this->query !== '', fn ($q) => $q->where('title', 'like', '%'.$this->query.'%'))
             ->when($this->console !== '', fn ($q) => $q->forConsole($this->console))
             ->when($this->status !== '', fn ($q) => $q->where('status', $this->status))
+            // Matched as one of the comma-separated parts rather than with a
+            // LIKE, or picking "Action" would also pull in every "Action /
+            // Adventure" the provider spells as its own genre.
+            ->when($this->genre !== '', fn ($q) => $q->whereRaw(
+                "FIND_IN_SET(?, REPLACE(REPLACE(genre, ' ,', ','), ', ', ',')) > 0",
+                [$this->genre],
+            ))
             ->withCount('files')
             ->orderBy('title')
             ->paginate(24);
@@ -61,6 +72,31 @@ new #[Title('Games')] class extends Component
         return Game::query()->distinct()->orderBy('console')->pluck('console')
             ->map(fn (string $key) => Console::tryFrom($key))
             ->filter()
+            ->values();
+    }
+
+    /**
+     * Every genre the library actually holds, one entry each.
+     *
+     * The provider hands them over comma-separated in a single column — "Music,
+     * Music and Dancing" is one game — so the list is what you get by splitting
+     * on that, which is also how the filter matches.
+     *
+     * @return Collection<int, string>
+     */
+    #[Computed]
+    public function genres(): Collection
+    {
+        return Game::query()
+            ->whereNotNull('genre')
+            ->where('genre', '<>', '')
+            ->distinct()
+            ->pluck('genre')
+            ->flatMap(fn (string $genre) => explode(',', $genre))
+            ->map(fn (string $genre) => trim($genre))
+            ->filter()
+            ->unique()
+            ->sort()
             ->values();
     }
 
@@ -111,7 +147,7 @@ new #[Title('Games')] class extends Component
 
     public function clear(): void
     {
-        $this->reset('query', 'console', 'status');
+        $this->reset('query', 'console', 'status', 'genre');
         $this->resetPage();
     }
 }; ?>
@@ -133,6 +169,13 @@ new #[Title('Games')] class extends Component
                 @endforeach
             </flux:select>
 
+            <flux:select wire:model.live="genre" size="sm" class="w-44">
+                <flux:select.option value="">{{ __('Any genre') }}</flux:select.option>
+                @foreach ($this->genres as $option)
+                    <flux:select.option value="{{ $option }}">{{ $option }}</flux:select.option>
+                @endforeach
+            </flux:select>
+
             <flux:select wire:model.live="status" size="sm" class="w-44">
                 <flux:select.option value="">{{ __('Any status') }}</flux:select.option>
                 @foreach (GameStatus::cases() as $case)
@@ -140,7 +183,7 @@ new #[Title('Games')] class extends Component
                 @endforeach
             </flux:select>
 
-            @if ($query !== '' || $console !== '' || $status !== '')
+            @if ($query !== '' || $console !== '' || $status !== '' || $genre !== '')
                 <flux:button size="sm" variant="ghost" wire:click="clear">{{ __('Clear') }}</flux:button>
             @endif
         </div>
@@ -157,6 +200,7 @@ new #[Title('Games')] class extends Component
                         <tr>
                             <th class="px-4 py-2.5 font-medium">{{ __('Title') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Console') }}</th>
+                            <th class="px-4 py-2.5 font-medium">{{ __('Genre') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Files') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Status') }}</th>
                             <th class="px-4 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
@@ -171,6 +215,12 @@ new #[Title('Games')] class extends Component
                                     </a>
                                 </td>
                                 <td class="px-4 py-2.5 text-fg-soft">{{ $game->console()?->name ?? $game->console }}</td>
+                                {{-- The provider's whole list on hover, one line in the row:
+                                     "Adventure / RealTime 3D, Adventure" is a single game,
+                                     and it would set the column width for every other. --}}
+                                <td class="max-w-44 truncate px-4 py-2.5 text-fg-soft" title="{{ $game->genre }}">
+                                    {{ $game->genre ?: '—' }}
+                                </td>
                                 <td class="px-4 py-2.5 text-fg-soft">{{ $game->files_count }}</td>
                                 <td class="px-4 py-2.5">
                                     <flux:badge size="sm" :color="match ($game->status) {
@@ -202,7 +252,10 @@ new #[Title('Games')] class extends Component
                 </table>
             </div>
 
-            {{ $this->games->links() }}
+            {{-- Flux's, not Laravel's: the stock pagination view is painted from
+                 the gray ramp, and only zinc is remapped onto the warm grounds,
+                 so it came out cold blue beside everything else. --}}
+            <flux:pagination :paginator="$this->games" />
         @endif
     </div>
 </section>

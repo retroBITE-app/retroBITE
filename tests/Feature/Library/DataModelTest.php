@@ -9,8 +9,8 @@ use App\Models\Game;
 use App\Models\GameCollection;
 use App\Models\GameFile;
 use App\Models\Media;
-use App\Models\MediaTypePreference;
 use App\Support\Console;
+use App\Support\MediaTypes;
 use Illuminate\Database\QueryException;
 
 it('creates a game as an unidentified placeholder', function () {
@@ -175,11 +175,11 @@ it('resolves a console folder by convention and lets a row override it', functio
 });
 
 it('stores runtime settings as json and reads them back typed', function () {
-    expect(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true))->toBeTrue();
+    expect(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeTrue();
 
     AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, false);
 
-    expect(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true))->toBeFalse()
+    expect(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse()
         ->and(AppSetting::count())->toBe(1);
 
     AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true);
@@ -188,11 +188,29 @@ it('stores runtime settings as json and reads them back typed', function () {
 });
 
 it('lists only the media types switched on', function () {
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
-    MediaTypePreference::create(['media_type' => 'ss', 'enabled' => true]);
-    MediaTypePreference::create(['media_type' => 'video', 'enabled' => false]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D', 'ss']);
 
-    expect(MediaTypePreference::enabledTypes())->toBe(['box-2D', 'ss']);
+    expect(MediaTypes::enabled())->toBe(['box-2D', 'ss']);
+});
+
+it('fetches the shipped selection until somebody chooses otherwise', function () {
+    // Nothing stored is not the same as nothing switched on: a fresh install
+    // fetches the defaults, an emptied list fetches nothing.
+    expect(MediaTypes::enabled())->toBe(config('media_types.default_enabled'));
+
+    AppSetting::put(AppSetting::MEDIA_TYPES, []);
+
+    expect(MediaTypes::enabled())->toBe([]);
+});
+
+it('reads back a setting written in the same request', function () {
+    // The memo is written through rather than invalidated; reading the old
+    // value here is the exact bug a naive one introduces.
+    expect(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeTrue();
+
+    AppSetting::put(AppSetting::UI_SCANLINES, false);
+
+    expect(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeFalse();
 });
 
 it('resolves a game back to its console value object', function () {

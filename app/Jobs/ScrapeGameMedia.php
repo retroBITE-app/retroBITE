@@ -10,10 +10,10 @@ use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Exceptions\ScreenScraper\SoftwareBlacklisted;
 use App\Exceptions\ScreenScraper\ThreadLimitReached;
 use App\Models\Game;
-use App\Models\MediaTypePreference;
 use App\Services\MediaLibrary;
 use App\Services\ScreenScraperService;
 use App\Support\MediaRegions;
+use App\Support\MediaTypes;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -57,7 +57,7 @@ class ScrapeGameMedia implements ShouldQueue
             return;
         }
 
-        $wanted = MediaTypePreference::enabledTypes();
+        $wanted = MediaTypes::enabled();
 
         if ($wanted === []) {
             return;

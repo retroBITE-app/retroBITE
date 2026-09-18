@@ -26,13 +26,6 @@
                     {{ __('Dashboard') }}
                 </flux:sidebar.item>
 
-                <flux:sidebar.item icon="puzzle-piece" :href="route('consoles.index')" :current="request()->routeIs('consoles.*')" wire:navigate>
-                    {{ __('Consoles') }}
-                </flux:sidebar.item>
-                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.*')" wire:navigate>
-                    {{ __('Games') }}
-                </flux:sidebar.item>
-
                 <flux:sidebar.item icon="wrench-screwdriver" :href="route('builder.index')" :current="request()->routeIs('builder.*')" wire:navigate>
                     {{ __('Builder') }}
                 </flux:sidebar.item>
@@ -41,11 +34,26 @@
                     {{ __('Docs') }}
                 </flux:sidebar.item>
 
-                <flux:sidebar.item icon="adjustments-horizontal" :href="route('profile.edit')" :current="request()->routeIs('profile.*') || request()->routeIs('security.*') || request()->routeIs('media.edit')" wire:navigate>
+                <flux:sidebar.item icon="adjustments-horizontal" :href="route('user.edit')" :current="request()->routeIs('user.*') || request()->routeIs('media.edit')" wire:navigate>
                     {{ __('Settings') }}
                 </flux:sidebar.item>
             </flux:sidebar.nav>
 
+            {{--
+                Consoles and Games are the library itself rather than app
+                chrome, so they sit under their own kicker — the same pattern
+                as `Installed` below, which lists what that library contains.
+            --}}
+            <p class="kicker px-3 pt-4 -pb-5 text-fg-faint">{{ __('Library') }}</p>
+
+            <flux:sidebar.nav>
+                <flux:sidebar.item icon="puzzle-piece" :href="route('consoles.index')" :current="request()->routeIs('consoles.*')" wire:navigate>
+                    {{ __('Consoles') }}
+                </flux:sidebar.item>
+                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.*')" wire:navigate>
+                    {{ __('Games') }}
+                </flux:sidebar.item>
+            </flux:sidebar.nav>
 
             @php($installed = App\Models\ConsoleSourceFolder::consoles())
 

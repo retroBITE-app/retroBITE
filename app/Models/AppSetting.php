@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 
 /**
@@ -32,6 +33,37 @@ class AppSetting extends Model
      */
     public const MEDIA_REGION = 'media_region';
 
+    /** The provider media types to fetch. Absent means the shipped selection. */
+    public const MEDIA_TYPES = 'media_types';
+
+    /** The CRT scanline overlay over key art and the sign-in backdrop. */
+    public const UI_SCANLINES = 'ui_scanlines';
+
+    /**
+     * What a key means before anybody has set it.
+     *
+     * Here rather than at each call site: the auto-queue default was spelled
+     * out in four places, and the fourth one to disagree would have won.
+     *
+     * @var array<string, mixed>
+     */
+    private const DEFAULTS = [
+        self::AUTO_QUEUE_MEDIA_SCRAPE => true,
+        self::MEDIA_REGION => '',
+        self::UI_SCANLINES => true,
+    ];
+
+    /**
+     * Values already read this request.
+     *
+     * A settings table is read far more often than written — the scanline
+     * overlay alone is asked about four times a page — and every read was a
+     * fresh query.
+     *
+     * @var array<string, mixed>
+     */
+    protected static array $memo = [];
+
     /**
      * @return array<string, string>
      */
@@ -42,22 +74,39 @@ class AppSetting extends Model
 
     public static function get(string $key, mixed $default = null): mixed
     {
-        $setting = static::query()->where('key', $key)->first();
+        $default ??= Arr::get(self::DEFAULTS, $key);
 
-        if ($setting === null) {
-            return $default;
+        if (! array_key_exists($key, static::$memo)) {
+            // ->first()?->value rather than ->value('value'): the latter skips
+            // the json cast and would memoise the raw string.
+            static::$memo[$key] = static::query()->where('key', $key)->first()?->value;
         }
 
-        return $setting->value ?? $default;
+        return static::$memo[$key] ?? $default;
     }
 
     public static function put(string $key, mixed $value): void
     {
         static::query()->updateOrCreate(['key' => $key], ['value' => $value]);
+
+        // Written through rather than invalidated: a screen that saves and then
+        // reads back in the same request must not be handed the old answer.
+        static::$memo[$key] = $value;
     }
 
-    public static function enabled(string $key, bool $default = false): bool
+    public static function enabled(string $key, ?bool $default = null): bool
     {
         return (bool) static::get($key, $default);
+    }
+
+    /**
+     * Forget everything read so far.
+     *
+     * For the two places a process outlives a request: a queue worker between
+     * jobs, and a test suite between tests.
+     */
+    public static function flush(): void
+    {
+        static::$memo = [];
     }
 }

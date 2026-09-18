@@ -15,7 +15,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(MediaTypePreferenceSeeder::class);
 
         // User::factory(10)->create();
 

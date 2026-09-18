@@ -1,10 +1,16 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginBackdropController;
 use App\Http\Controllers\Docs\ArchiveDocController;
 use App\Http\Controllers\Docs\DownloadDocController;
 use App\Http\Controllers\Docs\ServeMediaController as ServeDocMediaController;
 use App\Http\Controllers\Library\ServeMediaController;
 use Illuminate\Support\Facades\Route;
+
+// Public on purpose, and the only artwork outside the authed route: the
+// sign-in page cannot be behind auth. It takes no path, so it serves a
+// backdrop of its own choosing and nothing else.
+Route::get('login/backdrop', LoginBackdropController::class)->name('login.backdrop');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');

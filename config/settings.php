@@ -24,18 +24,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Interface
+    | Login
     |--------------------------------------------------------------------------
     |
-    | The CRT scanline overlay drawn across key art and the login backdrop.
-    | Part of the look rather than decoration you can ignore — set false for a
-    | flat presentation.
+    | The sign-in page reports what the host holds — games catalogued, consoles
+    | installed, disk used — under the form. That page is reachable without
+    | credentials, so this exists to withhold the figures on a host that is not
+    | only on a trusted LAN.
     |
     */
 
-    'interface' => [
-        'scanlines' => (bool) env('UI_SCANLINES', true),
-    ],
+    'login_show_stats' => (bool) env('LOGIN_SHOW_STATS', true),
 
     /*
     |--------------------------------------------------------------------------

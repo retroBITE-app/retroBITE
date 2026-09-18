@@ -42,4 +42,23 @@ return [
      */
     'fallback' => ['ss', 'wor', 'eu', 'us', 'jp'],
 
+    /*
+     * The five flags shipped in public/images/regions. Only codes those
+     * pictures actually depict are mapped — a code with no icon falls back to
+     * a chip carrying its label, which is better than a flag that is wrong.
+     * Adding a flag is an edit here, not in code.
+     */
+    'icons' => [
+        // The provider's own neutral entry is a world release in practice.
+        'ss' => '/images/regions/world.png',
+        'wor' => '/images/regions/world.png',
+        'eu' => '/images/regions/eu.png',
+        'us' => '/images/regions/usa.png',
+        'jp' => '/images/regions/japan.png',
+        'se' => '/images/regions/scandinavia.png',
+        'no' => '/images/regions/scandinavia.png',
+        'dk' => '/images/regions/scandinavia.png',
+        'fi' => '/images/regions/scandinavia.png',
+    ],
+
 ];
