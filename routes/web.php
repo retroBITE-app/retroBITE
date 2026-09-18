@@ -32,6 +32,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('docs/file/{path}', ServeDocMediaController::class)->where('path', '.*')->name('docs.media');
     Route::get('docs/download/{path}', DownloadDocController::class)->where('path', '.*')->name('docs.download');
     Route::get('docs/archive/{path}', ArchiveDocController::class)->where('path', '.*')->name('docs.archive');
+
+    // Last in the group on purpose: it claims a top-level segment, so any new
+    // fixed route has to be declared above it. The component 404s on a key
+    // config does not carry, so /nonsense/games is a miss rather than an empty
+    // shelf.
+    Route::livewire('{console}/games', 'games.index')
+        ->where('console', '[a-z0-9\-]+')
+        ->name('consoles.games');
 });
 
 require __DIR__.'/settings.php';

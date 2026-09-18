@@ -251,7 +251,17 @@ new #[Title('Consoles')] class extends Component
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 @foreach ($this->added as $row)
                     <div wire:key="added-{{ $row['console']->key }}"
-                         class="group flex items-center gap-4 rounded-xl border border-line bg-surface p-4">
+                         class="group relative flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-line-input hover:bg-hover">
+                        {{-- Stretched over the card rather than wrapping it, so
+                             Scan and the menu sit above the link instead of
+                             inside it. --}}
+                        <a
+                            href="{{ route('consoles.games', ['console' => $row['console']->key]) }}"
+                            wire:navigate
+                            aria-label="{{ $row['console']->name }}"
+                            class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                        ></a>
+
                         <img src="{{ $row['console']->icon }}" alt="" class="size-12 shrink-0 object-contain" />
 
                         <div class="min-w-0 flex-1">
@@ -265,7 +275,7 @@ new #[Title('Consoles')] class extends Component
                             <p class="mt-0.5 truncate font-mono text-xs text-fg-faint">{{ $row['folder'] }}</p>
                         </div>
 
-                        <div class="flex shrink-0 items-center gap-1">
+                        <div class="relative z-20 flex shrink-0 items-center gap-1">
                             <flux:button size="sm" variant="ghost" wire:click="scan('{{ $row['console']->key }}')">
                                 {{ __('Scan') }}
                             </flux:button>

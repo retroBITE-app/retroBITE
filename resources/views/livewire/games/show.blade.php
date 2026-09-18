@@ -6,6 +6,7 @@ use App\Jobs\ScrapeGameMedia;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
+use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
 use Carbon\CarbonInterface;
 use Flux\Flux;
@@ -64,11 +65,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      * so there is no answer to wait for — only a queue that has got to it.
      */
     private const WAIT_SECONDS = 120;
-
-    /** What a console without cover measurements of its own falls back to. */
-    private const DEFAULT_COVER_HEIGHT = 280;
-
-    private const DEFAULT_COVER_ASPECT = '5/7';
 
     public function identify(): void
     {
@@ -379,20 +375,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      * How tall the console's covers stand, in pixels.
      *
      * A SNES box is wide and flat where a PS2 case is tall, so the shelf is
-     * levelled by height and each cover keeps its own width. From the console's
-     * own config, which is what carries the difference.
+     * levelled by height and each cover keeps its own width.
      */
     #[Computed]
     public function coverHeight(): int
     {
-        return (int) Arr::get($this->game->console()?->toMetaArray() ?? [], 'cover_height', self::DEFAULT_COVER_HEIGHT);
-    }
-
-    /** The console's cover proportions, so a placeholder is the right shape. */
-    #[Computed]
-    public function coverAspect(): string
-    {
-        return (string) Arr::get($this->game->console()?->toMetaArray() ?? [], 'cover_aspect', self::DEFAULT_COVER_ASPECT);
+        return CoverGeometry::height($this->game->console());
     }
 
     /**
@@ -404,11 +392,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Computed]
     public function coverPlaceholderWidth(): int
     {
-        [$width, $depth] = array_pad(explode('/', $this->coverAspect), 2, null);
-
-        $ratio = (float) $depth > 0 ? (float) $width / (float) $depth : 5 / 7;
-
-        return (int) round($this->coverHeight * $ratio);
+        return CoverGeometry::width($this->game->console());
     }
 
     /** The region flag, or null when no picture depicts this code. */
@@ -469,7 +453,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         {{-- pl-14 clears the floating hamburger, which sits at top-4 left-4. --}}
         <div class="absolute top-4 right-4 left-4 flex items-center gap-3.5 pl-14 lg:top-5.5 lg:inset-x-7.5 lg:pl-0">
             <a
-                href="{{ $console !== null ? route('games.index', ['console' => $console->key]) : route('games.index') }}"
+                href="{{ $console !== null ? route('consoles.games', ['console' => $console->key]) : route('games.index') }}"
                 wire:navigate
                 class="flex items-center gap-1.5 rounded-lg border border-line-input bg-scrim/60 px-2.75 py-1.5 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
             >

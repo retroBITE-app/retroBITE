@@ -40,6 +40,14 @@ class AppSetting extends Model
     public const UI_SCANLINES = 'ui_scanlines';
 
     /**
+     * How the library lists games, 'cards' or 'table'.
+     *
+     * Remembered app-wide rather than per page: somebody who prefers the table
+     * prefers it on every console's shelf as well.
+     */
+    public const UI_GAMES_VIEW = 'ui_games_view';
+
+    /**
      * What a key means before anybody has set it.
      *
      * Here rather than at each call site: the auto-queue default was spelled
@@ -51,6 +59,7 @@ class AppSetting extends Model
         self::AUTO_QUEUE_MEDIA_SCRAPE => true,
         self::MEDIA_REGION => '',
         self::UI_SCANLINES => true,
+        self::UI_GAMES_VIEW => 'cards',
     ];
 
     /**
