@@ -1,14 +1,17 @@
 <?php
 
 use App\Enums\GameStatus;
+use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
 use App\Jobs\ScrapeGameMedia;
+use App\Models\AppSetting;
 use App\Models\Game;
 use App\Support\Console;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -18,11 +21,28 @@ new #[Title('Games')] class extends Component
 {
     use WithPagination;
 
+    /** The two ways the library lists games. */
+    private const VIEWS = ['cards', 'table'];
+
+    /**
+     * The console this page is fixed to, or '' for the whole library.
+     *
+     * Separate from the $console filter below so /ps2/games never renders as
+     * /ps2/games?console=ps2, and locked because it is the route, not a control.
+     */
+    #[Locked]
+    public string $lockedConsole = '';
+
     #[Url(as: 'q', except: '')]
     public string $query = '';
 
+    /**
+     * Named apart from the route's {console}: Livewire fills any public
+     * property whose name matches a route parameter, and this one filling
+     * would put ?console=gc back on /gc/games.
+     */
     #[Url(as: 'console', except: '')]
-    public string $console = '';
+    public string $consoleFilter = '';
 
     /** '' | placeholder | matched | unmatched */
     #[Url(as: 'status', except: '')]
@@ -32,12 +52,70 @@ new #[Title('Games')] class extends Component
     #[Url(as: 'genre', except: '')]
     public string $genre = '';
 
+    /**
+     * '' | cards | table — empty meaning whatever the setting says.
+     *
+     * Empty by default so the choice stays out of the URL until somebody makes
+     * one here, while ?view=table still shares a link in the other mode.
+     */
+    #[Url(as: 'view', except: '')]
+    public string $view = '';
+
+    /** The route's console, when this is one console's shelf rather than the library. */
+    public function mount(?string $console = null): void
+    {
+        if ($console === null) {
+            return;
+        }
+
+        abort_unless(Console::exists($console), 404);
+
+        $this->lockedConsole = $console;
+    }
+
     public function updated(string $property): void
     {
         // Any change to a filter invalidates the page you were on.
-        if (in_array($property, ['query', 'console', 'status', 'genre'], true)) {
+        if (in_array($property, ['query', 'consoleFilter', 'status', 'genre'], true)) {
             $this->resetPage();
         }
+    }
+
+    /** The console being listed, whichever supplied it. */
+    #[Computed]
+    public function consoleKey(): string
+    {
+        return $this->lockedConsole !== '' ? $this->lockedConsole : $this->consoleFilter;
+    }
+
+    /** The console this page is fixed to, or null for the whole library. */
+    #[Computed]
+    public function lockedTo(): ?Console
+    {
+        return Console::tryFrom($this->lockedConsole);
+    }
+
+    /** How to list the games: this visit's choice, else the remembered one. */
+    #[Computed]
+    public function viewMode(): string
+    {
+        return $this->view !== '' ? $this->view : (string) AppSetting::get(AppSetting::UI_GAMES_VIEW);
+    }
+
+    /** Switch layouts, and remember it for every other shelf too. */
+    public function setView(string $mode): void
+    {
+        if (! in_array($mode, self::VIEWS, true)) {
+            return;
+        }
+
+        $this->view = $mode;
+
+        // The computed is memoised for the request, and this render is the
+        // same request that just changed it.
+        unset($this->viewMode);
+
+        AppSetting::put(AppSetting::UI_GAMES_VIEW, $mode);
     }
 
     /** @return LengthAwarePaginator<int, Game> */
@@ -46,7 +124,7 @@ new #[Title('Games')] class extends Component
     {
         return Game::query()
             ->when($this->query !== '', fn ($q) => $q->where('title', 'like', '%'.$this->query.'%'))
-            ->when($this->console !== '', fn ($q) => $q->forConsole($this->console))
+            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
             ->when($this->status !== '', fn ($q) => $q->where('status', $this->status))
             // Matched as one of the comma-separated parts rather than with a
             // LIKE, or picking "Action" would also pull in every "Action /
@@ -55,6 +133,10 @@ new #[Title('Games')] class extends Component
                 "FIND_IN_SET(?, REPLACE(REPLACE(genre, ' ,', ','), ', ', ',')) > 0",
                 [$this->genre],
             ))
+            // Both for the cards: the cover comes out of the media relation in
+            // memory, and the size is a sum rather than every file loaded.
+            ->with(['media' => fn ($q) => $q->ofKind(MediaKind::Cover)])
+            ->withSum('files as size_bytes_sum', 'size_bytes')
             ->withCount('files')
             ->orderBy('title')
             ->paginate(24);
@@ -88,6 +170,9 @@ new #[Title('Games')] class extends Component
     public function genres(): Collection
     {
         return Game::query()
+            // Scoped to the console being listed, or a console's shelf would
+            // offer genres nothing on it has.
+            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
             ->whereNotNull('genre')
             ->where('genre', '<>', '')
             ->distinct()
@@ -147,27 +232,46 @@ new #[Title('Games')] class extends Component
 
     public function clear(): void
     {
-        $this->reset('query', 'console', 'status', 'genre');
+        $this->reset('query', 'consoleFilter', 'status', 'genre');
         $this->resetPage();
     }
 }; ?>
 
 <section class="w-full">
     <div class="flex flex-col gap-6">
-        <div class="min-w-0">
-            <p class="kicker mb-1.5 text-fg-faint">{{ __('Library') }}</p>
-            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Games') }}</h1>
-        </div>
+        @if ($this->lockedTo !== null)
+            <div class="min-w-0">
+                <a
+                    href="{{ route('consoles.index') }}"
+                    wire:navigate
+                    class="kicker mb-1.5 inline-flex items-center gap-1.5 text-fg-faint transition-colors hover:text-accent"
+                >
+                    <flux:icon.arrow-left variant="micro" />
+                    {{ __('Consoles') }}
+                </a>
+                <div class="flex items-center gap-3">
+                    <img src="{{ $this->lockedTo->icon }}" alt="" class="size-9 shrink-0 object-contain" />
+                    <h1 class="text-display font-medium tracking-display text-fg-bright">{{ $this->lockedTo->name }}</h1>
+                </div>
+            </div>
+        @else
+            <div class="min-w-0">
+                <p class="kicker mb-1.5 text-fg-faint">{{ __('Library') }}</p>
+                <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Games') }}</h1>
+            </div>
+        @endif
 
         <div class="flex flex-wrap items-end gap-3">
             <flux:input wire:model.live.debounce.300ms="query" :placeholder="__('Search titles')" class="min-w-56 flex-1" size="sm" />
 
-            <flux:select wire:model.live="console" size="sm" class="w-44">
-                <flux:select.option value="">{{ __('All consoles') }}</flux:select.option>
-                @foreach ($this->consoles as $option)
-                    <flux:select.option value="{{ $option->key }}">{{ $option->name }}</flux:select.option>
-                @endforeach
-            </flux:select>
+            @if ($this->lockedTo === null)
+                <flux:select wire:model.live="consoleFilter" size="sm" class="w-44">
+                    <flux:select.option value="">{{ __('All consoles') }}</flux:select.option>
+                    @foreach ($this->consoles as $option)
+                        <flux:select.option value="{{ $option->key }}">{{ $option->name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+            @endif
 
             <flux:select wire:model.live="genre" size="sm" class="w-44">
                 <flux:select.option value="">{{ __('Any genre') }}</flux:select.option>
@@ -183,9 +287,31 @@ new #[Title('Games')] class extends Component
                 @endforeach
             </flux:select>
 
-            @if ($query !== '' || $console !== '' || $status !== '' || $genre !== '')
+            @if ($query !== '' || $consoleFilter !== '' || $status !== '' || $genre !== '')
                 <flux:button size="sm" variant="ghost" wire:click="clear">{{ __('Clear') }}</flux:button>
             @endif
+
+            {{-- Pushed to the end of the row: it is not a filter, and on a
+                 narrow screen it should wrap away from them rather than
+                 between two selects. --}}
+            <flux:button.group class="ms-auto">
+                <flux:button
+                    size="sm"
+                    icon="squares-2x2"
+                    :variant="$this->viewMode === 'cards' ? 'filled' : 'ghost'"
+                    :aria-pressed="$this->viewMode === 'cards' ? 'true' : 'false'"
+                    :aria-label="__('Show covers')"
+                    wire:click="setView('cards')"
+                />
+                <flux:button
+                    size="sm"
+                    icon="list-bullet"
+                    :variant="$this->viewMode === 'table' ? 'filled' : 'ghost'"
+                    :aria-pressed="$this->viewMode === 'table' ? 'true' : 'false'"
+                    :aria-label="__('Show a list')"
+                    wire:click="setView('table')"
+                />
+            </flux:button.group>
         </div>
 
         @if ($this->games->isEmpty())
@@ -193,13 +319,44 @@ new #[Title('Games')] class extends Component
                 <p class="text-sm text-fg-soft">{{ __('Nothing matches that.') }}</p>
                 <p class="mt-1 text-sm text-fg-faint">{{ __('Scan a console to fill the library.') }}</p>
             </div>
+        @elseif ($this->viewMode === 'cards')
+            {{-- Wrapped rather than a grid: each console sets its own cover
+                 width, so a fixed column count would leave a SNES shelf in
+                 columns sized for a PS2 one. --}}
+            <ul class="flex flex-wrap items-start gap-4">
+                @foreach ($this->games as $game)
+                    <li wire:key="card-{{ $game->id }}">
+                        <x-game-card :game="$game" :show-console="$this->lockedTo === null">
+                            <x-slot:actions>
+                                @if ($game->canBeIdentified())
+                                    <flux:button size="xs" variant="filled" icon="sparkles"
+                                                 :aria-label="__('Identify')"
+                                                 :tooltip="__('Identify')"
+                                                 wire:click="identify({{ $game->id }})"
+                                                 wire:loading.attr="disabled"
+                                                 wire:target="identify({{ $game->id }})" />
+                                @elseif ($game->canFetchMedia())
+                                    <flux:button size="xs" variant="filled" icon="photo"
+                                                 :aria-label="__('Artwork')"
+                                                 :tooltip="__('Artwork')"
+                                                 wire:click="fetchMedia({{ $game->id }})"
+                                                 wire:loading.attr="disabled"
+                                                 wire:target="fetchMedia({{ $game->id }})" />
+                                @endif
+                            </x-slot:actions>
+                        </x-game-card>
+                    </li>
+                @endforeach
+            </ul>
         @else
             <div class="overflow-hidden rounded-xl border border-line">
                 <table class="w-full text-sm">
                     <thead class="bg-sunken text-left text-fg-faint">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">{{ __('Title') }}</th>
-                            <th class="px-4 py-2.5 font-medium">{{ __('Console') }}</th>
+                            @if ($this->lockedTo === null)
+                                <th class="px-4 py-2.5 font-medium">{{ __('Console') }}</th>
+                            @endif
                             <th class="px-4 py-2.5 font-medium">{{ __('Genre') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Files') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Status') }}</th>
@@ -214,7 +371,9 @@ new #[Title('Games')] class extends Component
                                         {{ $game->title }}
                                     </a>
                                 </td>
-                                <td class="px-4 py-2.5 text-fg-soft">{{ $game->console()?->name ?? $game->console }}</td>
+                                @if ($this->lockedTo === null)
+                                    <td class="px-4 py-2.5 text-fg-soft">{{ $game->console()?->name ?? $game->console }}</td>
+                                @endif
                                 {{-- The provider's whole list on hover, one line in the row:
                                      "Adventure / RealTime 3D, Adventure" is a single game,
                                      and it would set the column width for every other. --}}

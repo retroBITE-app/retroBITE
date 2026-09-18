@@ -1,7 +1,12 @@
 @php
-    // Placeholder figures. There is no Game model yet, so these stand in for
-    // per-console counts and disk usage until one exists.
-    $gameCounts = ['snes' => 4, 'ps2' => 4, 'ps3' => 0, 'gc' => 4, 'wii' => 1, 'gba' => 4, 'n64' => 3];
+    // One grouped query rather than a count per console: the list below runs
+    // on every page of the app.
+    $gameCounts = App\Models\Game::query()
+        ->selectRaw('console, count(*) as games')
+        ->groupBy('console')
+        ->pluck('games', 'console');
+
+    // Placeholder figures, until something measures the disk.
     $storageUsed = '412 GB';
     $storageTotal = '1.8 TB';
     $storagePercent = 23;
@@ -69,13 +74,17 @@
                 <div class="flex flex-col gap-px">
                     @foreach ($installed as $console)
                         <a
-                            href="{{ route('consoles.index') }}"
+                            href="{{ route('consoles.games', ['console' => $console->key]) }}"
                             wire:navigate
-                            class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-fg-cool transition-colors hover:bg-hover hover:text-fg"
+                            @class([
+                                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-hover hover:text-fg',
+                                'bg-hover text-fg' => request()->routeIs('consoles.games') && request()->route('console') === $console->key,
+                                'text-fg-cool' => ! (request()->routeIs('consoles.games') && request()->route('console') === $console->key),
+                            ])
                         >
                             <img src="{{ $console->icon }}" alt="" class="size-4 shrink-0 object-contain" />
                             <span class="truncate">{{ $console->name }}</span>
-                            <span class="ms-auto font-mono text-xs text-fg-faint">{{ $gameCounts[$console->key] ?? 0 }}</span>
+                            <span class="ms-auto font-mono text-xs text-fg-faint">{{ Illuminate\Support\Arr::get($gameCounts, $console->key, 0) }}</span>
                         </a>
                     @endforeach
                 </div>

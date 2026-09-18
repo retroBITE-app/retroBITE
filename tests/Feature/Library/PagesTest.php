@@ -150,10 +150,10 @@ it('lists games and filters them', function () {
         ->assertSee('Tekken 3')
         ->assertDontSee('Super Mario World')
         ->set('query', '')
-        ->set('console', 'snes')
+        ->set('consoleFilter', 'snes')
         ->assertSee('Super Mario World')
         ->assertDontSee('Tekken 3')
-        ->set('console', '')
+        ->set('consoleFilter', '')
         ->set('status', 'placeholder')
         ->assertSee('Tekken 3')
         ->assertDontSee('Super Mario World');
@@ -298,7 +298,7 @@ it('filters by genre, splitting the comma-separated list the provider sends', fu
 it('keeps every library page behind the login', function () {
     auth()->logout();
 
-    foreach ([route('consoles.index'), route('games.index'), route('media.edit')] as $url) {
+    foreach ([route('consoles.index'), route('games.index'), route('consoles.games', ['console' => 'snes']), route('media.edit')] as $url) {
         $this->get($url)->assertRedirect();
     }
 });
@@ -497,4 +497,65 @@ it('saves a preferred media region', function () {
     expect(MediaRegions::preferred())->toBe('se')
         // The preference leads, and the neutral entries stay behind it.
         ->and(MediaRegions::chain())->toBe(['se', 'ss', 'wor', 'eu', 'us', 'jp']);
+});
+
+it('lists one console on its own shelf, and 404s on a key config does not carry', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Vagrant Story', 'slug' => 'vagrant']);
+
+    $this->get(route('consoles.games', ['console' => 'snes']))
+        ->assertOk()
+        ->assertSee('Super Nintendo')
+        ->assertSee('Super Mario World')
+        ->assertDontSee('Vagrant Story');
+
+    // The console is the route rather than a control, so the filter that would
+    // change it is not offered.
+    $this->get(route('consoles.games', ['console' => 'snes']))->assertDontSee('All consoles');
+
+    // Livewire fills any public property named after a route parameter, so a
+    // filter called $console would come back as /snes/games?console=snes.
+    Livewire::test('games.index', ['console' => 'snes'])->assertSet('consoleFilter', '');
+
+    $this->get('/notaconsole/games')->assertNotFound();
+});
+
+it('remembers whether the library is drawn as covers or as a list', function () {
+    $game = Game::factory()->forConsole('snes')->unmatched()->create(['title' => 'Unknown Disc', 'slug' => 'unknown']);
+    GameFile::factory()->for($game)->create(['path' => 'snes/unknown.sfc', 'filename' => 'unknown.sfc', 'size_bytes' => 3145728]);
+
+    // Cards by default, and a card carries the word the table puts in a column
+    // header instead.
+    Livewire::test('games.index')
+        ->assertSee('Unidentified')
+        ->assertDontSee('Genre')
+        ->call('setView', 'table')
+        ->assertSee('Genre');
+
+    expect(AppSetting::get(AppSetting::UI_GAMES_VIEW))->toBe('table');
+
+    // The memo outlives the component, and the point is that the next visit
+    // reads the row back.
+    AppSetting::flush();
+
+    Livewire::test('games.index')->assertSee('Genre');
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('Genre');
+
+    // Anything else leaves it alone rather than drawing nothing at all.
+    Livewire::test('games.index')->call('setView', 'mosaic')->assertSee('Genre');
+
+    // A link in the other mode still overrides what was remembered. Last,
+    // because withQueryParams sticks to every Livewire::test after it.
+    Livewire::withQueryParams(['view' => 'cards'])->test('games.index')->assertDontSee('Genre');
+});
+
+it('sizes an empty slot from the console it belongs to', function () {
+    // Real art supplies its own width; a placeholder has none, so the
+    // console's ratio stands in and the slot holds a cover's worth of space.
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Vagrant Story', 'slug' => 'vagrant']);
+
+    // 2/3 and 5/7 of the same 280px.
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('width: 187px', escape: false);
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('width: 200px', escape: false);
 });
