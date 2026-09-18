@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AppSetting;
+use App\Support\ConsoleOverrides;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -30,6 +31,12 @@ pest()->extend(TestCase::class)
         // outlives RefreshDatabase — which empties the table underneath it and
         // would otherwise hand the next test the previous one's answer.
         AppSetting::flush();
+
+        // And the console overrides ride along, for the same reason the queue
+        // worker re-applies them: the memo above outlives the application, so
+        // the providers booted this test's config repository from the previous
+        // test's answer before RefreshDatabase had emptied the table.
+        ConsoleOverrides::apply();
     })
     ->in('Feature');
 
