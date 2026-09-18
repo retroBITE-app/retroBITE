@@ -585,6 +585,12 @@ body:has([data-flux-sidebar][data-flux-sidebar-on-mobile]:not([data-flux-sidebar
     cursor: zoom-in;
 }
 
+/* The marker is the lightbox's own opt-in, so this cannot reach an image that
+   is not wired to one — which repeating a utility at each call site can. */
+[data-lightbox] {
+    cursor: zoom-in;
+}
+
 [data-doc-body] figure img {
     display: block;
     max-width: 100%;

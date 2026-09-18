@@ -8,12 +8,13 @@ use App\Models\AppSetting;
 use Illuminate\Support\Arr;
 
 /**
- * Which of several regional copies of one piece of artwork to keep.
+ * Everything the app knows about the provider's regions.
  *
  * The provider answers with every region it holds — a box-2D for Europe, for
  * the United States, for Japan, for the world. Storing all of them fills the
  * disk with the same picture in four languages and leaves the interface
- * picking one arbitrarily. One is chosen here instead.
+ * picking one arbitrarily. One is chosen here instead, and the same config
+ * says how to name and picture the one that was kept.
  */
 final class MediaRegions
 {
@@ -25,6 +26,30 @@ final class MediaRegions
     public static function labels(): array
     {
         return (array) config('regions.labels', []);
+    }
+
+    /**
+     * The region's name, or null for a code we hold no label for.
+     *
+     * The provider can invent codes at any time, so a missing label is normal.
+     */
+    public static function label(?string $code): ?string
+    {
+        return $code === null ? null : Arr::get(self::labels(), $code);
+    }
+
+    /**
+     * The flag for a region shortname, or null when no picture depicts it.
+     *
+     * Null is an ordinary answer rather than a failure: the interface shows
+     * the region's name instead.
+     */
+    public static function icon(?string $code): ?string
+    {
+        /** @var array<string, string> $icons */
+        $icons = (array) config('regions.icons', []);
+
+        return $code === null ? null : Arr::get($icons, $code);
     }
 
     /** The region somebody chose, or '' for no preference. */

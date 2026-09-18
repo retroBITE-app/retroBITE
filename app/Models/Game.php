@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
+use App\Enums\MediaKind;
 use App\Support\Console;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -72,6 +74,27 @@ class Game extends Model
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
+    }
+
+    /**
+     * One piece of artwork of a kind, in the enum's preference order.
+     *
+     * Reads the relation rather than querying, so an eager-loaded page asks for
+     * a cover, a logo and a backdrop without three more round trips. Two of the
+     * same type break the tie on file size: the provider holds the same picture
+     * at several resolutions, and the biggest is the one worth showing.
+     */
+    public function artwork(MediaKind $kind): ?Media
+    {
+        $order = array_flip($kind->screenScraperTypes());
+
+        return $this->media
+            ->filter(fn (Media $media) => Arr::has($order, $media->screenscraper_type))
+            ->sortBy([
+                fn (Media $a, Media $b) => Arr::get($order, $a->screenscraper_type) <=> Arr::get($order, $b->screenscraper_type),
+                fn (Media $a, Media $b) => (int) $b->size_bytes <=> (int) $a->size_bytes,
+            ])
+            ->first();
     }
 
     /** @return BelongsToMany<GameCollection, $this> */

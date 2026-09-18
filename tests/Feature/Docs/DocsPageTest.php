@@ -67,7 +67,10 @@ test('the open document renders as html', function () {
     Livewire::test('docs.index', ['path' => $doc->path])
         ->assertSet('path', $doc->path)
         ->assertSeeHtml('data-doc-body')
-        ->assertSeeHtml('<li>A disc</li>');
+        ->assertSeeHtml('<li>A disc</li>')
+        // The viewer over the figures, now a shared component: an extraction
+        // that dropped it here would otherwise go unnoticed.
+        ->assertSeeHtml('x-teleport="body"');
 });
 
 test('the markdown tab shows the source without the front matter', function () {

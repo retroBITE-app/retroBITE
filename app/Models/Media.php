@@ -61,6 +61,25 @@ class Media extends Model
         return $this->belongsTo(Game::class);
     }
 
+    /** Below this an image is a thumbnail, whatever the provider filed it as. */
+    private const WALLPAPER_MIN_BYTES = 50_000;
+
+    /**
+     * Artwork fit to fill a whole screen.
+     *
+     * Two things disqualify a row. The provider files in-game screenshots as
+     * backdrops beside real wallpaper, and a screenshot blown up behind a form
+     * reads as a mistake; and some of what it does call key art is thumbnail
+     * sized, which full-bleed is the least forgiving place to discover.
+     *
+     * @param  Builder<Media>  $query
+     */
+    public function scopeWallpaper(Builder $query): void
+    {
+        $query->whereIn('screenscraper_type', MediaKind::Backdrop->keyArtTypes())
+            ->where('size_bytes', '>=', self::WALLPAPER_MIN_BYTES);
+    }
+
     /**
      * Narrow to the types a display role covers, best first.
      *

@@ -39,6 +39,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Login
+    |--------------------------------------------------------------------------
+    |
+    | The sign-in page reports what the host holds — games catalogued, consoles
+    | installed, disk used — under the form. That page is reachable without
+    | credentials, so this exists to withhold the figures on a host that is not
+    | only on a trusted LAN.
+    |
+    */
+
+    'login_show_stats' => (bool) env('LOGIN_SHOW_STATS', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Library
     |--------------------------------------------------------------------------
     |

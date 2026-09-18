@@ -2,6 +2,7 @@
 
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
+use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
@@ -169,6 +170,59 @@ it('shows a game with its files, marking the missing ones', function () {
         ->assertSee('d1.bin')
         ->assertSee('d2.bin')
         ->assertSee('Missing');
+});
+
+it('opens every artwork in one viewer, captioned by kind and region', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
+
+    $cover = Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+    $logo = Media::factory()->for($game)->ofType('wheel', 'eu')->create();
+    $clip = Media::factory()->for($game)->ofType('video')->create();
+
+    $page = $this->get(route('games.show', $game))->assertOk();
+
+    // One set, passed whole, so the strip and the hero cover agree on it.
+    $page->assertSeeHtml('data-lightbox-images');
+
+    // The hero cover is keyed by the same path its media row holds, which is
+    // how it opens the viewer in the right place without knowing its position.
+    $page->assertSeeHtml('data-lightbox="'.$cover->path.'"');
+
+    // The logo is artwork, so it is in the set and its thumbnail opens the
+    // viewer — but the copy beside the title is not a way in, or the header
+    // would be a gallery. Asserted as the whole tag, since the attribute alone
+    // appears legitimately on the thumbnail.
+    $page->assertSeeHtml(
+        '<img src="'.route('media.show', ['path' => $logo->path]).'" alt="Final Fantasy IX" class="h-auto w-28 shrink-0" />'
+    );
+
+    $page->assertSee('Cover · Europe');
+
+    // A type filling no slot we name keeps the provider's own word for it.
+    $page->assertSee($clip->screenscraper_type);
+});
+
+it('keeps screenshots and thumbnails out of the login backdrop', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create();
+
+    $wallpaper = Media::factory()->for($game)->ofType('fanart')->create(['size_bytes' => 400_000]);
+    // The provider files in-game screenshots as backdrops beside real key art.
+    Media::factory()->for($game)->ofType('ss')->create(['size_bytes' => 400_000]);
+    // Key art by type, thumbnail by size — full-bleed would expose it.
+    Media::factory()->for($game)->ofType('fanart')->create(['size_bytes' => 4_000]);
+
+    expect(Media::query()->wallpaper()->pluck('id')->all())->toBe([$wallpaper->id]);
+});
+
+it('leads with the biggest copy when the provider held several', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create();
+
+    Media::factory()->for($game)->ofType('fanart')->create(['size_bytes' => 120_000]);
+    $biggest = Media::factory()->for($game)->ofType('fanart')->create(['size_bytes' => 900_000]);
+    // A less preferred type never wins on size alone.
+    Media::factory()->for($game)->ofType('ss')->create(['size_bytes' => 2_000_000]);
+
+    expect($game->load('media')->artwork(MediaKind::Backdrop)?->id)->toBe($biggest->id);
 });
 
 it('serves artwork only through the authed route', function () {
