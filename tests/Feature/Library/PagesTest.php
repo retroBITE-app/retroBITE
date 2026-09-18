@@ -260,6 +260,41 @@ it('saves which media types to fetch', function () {
         ->and(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeFalse();
 });
 
+it('filters by genre, splitting the comma-separated list the provider sends', function () {
+    Game::factory()->forConsole('snes')->matched()->create([
+        'title' => 'Super Mario World', 'slug' => 'smw', 'genre' => 'Platform',
+    ]);
+    Game::factory()->forConsole('psx')->matched()->create([
+        'title' => 'Vagrant Story', 'slug' => 'vagrant', 'genre' => 'Tactical RPG, Role Playing Game',
+    ]);
+    // The provider also spells compound genres with a slash, which is part of
+    // one entry rather than two.
+    Game::factory()->forConsole('psx')->matched()->create([
+        'title' => 'Fighting Force', 'slug' => 'ff', 'genre' => 'Action / Beat\'em Up, Action',
+    ]);
+
+    $component = Livewire::test('games.index');
+
+    // One entry per genre, however many games carry it, sorted.
+    expect($component->instance()->genres->all())->toBe([
+        'Action',
+        "Action / Beat'em Up",
+        'Platform',
+        'Role Playing Game',
+        'Tactical RPG',
+    ]);
+
+    $component->set('genre', 'Role Playing Game')
+        ->assertSee('Vagrant Story')
+        ->assertDontSee('Super Mario World');
+
+    // Matched as a whole entry: "Action" must not drag in every game whose
+    // genre merely starts with it.
+    $component->set('genre', 'Action')
+        ->assertSee('Fighting Force')
+        ->assertDontSee('Vagrant Story');
+});
+
 it('keeps every library page behind the login', function () {
     auth()->logout();
 
