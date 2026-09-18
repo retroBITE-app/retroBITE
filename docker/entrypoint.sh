@@ -31,11 +31,63 @@ usermod -aG users,nogroup "$USER" 2>/dev/null || true
 # 'secure_chroot_dir'".
 mkdir -p /var/run/vsftpd/empty
 
-# Configure FTP passive mode IP if provided
+# vsftpd advertises this address for passive-mode data connections, so it has to
+# be one the client can actually reach. A stale value does not fail loudly — the
+# control connection still works and only the transfer hangs.
+#
+# Derive it from the default route when HOST_IP is unset, so a laptop that moves
+# between networks keeps working on restart. An explicit HOST_IP always wins.
+if [ -z "$HOST_IP" ]; then
+    HOST_IP=$(ip route get 1.1.1.1 2>/dev/null \
+        | awk '{ for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit } }')
+
+    if [ -n "$HOST_IP" ]; then
+        echo "→ detected host IP: $HOST_IP"
+    else
+        echo "⚠ could not detect host IP — set HOST_IP in .env, or FTP passive mode will fail"
+    fi
+fi
+
 if [ -n "$HOST_IP" ]; then
     echo "Configuring FTP passive mode with IP: $HOST_IP"
     sed -i "s/^pasv_address=.*/pasv_address=$HOST_IP/" /etc/vsftpd.conf
 fi
+
+# The console subdirectories served over the network. Created here, not in the
+# Dockerfile: /games is a bind mount, so anything made at build time is shadowed
+# the moment the volume is attached.
+#
+# This is the only place the list lives. GAME_FOLDERS creates the directories;
+# SMB_SHARES is the subset that also gets its own SMB share, because a loader
+# like OPL connects to a share named after the console rather than browsing
+# /games. FTP-only consoles need the directory but no share of their own.
+GAME_FOLDERS=${GAME_FOLDERS:-ps2 ps3 gc wii xbox dreamcast}
+SMB_SHARES=${SMB_SHARES:-ps2 gc wii}
+
+for folder in $GAME_FOLDERS; do
+    mkdir -p "/games/$folder"
+done
+
+# Generated fresh each boot so a changed SMB_SHARES never leaves a stale share
+# behind. smb.conf includes this file; an empty one is valid.
+: > /etc/samba/shares.conf
+for share in $SMB_SHARES; do
+    cat >> /etc/samba/shares.conf <<SHARE
+[$share]
+   comment = retroBite $share Library
+   path = /games/$share
+   browseable = yes
+   writable = yes
+   guest ok = no
+   valid users = @users
+   read only = no
+   create mask = 0775
+   directory mask = 0775
+   min protocol = NT1
+   max protocol = SMB3
+
+SHARE
+done
 
 # Ensure games directory has correct permissions
 chown -R :users /games

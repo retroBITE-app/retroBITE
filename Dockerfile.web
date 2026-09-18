@@ -1,27 +1,85 @@
-# Stage 1: Build Vue/Vite frontend
-FROM node:22-alpine AS frontend-builder
+FROM composer:latest AS vendor
 
-WORKDIR /app/web
-COPY web/package.json web/package-lock.json* ./
-RUN npm install
-COPY web/ .
+WORKDIR /app
+COPY composer.json composer.lock ./
+# --no-scripts: package:discover needs artisan, which is not here yet.
+# --ignore-platform-req=ext-intl: this stage only downloads packages, and the
+# composer image has no intl. The runtime image does, which is where it matters.
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-interaction \
+    --ignore-platform-req=ext-intl
+
+FROM node:22-bookworm-slim AS frontend-builder
+
+WORKDIR /app
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --no-audit --no-fund
+
+COPY vite.config.js ./
+COPY resources/ ./resources/
+COPY --from=vendor /app/vendor/livewire/flux ./vendor/livewire/flux
+COPY --from=vendor /app/vendor/laravel/framework/src/Illuminate/Pagination \
+     ./vendor/laravel/framework/src/Illuminate/Pagination
+
 RUN npm run build
 
-# Stage 2: PHP-FPM + Nginx runtime
-FROM php:8.4-fpm-alpine AS runner
+# Stage 3: PHP-FPM + nginx runtime
+FROM php:8.5-fpm-alpine AS runner
 
-RUN apk add --no-cache nginx sqlite sqlite-dev \
-    && docker-php-ext-install pdo_sqlite
+# php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
+# ctype/curl/dom/fileinfo/filter/hash/mbstring/openssl/pcre/pdo/session/
+# tokenizer/xml set Laravel's requirements list names. Passing an already
+# compiled extension to docker-php-ext-install builds no module and fails the
+# copy, so those must be left off the list below.
+#
+# What is added here is everything else Laravel's own Docker image (Sail)
+# ships, so a feature that needs an extension is never a rebuild away.
+# Deliberately not included: xdebug and pcov (development and coverage tooling
+# that slows a runtime image down), swoole (an alternative server, not
+# compatible with the php-fpm model here), imagick (~150 MB of ImageMagick for
+# what gd already covers) and mongodb and imap (no such database here, and imap
+# left PHP core after 8.3).
+#
+# Runtime libraries must survive .build-deps being removed: an extension links
+# against them at build time and fails at *runtime* without them, so a missing
+# one shows up as a 500 rather than a failed build. That is why icu-libs,
+# libpng, libjpeg-turbo, freetype, libpq, libldap and libmemcached-libs are in
+# the first list rather than the virtual one.
+#
+# unzip and git are for Composer's dist path.
+RUN apk add --no-cache \
+        nginx su-exec unzip git \
+        libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
+        libmemcached-libs gettext libwebp \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS libzip-dev icu-dev libpng-dev libjpeg-turbo-dev \
+        freetype-dev postgresql-dev openldap-dev libmemcached-dev zlib-dev \
+        gettext-dev libxml2-dev linux-headers libwebp-dev \
+    # gd without this builds silently without JPEG support and only fatals when
+    # something calls imagecreatefromjpeg().
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j"$(nproc)" \
+        bcmath calendar exif ftp gd gettext intl ldap pcntl pdo_mysql \
+        pdo_pgsql pgsql shmop soap sockets sysvmsg sysvsem sysvshm zip \
+    # PECL rather than bundled. igbinary and msgpack are the serializers redis
+    # and memcached use, so they are built first.
+    && pecl install igbinary msgpack redis \
+    && docker-php-ext-enable igbinary msgpack redis \
+    # memcached asks for the libmemcached path unless it is answered; the empty
+    # line takes the default.
+    && yes '' | pecl install memcached \
+    && docker-php-ext-enable memcached \
+    && apk del .build-deps \
+    && rm -rf /tmp/pear
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /app/web
-COPY web/composer.json web/composer.lock* ./
-RUN composer update --no-dev --no-interaction --optimize-autoloader
+WORKDIR /app
 
-COPY web/ .
-RUN mkdir -p storage/games storage/tmp database
-COPY --from=frontend-builder /app/web/public/build ./public/build
+COPY --from=vendor /app/vendor ./vendor
+COPY . .
+RUN composer dump-autoload --optimize --no-dev
+
+COPY --from=frontend-builder /app/public/build ./public/build
 
 # Nginx server block
 COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf
@@ -29,9 +87,11 @@ COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf
 # PHP config overrides
 COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
 COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/web/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
+COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
 COPY docker/web/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh
 
 EXPOSE 80
 

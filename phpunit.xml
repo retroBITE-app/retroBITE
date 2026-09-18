@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing" force="true"/>
+        <!-- Fixed, throwaway key. The suite needs one to boot the encrypter and
+             the repository ships no .env, so without this every test that
+             touches a session or a cookie dies on "No application encryption
+             key has been specified" long before it asserts anything. -->
+        <env name="APP_KEY" value="base64:Gm5YB2nVQ0xM8kTsZ1pJdLrWvXaCeHfNoPqRtUiOyE0=" force="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <env name="BROADCAST_CONNECTION" value="null" force="true"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <!-- MariaDB rather than sqlite :memory:, so a migration or a query that
+             only works on one of them cannot pass here and fail in production.
+             Needs a reachable server: `docker compose -f docker-compose.dev.yml
+             up -d retrobite-db` publishes one on 3307. Override any of these
+             from the environment to point elsewhere. -->
+        <env name="DB_CONNECTION" value="mariadb" force="true"/>
+        <env name="DB_HOST" value="127.0.0.1" force="true"/>
+        <env name="DB_PORT" value="3307" force="true"/>
+        <env name="DB_DATABASE" value="retrobite_testing" force="true"/>
+        <env name="DB_USERNAME" value="root" force="true"/>
+        <env name="DB_PASSWORD" value="retrobite" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
+        <!-- No real requests go out, so there is nothing to be polite to. -->
+        <env name="SCREENSCRAPER_MIN_INTERVAL" value="0" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
+        <env name="PULSE_ENABLED" value="false" force="true"/>
+        <env name="TELESCOPE_ENABLED" value="false" force="true"/>
+        <env name="NIGHTWATCH_ENABLED" value="false" force="true"/>
+
+        <!--
+            Laravel resolves env() through a repository that reads $_SERVER before
+            putenv/$_ENV, and PHPUnit's force="true" only writes the latter two.
+            Without these, a DB_DATABASE exported into the container by compose
+            survives into the suite and RefreshDatabase rebuilds the live database.
+        -->
+        <server name="APP_ENV" value="testing" force="true"/>
+        <server name="APP_KEY" value="base64:Gm5YB2nVQ0xM8kTsZ1pJdLrWvXaCeHfNoPqRtUiOyE0=" force="true"/>
+        <server name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
+        <server name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <server name="BROADCAST_CONNECTION" value="null" force="true"/>
+        <server name="CACHE_STORE" value="array" force="true"/>
+        <server name="DB_CONNECTION" value="mariadb" force="true"/>
+        <server name="DB_HOST" value="127.0.0.1" force="true"/>
+        <server name="DB_PORT" value="3307" force="true"/>
+        <server name="DB_DATABASE" value="retrobite_testing" force="true"/>
+        <server name="DB_USERNAME" value="root" force="true"/>
+        <server name="DB_PASSWORD" value="retrobite" force="true"/>
+        <server name="DB_URL" value="" force="true"/>
+        <server name="SCREENSCRAPER_MIN_INTERVAL" value="0" force="true"/>
+        <server name="MAIL_MAILER" value="array" force="true"/>
+        <server name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <server name="SESSION_DRIVER" value="array" force="true"/>
+        <server name="PULSE_ENABLED" value="false" force="true"/>
+        <server name="TELESCOPE_ENABLED" value="false" force="true"/>
+        <server name="NIGHTWATCH_ENABLED" value="false" force="true"/>
+    </php>
+</phpunit>

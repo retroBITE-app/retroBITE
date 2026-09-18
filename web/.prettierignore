@@ -1,6 +1,0 @@
-public/build
-vendor
-node_modules
-composer.lock
-package-lock.json
-resources/js/routes.ts

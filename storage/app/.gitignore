@@ -1,0 +1,5 @@
+*
+!docs/
+!private/
+!public/
+!.gitignore

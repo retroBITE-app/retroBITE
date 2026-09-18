@@ -1,18 +1,65 @@
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
-RUN apk add --no-cache nginx sqlite sqlite-dev \
-    && docker-php-ext-install pdo_sqlite
+# php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
+# ctype/curl/dom/fileinfo/filter/hash/mbstring/openssl/pcre/pdo/session/
+# tokenizer/xml set Laravel's requirements list names. Passing an already
+# compiled extension to docker-php-ext-install builds no module and fails the
+# copy, so those must be left off the list below.
+#
+# What is added here is everything else Laravel's own Docker image (Sail)
+# ships, so a feature that needs an extension is never a rebuild away.
+# Deliberately not included: xdebug and pcov (development and coverage tooling
+# that slows a runtime image down), swoole (an alternative server, not
+# compatible with the php-fpm model here), imagick (~150 MB of ImageMagick for
+# what gd already covers) and mongodb and imap (no such database here, and imap
+# left PHP core after 8.3).
+#
+# Runtime libraries must survive .build-deps being removed: an extension links
+# against them at build time and fails at *runtime* without them, so a missing
+# one shows up as a 500 rather than a failed build. That is why icu-libs,
+# libpng, libjpeg-turbo, freetype, libpq, libldap and libmemcached-libs are in
+# the first list rather than the virtual one.
+#
+# unzip and git are for Composer's dist path. nodejs and npm are here so the
+# whole development stack runs in this container and nothing has to be
+# installed on the host to work on the frontend.
+RUN apk add --no-cache \
+        nginx su-exec unzip git nodejs npm \
+        libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
+        libmemcached-libs gettext libwebp \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS libzip-dev icu-dev libpng-dev libjpeg-turbo-dev \
+        freetype-dev postgresql-dev openldap-dev libmemcached-dev zlib-dev \
+        gettext-dev libxml2-dev linux-headers libwebp-dev \
+    # gd without this builds silently without JPEG support and only fatals when
+    # something calls imagecreatefromjpeg().
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j"$(nproc)" \
+        bcmath calendar exif ftp gd gettext intl ldap pcntl pdo_mysql \
+        pdo_pgsql pgsql shmop soap sockets sysvmsg sysvsem sysvshm zip \
+    # PECL rather than bundled. igbinary and msgpack are the serializers redis
+    # and memcached use, so they are built first.
+    && pecl install igbinary msgpack redis \
+    && docker-php-ext-enable igbinary msgpack redis \
+    # memcached asks for the libmemcached path unless it is answered; the empty
+    # line takes the default.
+    && yes '' | pecl install memcached \
+    && docker-php-ext-enable memcached \
+    && apk del .build-deps \
+    && rm -rf /tmp/pear
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-WORKDIR /app/web
+WORKDIR /app
 
 # Nginx + PHP-FPM config (not volume-mounted, so bake them in)
 COPY docker/web/nginx.dev.conf /etc/nginx/http.d/default.conf
 COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
 COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/web/opcache.dev.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
 COPY docker/web/entrypoint.dev.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh
 
 EXPOSE 80
 

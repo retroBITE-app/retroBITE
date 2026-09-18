@@ -1,0 +1,24 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/nesbot/carbon/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - bootstrap/app.php
+        - config/
+        - database/
+        - routes/
+
+    level: 7
+
+    ignoreErrors:
+        # The Livewire components that use these traits are single-file
+        # components living in resources/views/livewire/*.blade.php, which is
+        # not an analysed path — PHPStan cannot see the `use` statements inside
+        # an anonymous class in a Blade file, so it reports the traits as dead.
+        # They are not: see settings/security.blade.php, delete-user-form.blade.php
+        # and profile.blade.php.
+        -
+            message: '#^Trait App\\Concerns\\(Password|Profile)ValidationRules is used zero times and is not analysed\.$#'
+            path: app/Concerns/*.php

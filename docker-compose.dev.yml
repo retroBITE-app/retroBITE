@@ -1,3 +1,8 @@
+# Its own project, so bringing this up does not replace the production
+# stack's containers: both files name a service retrobite-db, and without
+# this they fight over the same container.
+name: retrobite-dev
+
 services:
   retrobite-web:
     build:
@@ -6,28 +11,56 @@ services:
     container_name: web-dev
     env_file:
       - .env
+    environment:
+      DB_CONNECTION: mariadb
+      DB_HOST: retrobite-db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-retrobite}
+      DB_USERNAME: ${DB_USERNAME:-retrobite}
+      DB_PASSWORD: ${DB_PASSWORD:-retrobite}
     ports:
-      - "${WEB_PORT:-80}:80"
+      - 81:80
+      # Vite. Fixed by vite.config.js with strictPort, so a clash fails loudly.
+      - 1337:1337
     volumes:
-      - ./web:/app/web
-      - ./games:/games
-      - retrobite-data:/data
+      - .:/app
+      - ${GAMES_PATH:-./games}:/app/storage/app/games
+      # Explicit despite the .:/app bind above, so DOCS_PATH can point outside
+      # the repository.
+      - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
+      - retrobite-media:/app/storage/app/media
+      # Livewire compiles single-file components to absolute paths, so sharing
+      # this directory between host and container invalidates every cached view.
+      - retrobite-views:/app/storage/framework/views
+      # The container's own node_modules. package.json pins linux-x64-gnu
+      # binaries and Alpine is musl, so sharing the host's tree through the
+      # bind mount above hands Vite libraries it cannot load.
+      - retrobite-node:/app/node_modules
+    depends_on:
+      retrobite-db:
+        condition: service_healthy
     restart: always
 
-  # Opt-in: `docker compose -f docker-compose.dev.yml --profile vite up`.
-  # Skip it if you already run `npm run dev` on the host — both bind VITE_PORT.
-  retrobite-vite:
-    image: node:22-alpine
-    container_name: retrobite-vite
-    profiles: ["vite"]
-    working_dir: /app/web
-    env_file:
-      - .env
-    command: sh -c "npm install --no-audit --no-fund && npm run dev"
-    ports:
-      - "${VITE_PORT:-5173}:${VITE_PORT:-5173}"
+  retrobite-db:
+    image: mariadb:11.4
+    container_name: retrobite-db-dev
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-retrobite}
+      MARIADB_USER: ${DB_USERNAME:-retrobite}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-retrobite}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-retrobite}
     volumes:
-      - ./web:/app/web
+      - retrobite-db:/var/lib/mysql
+    ports:
+      # Published in development so a GUI client or a host-side `php artisan`
+      # can reach it. The production compose keeps it on the internal network.
+      - "${DB_PORT_HOST:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: always
 
   retrobite-share:
@@ -37,22 +70,17 @@ services:
     container_name: share
     env_file:
       - .env
-    # network_mode: host
+    network_mode: host
     volumes:
-      - ./games:/games
+      - ${GAMES_PATH:-./games}:/games
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
-    # Reaps zombies and forwards signals as PID 1, so the entrypoint's supervisor
-    # does not have to.
     init: true
-    ports:
-      - "139:139"     # SMB
-      - "445:445"     # SMB
-      - "20:20"       # FTP data
-      - "21:21"       # FTP control
-      - "21100-21110:21100-21110"  # FTP passive
     restart: always
 
 volumes:
-  retrobite-data:
+  retrobite-db:
+  retrobite-media:
+  retrobite-views:
+  retrobite-node:

@@ -1,0 +1,16 @@
+<?php
+
+return [
+    'order' => 470,
+    'name' => 'ColecoVision',
+    'brand' => 'Coleco',
+    'folder' => 'colecovision',
+    'icon' => '/images/consoles/Coleco - ColecoVision.png',
+    'file_icon' => '/images/consoles/Coleco - ColecoVision-content.png',
+    'file_extensions' => ['bin', 'col', 'rom', 'zip', '7z'],
+    'bios_extensions' => [],
+    'exclude_files' => [],
+    'screenscraper_id' => 48,
+    'cover_aspect' => '2/3',
+    'cover_height' => 280,
+];

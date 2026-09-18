@@ -1,0 +1,76 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    # The application runs on MariaDB, and the suite runs against a real server
+    # rather than sqlite in memory so a query that only works on one of them
+    # cannot pass here and fail in production.
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: retrobite
+          MARIADB_DATABASE: retrobite
+        ports:
+          # 3307 matches the port the dev compose publishes, so phpunit.xml
+          # needs no CI-specific override.
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      # Real environment variables win over .env, which composer setup copies
+      # from .env.example and which points at a hostname only the compose
+      # network has.
+      DB_CONNECTION: mariadb
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3307
+      DB_DATABASE: retrobite
+      DB_USERNAME: root
+      DB_PASSWORD: retrobite
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.5'
+          # The same set the runtime image carries. Listed rather than left to
+          # the action's defaults so an extension the application needs cannot
+          # pass here and fail in Docker — which is exactly how a missing intl
+          # reached a running container.
+          extensions: bcmath, calendar, exif, ftp, gd, gettext, igbinary, intl, ldap, memcached, msgpack, pcntl, pdo_mysql, pdo_pgsql, pgsql, redis, shmop, soap, sockets, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Create the test database
+        run: mysql -h 127.0.0.1 -P 3307 -u root -pretrobite -e "CREATE DATABASE IF NOT EXISTS retrobite_testing;"
+
+      - name: Setup Application
+        run: composer setup
+
+      - name: Run CI Checks
+        run: composer ci:check

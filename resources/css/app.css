@@ -1,0 +1,675 @@
+@import 'tailwindcss';
+@import '../../vendor/livewire/flux/dist/flux.css';
+
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';
+@source '../../vendor/livewire/flux/stubs/**/*.blade.php';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Open Sans, self-hosted as a single variable face.
+ *
+ * Self-hosting is required, not preferred: docker/web/nginx.conf sets
+ * `style-src 'self' 'unsafe-inline'` with no `font-src`, so a Google Fonts
+ * import is blocked in Docker while working fine under `npm run dev` — the
+ * worst failure mode to debug.
+ *
+ * Served straight out of public/, so the URL is stable and unhashed.
+ *
+ * The ranges are Open Sans's published wght and wdth axes. `format('woff2')`
+ * without `tech(variations)` is deliberate: browsers read variability from the
+ * font itself, and the older `woff2-variations` keyword is refused by some.
+ */
+@font-face {
+    font-family: 'Open Sans';
+    src: url('/fonts/open-sans-variable.woff2') format('woff2');
+    font-weight: 300 800;
+    font-stretch: 75% 100%;
+    font-style: normal;
+    font-display: swap;
+}
+
+/*
+ * The italic face ships alongside but is not loaded — the design uses no
+ * italics anywhere and the file is another 313 KB. Uncomment to enable.
+ *
+ * @font-face {
+ *   font-family: 'Open Sans';
+ *   src: url('/fonts/open-sans-italic-variable.woff2') format('woff2');
+ *   font-weight: 300 800;
+ *   font-stretch: 75% 100%;
+ *   font-style: italic;
+ *   font-display: swap;
+ * }
+ */
+
+/*
+ * Design tokens, carried over from the previous retroBITE build.
+ *
+ * `--spacing` is deliberately NOT redefined. The design leans on fractional
+ * utilities — px-2.75, py-1.75, px-4.5, pt-6.5, gap-8.5, w-13 and the rest —
+ * each computed as N x --spacing, so moving the base reflows every one.
+ *
+ * `static` keeps every token in :root even when no utility references it, so
+ * the hand-written gradients and scanline overlays can reach them through
+ * var().
+ */
+@theme static {
+    /* Grounds, darkest first */
+    --color-ground: #0c0c0d;
+    --color-sunken: #141416;
+    --color-surface: #17171a;
+    --color-hover: #1c1c1f;
+    --color-raised: #202024;
+
+    /* Lines, faintest first */
+    --color-line: #232326;
+    --color-line-strong: #26262a;
+    --color-line-input: #2c2c31;
+    --color-line-bright: #3a3a40;
+
+    /* Warm text ramp, brightest first. Ratios on bg-sunken: faint 6.35,
+       dim 7.62, muted 8.83, cool 8.25. */
+    --color-fg-bright: #f0e6d2;
+    --color-fg: #e9e6dd;
+    --color-fg-soft: #cfcabd;
+    --color-fg-muted: #b8b3ab;
+    --color-fg-dim: #aca69d;
+    --color-fg-faint: #9d978e;
+    --color-fg-cool: #adadb4;
+
+    /* Amber accent. accent-tint is the base of every rgba() fill in the
+       design, so `bg-accent-tint/10` and `border-accent-tint/55` carry it. */
+    --color-accent-light: #f5d089;
+    --color-accent-bright: #f0c14b;
+    --color-accent: #e8b44a;
+    --color-accent-tint: #e0a83c;
+    --color-accent-deep: #c9902a;
+    --color-accent-muted: #a09879;
+
+    /* Feedback. The design has no success colour — it uses the accent. */
+    --color-danger: #c98b7f;
+    --color-warn: #cf8759;
+
+    /* Overlay ground, for `bg-scrim/72` */
+    --color-scrim: #080809;
+
+    /* Open Sans carries the interface. --font-mono is left at Tailwind's
+       system stack on purpose: file paths, MD5 hashes and ports need to stay
+       aligned. */
+    --font-sans: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
+
+    /* Display headings carry a touch of negative tracking. Stock
+       `tracking-tight` is -0.025em, two and a half times this — the design
+       wants a hair, not a squeeze. */
+    --tracking-display: -0.01em;
+
+    /* Above stock's top step (--tracking-widest is 0.1em), so a real new rung. */
+    --tracking-kicker: 0.14em;
+
+    /* The page-title size. */
+    --text-display: 1.625rem; /* 26px */
+    --text-display--line-height: 1.2;
+
+    /* Named for the job each does, because a raw box-shadow at a call site
+       tells you nothing about which of them it is meant to be. */
+    --shadow-lift: 0 18px 40px rgb(0 0 0 / 0.55);
+    --shadow-glow: 0 0 6px var(--color-accent-deep);
+    --shadow-rail: inset 2px 0 0 var(--color-accent-deep);
+    --shadow-underline: inset 0 -2px 0 var(--color-accent);
+
+    /* Flux paints its components off the zinc ramp. Remapping it onto the
+       warm grounds above is what makes every flux: component inherit this
+       design without touching a single call site. */
+    --color-zinc-50: #f0e6d2;
+    --color-zinc-100: #e9e6dd;
+    --color-zinc-200: #cfcabd;
+    --color-zinc-300: #b8b3ab;
+    --color-zinc-400: #9d978e;
+    --color-zinc-500: #6d6a64;
+    --color-zinc-600: #3a3a40;
+    --color-zinc-700: #2c2c31;
+    --color-zinc-800: #202024;
+    --color-zinc-900: #17171a;
+    --color-zinc-950: #0c0c0d;
+
+    /* Flux's accent trio. accent-foreground is the ground colour so that the
+       rare solid-amber surface reads as dark-on-amber. */
+    --color-accent-content: #e8b44a;
+    --color-accent-foreground: #0c0c0d;
+}
+
+/*
+ * Flux's stylesheet ships its own `.dark` block setting the accent to white
+ * (vendor/livewire/flux/dist/flux.css). It is unlayered, so it outranks @theme
+ * regardless of import order — the accent has to be restated here or every
+ * accent-coloured Flux control, and `shadow-underline`, renders white.
+ */
+.dark {
+    --color-accent: #e8b44a;
+    --color-accent-content: #e8b44a;
+    --color-accent-foreground: #0c0c0d;
+}
+
+@layer base {
+    /*
+     * The page ground, set once.
+     *
+     * There is no light theme: the previous build had none, and the amber ramp
+     * has no light-mode counterpart to fall back to. The <html> element carries
+     * a hardcoded `dark` class so Flux's dark variants resolve.
+     */
+    html {
+        color-scheme: dark;
+    }
+
+    body {
+        background-color: var(--color-ground);
+        color: var(--color-fg);
+    }
+
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-line, currentColor);
+    }
+
+    /* Alpine strips this once it boots; without it a teleported overlay is
+       briefly visible on first paint. */
+    [x-cloak] {
+        display: none !important;
+    }
+}
+
+/*
+ * The small mono caps that head a column, a card section or a field group.
+ * Colour stays at the call site, because that genuinely varies.
+ */
+@utility kicker {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+}
+
+/* The same kicker in the interface face rather than mono. */
+@utility kicker-sans {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+}
+
+/*
+ * The two key-art scrims: a fade from the artwork into the page ground so the
+ * title block sits on something readable. Utilities rather than inline values
+ * because Tailwind's `/alpha` modifier does not work inside a raw gradient —
+ * these need color-mix(), and 200 characters of it does not belong in a class
+ * attribute.
+ */
+@utility hero-fade-y {
+    background-image: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--color-ground) 55%, transparent) 0%,
+        color-mix(in srgb, var(--color-ground) 60%, transparent) 45%,
+        var(--color-ground) 100%
+    );
+}
+
+@utility hero-fade-x {
+    background-image: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-scrim) 94%, transparent) 0%,
+        color-mix(in srgb, var(--color-scrim) 72%, transparent) 46%,
+        color-mix(in srgb, var(--color-scrim) 15%, transparent) 100%
+    );
+}
+
+/*
+ * Fades artwork out towards the left, so a card can carry its backdrop on the
+ * right without the text side having to fight it.
+ *
+ * A mask rather than a gradient overlay on purpose: the card's own background
+ * shows through, so it still works when `hover:bg-hover` changes it.
+ */
+@utility art-fade-l {
+    -webkit-mask-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 34%,
+        rgb(0 0 0 / 0.5) 62%,
+        #000 100%
+    );
+    mask-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 34%,
+        rgb(0 0 0 / 0.5) 62%,
+        #000 100%
+    );
+}
+
+/*
+ * The CRT scanline overlay. The design lays it over every piece of key art, so
+ * it lives here rather than as an arbitrary value repeated at each site.
+ */
+@utility scanlines {
+    background-image: repeating-linear-gradient(180deg, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px);
+    opacity: 0.32;
+    pointer-events: none;
+}
+
+/*
+ * Flux components.
+ *
+ * The design fills nothing solid — actions are outlined or bare, with the
+ * amber ramp carrying the primary weight. Flux's primary button is solid by
+ * default, so it is restyled here rather than at every call site.
+ */
+@layer components {
+    [data-flux-button].bg-\[var\(--color-accent\)\] {
+        background-color: color-mix(in srgb, var(--color-accent-tint) 10%, transparent) !important;
+        border: 1px solid color-mix(in srgb, var(--color-accent-tint) 55%, transparent) !important;
+        color: var(--color-accent) !important;
+        box-shadow: none !important;
+    }
+
+    [data-flux-button].bg-\[var\(--color-accent\)\]:hover {
+        background-color: color-mix(in srgb, var(--color-accent-tint) 18%, transparent) !important;
+    }
+
+    /*
+     * Active nav row: amber wash plus a 2px rail down the left edge. The rail
+     * is what makes the current section readable at a glance without a solid
+     * fill, which the design never uses.
+     *
+     * Scoped to [data-flux-sidebar-item] rather than any sidebar anchor: the
+     * logo links to the dashboard too, so a looser selector painted it as the
+     * active nav row.
+     */
+    [data-flux-sidebar-item][data-current] {
+        background-color: color-mix(in srgb, var(--color-accent-tint) 13%, transparent);
+        color: var(--color-accent);
+        box-shadow: var(--shadow-rail);
+    }
+
+    [data-flux-button].bg-red-500 {
+        background-color: transparent !important;
+        border: 1px solid color-mix(in srgb, var(--color-danger) 50%, transparent) !important;
+        color: var(--color-danger) !important;
+        box-shadow: none !important;
+    }
+
+    [data-flux-button].bg-red-500:hover {
+        background-color: color-mix(in srgb, var(--color-danger) 10%, transparent) !important;
+    }
+
+    /*
+     * Flux ships no cursor rule of its own, so every one of its controls reads
+     * as text. Set once here rather than at each call site — a control that
+     * does not look clickable is the same bug wherever it appears.
+     */
+    [data-flux-button]:not([disabled]),
+    [data-flux-menu-item]:not([disabled]),
+    [data-flux-modal-close],
+    [data-flux-sidebar-item],
+    [data-flux-navbar-item] {
+        cursor: pointer;
+    }
+}
+
+/*
+ * Field labels are the design's micro-caps, not sentence-case text.
+ *
+ * The previous build drew them two ways: IconField (auth) used the sans face,
+ * FormField (settings) used mono. Sans is the default here; the settings pane
+ * opts into mono via the wrapper below.
+ */
+[data-flux-label] {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+    color: var(--color-fg-dim);
+}
+
+[data-settings-fields] [data-flux-label] {
+    font-family: var(--font-mono);
+    color: var(--color-fg-faint);
+}
+
+/*
+ * Flux tints the dialog backdrop rgba(0, 0, 0, 0.10), which is invisible over a
+ * near-black ground — an open modal read as floating on a live page with
+ * nothing dimmed behind it.
+ *
+ * Unlayered, like the .dark block above it: flux.css ships unlayered too, so a
+ * rule in @layer components loses to it no matter the import order.
+ *
+ * The var() carries a literal fallback on purpose — ::backdrop sits in the top
+ * layer and only inherits custom properties from the originating element in
+ * recent browsers, so the token alone cannot be relied on.
+ */
+[data-flux-modal] > dialog::backdrop {
+    background-color: color-mix(in srgb, var(--color-scrim, #080809) 72%, transparent);
+    backdrop-filter: blur(2px);
+}
+
+/* Controls sit on the surface with a quiet border that warms on focus. */
+[data-flux-control] {
+    background-color: var(--color-surface);
+    border-color: var(--color-line-input);
+    color: var(--color-fg);
+}
+
+[data-flux-control]::placeholder {
+    color: var(--color-fg-faint);
+}
+
+/* Inputs sit on the sunken ground with a quiet border that warms on focus. */
+[data-flux-field]:not(ui-radio, ui-checkbox) {
+    @apply grid gap-2;
+}
+
+[data-flux-label] {
+    @apply !mb-0 !leading-tight;
+}
+
+input:focus[data-flux-control],
+textarea:focus[data-flux-control],
+select:focus[data-flux-control] {
+    @apply outline-hidden ring-2 ring-accent-deep ring-offset-2 ring-offset-ground;
+}
+
+/*
+ * The floating drawer toggle hides while the drawer is open: the drawer covers
+ * the corner it sits in, and closing is handled by the drawer's own control,
+ * the backdrop, or Escape.
+ *
+ * Driven off the sidebar's own state attributes rather than duplicating that
+ * state in Alpine — Flux drops `data-flux-sidebar-collapsed-mobile` when the
+ * drawer opens.
+ */
+body:has([data-flux-sidebar][data-flux-sidebar-on-mobile]:not([data-flux-sidebar-collapsed-mobile])) [data-sidebar-toggle] {
+    display: none;
+}
+
+/* Global scrollbar styling, on the warm ramp like everything else */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-bright) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-bright);
+    border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-fg-faint);
+}
+
+/*
+ * Rendered markdown.
+ *
+ * There is no @tailwindcss/typography here and deliberately so: prose has to
+ * wear the amber ramp like everything else, and a plugin's own palette would
+ * have to be overridden token by token anyway. Every colour below is a token.
+ *
+ * Scoped to [data-doc-body] rather than a class, matching how
+ * [data-settings-fields] switches the settings pane to mono labels.
+ */
+[data-doc-body] {
+    color: var(--color-fg-soft);
+    font-size: var(--text-sm);
+    line-height: 1.7;
+}
+
+[data-doc-body] > * + * {
+    margin-block-start: 1.1em;
+}
+
+[data-doc-body] h1,
+[data-doc-body] h2,
+[data-doc-body] h3,
+[data-doc-body] h4 {
+    color: var(--color-fg-bright);
+    font-weight: 500;
+    letter-spacing: var(--tracking-display);
+    margin-block-start: 2em;
+}
+
+[data-doc-body] h1 { font-size: var(--text-xl); }
+[data-doc-body] h2 { font-size: var(--text-base); }
+[data-doc-body] h3,
+[data-doc-body] h4 { font-size: var(--text-sm); }
+
+[data-doc-body] > :first-child {
+    margin-block-start: 0;
+}
+
+[data-doc-body] a {
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+[data-doc-body] a:hover {
+    color: var(--color-accent-bright);
+}
+
+[data-doc-body] strong {
+    color: var(--color-fg-bright);
+    font-weight: 600;
+}
+
+/*
+ * Checklists. The design marks every unordered item with an amber tick rather
+ * than a bullet — "Before you start" is a list of things to have, not prose.
+ */
+[data-doc-body] ul {
+    display: grid;
+    gap: 0.55em;
+    list-style: none;
+    padding: 0;
+}
+
+[data-doc-body] ul > li {
+    display: grid;
+    grid-template-columns: 1.25em 1fr;
+    align-items: start;
+}
+
+[data-doc-body] ul > li::before {
+    content: '✓';
+    color: var(--color-accent-tint);
+    font-size: 0.9em;
+    line-height: 1.7;
+}
+
+/* Numbered steps carry a mono badge, so a procedure reads as a sequence. */
+[data-doc-body] ol {
+    counter-reset: step;
+    display: grid;
+    gap: 0.55em;
+    list-style: none;
+    padding: 0;
+}
+
+[data-doc-body] ol > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 1.5rem 1fr;
+    gap: 0.75rem;
+    align-items: start;
+}
+
+[data-doc-body] ol > li::before {
+    content: counter(step);
+    display: grid;
+    place-items: center;
+    height: 1.5rem;
+    border: 1px solid var(--color-line-input);
+    border-radius: calc(var(--radius-md, 0.375rem));
+    background-color: var(--color-raised);
+    color: var(--color-fg-faint);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+[data-doc-body] li > ul,
+[data-doc-body] li > ol {
+    margin-block-start: 0.55em;
+}
+
+/* Blockquotes are the design's callout: an amber wash behind a warning glyph. */
+[data-doc-body] blockquote {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-accent-tint) 55%, transparent);
+    background-color: color-mix(in srgb, var(--color-accent-tint) 10%, transparent);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    color: var(--color-fg-soft);
+}
+
+[data-doc-body] blockquote::before {
+    content: '⚠';
+    color: var(--color-warn);
+    line-height: 1.7;
+}
+
+[data-doc-body] blockquote > :first-child {
+    margin-block-start: 0;
+}
+
+[data-doc-body] blockquote strong {
+    color: var(--color-fg-bright);
+}
+
+/*
+/*
+ * The frame sits on the figure rather than the image so the caption bar is
+ * clipped by the same rounded corner, and fit-content keeps the figure the
+ * width of the image rather than the column — otherwise the bar overhangs a
+ * narrow photo.
+ */
+[data-doc-body] figure {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background-color: var(--color-sunken);
+}
+
+[data-doc-body] img {
+    cursor: zoom-in;
+}
+
+[data-doc-body] figure img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* A scrim bar across the foot of the image, not a line of text beneath it. */
+[data-doc-body] figcaption {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    padding: 0.5rem 0.8rem 0.2rem 0.8rem;
+    background-color: color-mix(in srgb, var(--color-scrim) 78%, transparent);
+    backdrop-filter: blur(2px);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+    color: var(--color-fg-soft);
+}
+
+
+[data-doc-body] .doc-video {
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background-color: var(--color-sunken);
+}
+
+[data-doc-body] .doc-video iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+/* Tables hold part numbers and measurements, so they stay mono and aligned. */
+[data-doc-body] table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+}
+
+[data-doc-body] th,
+[data-doc-body] td {
+    border: 1px solid var(--color-line);
+    padding: 0.5rem 0.75rem;
+    text-align: start;
+}
+
+[data-doc-body] th {
+    background-color: var(--color-sunken);
+    color: var(--color-fg-dim);
+    font-weight: 500;
+    letter-spacing: var(--tracking-kicker);
+    text-transform: uppercase;
+}
+
+[data-doc-body] code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.3rem;
+    padding: 0.1em 0.35em;
+    color: var(--color-accent-light);
+}
+
+[data-doc-body] pre {
+    background-color: var(--color-sunken);
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+}
+
+[data-doc-body] pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--color-fg);
+}
+
+[data-doc-body] hr {
+    border: 0;
+    border-block-start: 1px solid var(--color-line);
+}

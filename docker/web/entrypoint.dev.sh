@@ -1,31 +1,82 @@
 #!/bin/sh
 set -e
 
-# Match www-data UID/GID to host user so bind-mounted files just work
-HOST_UID=$(stat -c '%u' /app/web)
-HOST_GID=$(stat -c '%g' /app/web)
-if [ "$HOST_UID" != "0" ]; then
-    deluser www-data 2>/dev/null || true
-    addgroup -g "$HOST_GID" -S www-data 2>/dev/null || true
-    adduser -u "$HOST_UID" -G www-data -S -D -H www-data 2>/dev/null || true
-fi
-addgroup www-data users 2>/dev/null || true
-
 # Ensure storage subdirs exist
-mkdir -p /app/web/storage/games /app/web/storage/tmp /app/web/database
+mkdir -p /app/storage/app/games \
+         /app/storage/app/docs \
+         /app/storage/framework/cache/data \
+         /app/storage/framework/sessions \
+         /app/storage/framework/views \
+         /app/storage/logs \
+         /app/bootstrap/cache
 
-# Remove any stale production build so Vite.php falls back to the dev server
-rm -rf /app/web/public/build
+# Sets WEB_USER / WEB_GROUP from the owner of the bind-mounted source tree.
+. /usr/local/bin/user-setup.sh /app
 
-# Install PHP deps (volume-mounted, so not baked into image)
-composer install --no-interaction --working-dir=/app/web
+# Remove any stale production build so Vite's dev server is used instead.
+# Otherwise Laravel finds public/build/manifest.json and serves the old bundle,
+# ignoring the dev server entirely.
+rm -rf /app/public/build
 
-# Bring the schema up to date before serving any request. Runs as root, so the
-# chown below has to follow it — the migration creates the SQLite file.
-php /app/web/console migrate
+# Install PHP deps (volume-mounted, so not baked into the image)
+composer install --no-interaction --working-dir=/app
 
-# Ensure writable dirs are owned by www-data
-chown -R www-data:www-data /app/web/storage /app/web/database /data
+# Node deps go into the container's own node_modules volume, not the host's:
+# package.json pins linux-x64-gnu binaries and this is musl, so the two trees
+# cannot be shared. Skipped when it is already populated, since npm ci would
+# throw the whole thing away on every restart.
+if [ ! -d /app/node_modules/vite ]; then
+    echo "Installing node dependencies ..."
+    npm install --prefix /app --no-audit --no-fund
+fi
+
+# MariaDB accepts connections well after its container reports started, and
+# migrate does not retry.
+echo "Waiting for ${DB_HOST:-retrobite-db}:${DB_PORT:-3306} ..."
+i=0
+until php -r 'exit(@fsockopen(getenv("DB_HOST") ?: "retrobite-db", (int)(getenv("DB_PORT") ?: 3306), $e, $s, 2) ? 0 : 1);'; do
+    i=$((i + 1))
+    if [ "$i" -ge 60 ]; then
+        echo "Database never came up after 120s; giving up." >&2
+        exit 1
+    fi
+    sleep 2
+done
+
+php /app/artisan migrate --force
+
+# Guarantee a login exists on a fresh install. No-ops once any user exists.
+php /app/artisan db:seed --class=DefaultUserSeeder --force
+
+# Idempotent: firstOrCreate per type, so a media type added in a release
+# reaches an existing install without anyone remembering to seed it.
+php /app/artisan db:seed --class=MediaTypePreferenceSeeder --force
+
+# After migrate, which runs as root and would otherwise leave root-owned files.
+chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
+
+# queue:listen rather than queue:work, which is the whole difference here.
+# work keeps one booted application in memory for its whole life, so a job runs
+# whatever the code was when the worker started — edit a job class and the
+# container happily keeps running the old one, with nothing to say so. listen
+# boots a fresh application per job, which costs a little time and is exactly
+# the right trade while the source is bind-mounted.
+#
+# One for scraping, because ScreenScraper allows a plain account a single
+# thread; a few for media and hashing, which are disk-bound instead.
+su-exec "$WEB_USER" php /app/artisan queue:listen \
+    --queue=scraper --sleep=3 --tries=3 &
+
+for _ in 1 2 3; do
+    su-exec "$WEB_USER" php /app/artisan queue:listen \
+        --queue=media,default --sleep=3 --tries=3 &
+done
+
+# Vite, in here rather than on the host, so working on the frontend needs
+# nothing installed locally. Starting it writes public/hot, which Laravel reads
+# to point asset URLs at the dev server instead of the built bundle — which is
+# also why the built bundle was removed above.
+su-exec "$WEB_USER" npm run dev --prefix /app &
 
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D
