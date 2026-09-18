@@ -93,9 +93,9 @@
 
                 {{-- Reads left-to-right, so the text side is darkened hardest. --}}
                 <div class="hero-fade-x pointer-events-none absolute inset-0"></div>
-                @if (config('settings.interface.scanlines'))
+                @scanlines
                     <div class="scanlines absolute inset-0"></div>
-                @endif
+                @endscanlines
 
                 <div class="relative mt-auto w-full p-6">
                     @if ($hero === null)
@@ -147,9 +147,9 @@
                             <span aria-hidden="true" class="art-fade-l pointer-events-none absolute inset-0">
                                 <span class="absolute inset-0 bg-cover bg-center"
                                       style="background-image: url('{{ $game['backdrop'] }}')"></span>
-                                @if (config('settings.interface.scanlines'))
+                                @scanlines
                                     <span class="scanlines absolute inset-0"></span>
-                                @endif
+                                @endscanlines
                             </span>
                         @endif
 

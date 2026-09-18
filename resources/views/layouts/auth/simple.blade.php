@@ -29,9 +29,9 @@
             "
         ></div>
 
-        @if (config('settings.interface.scanlines'))
+        @scanlines
             <div class="scanlines fixed inset-0"></div>
-        @endif
+        @endscanlines
 
         <div
             class="pointer-events-none fixed inset-0"

@@ -6,6 +6,7 @@ use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Support\Console;
+use App\Support\MediaTypes;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -185,7 +186,7 @@ class Game extends Model
             return __('Identify the game first — artwork is fetched by provider id.');
         }
 
-        if (MediaTypePreference::enabledTypes() === []) {
+        if (MediaTypes::enabled() === []) {
             return __('No media types are switched on. Choose some in Settings → Media.');
         }
 

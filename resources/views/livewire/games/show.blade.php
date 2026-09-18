@@ -460,8 +460,10 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
         <div class="absolute inset-0 hero-fade-y"></div>
 
-        @if ($this->backdrop && config('settings.interface.scanlines'))
-            <div class="scanlines absolute inset-0"></div>
+        @if ($this->backdrop)
+            @scanlines
+                <div class="scanlines absolute inset-0"></div>
+            @endscanlines
         @endif
 
         {{-- pl-14 clears the floating hamburger, which sits at top-4 left-4. --}}

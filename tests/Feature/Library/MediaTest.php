@@ -7,7 +7,6 @@ use App\Models\AppSetting;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
-use App\Models\MediaTypePreference;
 use App\Services\GameMatcher;
 use App\Services\MediaLibrary;
 use App\Services\ScreenScraperService;
@@ -21,10 +20,8 @@ const PNG = "\x89PNG\r\n\x1a\n";
 beforeEach(function () {
     Storage::fake('media');
 
-    foreach (['box-2D', 'ss'] as $type) {
-        MediaTypePreference::create(['media_type' => $type, 'enabled' => true]);
-    }
-    MediaTypePreference::create(['media_type' => 'video', 'enabled' => false]);
+    // video is absent, which is what "switched off" means now.
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D', 'ss']);
 
     $this->game = Game::factory()->forConsole('psx')->matched(19256)->create([
         'title' => 'Final Fantasy IX', 'slug' => 'final-fantasy-ix',

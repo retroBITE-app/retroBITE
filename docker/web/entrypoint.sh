@@ -37,10 +37,6 @@ php /app/artisan migrate --force
 # Guarantee a login exists on a fresh install. No-ops once any user exists.
 php /app/artisan db:seed --class=DefaultUserSeeder --force
 
-# Idempotent: firstOrCreate per type, so a media type added in a release
-# reaches an existing install without anyone remembering to seed it.
-php /app/artisan db:seed --class=MediaTypePreferenceSeeder --force
-
 # After migrate, which runs as root and would otherwise leave a root-owned
 # laravel.log behind. bootstrap/cache is where Laravel writes packages.php,
 # services.php and the config/route caches — root-owned it throws

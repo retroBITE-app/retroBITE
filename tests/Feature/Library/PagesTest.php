@@ -11,10 +11,10 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
-use App\Models\MediaTypePreference;
 use App\Models\User;
 use App\Support\Console;
 use App\Support\MediaRegions;
+use App\Support\MediaTypes;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -242,19 +242,22 @@ it('serves artwork only through the authed route', function () {
 });
 
 it('saves which media types to fetch', function () {
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
-    MediaTypePreference::create(['media_type' => 'video', 'enabled' => false]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
     Livewire::test('settings.media')
         ->assertSet('enabled.box-2D', true)
+        ->assertSet('enabled.video', false)
         ->assertSet('autoQueue', true)
+        ->assertSet('scanlines', true)
         ->set('enabled.video', true)
         ->set('enabled.box-2D', false)
         ->set('autoQueue', false)
+        ->set('scanlines', false)
         ->call('save');
 
-    expect(MediaTypePreference::enabledTypes())->toBe(['video'])
-        ->and(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true))->toBeFalse();
+    expect(MediaTypes::enabled())->toBe(['video'])
+        ->and(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse()
+        ->and(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeFalse();
 });
 
 it('keeps every library page behind the login', function () {
@@ -369,7 +372,7 @@ it('offers a retry on a game the provider could not name', function () {
 
 it('fetches artwork for an identified game from the list', function () {
     Queue::fake();
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
     GameFile::factory()->for($game)->create(['path' => 'psx/t.bin', 'filename' => 't.bin', 'role' => FileRole::Track]);
@@ -380,7 +383,7 @@ it('fetches artwork for an identified game from the list', function () {
 });
 
 it('offers artwork only once a game has been identified', function () {
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
     $placeholder = Game::factory()->forConsole('psx')->create(['title' => 'Unknown', 'slug' => 'unknown']);
     GameFile::factory()->for($placeholder)->create(['path' => 'psx/u.bin', 'filename' => 'u.bin', 'role' => FileRole::Track]);
@@ -395,7 +398,12 @@ it('offers artwork only once a game has been identified', function () {
 it('says so when no media type is switched on rather than queueing nothing', function () {
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
 
-    expect(MediaTypePreference::enabledTypes())->toBe([])
+    // Written out, because an absent setting now means the shipped selection.
+    // Switching everything off is a choice somebody made, and only an empty
+    // stored list says so.
+    AppSetting::put(AppSetting::MEDIA_TYPES, []);
+
+    expect(MediaTypes::enabled())->toBe([])
         ->and($game->canFetchMedia())->toBeFalse();
 
     // The job would run, find nothing switched on and return having done
@@ -405,7 +413,7 @@ it('says so when no media type is switched on rather than queueing nothing', fun
 
 it('waits for artwork to arrive, then stops', function () {
     Queue::fake();
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
 
@@ -429,7 +437,7 @@ it('waits for artwork to arrive, then stops', function () {
 
 it('gives up waiting when the provider holds no artwork', function () {
     Queue::fake();
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Obscure', 'slug' => 'obscure']);
 
@@ -443,7 +451,7 @@ it('gives up waiting when the provider holds no artwork', function () {
 });
 
 it('saves a preferred media region', function () {
-    MediaTypePreference::create(['media_type' => 'box-2D', 'enabled' => true]);
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
     Livewire::test('settings.media')
         ->assertSet('region', '')

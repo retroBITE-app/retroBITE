@@ -24,21 +24,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Interface
-    |--------------------------------------------------------------------------
-    |
-    | The CRT scanline overlay drawn across key art and the login backdrop.
-    | Part of the look rather than decoration you can ignore — set false for a
-    | flat presentation.
-    |
-    */
-
-    'interface' => [
-        'scanlines' => (bool) env('UI_SCANLINES', true),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | Login
     |--------------------------------------------------------------------------
     |
