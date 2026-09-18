@@ -1,9 +1,13 @@
-@props(['heading' => '', 'subheading' => ''])
+@props([
+    'heading' => '',
+    'subheading' => '',
+    // A screen's own control for the header row — a save button, usually.
+    'actions' => null,
+])
 
 @php
     $tabs = [
-        ['label' => __('Profile'), 'route' => 'profile.edit', 'active' => request()->routeIs('profile.*')],
-        ['label' => __('Security'), 'route' => 'security.edit', 'active' => request()->routeIs('security.*')],
+        ['label' => __('User'), 'route' => 'user.edit', 'active' => request()->routeIs('user.*')],
         ['label' => __('Media'), 'route' => 'media.edit', 'active' => request()->routeIs('media.edit')],
     ];
 @endphp
@@ -24,18 +28,35 @@
     @endforeach
 </div>
 
-@if (filled($heading) || filled($subheading))
-    <div class="mb-5">
-        @if (filled($heading))
-            <p class="text-base text-fg-bright">{{ $heading }}</p>
-        @endif
+@if (filled($heading) || filled($subheading) || filled($actions))
+    {{-- The screen's action sits on the title's own line, hard right, rather
+         than at the foot of a form somebody has to scroll past the whole pane
+         to reach. It wraps under the text on a narrow window. --}}
+    <div class="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div class="min-w-0">
+            @if (filled($heading))
+                <p class="text-base text-fg-bright">{{ $heading }}</p>
+            @endif
 
-        @if (filled($subheading))
-            <p class="mt-0.5 text-sm text-fg-faint">{{ $subheading }}</p>
+            @if (filled($subheading))
+                <p class="mt-0.5 text-sm text-fg-faint">{{ $subheading }}</p>
+            @endif
+        </div>
+
+        @if (filled($actions))
+            <div class="shrink-0">{{ $actions }}</div>
         @endif
     </div>
 @endif
 
-<div class="w-full max-w-lg" data-settings-fields>
+{{--
+    The pane each settings screen lays itself out in.
+
+    Twelve columns at lg, so a screen can put two cards side by side rather
+    than stacking everything in one narrow strip with the page empty beside it.
+    Each screen sets its own spans; the cap is what keeps a line of body text
+    readable at that width.
+--}}
+<div class="w-full max-w-5xl" data-settings-fields>
     {{ $slot }}
 </div>
