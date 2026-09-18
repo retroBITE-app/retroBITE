@@ -26,9 +26,52 @@
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
 
+            @php($installed = App\Models\ConsoleSourceFolder::consoles())
+
             <flux:sidebar.nav>
                 <flux:sidebar.item icon="squares-2x2" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                     {{ __('Dashboard') }}
+                </flux:sidebar.item>
+
+                <flux:sidebar.item icon="puzzle-piece" :href="route('consoles.index')" :current="request()->routeIs('consoles.index')" wire:navigate>
+                    {{ __('Consoles') }}
+                </flux:sidebar.item>
+
+                @if ($installed->isNotEmpty())
+                    {{--
+                        Installed consoles hang off `Consoles` as its children
+                        rather than standing as their own section. Geometry
+                        copies flux:sidebar.group's expandable branch — ps-7 on
+                        the list, a hairline rail at ms-5 — so the indent reads
+                        the same as Flux's own nesting.
+                    --}}
+                    <div class="relative min-w-0 ps-7">
+                        <div class="absolute inset-y-[3px] start-0 ms-5 w-px bg-line-strong"></div>
+
+                        <div class="flex flex-col gap-px">
+                            @foreach ($installed as $console)
+                                @php($isCurrent = request()->routeIs('consoles.games') && request()->route('console') === $console->key)
+
+                                <a
+                                    href="{{ route('consoles.games', ['console' => $console->key]) }}"
+                                    wire:navigate
+                                    @class([
+                                        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                                        'bg-accent-tint/13 text-accent shadow-rail' => $isCurrent,
+                                        'text-fg-cool hover:bg-hover hover:text-fg' => ! $isCurrent,
+                                    ])
+                                >
+                                    <img src="{{ $console->icon }}" alt="" class="size-4 shrink-0 object-contain" />
+                                    <span class="truncate">{{ $console->name }}</span>
+                                    <span class="ms-auto font-mono text-xs text-fg-faint">{{ Illuminate\Support\Arr::get($gameCounts, $console->key, 0) }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.*')" wire:navigate>
+                    {{ __('Games') }}
                 </flux:sidebar.item>
 
                 <flux:sidebar.item icon="wrench-screwdriver" :href="route('builder.index')" :current="request()->routeIs('builder.*')" wire:navigate>
@@ -43,52 +86,6 @@
                     {{ __('Settings') }}
                 </flux:sidebar.item>
             </flux:sidebar.nav>
-
-            {{--
-                Consoles and Games are the library itself rather than app
-                chrome, so they sit under their own kicker — the same pattern
-                as `Installed` below, which lists what that library contains.
-            --}}
-            <p class="kicker px-3 pt-4 -pb-5 text-fg-faint">{{ __('Library') }}</p>
-
-            <flux:sidebar.nav>
-                <flux:sidebar.item icon="puzzle-piece" :href="route('consoles.index')" :current="request()->routeIs('consoles.*')" wire:navigate>
-                    {{ __('Consoles') }}
-                </flux:sidebar.item>
-                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.*')" wire:navigate>
-                    {{ __('Games') }}
-                </flux:sidebar.item>
-            </flux:sidebar.nav>
-
-            @php($installed = App\Models\ConsoleSourceFolder::consoles())
-
-            @if ($installed->isNotEmpty())
-                {{--
-                    Geometry deliberately mirrors flux:sidebar.item above: no
-                    wrapper inset, px-3 on the row, and a 16px icon box so the
-                    console labels line up with the nav labels rather than
-                    sitting 19px further right.
-                --}}
-                <p class="kicker px-3 pt-4 -pb-5 text-fg-faint">{{ __('Installed') }}</p>
-
-                <div class="flex flex-col gap-px">
-                    @foreach ($installed as $console)
-                        <a
-                            href="{{ route('consoles.games', ['console' => $console->key]) }}"
-                            wire:navigate
-                            @class([
-                                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-hover hover:text-fg',
-                                'bg-hover text-fg' => request()->routeIs('consoles.games') && request()->route('console') === $console->key,
-                                'text-fg-cool' => ! (request()->routeIs('consoles.games') && request()->route('console') === $console->key),
-                            ])
-                        >
-                            <img src="{{ $console->icon }}" alt="" class="size-4 shrink-0 object-contain" />
-                            <span class="truncate">{{ $console->name }}</span>
-                            <span class="ms-auto font-mono text-xs text-fg-faint">{{ Illuminate\Support\Arr::get($gameCounts, $console->key, 0) }}</span>
-                        </a>
-                    @endforeach
-                </div>
-            @endif
 
             <flux:spacer />
 
