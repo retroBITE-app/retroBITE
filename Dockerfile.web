@@ -50,6 +50,10 @@ RUN apk add --no-cache \
         nginx su-exec unzip git \
         libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
         libmemcached-libs gettext libwebp \
+        # For the per-console toolboxes in app/Scripts. Alpine's shell is ash
+        # and carries no `strings`; reading a PS2 disc's serial needs both, and
+        # without them the export fails at runtime as exit 127.
+        bash binutils \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS libzip-dev icu-dev libpng-dev libjpeg-turbo-dev \
         freetype-dev postgresql-dev openldap-dev libmemcached-dev zlib-dev \

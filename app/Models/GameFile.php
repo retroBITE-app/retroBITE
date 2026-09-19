@@ -37,6 +37,8 @@ use Illuminate\Support\Collection;
  * @property FileRole $role
  * @property int|null $disc_number
  * @property string|null $region
+ * @property string|null $license_id the serial the disc names itself by, e.g. SLES_503.86
+ * @property string|null $video_mode PAL or NTSC, as the disc declares it
  * @property int|null $parent_id
  * @property Carbon|null $missing_since
  * @property Carbon|null $created_at
@@ -47,8 +49,8 @@ use Illuminate\Support\Collection;
  */
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
-    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'parent_id',
-    'missing_since',
+    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'license_id',
+    'video_mode', 'parent_id', 'missing_since',
 ])]
 class GameFile extends Model
 {
@@ -142,5 +144,18 @@ class GameFile extends Model
     public function scopeUnhashed(Builder $query): void
     {
         $query->whereNull('md5')->whereNull('sha1')->whereNull('crc');
+    }
+
+    /**
+     * Files no console toolbox has read yet.
+     *
+     * Only license_id is tested: it is the one field every toolbox that runs at
+     * all comes back with, and a disc with no video mode is ordinary.
+     *
+     * @param  Builder<GameFile>  $query
+     */
+    public function scopeUninspected(Builder $query): void
+    {
+        $query->whereNull('license_id');
     }
 }

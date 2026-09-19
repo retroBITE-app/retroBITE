@@ -148,6 +148,7 @@ final class GameMatcher
             'publisher' => Arr::get($payload, 'publisher') ?: null,
             'developer' => Arr::get($payload, 'developer') ?: null,
             'region' => Arr::get($payload, 'region'),
+            'rating' => Arr::get($payload, 'rating'),
         ]);
 
         $this->applyDiscNumbers($game, $payload);

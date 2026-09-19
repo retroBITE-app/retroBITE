@@ -11,16 +11,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Walk one console's folder and record what is on it.
- *
- * Queued rather than run in the request: a library on a spinning disk takes
- * minutes to walk, and the interface should be showing rows while it happens.
- *
- * Deliberately not on the scraper queue. Nothing here talks to ScreenScraper —
- * scanning is disk work, and pinning it behind the single scraper worker would
- * make a scan wait on whatever lookup happened to be in flight.
- */
 class ScanConsoleFolder implements ShouldQueue
 {
     use Queueable;
@@ -68,6 +58,13 @@ class ScanConsoleFolder implements ShouldQueue
         // nothing ever identifies them.
         $queued = MatchGame::queueAwaiting($console->key);
 
-        Log::info('Scan finished.', $result->toArray() + ['queued_for_lookup' => $queued]);
+        // And what the provider cannot answer, the console might. Zero for
+        // every console without a toolbox, which is nearly all of them.
+        $inspecting = InspectGameFile::queueAwaiting($console->key);
+
+        Log::info('Scan finished.', $result->toArray() + [
+            'queued_for_lookup' => $queued,
+            'queued_for_inspection' => $inspecting,
+        ]);
     }
 }

@@ -5,8 +5,10 @@ use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
+use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
+use App\Support\Layouts\Layouts;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -93,6 +95,25 @@ new #[Title('Games')] class extends Component
     public function lockedTo(): ?Console
     {
         return Console::tryFrom($this->lockedConsole);
+    }
+
+    /**
+     * How this console's folder is read, for the badge beside the title.
+     *
+     * Null where the console knows one arrangement — saying so on 134 of the
+     * 135 consoles tells nobody anything — and null for the whole library,
+     * which is read every way at once.
+     */
+    #[Computed]
+    public function layoutLabel(): ?string
+    {
+        $console = $this->lockedTo;
+
+        if ($console === null || count(Layouts::keysFor($console)) <= 1) {
+            return null;
+        }
+
+        return ConsoleSourceFolder::layoutFor($console)->label();
     }
 
     /** How to list the games: this visit's choice, else the remembered one. */
@@ -249,9 +270,18 @@ new #[Title('Games')] class extends Component
                     <flux:icon.arrow-left variant="micro" />
                     {{ __('Consoles') }}
                 </a>
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3">
                     <img src="{{ $this->lockedTo->icon }}" alt="" class="size-9 shrink-0 object-contain" />
                     <h1 class="text-display font-medium tracking-display text-fg-bright">{{ $this->lockedTo->name }}</h1>
+
+                    {{-- Only where the console offers more than one arrangement:
+                         the folders on the share are read that way, and getting
+                         it wrong is what an empty shelf usually means. --}}
+                    @if ($this->layoutLabel !== null)
+                        <span class="rounded-md border border-accent-tint/55 bg-accent-tint/10 px-2 py-1 font-mono text-xs text-accent">
+                            {{ $this->layoutLabel }}
+                        </span>
+                    @endif
                 </div>
             </div>
         @else

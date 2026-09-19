@@ -38,6 +38,7 @@ use Illuminate\Support\Collection;
  * @property string|null $publisher
  * @property string|null $developer
  * @property string|null $region
+ * @property int|null $rating 0-5, folded down from the provider's /20 note
  * @property Carbon|null $matched_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -47,7 +48,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
     'release_date', 'genre', 'players', 'publisher', 'developer', 'region',
-    'matched_at',
+    'rating', 'matched_at',
 ])]
 class Game extends Model
 {
@@ -61,6 +62,7 @@ class Game extends Model
     {
         return [
             'status' => GameStatus::class,
+            'rating' => 'integer',
             'matched_at' => 'datetime',
         ];
     }
@@ -139,6 +141,18 @@ class Game extends Model
             ->orderByRaw('disc_number IS NULL, disc_number')
             ->orderBy('id')
             ->first();
+    }
+
+    /**
+     * The serial the disc names itself by, e.g. SLES_503.86.
+     *
+     * Taken from the file the provider would be asked about, which is disc 1 of
+     * a multi-disc set — the later discs carry serials of their own, and a game
+     * has only one name.
+     */
+    public function licenseId(): ?string
+    {
+        return $this->identifiableFile()?->license_id;
     }
 
     /**

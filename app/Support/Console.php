@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Support\Layouts\Layouts;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -28,10 +29,35 @@ final class Console
     /** @var string[] */
     public readonly array $biosExtensions;
 
+    /**
+     * Images this console's toolbox can read inside.
+     *
+     * A subset of fileExtensions: a compressed container is one of this
+     * console's files and is still not one anything can be read out of.
+     * Empty for the 134 consoles with no toolbox.
+     *
+     * @var string[]
+     */
+    public readonly array $toolboxFileExtensions;
+
     /** @var string[] */
     public readonly array $excludeFiles;
 
     public readonly ?int $screenscraperId;
+
+    /**
+     * The on-disk arrangements this console offers, by key.
+     *
+     * A console that declares none offers the custom layout alone, which reads
+     * everything — so the 134 console files that say nothing about layouts
+     * behave exactly as they did before layouts existed.
+     *
+     * @var string[]
+     */
+    public readonly array $layouts;
+
+    /** The layout to assume until somebody says otherwise. */
+    public readonly string $defaultLayout;
 
     public function __construct(string $key)
     {
@@ -51,8 +77,11 @@ final class Console
         $this->folder = (string) Arr::get($meta, 'folder', '');
         $this->fileExtensions = (array) Arr::get($meta, 'file_extensions', []);
         $this->biosExtensions = (array) Arr::get($meta, 'bios_extensions', []);
+        $this->toolboxFileExtensions = (array) Arr::get($meta, 'toolbox_file_extensions', []);
         $this->excludeFiles = (array) Arr::get($meta, 'exclude_files', []);
         $this->screenscraperId = $ssId !== null ? (int) $ssId : null;
+        $this->layouts = (array) Arr::get($meta, 'layouts', [Layouts::FALLBACK]);
+        $this->defaultLayout = (string) Arr::get($meta, 'default_layout', Layouts::FALLBACK);
     }
 
     /**

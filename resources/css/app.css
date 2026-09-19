@@ -266,6 +266,53 @@
 }
 
 /*
+ * The indeterminate rail under a panel that is waiting on queued work.
+ *
+ * A sweep rather than a percentage: nothing here knows how far along a scan is,
+ * only that it is still running, and a bar that fills to a number it made up
+ * lies about progress.
+ */
+@utility work-rail {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 2px;
+    overflow: hidden;
+    background-color: color-mix(in srgb, var(--color-accent-tint) 18%, transparent);
+
+    &::after {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        width: 38%;
+        background-image: linear-gradient(
+            90deg,
+            transparent 0%,
+            var(--color-accent) 50%,
+            transparent 100%
+        );
+        animation: work-rail-sweep 1.6s ease-in-out infinite;
+    }
+}
+
+@keyframes work-rail-sweep {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(300%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .work-rail::after {
+        animation: none;
+        width: 100%;
+        opacity: 0.5;
+    }
+}
+
+/*
  * Flux components.
  *
  * The design fills nothing solid — actions are outlined or bare, with the

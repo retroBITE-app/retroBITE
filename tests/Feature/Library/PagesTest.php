@@ -13,6 +13,7 @@ use App\Models\GameFile;
 use App\Models\Media;
 use App\Models\User;
 use App\Support\Console;
+use App\Support\ExportProgress;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use Illuminate\Support\Facades\File;
@@ -558,4 +559,18 @@ it('sizes an empty slot from the console it belongs to', function () {
     // 2/3 and 5/7 of the same 280px.
     Livewire::test('games.index', ['console' => 'snes'])->assertSee('width: 187px', escape: false);
     Livewire::test('games.index', ['console' => 'psx'])->assertSee('width: 200px', escape: false);
+});
+
+it('says how many files an export has written, not how many jobs it queued', function () {
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+
+    ExportProgress::advance('ps2', 'cfg', 12, 19);
+
+    Livewire::test('consoles.index')
+        ->assertSee('Writing files')
+        ->assertSeeInOrder(['12', '/19']);
+
+    ExportProgress::finish('ps2', 'cfg');
+
+    Livewire::test('consoles.index')->assertDontSee('Writing files');
 });
