@@ -4,6 +4,7 @@ use App\Jobs\RetroAchievements\ReconcileProgress;
 use App\Jobs\RetroAchievements\SyncRecentUnlocks;
 use App\Models\AppSetting;
 use App\Models\RaConsoleSync;
+use App\Services\RetroAchievementsService;
 use App\Support\RetroAchievements\LibraryConsoles;
 use Flux\Flux;
 use Illuminate\Support\Collection;
@@ -65,23 +66,42 @@ new #[Title('Integrations')] class extends Component
             ->values();
     }
 
-    public function save(): void
+    public function save(RetroAchievementsService $provider): void
     {
+        // RetroAchievements' own rules, quoted back by its API: "The u must be
+        // between 2 and 20 characters" and "may only contain letters and
+        // numbers". Worth enforcing here because the mistake this catches — a
+        // 32-character API key typed into the username field — is one somebody
+        // can make twice without the interface ever objecting.
         $this->validate([
-            'username' => ['nullable', 'string', 'max:255'],
+            'username' => ['nullable', 'string', 'between:2,20', 'alpha_num'],
             'apiKey' => ['nullable', 'string', 'max:255'],
+        ], [
+            'username.between' => __('A RetroAchievements username is 2 to 20 characters. An API key is longer — that goes in the field below.'),
+            'username.alpha_num' => __('A RetroAchievements username is letters and numbers only.'),
         ]);
+
+        // Save the key first, so a key typed in the same submission is the one
+        // the check below authenticates with.
+        if ($this->apiKey !== '') {
+            AppSetting::putSecret(AppSetting::RA_API_KEY, $this->apiKey);
+            $this->apiKey = '';
+
+            unset($this->hasKey);
+        }
+
+        // Null means the question could not be put — no key yet, or the
+        // network is down. The form saves anyway then: refusing on the
+        // strength of an outage would be worse than saving a typo.
+        if ($this->username !== '' && $provider->userExists($this->username) === false) {
+            $this->addError('username', __('RetroAchievements has no account by that name.'));
+
+            return;
+        }
 
         auth()->user()?->forceFill([
             'retroachievements_username' => $this->username !== '' ? $this->username : null,
         ])->save();
-
-        // Only when something was typed. Blank means "keep what is stored",
-        // because the field never showed it in the first place.
-        if ($this->apiKey !== '') {
-            AppSetting::putSecret(AppSetting::RA_API_KEY, $this->apiKey);
-            $this->apiKey = '';
-        }
 
         AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, $this->hardcorePrimary);
 
@@ -140,7 +160,8 @@ new #[Title('Integrations')] class extends Component
 
                     <div class="flex flex-col gap-4">
                         <flux:input wire:model="username" :label="__('Username')"
-                                    :description="__('The account whose unlocks are tracked. Achievement sets are fetched whatever this is; progress needs it.')" />
+                                    :placeholder="__('Your account name, not your key')"
+                                    :description="__('The name on your RetroAchievements profile — the last part of retroachievements.org/user/…. Achievement sets are fetched whatever this says; progress needs it to be right.')" />
 
                         <flux:input wire:model="apiKey" type="password" :label="__('API key')"
                                     :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From your RetroAchievements control panel')"

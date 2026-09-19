@@ -147,6 +147,48 @@ class RetroAchievementsService
     }
 
     /**
+     * Whether RetroAchievements knows this account.
+     *
+     * Three answers, not two. Null means the question could not be put — the
+     * network is down, or there is no key — and a settings form must save
+     * anyway in that case rather than refuse on the strength of an outage.
+     *
+     * Handles its own statuses instead of going through call(), because a 404
+     * here is the answer rather than a failure.
+     */
+    public function userExists(string $username): ?bool
+    {
+        $key = $this->apiKey();
+
+        if ($key === '' || trim($username) === '') {
+            return null;
+        }
+
+        $this->throttle();
+
+        $url = rtrim((string) config('retroachievements.endpoint'), '/').'/API_GetUserProfile.php';
+
+        try {
+            $response = $this->send($url, ['u' => $username, 'y' => $key]);
+        } catch (RetroAchievementsException) {
+            return null;
+        }
+
+        // 404 with an empty array is a well-formed name nobody holds. 422 is
+        // RetroAchievements rejecting the shape of the name itself, which is
+        // also a definite no.
+        if ($response->status() === 404 || $response->status() === 422) {
+            return false;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        return Arr::get($response->json() ?? [], 'User') !== null;
+    }
+
+    /**
      * Turn one row of GetUserRecentAchievements into the two-date shape.
      *
      * @param  array<string, mixed>  $row
