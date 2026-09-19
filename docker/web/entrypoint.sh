@@ -61,6 +61,31 @@ for _ in 1 2 3; do
         --queue=media,default --sleep=3 --tries=3 --max-time=3600 &
 done
 
+# RetroAchievements: identification and set downloads are HTTP and quick, so
+# one worker keeps up; progress gets its own so a library-wide backfill of the
+# first two cannot starve it.
+su-exec "$WEB_USER" php /app/artisan queue:work \
+    --queue=ra --sleep=3 --tries=3 --max-time=3600 &
+
+su-exec "$WEB_USER" php /app/artisan queue:work \
+    --queue=ra-progress --sleep=3 --tries=3 --max-time=3600 &
+
+# The long connection, and the connection is a positional argument rather than
+# a flag: `queue:work --queue=ra-hash` would quietly run on the default
+# connection and put its 90-second retry_after back. The jobs table has no
+# connection column, so queue names are the only isolation there is — which is
+# why the checksum queue is named `hash` and not left on `media`.
+#
+# Two workers. Hashing is disk and CPU bound on one machine, so more processes
+# mostly means more seeking.
+for _ in 1 2; do
+    su-exec "$WEB_USER" php /app/artisan queue:work database-long \
+        --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3600 --max-time=3600 &
+done
+
+# The scheduler, for the nightly index sync and the progress pulse.
+su-exec "$WEB_USER" php /app/artisan schedule:work &
+
 # Start PHP-FPM in the background (manages its own worker pool)
 php-fpm -D
 

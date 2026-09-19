@@ -34,6 +34,10 @@ use Illuminate\Support\Collection;
  * @property string|null $md5
  * @property string|null $sha1
  * @property Carbon|null $hashed_at
+ * @property string|null $ra_hash
+ * @property int|null $ra_hash_size
+ * @property int|null $ra_hash_mtime
+ * @property Carbon|null $ra_hashed_at
  * @property FileRole $role
  * @property int|null $disc_number
  * @property string|null $region
@@ -48,7 +52,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
     'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'parent_id',
-    'missing_since',
+    'missing_since', 'ra_hash', 'ra_hash_size', 'ra_hash_mtime', 'ra_hashed_at',
 ])]
 class GameFile extends Model
 {
@@ -65,6 +69,9 @@ class GameFile extends Model
             'size_bytes' => 'integer',
             'disc_number' => 'integer',
             'hashed_at' => 'datetime',
+            'ra_hash_size' => 'integer',
+            'ra_hash_mtime' => 'integer',
+            'ra_hashed_at' => 'datetime',
             'missing_since' => 'datetime',
         ];
     }

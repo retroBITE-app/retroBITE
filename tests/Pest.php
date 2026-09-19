@@ -4,6 +4,7 @@ use App\Models\AppSetting;
 use App\Support\ConsoleOverrides;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Tests\TestCase;
 
 /*
@@ -26,6 +27,13 @@ pest()->extend(TestCase::class)
         // written to catch — that is exactly how a stripped query string got
         // past a green suite once already.
         Http::preventStrayRequests();
+
+        // And no test may start a process. The same trap as above wearing
+        // different clothes: a Process::fake() whose pattern does not match
+        // would fall through to the real RAHasher, which on a developer's
+        // machine means reading an actual disc image for minutes, and in CI
+        // means a binary that is not there.
+        Process::preventStrayProcesses();
 
         // AppSetting memoises for the length of a request, and that static
         // outlives RefreshDatabase — which empties the table underneath it and

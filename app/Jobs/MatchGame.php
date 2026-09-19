@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Exceptions\ScreenScraper\ScreenScraperException;
+use App\Jobs\RetroAchievements\IdentifyGame;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Services\GameMatcher;
@@ -81,7 +82,7 @@ class MatchGame implements ShouldQueue
         }
 
         if ($result->outcome === MatchOutcome::NeedsChecksums && $result->file !== null) {
-            // Hashing happens on the media queue so the scraper worker is not
+            // Hashing happens on the hash queue so the scraper worker is not
             // held for the minutes a disc image takes to read, and the lookup
             // resumes by itself once the checksums exist.
             Bus::chain([
@@ -100,6 +101,20 @@ class MatchGame implements ShouldQueue
             // The list travels with the result, so fetching artwork costs no
             // second metadata request: the answer already held every URL.
             ScrapeGameMedia::dispatch($result->game->id, $result->medias);
+        }
+
+        // RetroAchievements is asked whatever ScreenScraper answered, and on
+        // its own queue. The two know nothing about each other: a game
+        // ScreenScraper has never heard of can still have an achievement set,
+        // and tying the two together would lose exactly those games — they are
+        // left Unmatched and queueAwaiting() never picks them up again.
+        //
+        // Not on NeedsChecksums, because that outcome returns above and brings
+        // this job back. Skipped is included: it means ScreenScraper had
+        // nothing to work with, which says nothing about whether RAHasher does
+        // — the two pick different files out of the same game.
+        if ($result->game !== null) {
+            IdentifyGame::dispatch($result->game->id);
         }
 
         Log::info('Match attempt finished.', [

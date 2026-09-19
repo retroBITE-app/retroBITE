@@ -5,7 +5,11 @@ use App\Jobs\MatchGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\Game;
 use App\Models\GameFile;
+use App\Models\AppSetting;
 use App\Models\Media;
+use App\Models\RaGame;
+use App\Models\RaProgress;
+use App\Models\RaUnlock;
 use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
 use Carbon\CarbonInterface;
@@ -17,11 +21,16 @@ use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends Component
 {
     public Game $game;
+
+    /** all | unlocked | locked. In the URL so a filtered view can be linked. */
+    #[Url(as: 'achievements')]
+    public string $achievementFilter = 'all';
 
     public function mount(Game $game): void
     {
@@ -410,6 +419,176 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
+     * The achievement set, with the achievements that count.
+     *
+     * Unofficial and demoted ones are stored but never shown: they do not
+     * count towards a score on RetroAchievements either, so listing them would
+     * make our totals disagree with theirs on the same page.
+     */
+    #[Computed]
+    public function raGame(): ?RaGame
+    {
+        if ($this->game->retroachievements_id === null) {
+            return null;
+        }
+
+        return RaGame::query()
+            ->with(['achievements' => fn ($query) => $query->counting()
+                ->orderBy('display_order')
+                ->orderBy('id')])
+            ->find($this->game->retroachievements_id);
+    }
+
+    /** This person's counters for the set, straight out of the table. */
+    #[Computed]
+    public function raProgress(): ?RaProgress
+    {
+        if ($this->game->retroachievements_id === null) {
+            return null;
+        }
+
+        return RaProgress::query()
+            ->where('user_id', auth()->id())
+            ->where('ra_game_id', $this->game->retroachievements_id)
+            ->first();
+    }
+
+    /**
+     * Their unlocks for this set, keyed by achievement.
+     *
+     * One query for the whole grid rather than a lookup per card.
+     *
+     * @return Collection<int, RaUnlock>
+     */
+    #[Computed]
+    public function unlocks(): Collection
+    {
+        if ($this->game->retroachievements_id === null) {
+            return new Collection;
+        }
+
+        return RaUnlock::query()
+            ->where('user_id', auth()->id())
+            ->where('ra_game_id', $this->game->retroachievements_id)
+            ->get()
+            ->keyBy('ra_achievement_id');
+    }
+
+    /**
+     * The four figures across the top of the panel.
+     *
+     * Softcore and hardcore side by side rather than behind a switch: a game
+     * can be 40/40 softcore and 3/40 hardcore at the same time, and either
+     * number alone is a misleading description of where somebody is.
+     *
+     * @return array<int, array{label: string, value: string, percent: int}>
+     */
+    #[Computed]
+    public function achievementStats(): array
+    {
+        $progress = $this->raProgress;
+        $possible = (int) ($progress?->achievements_possible ?? 0);
+        $pointsPossible = (int) ($progress?->points_possible ?? 0);
+
+        return [
+            [
+                'label' => __('Unlocked'),
+                'value' => ($progress?->unlocked_count ?? 0).' / '.$possible,
+                'percent' => $possible > 0 ? (int) round(($progress?->unlocked_count ?? 0) / $possible * 100) : 0,
+            ],
+            [
+                'label' => __('Points'),
+                'value' => Number::format((int) ($progress?->points_earned ?? 0)).' / '.Number::format($pointsPossible),
+                'percent' => $pointsPossible > 0 ? (int) round(($progress?->points_earned ?? 0) / $pointsPossible * 100) : 0,
+            ],
+            [
+                'label' => __('Hardcore'),
+                'value' => (string) ($progress?->unlocked_hardcore_count ?? 0),
+                'percent' => $possible > 0 ? (int) round(($progress?->unlocked_hardcore_count ?? 0) / $possible * 100) : 0,
+            ],
+            [
+                'label' => __('Site rank'),
+                // Null is "they have no progress in this game", which is not
+                // the same as rank zero and should not read like it.
+                'value' => $progress?->site_rank !== null ? '#'.Number::format($progress->site_rank) : '—',
+                'percent' => 0,
+            ],
+        ];
+    }
+
+    /**
+     * The achievement cards, filtered by the tab.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    #[Computed]
+    public function achievements(): array
+    {
+        $set = $this->raGame;
+
+        if ($set === null) {
+            return [];
+        }
+
+        $players = (int) $set->num_distinct_players;
+
+        return $set->achievements
+            ->map(function ($achievement) use ($players) {
+                $unlock = $this->unlocks->get($achievement->id);
+                $unlockedAt = $unlock?->unlocked_at ?? $unlock?->unlocked_hardcore_at;
+                $rarity = $players > 0 ? round($achievement->num_awarded / $players * 100, 1) : null;
+
+                return [
+                    'id' => $achievement->id,
+                    'title' => $achievement->title,
+                    'description' => $achievement->description,
+                    'points' => $achievement->points,
+                    'kind' => $achievement->kind?->label(),
+                    'unlocked' => $unlockedAt !== null,
+                    'hardcore' => $unlock?->unlocked_hardcore_at !== null,
+                    // The locked badge as well as the unlocked one, so a
+                    // greyed-out card still shows what it is a picture of.
+                    'badge' => $achievement->badgeUrl(locked: $unlockedAt === null),
+                    'footnote' => $unlockedAt !== null
+                        ? __('Unlocked :date', ['date' => $unlockedAt->format('d M Y')])
+                        : ($rarity !== null
+                            ? __('Locked · :percent% of players', ['percent' => $rarity])
+                            : __('Locked')),
+                ];
+            })
+            ->filter(fn (array $row) => match ($this->achievementFilter) {
+                'unlocked' => $row['unlocked'],
+                'locked' => ! $row['unlocked'],
+                default => true,
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string}>
+     */
+    #[Computed]
+    public function achievementTabs(): array
+    {
+        $all = $this->raGame?->achievements ?? new Collection;
+        $unlocked = $all->filter(fn ($a) => $this->unlocks->has($a->id))->count();
+
+        return [
+            ['key' => 'all', 'label' => __('All :count', ['count' => $all->count()])],
+            ['key' => 'unlocked', 'label' => __('Unlocked :count', ['count' => $unlocked])],
+            ['key' => 'locked', 'label' => __('Locked :count', ['count' => $all->count() - $unlocked])],
+        ];
+    }
+
+    public function filterAchievements(string $filter): void
+    {
+        $this->achievementFilter = in_array($filter, ['all', 'unlocked', 'locked'], true) ? $filter : 'all';
+
+        unset($this->achievements, $this->achievementTabs);
+    }
+
+    /**
      * A short age, e.g. "3d ago".
      *
      * Anything under a minute reads as "just now", since the scan that wrote
@@ -658,6 +837,115 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     <p class="text-sm text-accent">{{ __('Fetching artwork…') }}</p>
                 </div>
             @endif
+        </section>
+    @endif
+
+    @if ($this->raGame !== null)
+        <section class="relative z-1 px-4 pt-6.5 lg:px-8 lg:pt-10">
+            <div class="overflow-hidden rounded-xl border border-line bg-sunken">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-raised px-4.5 py-3.75">
+                    <flux:icon.trophy class="size-[18px] text-accent" />
+                    <h2 class="text-lg font-medium text-fg-bright">{{ __('Achievements') }}</h2>
+
+                    @if (App\Models\AppSetting::enabled(App\Models\AppSetting::RA_HARDCORE_PRIMARY))
+                        <span class="kicker rounded-md border border-accent/40 bg-accent-tint/10 px-1.75 py-0.75 text-accent">
+                            {{ __('Hardcore') }}
+                        </span>
+                    @endif
+
+                    <div class="ml-auto flex gap-1 rounded-lg border border-line-input bg-ground p-0.75">
+                        @foreach ($this->achievementTabs as $tab)
+                            <button
+                                type="button"
+                                wire:click="filterAchievements('{{ $tab['key'] }}')"
+                                @class([
+                                    'rounded-md px-2.5 py-1 text-xs transition-colors',
+                                    'bg-raised text-fg-bright' => $this->achievementFilter === $tab['key'],
+                                    'text-fg-muted hover:text-fg' => $this->achievementFilter !== $tab['key'],
+                                ])
+                            >{{ $tab['label'] }}</button>
+                        @endforeach
+                    </div>
+
+                    <span class="font-mono text-xs text-fg-dim">{{ __('RetroAchievements') }}</span>
+                </div>
+
+                <dl class="grid grid-cols-2 border-b border-raised sm:grid-cols-4">
+                    @foreach ($this->achievementStats as $stat)
+                        <div @class([
+                            'px-4.5 py-3.5',
+                            'border-r border-raised' => ! $loop->last,
+                        ])>
+                            <dt class="kicker text-fg-faint">{{ $stat['label'] }}</dt>
+                            <dd class="mt-1.5 text-[19px] font-medium tracking-display text-fg-bright">{{ $stat['value'] }}</dd>
+                            <div class="mt-2.5 h-[3px] overflow-hidden rounded-sm bg-raised">
+                                <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" style="width: {{ $stat['percent'] }}%"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </dl>
+
+                @if ($this->achievements === [])
+                    <p class="px-4.5 py-8 text-center text-sm text-fg-faint">
+                        {{ __('Nothing here yet. The set is fetched in the background.') }}
+                    </p>
+                @else
+                    <ul class="grid gap-2.5 p-4.5 [grid-template-columns:repeat(auto-fill,minmax(268px,1fr))]">
+                        @foreach ($this->achievements as $achievement)
+                            <li
+                                wire:key="ach-{{ $achievement['id'] }}"
+                                @class([
+                                    'flex items-start gap-3 rounded-xl p-2.75',
+                                    'border border-accent/25 bg-accent-tint/5' => $achievement['unlocked'],
+                                    'border border-line bg-ground' => ! $achievement['unlocked'],
+                                ])
+                            >
+                                {{-- The badge is the one thing on this page that
+                                     needs the network: it is served from
+                                     RetroAchievements' CDN and only its name is
+                                     stored. Offline the card is correct and the
+                                     picture is broken. --}}
+                                <div @class([
+                                    'grid size-9.5 shrink-0 place-items-center overflow-hidden rounded-lg border',
+                                    'border-accent/40 bg-accent-tint/10' => $achievement['unlocked'],
+                                    'border-line-input bg-raised opacity-60' => ! $achievement['unlocked'],
+                                ])>
+                                    @if ($achievement['badge'] !== null)
+                                        <img src="{{ $achievement['badge'] }}" alt="" loading="lazy" class="size-full object-cover" />
+                                    @else
+                                        <flux:icon.trophy class="size-4 text-fg-faint" />
+                                    @endif
+                                </div>
+
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-baseline gap-2">
+                                        <p class="truncate text-sm text-fg-bright" title="{{ $achievement['title'] }}">{{ $achievement['title'] }}</p>
+                                        <span @class([
+                                            'ml-auto shrink-0 font-mono text-xs',
+                                            'text-accent' => $achievement['unlocked'],
+                                            'text-fg-dim' => ! $achievement['unlocked'],
+                                        ])>{{ $achievement['points'] }}</span>
+                                    </div>
+
+                                    @if ($achievement['description'] !== null)
+                                        <p class="mt-0.75 text-xs leading-snug text-fg-muted">{{ $achievement['description'] }}</p>
+                                    @endif
+
+                                    <div class="mt-1.75 flex flex-wrap items-center gap-2">
+                                        <span class="font-mono text-[10px] text-fg-dim">{{ $achievement['footnote'] }}</span>
+                                        @if ($achievement['hardcore'])
+                                            <span class="kicker text-[9px] text-accent">{{ __('Hardcore') }}</span>
+                                        @endif
+                                        @if ($achievement['kind'] !== null)
+                                            <span class="kicker text-[9px] text-fg-faint">{{ $achievement['kind'] }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
         </section>
     @endif
 

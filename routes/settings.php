@@ -9,4 +9,5 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings/security', '/settings/user');
     Route::livewire('settings/media', 'settings.media')->name('media.edit');
     Route::livewire('settings/consoles', 'settings.consoles')->name('console-config.edit');
+    Route::livewire('settings/integrations', 'settings.integrations')->name('integrations.edit');
 });

@@ -5,6 +5,8 @@
     use App\Models\Game;
     use App\Models\ConsoleSourceFolder;
     use App\Models\GameFile;
+    use App\Models\RaProgress;
+    use App\Models\RaUnlock;
     use App\Services\NetworkService;
     use App\Support\Console;
     use Illuminate\Support\Number;
@@ -15,7 +17,16 @@
         ->with(['files', 'media'])
         ->latest('id')
         ->take(3)
+        ->get();
+
+    // One query for the three, rather than a progress lookup inside the map.
+    $recentProgress = RaProgress::query()
+        ->where('user_id', auth()->id())
+        ->whereIn('ra_game_id', $recent->pluck('retroachievements_id')->filter())
         ->get()
+        ->keyBy('ra_game_id');
+
+    $recent = $recent
         ->map(fn (Game $game) => [
             'title' => $game->title,
             'console' => $game->console()?->name ?? $game->console,
@@ -25,6 +36,10 @@
             'id' => $game->id,
             'cover' => ($cover = $game->artwork(MediaKind::Cover)) ? route('media.show', ['path' => $cover->path]) : null,
             'backdrop' => ($backdrop = $game->artwork(MediaKind::Backdrop)) ? route('media.show', ['path' => $backdrop->path]) : null,
+            'achievements' => ($p = $recentProgress->get($game->retroachievements_id)) !== null && $p->achievements_possible > 0
+                ? ['unlocked' => $p->unlocked_count, 'possible' => $p->achievements_possible,
+                   'percent' => (int) round($p->unlocked_count / $p->achievements_possible * 100)]
+                : null,
         ])
         ->all();
 
@@ -38,12 +53,53 @@
     $identified = Game::where('status', GameStatus::Matched)->count();
     $bytes = (int) GameFile::whereNull('missing_since')->sum('size_bytes');
 
+    // One grouped row for the whole library. The counters are denormalised
+    // onto ra_progress precisely so this is a sum and not an aggregation over
+    // every unlock.
+    $ra = RaProgress::query()
+        ->where('user_id', auth()->id())
+        ->selectRaw(
+            'coalesce(sum(unlocked_count), 0) as unlocked,'
+            .' coalesce(sum(unlocked_hardcore_count), 0) as unlocked_hardcore,'
+            .' coalesce(sum(achievements_possible), 0) as possible,'
+            .' coalesce(sum(points_earned), 0) as points,'
+            .' coalesce(sum(points_hardcore_earned), 0) as points_hardcore'
+        )
+        ->first();
+
     $cells = [
         ['label' => 'Games', 'value' => (string) $games, 'sub' => trans_choice('across :count console|across :count consoles', $consoles->count(), ['count' => $consoles->count()])],
         ['label' => 'Identified', 'value' => (string) $identified, 'sub' => __(':count still unmatched', ['count' => $games - $identified])],
         ['label' => 'Consoles', 'value' => (string) $consoles->count(), 'sub' => __('in your library')],
+        ['label' => 'Achievements', 'value' => Number::format((int) $ra->unlocked), 'sub' => __('of :count tracked', ['count' => Number::format((int) $ra->possible)])],
+        ['label' => 'Points', 'value' => Number::format((int) $ra->points), 'sub' => __('hardcore :count', ['count' => Number::format((int) $ra->points_hardcore)])],
         ['label' => 'Storage', 'value' => Number::fileSize($bytes, 1), 'sub' => __('on disk')],
     ];
+
+    // The five most recent unlocks, and what they were worth this week.
+    $unlockFeed = RaUnlock::query()
+        ->where('user_id', auth()->id())
+        ->whereNotNull('unlocked_at')
+        ->with(['achievement:id,ra_game_id,title,points,badge_name', 'achievement.game:id,title'])
+        ->orderByDesc('unlocked_at')
+        ->take(5)
+        ->get()
+        ->filter(fn (RaUnlock $unlock) => $unlock->achievement !== null)
+        ->map(fn (RaUnlock $unlock) => [
+            'id' => $unlock->id,
+            'title' => $unlock->achievement->title,
+            'game' => $unlock->achievement->game?->title ?? '',
+            'points' => $unlock->achievement->points,
+            'badge' => $unlock->achievement->badgeUrl(),
+            'when' => $unlock->unlocked_at?->diffForHumans(short: true) ?? '',
+        ])
+        ->values();
+
+    $pointsThisWeek = (int) RaUnlock::query()
+        ->where('ra_unlocks.user_id', auth()->id())
+        ->where('ra_unlocks.unlocked_at', '>=', now()->subWeek())
+        ->join('ra_achievements', 'ra_achievements.id', '=', 'ra_unlocks.ra_achievement_id')
+        ->sum('ra_achievements.points');
 
     // Files the provider could not name. Their game rows still carry the
     // filename as a stand-in title, which is what makes them recognisable here.
@@ -115,6 +171,17 @@
                         <p class="mt-1 truncate font-mono text-sm text-fg-muted">
                             {{ $hero['path'] }} · {{ $hero['size'] }} · {{ $hero['added'] }}
                         </p>
+
+                        @if ($hero['achievements'] !== null)
+                            <div class="mt-4 flex max-w-85 items-center gap-3">
+                                <div class="h-1.25 flex-1 overflow-hidden rounded-sm bg-scrim/40">
+                                    <div class="h-full rounded-sm bg-accent" style="width: {{ $hero['achievements']['percent'] }}%"></div>
+                                </div>
+                                <span class="shrink-0 font-mono text-xs text-accent">
+                                    {{ $hero['achievements']['unlocked'] }} / {{ $hero['achievements']['possible'] }}
+                                </span>
+                            </div>
+                        @endif
                     @endif
 
                     <div class="mt-4">
@@ -173,14 +240,12 @@
         </div>
 
         <section>
-            <dl class="grid grid-cols-2 overflow-hidden rounded-xl border border-line bg-sunken lg:grid-cols-4">
-                @foreach ($cells as $index => $cell)
-                    <div @class([
-                        'border-line px-4.5 py-4',
-                        'border-r' => $index % 2 === 0,
-                        'border-b lg:border-b-0' => $index < 2,
-                        'lg:border-r lg:last:border-r-0',
-                    ])>
+            {{-- Separated by a 1px gap over the border colour rather than by
+                 per-cell border classes: the cell count changed once and the
+                 index arithmetic behind those classes did not survive it. --}}
+            <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line lg:grid-cols-3">
+                @foreach ($cells as $cell)
+                    <div class="bg-sunken px-4.5 py-4">
                         <dt class="kicker text-fg-faint">{{ $cell['label'] }}</dt>
                         <dd class="mt-2 text-[22px] font-medium tracking-display text-fg-bright">{{ $cell['value'] }}</dd>
                         <dd class="mt-1 text-sm text-fg-dim">{{ $cell['sub'] }}</dd>
@@ -188,6 +253,41 @@
                 @endforeach
             </dl>
         </section>
+
+        @if ($unlockFeed->isNotEmpty())
+            <section>
+                <div class="mb-3.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+                    <h2 class="text-lg font-medium text-fg-bright">{{ __('Latest achievements') }}</h2>
+                    <p class="font-mono text-sm text-accent">
+                        {{ __('+:points pts this week', ['points' => Number::format($pointsThisWeek)]) }}
+                    </p>
+                </div>
+
+                <ul class="overflow-hidden rounded-xl border border-line bg-sunken">
+                    @foreach ($unlockFeed as $unlock)
+                        <li class="flex items-center gap-3.25 border-b border-raised px-3.5 py-2.75 last:border-0">
+                            <div class="grid size-9.5 shrink-0 place-items-center overflow-hidden rounded-lg border border-accent/35 bg-accent-tint/10">
+                                @if ($unlock['badge'] !== null)
+                                    <img src="{{ $unlock['badge'] }}" alt="" loading="lazy" class="size-full object-cover" />
+                                @else
+                                    <flux:icon.trophy class="size-4 text-accent" />
+                                @endif
+                            </div>
+
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm text-fg-bright">{{ $unlock['title'] }}</p>
+                                <p class="mt-0.5 truncate text-xs text-fg-muted">{{ $unlock['game'] }}</p>
+                            </div>
+
+                            <div class="shrink-0 text-right">
+                                <p class="font-mono text-xs text-accent">{{ $unlock['points'] }}</p>
+                                <p class="mt-0.5 font-mono text-[10px] text-fg-dim">{{ $unlock['when'] }}</p>
+                            </div>
+                        </li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
 
         <section>
             <div class="mb-3.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">

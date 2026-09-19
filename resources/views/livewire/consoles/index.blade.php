@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\ScanConsoleFolder;
+use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
@@ -42,11 +43,38 @@ new #[Title('Consoles')] class extends Component
             ->get()
             ->keyBy('console');
 
+        // One grouped query for every console rather than a sum per row. The
+        // join is to the denormalised progress table, so nothing here counts
+        // individual unlocks.
+        $achievements = Game::query()
+            ->leftJoin('ra_progress', fn ($join) => $join
+                ->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
+                ->where('ra_progress.user_id', '=', auth()->id() ?? 0))
+            ->selectRaw(
+                'games.console,'
+                .' coalesce(sum(ra_progress.unlocked_count), 0) as unlocked,'
+                .' coalesce(sum(ra_progress.unlocked_hardcore_count), 0) as unlocked_hardcore,'
+                .' coalesce(sum(ra_progress.achievements_possible), 0) as possible'
+            )
+            ->groupBy('games.console')
+            ->get()
+            ->keyBy('console');
+
+        $hardcore = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
+
         return ConsoleSourceFolder::consoles()->map(fn (Console $console) => [
             'console' => $console,
             'games' => (int) ($counts[$console->key]->games ?? 0),
             'identified' => (int) ($counts[$console->key]->identified ?? 0),
             'folder' => ConsoleSourceFolder::pathFor($console),
+            'achievements' => (int) ($achievements[$console->key]->possible ?? 0) > 0
+                ? [
+                    'unlocked' => (int) ($hardcore
+                        ? $achievements[$console->key]->unlocked_hardcore
+                        : $achievements[$console->key]->unlocked),
+                    'possible' => (int) $achievements[$console->key]->possible,
+                ]
+                : null,
         ])->values();
     }
 
@@ -270,6 +298,9 @@ new #[Title('Consoles')] class extends Component
                                 {{ $row['games'] }} {{ __('games') }}
                                 @if ($row['games'] > 0)
                                     · {{ $row['identified'] }} {{ __('identified') }}
+                                @endif
+                                @if ($row['achievements'] !== null)
+                                    · <span class="text-accent">{{ $row['achievements']['unlocked'] }} / {{ $row['achievements']['possible'] }} {{ __('achievements') }}</span>
                                 @endif
                             </p>
                             <p class="mt-0.5 truncate font-mono text-xs text-fg-faint">{{ $row['folder'] }}</p>

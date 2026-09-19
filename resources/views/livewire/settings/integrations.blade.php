@@ -1,0 +1,208 @@
+<?php
+
+use App\Jobs\RetroAchievements\ReconcileProgress;
+use App\Jobs\RetroAchievements\SyncRecentUnlocks;
+use App\Models\AppSetting;
+use App\Models\RaConsoleSync;
+use App\Support\RetroAchievements\LibraryConsoles;
+use Flux\Flux;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+
+new #[Title('Integrations')] class extends Component
+{
+    public string $username = '';
+
+    /**
+     * Left blank when a key is already stored.
+     *
+     * The stored key is never sent to the browser — the field shows a
+     * placeholder instead, and an empty submission means "leave it alone"
+     * rather than "clear it".
+     */
+    public string $apiKey = '';
+
+    public bool $hardcorePrimary = false;
+
+    public function mount(): void
+    {
+        $this->username = (string) (auth()->user()?->retroachievements_username ?? '');
+        $this->hardcorePrimary = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
+    }
+
+    #[Computed]
+    public function hasKey(): bool
+    {
+        return AppSetting::getSecret(AppSetting::RA_API_KEY) !== null
+            || (string) config('retroachievements.api_key_fallback', '') !== '';
+    }
+
+    #[Computed]
+    public function linked(): bool
+    {
+        return $this->username !== '' && $this->hasKey;
+    }
+
+    /**
+     * Which consoles have an index, and how fresh it is.
+     *
+     * @return Collection<int, array{id: int, consoles: string, synced: ?string, games: int}>
+     */
+    #[Computed]
+    public function indexes(): Collection
+    {
+        $synced = RaConsoleSync::query()->get()->keyBy('ra_console_id');
+
+        return LibraryConsoles::mapped()
+            ->map(fn (array $keys, $raConsoleId) => [
+                'id' => (int) $raConsoleId,
+                'consoles' => implode(', ', $keys),
+                'synced' => $synced->get((int) $raConsoleId)?->synced_at?->diffForHumans(),
+                'games' => (int) ($synced->get((int) $raConsoleId)?->games ?? 0),
+            ])
+            ->values();
+    }
+
+    public function save(): void
+    {
+        $this->validate([
+            'username' => ['nullable', 'string', 'max:255'],
+            'apiKey' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        auth()->user()?->forceFill([
+            'retroachievements_username' => $this->username !== '' ? $this->username : null,
+        ])->save();
+
+        // Only when something was typed. Blank means "keep what is stored",
+        // because the field never showed it in the first place.
+        if ($this->apiKey !== '') {
+            AppSetting::putSecret(AppSetting::RA_API_KEY, $this->apiKey);
+            $this->apiKey = '';
+        }
+
+        AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, $this->hardcorePrimary);
+
+        unset($this->hasKey, $this->linked);
+
+        Flux::toast(variant: 'success', text: __('Integration settings saved.'));
+    }
+
+    public function forgetKey(): void
+    {
+        AppSetting::putSecret(AppSetting::RA_API_KEY, null);
+
+        unset($this->hasKey, $this->linked);
+
+        Flux::toast(variant: 'success', text: __('API key removed.'));
+    }
+
+    public function syncProgress(bool $full = false): void
+    {
+        $user = auth()->user();
+
+        if ($user === null || (string) $user->retroachievements_username === '') {
+            Flux::toast(variant: 'warning', text: __('Set a RetroAchievements username first.'));
+
+            return;
+        }
+
+        // Queued, never run here. Nothing in a request may wait on the
+        // network: the page has to render the same with the cable pulled.
+        dispatch($full ? new ReconcileProgress($user->id) : new SyncRecentUnlocks($user->id));
+
+        Flux::toast(variant: 'success', text: __('Queued. Progress will update as the worker gets to it.'));
+    }
+}; ?>
+
+<section class="w-full">
+    @include('partials.settings-heading')
+
+    <x-settings.layout :heading="__('Integrations')" :subheading="__('The outside services retroBite talks to')">
+        <x-slot name="actions">
+            <flux:button variant="primary" type="submit" form="integration-settings">{{ __('Save') }}</flux:button>
+        </x-slot>
+
+        <form id="integration-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div class="flex flex-col gap-6 lg:col-span-6">
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <div class="mb-4 flex items-center gap-2.5">
+                        <flux:icon.trophy class="size-[17px] text-accent" />
+                        <p class="flex-1 text-sm text-fg-bright">{{ __('RetroAchievements') }}</p>
+                        <span @class([
+                            'kicker rounded-md border px-1.75 py-0.75',
+                            'border-accent/40 text-accent' => $this->linked,
+                            'border-line-input text-fg-faint' => ! $this->linked,
+                        ])>{{ $this->linked ? __('Linked') : __('Not linked') }}</span>
+                    </div>
+
+                    <div class="flex flex-col gap-4">
+                        <flux:input wire:model="username" :label="__('Username')"
+                                    :description="__('The account whose unlocks are tracked. Achievement sets are fetched whatever this is; progress needs it.')" />
+
+                        <flux:input wire:model="apiKey" type="password" :label="__('API key')"
+                                    :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From your RetroAchievements control panel')"
+                                    :description="__('Kept encrypted in the database and never shown again once saved.')" />
+
+                        @if ($this->hasKey)
+                            <div>
+                                <flux:button size="xs" variant="ghost" wire:click="forgetKey" type="button">
+                                    {{ __('Remove stored key') }}
+                                </flux:button>
+                            </div>
+                        @endif
+
+                        <flux:switch wire:model="hardcorePrimary"
+                                     :label="__('Lead with hardcore')"
+                                     :description="__('Hardcore is a mode in the emulator, which retroBite cannot switch on. What this decides is which figure the shelf, the console totals and the dashboard show. The game page always shows both.')" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-6 lg:col-span-6">
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <p class="kicker mb-1 text-fg-faint">{{ __('Hash index') }}</p>
+                    <p class="mb-4 text-sm text-fg-soft">
+                        {{ __('Downloaded once per console so that identifying a game costs no request. Refreshed nightly.') }}
+                    </p>
+
+                    @if ($this->indexes->isEmpty())
+                        <p class="text-sm text-fg-faint">{{ __('No console in the library is on RetroAchievements.') }}</p>
+                    @else
+                        <dl class="flex flex-col gap-2.5">
+                            @foreach ($this->indexes as $index)
+                                <div wire:key="idx-{{ $index['id'] }}" class="flex items-baseline gap-3 border-b border-raised pb-2.5 last:border-0 last:pb-0">
+                                    <dt class="font-mono text-xs text-fg-soft">{{ $index['consoles'] }}</dt>
+                                    <dd class="ml-auto font-mono text-xs text-fg-dim">
+                                        {{ $index['synced'] ?? __('never') }}
+                                        @if ($index['games'] > 0)
+                                            <span class="text-fg-faint">· {{ $index['games'] }}</span>
+                                        @endif
+                                    </dd>
+                                </div>
+                            @endforeach
+                        </dl>
+                    @endif
+                </div>
+
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <p class="kicker mb-1 text-fg-faint">{{ __('Progress') }}</p>
+                    <p class="mb-4 text-sm text-fg-soft">
+                        {{ __('Pulled every quarter of an hour and reconciled in full overnight. These queue the same work now.') }}
+                    </p>
+
+                    <div class="flex flex-wrap gap-2">
+                        <flux:button size="sm" variant="filled" type="button" wire:click="syncProgress(false)">
+                            {{ __('Sync recent unlocks') }}
+                        </flux:button>
+                        <flux:button size="sm" variant="ghost" type="button" wire:click="syncProgress(true)">
+                            {{ __('Reconcile everything') }}
+                        </flux:button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </x-settings.layout>
+</section>
