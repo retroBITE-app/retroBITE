@@ -1,0 +1,273 @@
+<?php
+
+use App\Jobs\RetroAchievements\ReconcileProgress;
+use App\Jobs\RetroAchievements\SyncRecentUnlocks;
+use App\Models\AppSetting;
+use App\Models\RaConsoleSync;
+use App\Services\RetroAchievementsService;
+use App\Support\RetroAchievements\LibraryConsoles;
+use Flux\Flux;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+
+new #[Title('RetroAchievements')] class extends Component
+{
+    public string $username = '';
+
+    /**
+     * Left blank when a key is already stored.
+     *
+     * The stored key is never sent to the browser — the field shows a
+     * placeholder instead, and an empty submission means "leave it alone"
+     * rather than "clear it".
+     */
+    public string $apiKey = '';
+
+    public bool $hardcorePrimary = true;
+
+    public function mount(): void
+    {
+        $this->username = (string) (auth()->user()?->retroachievements_username ?? '');
+        $this->hardcorePrimary = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
+    }
+
+    /** A key typed in here, which is the only one this screen can remove. */
+    #[Computed]
+    public function hasStoredKey(): bool
+    {
+        return AppSetting::getSecret(AppSetting::RA_API_KEY) !== null;
+    }
+
+    /** Seeded from the environment for a headless install. */
+    #[Computed]
+    public function hasEnvKey(): bool
+    {
+        return (string) config('retroachievements.api_key_fallback', '') !== '';
+    }
+
+    /** A key the API can be called with, from wherever it came. */
+    #[Computed]
+    public function hasKey(): bool
+    {
+        return $this->hasStoredKey || $this->hasEnvKey;
+    }
+
+    #[Computed]
+    public function linked(): bool
+    {
+        return $this->username !== '' && $this->hasKey;
+    }
+
+    /**
+     * Which consoles have an index, and how fresh it is.
+     *
+     * @return Collection<int, array{id: int, consoles: string, synced: ?string, games: int}>
+     */
+    #[Computed]
+    public function indexes(): Collection
+    {
+        $synced = RaConsoleSync::query()->get()->keyBy('ra_console_id');
+
+        return LibraryConsoles::mapped()
+            ->map(fn (array $keys, $raConsoleId) => [
+                'id' => (int) $raConsoleId,
+                'consoles' => implode(', ', $keys),
+                'synced' => $synced->get((int) $raConsoleId)?->synced_at?->diffForHumans(),
+                'games' => (int) ($synced->get((int) $raConsoleId)?->games ?? 0),
+            ])
+            ->values();
+    }
+
+    public function save(RetroAchievementsService $provider): void
+    {
+        // RetroAchievements' own rules, quoted back by its API: "The u must be
+        // between 2 and 20 characters" and "may only contain letters and
+        // numbers". Worth enforcing here because the mistake this catches — a
+        // 32-character API key typed into the username field — is one somebody
+        // can make twice without the interface ever objecting.
+        $this->validate([
+            'username' => ['nullable', 'string', 'between:2,20', 'alpha_num'],
+            'apiKey' => ['nullable', 'string', 'max:255'],
+        ], [
+            'username.between' => __('A RetroAchievements username is 2 to 20 characters. An API key is longer — that goes in the field below.'),
+            'username.alpha_num' => __('A RetroAchievements username is letters and numbers only.'),
+        ]);
+
+        // Save the key first, so a key typed in the same submission is the one
+        // the check below authenticates with.
+        if ($this->apiKey !== '') {
+            AppSetting::putSecret(AppSetting::RA_API_KEY, $this->apiKey);
+            $this->apiKey = '';
+
+            unset($this->hasStoredKey, $this->hasKey);
+        }
+
+        // Null means the question could not be put — no key yet, or the
+        // network is down. The form saves anyway then: refusing on the
+        // strength of an outage would be worse than saving a typo.
+        if ($this->username !== '' && $provider->userExists($this->username) === false) {
+            $this->addError('username', __('RetroAchievements has no account by that name.'));
+
+            return;
+        }
+
+        auth()->user()?->forceFill([
+            'retroachievements_username' => $this->username !== '' ? $this->username : null,
+        ])->save();
+
+        AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, $this->hardcorePrimary);
+
+        unset($this->hasStoredKey, $this->hasKey, $this->linked);
+
+        Flux::toast(variant: 'success', text: __('Settings saved.'));
+    }
+
+    /**
+     * Drop the stored key.
+     *
+     * Only ever the stored one: a key in the environment belongs to whoever
+     * deployed the container, and a button in here cannot reach it. Said out
+     * loud rather than left as a button that appears to do nothing.
+     */
+    public function forgetKey(): void
+    {
+        AppSetting::putSecret(AppSetting::RA_API_KEY, null);
+
+        unset($this->hasStoredKey, $this->hasKey, $this->linked);
+
+        Flux::toast(variant: 'success', text: $this->hasEnvKey
+            ? __('Stored key removed. The one in the environment is in use again.')
+            : __('API key removed.'));
+    }
+
+    public function syncProgress(bool $full = false): void
+    {
+        $user = auth()->user();
+
+        if ($user === null || (string) $user->retroachievements_username === '') {
+            Flux::toast(variant: 'warning', text: __('Set a RetroAchievements username first.'));
+
+            return;
+        }
+
+        // Queued, never run here. Nothing in a request may wait on the
+        // network: the page has to render the same with the cable pulled.
+        dispatch($full ? new ReconcileProgress($user->id) : new SyncRecentUnlocks($user->id));
+
+        Flux::toast(variant: 'success', text: __('Queued. Progress will update as the worker gets to it.'));
+    }
+}; ?>
+
+<section class="w-full">
+    @include('partials.settings-heading')
+
+    <x-settings.layout :heading="__('RetroAchievements')" :subheading="__('Achievements, the hash index and your progress')">
+        <x-slot name="actions">
+            <flux:button variant="primary" type="submit" form="retroachievements-settings">{{ __('Save') }}</flux:button>
+        </x-slot>
+
+        <form id="retroachievements-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div class="flex flex-col gap-6 lg:col-span-6">
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <div class="mb-4 flex items-center gap-2.5">
+                        <flux:icon.trophy class="size-[17px] text-accent" />
+                        {{-- Not 'RetroAchievements': the screen is called that
+                             now, and this card is the account within it. --}}
+                        <p class="flex-1 text-sm text-fg-bright">{{ __('Account') }}</p>
+                        <span @class([
+                            'kicker rounded-md border px-1.75 py-0.75',
+                            'border-accent/40 text-accent' => $this->linked,
+                            'border-line-input text-fg-faint' => ! $this->linked,
+                        ])>{{ $this->linked ? __('Linked') : __('Not linked') }}</span>
+                    </div>
+
+                    <div class="flex flex-col gap-4">
+                        <flux:input wire:model="username" :label="__('Username')"
+                                    :placeholder="__('Your account name, not your key')"
+                                    :description="__('The name on your RetroAchievements profile — the last part of retroachievements.org/user/…. Achievement sets are fetched whatever this says; progress needs it to be right.')" />
+
+                        <flux:input wire:model="apiKey" type="password" :label="__('API key')"
+                                    :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From your RetroAchievements control panel')"
+                                    :description="$this->hasEnvKey && ! $this->hasStoredKey
+                                        ? __('Set in the environment. A key typed here is kept encrypted in the database and takes over from it.')
+                                        : __('Kept encrypted in the database and never shown again once saved.')" />
+
+                        {{-- Only for a key this screen put there. The one in
+                             the environment is the operator's, and no button
+                             here can reach it. --}}
+                        @if ($this->hasStoredKey)
+                            <div>
+                                <flux:button size="xs" variant="danger" wire:click="forgetKey" type="button">
+                                    {{ __('Remove stored key') }}
+                                </flux:button>
+                            </div>
+                        @endif
+
+                        <flux:switch wire:model="hardcorePrimary"
+                                     :label="__('Lead with hardcore')"
+                                     :description="__('Show your hardcore score rather than your softcore one.')" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-6 lg:col-span-6">
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <p class="kicker mb-1 text-fg-faint">{{ __('Hash index') }}</p>
+                    <p class="mb-4 text-sm text-fg-soft">
+                        {{ __('Downloaded once per console so that identifying a game costs no request. Refreshed nightly.') }}
+                    </p>
+
+                    @if ($this->indexes->isEmpty())
+                        <p class="text-sm text-fg-faint">{{ __('No console in the library is on RetroAchievements.') }}</p>
+                    @else
+                        <dl class="flex flex-col gap-2.5">
+                            @foreach ($this->indexes as $index)
+                                <div wire:key="idx-{{ $index['id'] }}" class="flex items-baseline gap-3 border-b border-raised pb-2.5 last:border-0 last:pb-0">
+                                    <dt class="font-mono text-xs text-fg-soft">{{ $index['consoles'] }}</dt>
+                                    <dd class="ml-auto font-mono text-xs text-fg-dim">
+                                        {{ $index['synced'] ?? __('never') }}
+                                        @if ($index['games'] > 0)
+                                            <span class="text-fg-faint">· {{ $index['games'] }}</span>
+                                        @endif
+                                    </dd>
+                                </div>
+                            @endforeach
+                        </dl>
+                    @endif
+                </div>
+
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <p class="kicker mb-1 text-fg-faint">{{ __('Progress') }}</p>
+                    <p class="mb-4 text-sm text-fg-soft">
+                        {{ __('Both run on a schedule — recent unlocks every quarter of an hour, the reconcile overnight. These queue the same work now.') }}
+                    </p>
+
+                    {{-- Two buttons because they answer different questions,
+                         and one of them is dear. Said on the page rather than
+                         left to be guessed from the labels. --}}
+                    <div class="flex flex-col gap-3">
+                        <div>
+                            <flux:button size="sm" variant="filled" type="button" wire:click="syncProgress(false)">
+                                {{ __('Sync recent unlocks') }}
+                            </flux:button>
+                            <p class="mt-1.5 text-xs text-fg-faint">
+                                {{ __('One request for everything you have unlocked since the last run. Cheap, and what the schedule uses.') }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <flux:button size="sm" variant="ghost" type="button" wire:click="syncProgress(true)">
+                                {{ __('Reconcile everything') }}
+                            </flux:button>
+                            <p class="mt-1.5 text-xs text-fg-faint">
+                                {{ __('Compares every game against RetroAchievements and re-fetches the ones that disagree. Catches revoked unlocks, re-scored sets and anything a long outage missed.') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </x-settings.layout>
+</section>

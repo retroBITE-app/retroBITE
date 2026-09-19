@@ -33,6 +33,8 @@ final class ConsoleResource
 
     public readonly ?int $screenscraperId;
 
+    public readonly ?int $retroachievementsId;
+
     /** @var string[] */
     public readonly array $fileExtensions;
 
@@ -63,6 +65,7 @@ final class ConsoleResource
         $this->coverAspect = self::asString($meta, 'cover_aspect');
         $this->coverHeight = self::asInt($meta, 'cover_height');
         $this->screenscraperId = self::asInt($meta, 'screenscraper_id');
+        $this->retroachievementsId = self::asInt($meta, 'retroachievements_id');
         $this->fileExtensions = (array) Arr::get($meta, 'file_extensions', []);
         $this->biosExtensions = (array) Arr::get($meta, 'bios_extensions', []);
         $this->excludeFiles = (array) Arr::get($meta, 'exclude_files', []);

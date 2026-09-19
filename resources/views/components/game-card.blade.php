@@ -29,6 +29,14 @@
     if ($cover === null) {
         $coverStyle .= '; width: '.App\Support\CoverGeometry::width($console).'px';
     }
+
+    // Selected by the library list off the joined progress row, and absent
+    // everywhere else — so ?? rather than a bare read, or a card rendered from
+    // a plain Game would throw.
+    $achievementsPossible = (int) ($game->ra_achievements_possible ?? 0);
+    $hardcorePrimary = App\Models\AppSetting::enabled(App\Models\AppSetting::RA_HARDCORE_PRIMARY);
+    $unlocked = (int) (($hardcorePrimary ? $game->ra_unlocked_hardcore : $game->ra_unlocked) ?? 0);
+    $achievementPercent = $achievementsPossible > 0 ? (int) round($unlocked / $achievementsPossible * 100) : 0;
 @endphp
 
 {{-- The link is stretched over the card rather than wrapping it, so the
@@ -102,5 +110,19 @@
                 {{ Illuminate\Support\Number::fileSize((int) ($game->size_bytes_sum ?? 0), 1) }}
             </span>
         </div>
+
+        @if ($achievementsPossible > 0)
+            {{-- Counts and a bar, no points: the game page is where the score
+                 belongs, and a caption row this narrow can carry one number. --}}
+            <div class="mt-1.5 flex items-center gap-2">
+                <div class="h-1 flex-1 overflow-hidden rounded-sm bg-raised">
+                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" style="width: {{ $achievementPercent }}%"></div>
+                </div>
+                <span
+                    class="shrink-0 font-mono text-xs text-fg-dim"
+                    title="{{ $hardcorePrimary ? __('Hardcore achievements') : __('Achievements') }}"
+                >{{ $unlocked }} / {{ $achievementsPossible }}</span>
+            </div>
+        @endif
     </div>
 </div>

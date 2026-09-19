@@ -5,13 +5,16 @@ namespace App\Models;
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
+use App\Enums\RetroAchievementsStatus;
 use App\Support\Console;
+use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Arr;
@@ -27,10 +30,12 @@ use Illuminate\Support\Collection;
  *
  * @property int $id
  * @property int|null $screenscraper_id
+ * @property int|null $retroachievements_id
  * @property string $console
  * @property string $title
  * @property string $slug
  * @property GameStatus $status
+ * @property RetroAchievementsStatus $retroachievements_status
  * @property string|null $description
  * @property string|null $release_date
  * @property string|null $genre
@@ -38,7 +43,9 @@ use Illuminate\Support\Collection;
  * @property string|null $publisher
  * @property string|null $developer
  * @property string|null $region
+ * @property string|null $media_region
  * @property Carbon|null $matched_at
+ * @property Carbon|null $retroachievements_matched_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Collection<int, GameFile> $files
@@ -46,8 +53,9 @@ use Illuminate\Support\Collection;
  */
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
-    'release_date', 'genre', 'players', 'publisher', 'developer', 'region',
-    'matched_at',
+    'release_date', 'genre', 'players', 'publisher', 'developer', 'region', 'media_region',
+    'matched_at', 'retroachievements_id', 'retroachievements_status',
+    'retroachievements_matched_at',
 ])]
 class Game extends Model
 {
@@ -62,6 +70,18 @@ class Game extends Model
         return [
             'status' => GameStatus::class,
             'matched_at' => 'datetime',
+            'retroachievements_status' => RetroAchievementsStatus::class,
+            'retroachievements_matched_at' => 'datetime',
+
+            // Not columns on this table. The library list selects these off
+            // the joined ra_progress row, and without a cast they arrive as
+            // PDO strings — "31" formats fine and compares wrong.
+            'ra_unlocked' => 'integer',
+            'ra_unlocked_hardcore' => 'integer',
+            'ra_achievements_possible' => 'integer',
+            'ra_points' => 'integer',
+            'ra_points_hardcore' => 'integer',
+            'ra_points_possible' => 'integer',
         ];
     }
 
@@ -81,21 +101,63 @@ class Game extends Model
      * One piece of artwork of a kind, in the enum's preference order.
      *
      * Reads the relation rather than querying, so an eager-loaded page asks for
-     * a cover, a logo and a backdrop without three more round trips. Two of the
-     * same type break the tie on file size: the provider holds the same picture
-     * at several resolutions, and the biggest is the one worth showing.
+     * a cover, a logo and a backdrop without three more round trips.
+     *
+     * Region decides before size does. A game can hold the same cover from
+     * four regions at once — that is the point of being able to fetch another
+     * one — and without this the biggest file wins, which is how somebody who
+     * asked for the Japanese box keeps being shown the European one.
      */
     public function artwork(MediaKind $kind): ?Media
     {
         $order = array_flip($kind->screenScraperTypes());
+        $regions = array_flip(MediaRegions::chainFor($this->media_region));
 
         return $this->media
             ->filter(fn (Media $media) => Arr::has($order, $media->screenscraper_type))
             ->sortBy([
                 fn (Media $a, Media $b) => Arr::get($order, $a->screenscraper_type) <=> Arr::get($order, $b->screenscraper_type),
+                fn (Media $a, Media $b) => $this->regionRank($a, $regions) <=> $this->regionRank($b, $regions),
                 fn (Media $a, Media $b) => (int) $b->size_bytes <=> (int) $a->size_bytes,
             ])
             ->first();
+    }
+
+    /**
+     * How far down the chain this artwork's region sits.
+     *
+     * A region nobody named still beats nothing at all — an Italian cover is
+     * better than no cover — so it ranks last rather than being dropped.
+     *
+     * @param  array<string, int>  $regions
+     */
+    private function regionRank(Media $media, array $regions): int
+    {
+        return $regions[$media->region] ?? count($regions);
+    }
+
+    /**
+     * The achievement set this game was identified as, if any.
+     *
+     * @return BelongsTo<RaGame, $this>
+     */
+    public function raGame(): BelongsTo
+    {
+        return $this->belongsTo(RaGame::class, 'retroachievements_id');
+    }
+
+    /**
+     * Everyone's progress in this game's set.
+     *
+     * Keyed through retroachievements_id rather than this game's own id, which
+     * is the whole point of the set owning progress: merging this game into
+     * another, or rebuilding the library, leaves the rows where they are.
+     *
+     * @return HasMany<RaProgress, $this>
+     */
+    public function raProgress(): HasMany
+    {
+        return $this->hasMany(RaProgress::class, 'ra_game_id', 'retroachievements_id');
     }
 
     /** @return BelongsToMany<GameCollection, $this> */
@@ -142,6 +204,33 @@ class Game extends Model
     }
 
     /**
+     * The one file to give RAHasher.
+     *
+     * Deliberately not identifiableFile(). That one prefers a track, which is
+     * right for ScreenScraper because a track is what ScreenScraper's database
+     * holds — and wrong here, because RAHasher needs the container: it reads
+     * SYSTEM.CNF out of a cuesheet's disc to find the executable it actually
+     * hashes, and a loose .bin gives it nothing to read.
+     *
+     * One file settles the whole game. A set lists a hash for every disc, so
+     * disc one recognises a four-disc title, and hashing the other three would
+     * cost minutes each to learn the same thing.
+     */
+    public function hashableFile(): ?GameFile
+    {
+        return $this->files()
+            ->present()
+            ->whereIn('role', [FileRole::Playlist->value, FileRole::Sheet->value, FileRole::Rom->value])
+            ->orderByRaw(
+                'CASE role WHEN ? THEN 0 WHEN ? THEN 1 ELSE 2 END',
+                [FileRole::Playlist->value, FileRole::Sheet->value],
+            )
+            ->orderByRaw('disc_number IS NULL, disc_number')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
      * Why this game cannot be put to the provider, or null when it can.
      *
      * Returned as a reason rather than a boolean so the interface can say what
@@ -159,7 +248,13 @@ class Game extends Model
             return __('This console is not mapped to ScreenScraper.');
         }
 
-        if ($this->identifiableFile() === null) {
+        // The list view selects this count so a page of cards does not run a
+        // files query per row; everywhere else falls back to asking directly.
+        $hasIdentifiable = array_key_exists('identifiable_files_count', $this->attributes)
+            ? (int) $this->attributes['identifiable_files_count'] > 0
+            : $this->identifiableFile() !== null;
+
+        if (! $hasIdentifiable) {
             // A playlist and its cuesheets with no data track left, or every
             // file gone missing since the last scan.
             return __('No file here is one the provider can identify.');
@@ -204,9 +299,31 @@ class Game extends Model
         $query->where('status', GameStatus::Placeholder);
     }
 
-    /** @param  Builder<Game>  $query */
+    /**
+     * Games worth trying RetroAchievements on again.
+     *
+     * Includes NoMatch, unlike scopeAwaitingLookup: there is no scarce failed
+     * lookup allowance here, the hash is already cached, and new sets appear
+     * constantly.
+     *
+     * @param  Builder<Game>  $query
+     */
+    public function scopeAwaitingRetroAchievements(Builder $query): void
+    {
+        $query->whereIn('retroachievements_status', [
+            RetroAchievementsStatus::Pending->value,
+            RetroAchievementsStatus::NoMatch->value,
+        ]);
+    }
+
+    /**
+     * @param  Builder<Game>  $query
+     */
     public function scopeForConsole(Builder $query, string $console): void
     {
-        $query->where('console', $console);
+        // Qualified: the library list joins ra_progress, and an unqualified
+        // column name in a joined query is one added column away from being
+        // ambiguous at runtime.
+        $query->where('games.console', $console);
     }
 }

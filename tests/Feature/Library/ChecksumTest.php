@@ -80,12 +80,18 @@ it('chains hashing before a second lookup when name and size miss', function () 
 
     (new MatchGame($game->id))->handle(app(GameMatcher::class));
 
-    // Hashing runs on the media queue so the single scraper worker is not held
+    // Hashing runs on its own queue so the single scraper worker is not held
     // for the minutes a disc image takes to read.
     Bus::assertChained([HashFile::class, MatchGame::class]);
 });
 
-it('puts hashing on the media queue and lookups on the scraper queue', function () {
-    expect((new HashFile(1))->queue)->toBe('media')
+it('puts hashing on the long connection and lookups on the scraper queue', function () {
+    // It was on `media` until the connection split. The jobs table has no
+    // connection column, so a job is re-reserved after the retry_after of
+    // whichever connection's worker popped it — and the media workers run on
+    // the 90-second one while this job has an hour-long timeout. Isolation is
+    // by queue name, which is why the name had to change too.
+    expect((new HashFile(1))->queue)->toBe('hash')
+        ->and((new HashFile(1))->connection)->toBe('database-long')
         ->and((new MatchGame(1))->queue)->toBe('scraper');
 });

@@ -16,6 +16,8 @@ use Illuminate\Support\Str;
  * @property int $id
  * @property string $name
  * @property string|null $username
+ * @property string|null $retroachievements_username
+ * @property Carbon|null $retroachievements_synced_at
  * @property string $email
  * @property Carbon|null $email_verified_at
  * @property string $password
@@ -26,7 +28,7 @@ use Illuminate\Support\Str;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'username', 'email', 'password'])]
+#[Fillable(['name', 'username', 'email', 'password', 'retroachievements_username'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -41,6 +43,7 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'retroachievements_synced_at' => 'datetime',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
