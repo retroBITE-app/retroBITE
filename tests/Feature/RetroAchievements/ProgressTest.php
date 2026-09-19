@@ -208,7 +208,12 @@ it('takes the award and the rank from the provider', function () {
         '*API_GetGameInfoAndUserProgress*' => Http::response([
             'ID' => $this->set->id,
             'HighestAwardKind' => 'beaten-hardcore',
-            'HighestAwardDate' => '2026-03-11 10:00:00',
+            // ISO 8601 with an offset, which is the shape this endpoint
+            // actually sends — unlike the unlock dates beside it. Written
+            // through the query builder, nothing casts it on the way past, and
+            // MariaDB rejected it outright: every game the person had beaten
+            // failed, and the counters went with it.
+            'HighestAwardDate' => '2026-03-11T10:00:00+00:00',
             'Achievements' => [
                 $achievement->id => [
                     'ID' => $achievement->id,
@@ -232,6 +237,7 @@ it('takes the award and the rank from the provider', function () {
     // beaten-hardcore, not beaten: collapsing the two would throw away the
     // distinction the rest of this is built to keep.
     expect($row->highest_award_kind)->toBe(AwardKind::BeatenHardcore)
+        ->and($row->highest_award_at?->toDateTimeString())->toBe('2026-03-11 10:00:00')
         ->and($row->site_rank)->toBe(842)
         ->and($row->unlocked_hardcore_count)->toBe(1);
 });

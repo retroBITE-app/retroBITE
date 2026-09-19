@@ -10,11 +10,13 @@ use App\Models\RaGame;
 use App\Models\User;
 use App\Services\RetroAchievementsProgress;
 use App\Services\RetroAchievementsService;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Reconcile one person's progress in one game, in full.
@@ -82,7 +84,7 @@ class SyncGameProgress implements ShouldBeUnique, ShouldQueue
             // Straight from the provider. Working an award out locally would
             // mean reimplementing their rules and getting a different answer.
             'highest_award_kind' => $this->award(Arr::get($payload, 'HighestAwardKind')),
-            'highest_award_at' => Arr::get($payload, 'HighestAwardDate'),
+            'highest_award_at' => $this->moment(Arr::get($payload, 'HighestAwardDate')),
 
             // An empty answer means the person has no progress in this game,
             // which is "no rank" rather than a failure.
@@ -99,6 +101,33 @@ class SyncGameProgress implements ShouldBeUnique, ShouldQueue
     private function award(mixed $kind): ?string
     {
         return is_string($kind) ? AwardKind::tryFrom($kind)?->value : null;
+    }
+
+    /**
+     * Parse a date the provider sent, whatever shape it chose.
+     *
+     * The two endpoints disagree: unlock dates come as '2018-09-25 21:41:23'
+     * and HighestAwardDate as '2026-01-02T23:36:44+00:00'. The counters are
+     * written through the query builder rather than Eloquent, so nothing casts
+     * them on the way past, and MariaDB rejected the second outright — taking
+     * the whole update with it for every game the person had actually beaten.
+     */
+    private function moment(mixed $value): ?CarbonImmutable
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value)->utc();
+        } catch (Throwable) {
+            Log::warning('Unparseable date from RetroAchievements.', [
+                'ra_game_id' => $this->raGameId,
+                'value' => $value,
+            ]);
+
+            return null;
+        }
     }
 
     private function waitAndRetry(RetroAchievementsException $e): void
