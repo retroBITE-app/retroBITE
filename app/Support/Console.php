@@ -33,6 +33,15 @@ final class Console
 
     public readonly ?int $screenscraperId;
 
+    /**
+     * RetroAchievements' ConsoleID, which is also RAHasher's systemid.
+     *
+     * Unrelated to screenscraperId despite both being small integers, and the
+     * ranges overlap: NES is 3 at ScreenScraper and 7 here, while 3 here is the
+     * Super Nintendo. Null for the consoles RetroAchievements does not cover.
+     */
+    public readonly ?int $retroachievementsId;
+
     public function __construct(string $key)
     {
         $meta = config("consoles.{$key}");
@@ -42,6 +51,7 @@ final class Console
         }
 
         $ssId = Arr::get($meta, 'screenscraper_id');
+        $raId = Arr::get($meta, 'retroachievements_id');
 
         $this->key = $key;
         $this->name = (string) Arr::get($meta, 'name', '');
@@ -53,6 +63,7 @@ final class Console
         $this->biosExtensions = (array) Arr::get($meta, 'bios_extensions', []);
         $this->excludeFiles = (array) Arr::get($meta, 'exclude_files', []);
         $this->screenscraperId = $ssId !== null ? (int) $ssId : null;
+        $this->retroachievementsId = $raId !== null ? (int) $raId : null;
     }
 
     /**

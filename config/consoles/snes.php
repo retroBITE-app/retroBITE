@@ -16,6 +16,7 @@ return [
     'bios_extensions' => ['rom'],
     'exclude_files' => [],
     'screenscraper_id' => 4,
+    'retroachievements_id' => 3,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
 ];
