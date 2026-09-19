@@ -83,10 +83,12 @@ class SyncSet implements ShouldBeUnique, ShouldQueue
                 'badge_name' => Arr::get($achievement, 'BadgeName'),
                 'kind' => $this->kind(Arr::get($achievement, 'type')),
                 'display_order' => (int) Arr::get($achievement, 'DisplayOrder', 0),
-                // f=5 brings back unofficial and demoted entries alongside the
-                // real ones. Flags 3 is the official set; anything else is
-                // stored but never counted.
-                'core' => (int) Arr::get($achievement, 'Flags', 3) === 3,
+                // Always true, because only the official set is fetched — see
+                // RetroAchievementsService::gameExtended() for why asking for
+                // the unofficial one instead is a trap. The column and the
+                // counting scope stay, so a demoted achievement that somebody
+                // has unlocked has somewhere to be excluded from later.
+                'core' => true,
                 'num_awarded' => (int) Arr::get($achievement, 'NumAwarded', 0),
                 'num_awarded_hardcore' => (int) Arr::get($achievement, 'NumAwardedHardcore', 0),
                 'removed_at' => null,
@@ -100,11 +102,11 @@ class SyncSet implements ShouldBeUnique, ShouldQueue
                 'ra_console_id' => (int) Arr::get($payload, 'ConsoleID', 0),
                 'title' => (string) Arr::get($payload, 'Title', ''),
                 'image_icon' => Arr::get($payload, 'ImageIcon'),
-                'num_achievements' => count(array_filter($rows, fn (array $r) => $r['core'])),
-                'points_total' => array_sum(array_map(
-                    fn (array $r) => $r['core'] ? $r['points'] : 0,
-                    $rows,
-                )),
+                // Every row, because only the official set is fetched. These
+                // agree with the NumAchievements and Points the index sync
+                // wrote, and are recomputed here so a demotion shrinks them.
+                'num_achievements' => count($rows),
+                'points_total' => array_sum(array_column($rows, 'points')),
                 // The denominator for "3.4% of players". Free here, and there
                 // is no other endpoint that would give it to us.
                 'num_distinct_players' => (int) Arr::get($payload, 'NumDistinctPlayers', 0),

@@ -181,3 +181,25 @@ it('leaves the game alone when the binary itself is missing', function () {
     // back out would take a reset of every row.
     expect($game->refresh()->retroachievements_status)->toBe(RetroAchievementsStatus::Pending);
 });
+
+it('treats an empty hasher path as a missing binary', function () {
+    // .env.example shipped `RA_HASHER_PATH=`, and env() returns the empty
+    // string for a variable that is present but empty — the second argument
+    // only applies when it is absent. The path resolved to '', proc_open was
+    // handed an empty program name, and every hash job died with a ValueError
+    // from inside Symfony that named neither the cause nor the fix.
+    config()->set('retroachievements.hasher_path', '');
+
+    expect(fn () => app(RetroAchievementsHasher::class)->hash(3, '/tmp/whatever.sfc'))
+        ->toThrow(HasherUnavailable::class);
+
+    Process::assertNothingRan();
+});
+
+it('falls back to a usable default when the variable is present but empty', function () {
+    // The config itself has to survive it, not just the service.
+    expect(config('retroachievements.hasher_path'))->not->toBe('')
+        ->and(config('retroachievements.timeout'))->toBeGreaterThan(0)
+        ->and(config('retroachievements.connect_timeout'))->toBeGreaterThan(0)
+        ->and(config('retroachievements.hasher_timeout'))->toBeGreaterThan(0);
+});

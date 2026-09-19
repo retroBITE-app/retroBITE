@@ -39,7 +39,7 @@ function raAchievement(int $id, array $overrides = []): array
     return array_replace([
         'ID' => $id, 'Title' => "Achievement {$id}", 'Description' => 'Do the thing',
         'Points' => 10, 'TrueRatio' => 12, 'BadgeName' => '12345', 'DisplayOrder' => 0,
-        'Flags' => 3, 'NumAwarded' => 100, 'NumAwardedHardcore' => 40, 'type' => null,
+        'NumAwarded' => 100, 'NumAwardedHardcore' => 40, 'type' => null,
     ], $overrides);
 }
 
@@ -96,21 +96,33 @@ it('marks an achievement that left the set instead of deleting it', function () 
         ->and(RaAchievement::find(1)?->removed_at)->toBeNull();
 });
 
-it('stores unofficial achievements without counting them', function () {
-    Http::fake(['*' => Http::response(raSet([
-        raAchievement(1, ['Points' => 10]),
-        raAchievement(2, ['Points' => 50, 'Flags' => 5]),
-    ]), 200)]);
+it('asks for the official set and not the demoted one', function () {
+    Http::fake(['*' => Http::response(raSet([raAchievement(1)]), 200)]);
 
     runSetSync();
 
-    expect(RaAchievement::count())->toBe(2)
-        ->and(RaAchievement::find(2)?->core)->toBeFalse()
-        // RetroAchievements does not count demoted achievements towards a
-        // score either, so counting them here would make our total disagree
-        // with theirs on the same page.
-        ->and(RaGame::find(4111)?->points_total)->toBe(10)
-        ->and(RaGame::find(4111)?->num_achievements)->toBe(1);
+    // f is a filter rather than an addition: f=5 returns the demoted
+    // achievements *instead of* the real ones, and there is no Flags field in
+    // the response to tell the two apart afterwards. A set fetched the wrong
+    // way looks entirely plausible — ActRaiser came back as four achievements
+    // worth 25 points rather than sixty-six worth 653.
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'f=3'));
+});
+
+it('does not count an achievement that has left the set', function () {
+    Http::fake(['*' => Http::sequence()
+        ->push(raSet([raAchievement(1, ['Points' => 10]), raAchievement(2, ['Points' => 50])]), 200)
+        ->push(raSet([raAchievement(1, ['Points' => 10])]), 200)]);
+
+    runSetSync();
+    runSetSync();
+
+    // Demotion is what removal from the official set means, and
+    // RetroAchievements stops counting a demoted achievement too — so
+    // counting it here would make our total disagree with theirs.
+    expect(RaGame::find(4111)?->points_total)->toBe(10)
+        ->and(RaGame::find(4111)?->num_achievements)->toBe(1)
+        ->and(RaAchievement::find(2)?->removed_at)->not->toBeNull();
 });
 
 it('marks existing progress stale when the set changes', function () {

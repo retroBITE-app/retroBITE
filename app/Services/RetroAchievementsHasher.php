@@ -37,7 +37,14 @@ class RetroAchievementsHasher
      */
     public function hash(int $consoleId, string $absolutePath): string
     {
-        $binary = (string) config('retroachievements.hasher_path', 'RAHasher');
+        $binary = trim((string) config('retroachievements.hasher_path'));
+
+        if ($binary === '') {
+            // Otherwise proc_open raises a ValueError about an empty program
+            // name from four frames inside Symfony, which says nothing about
+            // what is actually wrong or where to fix it.
+            throw new HasherUnavailable('No RAHasher path is configured.');
+        }
 
         $result = Process::timeout((int) config('retroachievements.hasher_timeout', 1800))
             ->run([$binary, (string) $consoleId, $absolutePath]);

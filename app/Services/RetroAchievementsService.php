@@ -51,15 +51,23 @@ class RetroAchievementsService
     /**
      * One game's full achievement set.
      *
-     * f=5 rather than the default 3, so unofficial and demoted achievements
-     * come back too. They are stored and never counted — but a set that loses
-     * one has to be able to say so, and the only way to know is to be told.
+     * f is a filter, not an addition, whatever the documentation's phrasing
+     * suggests. Asked with f=5 this endpoint returns the demoted achievements
+     * *instead of* the real ones: ActRaiser answers with 66 achievements and
+     * 653 points at f=3, and four titles ending "DEMOTED per revision" at f=5.
+     *
+     * Nor is there a Flags field in the response to tell them apart, so a set
+     * fetched at f=5 and stored looks exactly like a real one.
+     *
+     * Only the official set is fetched. An achievement that is demoted simply
+     * stops appearing here, which SyncSet already reads as having left the set
+     * — the right answer, and it costs no second request per game.
      *
      * @return array<string, mixed>|null
      */
     public function gameExtended(int $gameId): ?array
     {
-        $payload = $this->call('API_GetGameExtended.php', ['i' => $gameId, 'f' => 5]);
+        $payload = $this->call('API_GetGameExtended.php', ['i' => $gameId, 'f' => 3]);
 
         return Arr::get($payload, 'ID') === null ? null : $payload;
     }
