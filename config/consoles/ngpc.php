@@ -9,8 +9,11 @@ return [
     'file_icon' => '/images/consoles/SNK - Neo Geo Pocket Color-content.png',
     'file_extensions' => ['ngc', 'zip', '7z'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 82,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

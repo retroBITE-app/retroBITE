@@ -9,8 +9,11 @@ return [
     'file_icon' => '/images/consoles/Sharp - X68000-content.png',
     'file_extensions' => ['dim', 'img', 'd88', '88d', 'hdm', 'dup', '2hd', 'xdf', 'hdf', 'cmd', 'm3u', 'zip', '7z'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 79,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

@@ -9,8 +9,11 @@ return [
     'file_icon' => '/images/consoles/Casio - PV-1000-content.png',
     'file_extensions' => ['bin', 'zip', '7z'],
     'bios_extensions' => [],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 74,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

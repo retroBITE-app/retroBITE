@@ -9,8 +9,11 @@ return [
     'file_icon' => '/images/consoles/Nintendo - Nintendo DS-content.png',
     'file_extensions' => ['nds', 'bin', 'zip', '7z'],
     'bios_extensions' => [],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 15,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];
