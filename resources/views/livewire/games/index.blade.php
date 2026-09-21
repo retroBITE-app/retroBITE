@@ -348,10 +348,20 @@ new #[Title('Games')] class extends Component
                 <p class="mt-1 text-sm text-fg-faint">{{ __('Scan a console to fill the library.') }}</p>
             </div>
         @elseif ($this->viewMode === 'cards')
-            {{-- Wrapped rather than a grid: each console sets its own cover
-                 width, so a fixed column count would leave a SNES shelf in
-                 columns sized for a PS2 one. --}}
-            <ul class="flex flex-wrap items-start gap-4">
+            {{--
+                A fixed column count per breakpoint rather than wrapping on
+                whatever fits: the cap is the point, so a row holds the same
+                number of games on a laptop every time instead of reflowing
+                by a column each time the window moves.
+
+                The counts are set against the content column — the viewport
+                less the 16rem sidebar and the page's own padding — so a cell
+                is wide enough for a cover at the sizes config asks for.
+                Covers are not stretched to the cell; a card is as wide as its
+                own art, which is why the cells are left-aligned and the rows
+                start at the top rather than being levelled to the tallest.
+            --}}
+            <ul class="grid grid-cols-2 items-start justify-items-start gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                 @foreach ($this->games as $game)
                     <li wire:key="card-{{ $game->id }}">
                         <x-game-card :game="$game" :show-console="$this->lockedTo === null">

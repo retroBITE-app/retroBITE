@@ -1,12 +1,17 @@
 {{--
     One game on the library shelf.
 
-    Levelled by height, which comes from the console's own config: a SNES box
-    is wide and flat where a PS2 case is tall, and a shelf mixing the two has
-    to line up somewhere. Width is the cover's own, because one console holds
-    both shapes — a US Super Nintendo box is landscape and the Super Famicom
-    one portrait — so any single width would crop one of them. Only a
-    placeholder takes a width from config, having no art to take one from.
+    The card is exactly as big as its cover. Nothing is stretched to fill the
+    column it sits in and nothing is letterboxed to a shape it is not: the
+    frame shrinks to the art in both directions, so a wide box and a tall one
+    each look like themselves.
+
+    Size comes from the console, as `cover_height` in config/consoles/*.php,
+    and it is a ceiling rather than a fixed height — a narrow column shrinks
+    the cover further instead of adding bars around it. That ceiling is the
+    one knob that makes one console's shelf smaller than another's.
+
+    Only a placeholder is measured outright, having no art to be measured by.
 --}}
 @props([
     'game',
@@ -23,12 +28,11 @@
     $regionIcon = App\Support\MediaRegions::icon($game->region);
     $regionLabel = App\Support\MediaRegions::label($game->region);
 
-    // Height always; a width only when there is no art to supply one.
-    $coverStyle = 'height: '.App\Support\CoverGeometry::height($console).'px';
-
-    if ($cover === null) {
-        $coverStyle .= '; width: '.App\Support\CoverGeometry::width($console).'px';
-    }
+    // Inline styles rather than Tailwind arbitrary values: the numbers come
+    // out of config at runtime, and a class Tailwind never sees in the source
+    // is a class it never generates.
+    $coverHeight = App\Support\CoverGeometry::height($console);
+    $coverWidth = App\Support\CoverGeometry::width($console);
 
     // Selected by the library list off the joined progress row, and absent
     // everywhere else — so ?? rather than a bare read, or a card rendered from
@@ -41,7 +45,7 @@
 
 {{-- The link is stretched over the card rather than wrapping it, so the
      actions can sit above it instead of nesting a button inside an anchor. --}}
-<div class="group relative flex max-w-full flex-col gap-2">
+<div class="group relative flex w-fit max-w-full flex-col gap-2">
     <a
         href="{{ route('games.show', $game) }}"
         wire:navigate
@@ -49,8 +53,11 @@
         class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-deep"
     ></a>
 
+    {{-- No height of its own: the frame is whatever the image turns out to
+         be, which is the whole point of a shelf of boxes that are not all the
+         same shape. The placeholder below is the exception and says so. --}}
     <div
-        style="{{ $coverStyle }}"
+        @if ($cover === null) style="height: {{ $coverHeight }}px; width: {{ $coverWidth }}px" @endif
         class="relative flex w-fit max-w-full items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken transition-colors group-hover:border-accent-tint/50"
     >
         @if ($cover !== null)
@@ -58,12 +65,13 @@
                 src="{{ route('media.show', ['path' => $cover]) }}"
                 alt="{{ $game->title }}"
                 loading="lazy"
-                class="block h-full w-auto max-w-full object-contain"
+                style="max-height: {{ $coverHeight }}px"
+                class="block h-auto w-auto max-w-full"
             />
         @else
             <div class="flex h-full w-full flex-col items-center justify-center gap-3 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]">
                 @if ($console !== null)
-                    <img src="{{ $console->fileIcon }}" alt="{{ $console->name }}" class="h-14 w-14 object-contain opacity-25" />
+                    <img src="{{ $console->fileIcon }}" alt="{{ $console->name }}" class="size-14 max-w-1/2 object-contain opacity-25" />
                 @else
                     <flux:icon.photo class="size-8 text-fg-faint" />
                 @endif

@@ -9,10 +9,13 @@ use Illuminate\Support\Arr;
 /**
  * How tall and how wide a console's covers stand.
  *
- * A SNES box is wide and flat where a PS2 case is tall, so a shelf of covers is
- * levelled by height and each console keeps its own proportions. The numbers
- * live in config/consoles/*.php; this is the one place that reads them, since
- * the game page and the library cards have to agree.
+ * A SNES box is wide and flat where a PS2 case is tall, and the numbers for
+ * both live in config/consoles/*.php. This is the one place that reads them,
+ * since the game page and the library cards have to agree.
+ *
+ * The two readings answer different layouts. The shelf is a grid: a card fills
+ * its column, so all it needs is {@see aspect()} and the height follows. The
+ * game page is not, and levels its covers by {@see height()} in pixels.
  */
 final class CoverGeometry
 {
@@ -46,10 +49,9 @@ final class CoverGeometry
     /**
      * How wide a cover stands at that height, in pixels.
      *
-     * A ratio alone is not enough for either caller: a shelf card is a
-     * shrink-to-fit flex item, so without a width in pixels it takes the one
-     * its own art happens to have, and a placeholder has no art to take a
-     * width from at all.
+     * For the game page, where a placeholder has no art to take a width from
+     * and nothing else would give the empty box one. The shelf has no use for
+     * it: there the column decides the width and the ratio decides the rest.
      */
     public static function width(?Console $console): int
     {

@@ -51,6 +51,40 @@ class ScrapeGameMedia implements ShouldQueue
         $this->onQueue('media');
     }
 
+    /**
+     * Queue artwork for a whole console.
+     *
+     * One job per game, on the media queue, so the three workers there share
+     * the console between them and nothing waits on the single scraper
+     * worker. Only games the provider has already named: artwork is fetched
+     * by provider id, so a placeholder or an unmatched game has nothing to
+     * fetch by — the same rule {@see Game::blockedFromMediaScrape()} states
+     * one game at a time.
+     *
+     * The cost that matters is one metadata request per game. The bytes are
+     * mostly free on a second run, because a media whose checksum we already
+     * hold is recognised without being downloaded, but the lookup that
+     * carries those checksums is spent either way. Hence the default: games
+     * holding nothing at all, which is the set a bulk fetch is usually for.
+     *
+     * @param  bool  $held  include games that already have artwork
+     * @return int how many were queued
+     */
+    public static function queueForConsole(string $console, bool $held = false): int
+    {
+        $ids = Game::query()
+            ->forConsole($console)
+            ->whereNotNull('screenscraper_id')
+            ->unless($held, fn ($query) => $query->missingMedia())
+            ->pluck('id');
+
+        foreach ($ids as $id) {
+            self::dispatch($id);
+        }
+
+        return $ids->count();
+    }
+
     public function handle(ScreenScraperService $provider, MediaLibrary $library): void
     {
         $game = Game::find($this->gameId);

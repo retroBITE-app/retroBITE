@@ -1,10 +1,12 @@
 <?php
 
 use App\Jobs\ScanConsoleFolder;
+use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
+use App\Support\MediaTypes;
 use App\Support\Scanning\LibraryFolders;
 use App\Support\SystemActivity;
 use Flux\Flux;
@@ -217,6 +219,47 @@ new #[Title('Consoles')] class extends Component
         ]));
     }
 
+    /**
+     * Queue artwork for every game on a console.
+     *
+     * `$held` is the difference between filling the gaps and starting over:
+     * without it, only games holding nothing at all are asked about, which is
+     * what somebody wants after a scan. With it, every identified game on the
+     * console is asked again — the way to pick up a media type that was
+     * switched on after the artwork was first fetched.
+     */
+    public function fetchMedia(string $key, bool $held = false): void
+    {
+        $console = Console::tryFrom($key);
+
+        if ($console === null) {
+            return;
+        }
+
+        // Said once here rather than discovered one job at a time: with
+        // nothing switched on, every one of them would return having done
+        // nothing and the page would look broken.
+        if (MediaTypes::enabled() === []) {
+            Flux::toast(variant: 'warning', text: __('No media types are switched on. Choose some in Settings → Media.'));
+
+            return;
+        }
+
+        $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
+
+        unset($this->activity);
+
+        $this->dispatch('system-activity-changed');
+
+        Flux::toast(text: $queued === 0
+            ? __('Nothing to fetch — every identified game on :console already has artwork.', ['console' => $console->name])
+            : trans_choice(
+                '{1} Fetching artwork for one game.|[2,*] Fetching artwork for :count games. The library fills in as it goes.',
+                $queued,
+                ['count' => $queued],
+            ));
+    }
+
     /** Queue a scan. Never runs here: a large library takes minutes to walk. */
     public function scan(string $key): void
     {
@@ -312,6 +355,24 @@ new #[Title('Consoles')] class extends Component
                             <flux:dropdown position="bottom" align="end">
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
                                 <flux:menu>
+                                    <flux:menu.item icon="photo"
+                                                    wire:click="fetchMedia('{{ $row['console']->key }}')">
+                                        {{ __('Fetch missing artwork') }}
+                                    </flux:menu.item>
+
+                                    {{-- Confirmed, and the scraper's own count
+                                         is in the question: this is one
+                                         provider lookup per identified game,
+                                         and on a large console that is a
+                                         visible bite out of the day. --}}
+                                    <flux:menu.item icon="arrow-path"
+                                                    wire:click="fetchMedia('{{ $row['console']->key }}', true)"
+                                                    wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
+                                        {{ __('Re-fetch all artwork') }}
+                                    </flux:menu.item>
+
+                                    <flux:menu.separator />
+
                                     <flux:menu.item icon="trash" variant="danger"
                                                     wire:click="remove('{{ $row['console']->key }}')"
                                                     wire:confirm="{{ __('Remove :console from your library? Its games stay and nothing on disk is touched.', ['console' => $row['console']->name]) }}">

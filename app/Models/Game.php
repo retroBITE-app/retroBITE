@@ -317,6 +317,26 @@ class Game extends Model
     }
 
     /**
+     * Games holding no artwork at all.
+     *
+     * The useful half of a bulk fetch: a game the provider has already
+     * answered for costs another metadata request to ask again, and on a
+     * console of three thousand that is three thousand lookups spent to
+     * re-download nothing.
+     *
+     * Deliberately "none at all" rather than "short of a type". The provider
+     * does not hold every type for every game, so a game with a cover and no
+     * logo is usually a game whose logo does not exist, and it would sit in
+     * this list being asked about for ever.
+     *
+     * @param  Builder<Game>  $query
+     */
+    public function scopeMissingMedia(Builder $query): void
+    {
+        $query->whereDoesntHave('media');
+    }
+
+    /**
      * @param  Builder<Game>  $query
      */
     public function scopeForConsole(Builder $query, string $console): void

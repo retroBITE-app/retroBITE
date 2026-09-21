@@ -111,6 +111,57 @@ it('does not offer a console that is already in the library', function () {
         ->assertSee('Nothing matches that.');
 });
 
+it('fetches artwork for a whole console, skipping the games that already have some', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $bare = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
+    $dressed = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 102]);
+    Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+
+    // A placeholder has no provider id, and artwork is fetched by provider id.
+    Game::factory()->forConsole('snes')->create(['screenscraper_id' => null, 'status' => GameStatus::Placeholder]);
+
+    // And another console's game is not this console's business.
+    Game::factory()->forConsole('nes')->create(['screenscraper_id' => 103]);
+
+    Livewire::test('consoles.index')->call('fetchMedia', 'snes');
+
+    Queue::assertPushed(ScrapeGameMedia::class, 1);
+    Queue::assertPushed(ScrapeGameMedia::class, fn ($job) => $job->gameId === $bare->id);
+});
+
+it('re-fetches every identified game when asked to start over', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $bare = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
+    $dressed = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 102]);
+    Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+
+    // What somebody does after switching a media type on: the games that
+    // already hold a cover are exactly the ones that need asking again.
+    Livewire::test('consoles.index')->call('fetchMedia', 'snes', true);
+
+    Queue::assertPushed(ScrapeGameMedia::class, 2);
+});
+
+it('says so rather than queueing nothing when no media types are switched on', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+    Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
+
+    AppSetting::put(AppSetting::MEDIA_TYPES, []);
+
+    // Every job would return having done nothing, and the page would look
+    // broken rather than misconfigured.
+    Livewire::test('consoles.index')
+        ->call('fetchMedia', 'snes')
+        ->assertDispatched('toast-show');
+
+    Queue::assertNothingPushed();
+});
+
 it('removes a console from the library without touching its games', function () {
     File::ensureDirectoryExists($this->root.'/snes');
     ConsoleSourceFolder::add(new Console('snes'));
@@ -703,4 +754,29 @@ it('sizes an empty slot from the console it belongs to', function () {
     // 2/3 and 5/7 of the same 280px.
     Livewire::test('games.index', ['console' => 'snes'])->assertSee('width: 187px', escape: false);
     Livewire::test('games.index', ['console' => 'psx'])->assertSee('width: 200px', escape: false);
+});
+
+it('caps a cover by its console rather than stretching it to the column', function () {
+    $game = Game::factory()->forConsole('gba')->matched()->create(['title' => 'Metroid Fusion', 'slug' => 'fusion']);
+    Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    // The one knob that makes one console's shelf smaller than another's, and
+    // a ceiling rather than a height: a narrow column shrinks the cover
+    // further instead of putting bars around it.
+    Livewire::test('games.index', ['console' => 'gba'])
+        ->assertSee('max-height: 240px', escape: false)
+        ->assertDontSee('height: 240px;', escape: false);
+});
+
+it('caps how many covers a row can hold, at every width', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    // The cap is the point: covers stretch to their column, so without one a
+    // wide screen draws either postage stamps or posters.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('grid-cols-2', escape: false)
+        ->assertSee('sm:grid-cols-3', escape: false)
+        ->assertSee('lg:grid-cols-4', escape: false)
+        ->assertSee('xl:grid-cols-5', escape: false)
+        ->assertSee('2xl:grid-cols-6', escape: false);
 });

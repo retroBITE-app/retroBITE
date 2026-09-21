@@ -1,9 +1,7 @@
 <?php
 
 use App\Models\AppSetting;
-use App\Models\Game;
 use App\Models\RaConsoleSync;
-use App\Models\RaGame;
 use App\Models\User;
 use App\Support\ScreenScraperQuota;
 use Livewire\Livewire;
@@ -11,7 +9,7 @@ use Livewire\Livewire;
 /**
  * The sidebar panel. Mostly about the states that are easy to get wrong —
  * "never asked" drawn as a spent allowance, a day-old figure drawn as today's,
- * and a RetroAchievements quota that does not exist.
+ * and the scarce allowance folded away without being dropped.
  */
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -54,7 +52,7 @@ it('tells "nothing asked yet" apart from a spent allowance', function () {
     $this->get(route('dashboard'))
         ->assertOk()
         ->assertSee('Not asked yet — figures appear after the first lookup.')
-        ->assertDontSee('Requests');
+        ->assertDontSee('20,000');
 });
 
 it('draws what is left of both allowances, not just the large one', function () {
@@ -64,8 +62,63 @@ it('draws what is left of both allowances, not just the large one', function () 
 
     // 20 000 - 15 000 successful …
     $response->assertSee('5,000')->assertSee('20,000');
-    // … and 2 000 - 1 900 failed, which is the one that runs out first.
+    // … and 2 000 - 1 900 failed, which is the one that runs out first. Folded
+    // away by default, but rendered: the fold is the viewer's, not the
+    // server's, so opening it costs no round trip.
     $response->assertSee('100')->assertSee('2,000');
+});
+
+it('carries the figure on the heading row rather than spending a line on a title', function () {
+    recordQuota();
+
+    $this->get(route('dashboard'))
+        ->assertOk()
+        ->assertSee('Scraper')
+        // The section title this replaces, and the footnote under the bars.
+        ->assertDontSee('APIs')
+        ->assertDontSee('level 2');
+});
+
+it('folds the failed allowance away until it is asked for', function () {
+    recordQuota();
+
+    // Asserted against the component rather than the page: the activity block
+    // below it has a fold of its own, and a page-wide assertion would pass on
+    // that one and say nothing about this.
+    Livewire::test('api-status')
+        ->assertSeeHtml('x-show="open"')
+        ->assertSeeHtml('sidebar.scraper')
+        // Rendered, not withheld — the fold is the viewer's, so opening it
+        // costs no round trip.
+        ->assertSee('Failed');
+});
+
+it('offers nothing to unfold when there is no snapshot to unfold', function () {
+    config(['screenscraper.user' => 'someone']);
+
+    // A dead control in a column this narrow is worse than no control, so
+    // neither the fold nor the chevron that opens it is drawn. Unlike the
+    // activity block, which always has every queue to show.
+    Livewire::test('api-status')
+        ->assertDontSeeHtml('x-show="open"')
+        ->assertDontSeeHtml('-rotate-180');
+});
+
+it('says nothing about RetroAchievements, which reports no allowance at all', function () {
+    AppSetting::putSecret(AppSetting::RA_API_KEY, 'key');
+    test()->user->forceFill([
+        'retroachievements_username' => 'someone',
+        'retroachievements_synced_at' => now()->subMinutes(12),
+    ])->save();
+
+    RaConsoleSync::create(['ra_console_id' => 3, 'synced_at' => now()->subHours(9), 'games' => 5, 'hashes' => 9]);
+
+    // Freshness is a real question and this is no longer where it is answered.
+    $this->get(route('dashboard'))
+        ->assertOk()
+        ->assertDontSee('RetroAchievements')
+        ->assertDontSee('Hash index')
+        ->assertDontSee('Sets waiting');
 });
 
 it('colours each bar by how close that counter is to its own limit', function () {
@@ -101,58 +154,6 @@ it('warns when the server is turning accounts like ours away', function () {
     $this->get(route('dashboard'))
         ->assertOk()
         ->assertSee('Turning away accounts that only download.');
-});
-
-it('offers the settings screen when RetroAchievements is not linked', function () {
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('not linked')
-        ->assertSee(route('retroachievements.edit'), false);
-});
-
-it('answers freshness for RetroAchievements, which reports no allowance', function () {
-    AppSetting::putSecret(AppSetting::RA_API_KEY, 'key');
-    $this->user->forceFill([
-        'retroachievements_username' => 'someone',
-        'retroachievements_synced_at' => now()->subMinutes(12),
-    ])->save();
-
-    Game::factory()->forConsole('snes')->create();
-    RaConsoleSync::create([
-        'ra_console_id' => 3,
-        'synced_at' => now()->subHours(9),
-        'games' => 5,
-        'hashes' => 9,
-    ]);
-    RaGame::factory()->count(2)->create();
-
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('Hash index')
-        ->assertSee('1/1')
-        ->assertSee('9h ago')
-        ->assertSee('12m ago')
-        // Identified games whose set has not been fetched yet.
-        ->assertSee('Sets waiting')
-        // And no invented quota anywhere in the RetroAchievements half.
-        ->assertDontSee('Requests');
-});
-
-it('counts the consoles the index is missing, not the ones it has', function () {
-    AppSetting::putSecret(AppSetting::RA_API_KEY, 'key');
-    $this->user->forceFill(['retroachievements_username' => 'someone'])->save();
-
-    Game::factory()->forConsole('snes')->create();
-    Game::factory()->forConsole('nes')->create();
-
-    // Only one of the two consoles has been indexed, and the oldest sync is
-    // what the panel reports — the weakest link decides what can be identified.
-    RaConsoleSync::create(['ra_console_id' => 3, 'synced_at' => now()->subDay(), 'games' => 5, 'hashes' => 9]);
-
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('1/2')
-        ->assertSee('1d ago');
 });
 
 it('re-reads the figures on every poll rather than freezing at page load', function () {
