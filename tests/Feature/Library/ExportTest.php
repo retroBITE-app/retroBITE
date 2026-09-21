@@ -10,7 +10,7 @@ use App\Models\Media;
 use App\Support\Console;
 use App\Support\ExportProgress;
 use App\Support\LibraryPath;
-use App\Tools\ConsoleTool\PS2;
+use App\Tools\ConsoleTools;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -38,6 +38,16 @@ afterEach(function () {
     File::deleteDirectory($this->root);
 });
 
+/**
+ * Run one export the way every caller does, through the chain.
+ *
+ * @return array{written: int, skipped: int, failed: int}
+ */
+function runExport(string $export, bool $force = false): array
+{
+    return ConsoleTools::for(test()->console)->export($export)->force($force)->run();
+}
+
 function exportGame(array $attributes = [], string $serial = 'SLES_503.86'): Game
 {
     $game = Game::factory()->create(array_merge([
@@ -48,7 +58,6 @@ function exportGame(array $attributes = [], string $serial = 'SLES_503.86'): Gam
         'release_date' => '2001-11-01',
         'developer' => "Traveller's Tales",
         'description' => 'Crash Bandicoot: The Wrath of Cortex is the first Crash Bandicoot game for a system other than the original PlayStation.',
-        'rating' => 4,
     ], $attributes));
 
     GameFile::factory()->for($game)->create([
@@ -94,7 +103,7 @@ function cover(Game $game, string $contents): Media
 it('writes a config in the shape a real drive carries', function () {
     exportGame();
 
-    expect(app(PS2::class)->writeGameConfigs($this->console))
+    expect(runExport('cfg'))
         ->toBe(['written' => 1, 'skipped' => 0, 'failed' => 0]);
 
     expect(cfg())->toBe(implode("\n", [
@@ -103,7 +112,6 @@ it('writes a config in the shape a real drive carries', function () {
         'Release=2001-11-01',
         "Developer=Traveller's Tales",
         'Description=Crash Bandicoot: The Wrath of Cortex is the first Crash Bandicoot game for a system other than the original PlayStation.',
-        'Rating=4',
         '#LongName=Crash Bandicoot - The Wrath of Cortex',
     ])."\n");
 });
@@ -111,9 +119,9 @@ it('writes a config in the shape a real drive carries', function () {
 it('cuts a long synopsis on a word boundary', function () {
     exportGame(['description' => str_repeat('word ', 200)]);
 
-    app(PS2::class)->writeGameConfigs($this->console);
+    runExport('cfg');
 
-    $description = Str::after(Str::before(cfg(), "\nRating="), 'Description=');
+    $description = Str::after(Str::before(cfg(), "\n#LongName="), 'Description=');
 
     expect($description)->toEndWith('...')
         ->and(mb_strlen($description))->toBeLessThanOrEqual(303)
@@ -124,21 +132,21 @@ it('cuts a long synopsis on a word boundary', function () {
 it('writes plain ascii, because that is all OPL draws', function () {
     exportGame(['title' => 'Pokémon Colosseum', 'developer' => 'Genius Sonority']);
 
-    app(PS2::class)->writeGameConfigs($this->console);
+    runExport('cfg');
 
     expect(cfg())->toContain('Title=Pokemon Colosseum')
         ->and(mb_check_encoding(cfg(), 'ASCII'))->toBeTrue();
 });
 
 it('leaves out a field it has no answer for', function () {
-    exportGame(['genre' => null, 'rating' => null]);
+    exportGame(['genre' => null, 'developer' => null]);
 
-    app(PS2::class)->writeGameConfigs($this->console);
+    runExport('cfg');
 
     // Written blank, OPL shows the key with nothing after it, which reads as
     // an answer rather than an absence.
     expect(cfg())->not->toContain('Genre=')
-        ->and(cfg())->not->toContain('Rating=');
+        ->and(cfg())->not->toContain('Developer=');
 });
 
 it('keeps the settings somebody tuned by hand', function () {
@@ -147,7 +155,7 @@ it('keeps the settings somebody tuned by hand', function () {
     File::ensureDirectoryExists($this->root.'/ps2/CFG');
     File::put($this->root.'/ps2/CFG/SLES_503.86.cfg', "Title=Old\n\$DMA=1\n\$Compatibility=4\n");
 
-    app(PS2::class)->writeGameConfigs($this->console, force: true);
+    runExport('cfg', force: true);
 
     // Dropping these resets a game somebody got running by trial and error,
     // which is the one genuinely damaging thing this feature could do.
@@ -160,10 +168,10 @@ it('keeps the settings somebody tuned by hand', function () {
 it('does not rewrite a config it has already written', function () {
     exportGame();
 
-    app(PS2::class)->writeGameConfigs($this->console);
+    runExport('cfg');
     $first = cfg();
 
-    expect(app(PS2::class)->writeGameConfigs($this->console))
+    expect(runExport('cfg'))
         ->toBe(['written' => 0, 'skipped' => 1, 'failed' => 0])
         ->and(cfg())->toBe($first);
 });
@@ -180,7 +188,7 @@ it('skips a game with nothing to name a file by', function () {
     $unread = Game::factory()->create(['console' => 'ps2', 'status' => GameStatus::Matched]);
     GameFile::factory()->for($unread)->create(['path' => 'ps2/DVD/Known.iso', 'extension' => 'iso']);
 
-    expect(app(PS2::class)->writeGameConfigs($this->console))
+    expect(runExport('cfg'))
         ->toBe(['written' => 0, 'skipped' => 2, 'failed' => 0])
         ->and(File::exists($this->root.'/ps2/CFG'))->toBeFalse();
 });
@@ -189,9 +197,9 @@ it('writes nothing at all for a console arranged some other way', function () {
     exportGame();
     ConsoleSourceFolder::setLayout($this->console, 'custom');
 
-    expect(app(PS2::class)->writeGameConfigs($this->console))
+    expect(runExport('cfg'))
         ->toBe(['written' => 0, 'skipped' => 0, 'failed' => 0])
-        ->and(app(PS2::class)->writeGameArt($this->console))
+        ->and(runExport('art'))
         ->toBe(['written' => 0, 'skipped' => 0, 'failed' => 0])
         ->and(File::exists($this->root.'/ps2/CFG'))->toBeFalse()
         ->and(File::exists($this->root.'/ps2/ART'))->toBeFalse();
@@ -201,15 +209,15 @@ it('re-encodes a cached cover to the size OPL reads', function () {
     $game = exportGame();
     cover($game, pngOf(1000, 1400));
 
-    expect(app(PS2::class)->writeGameArt($this->console))
+    expect(runExport('art'))
         ->toBe(['written' => 1, 'skipped' => 0, 'failed' => 0]);
 
-    $path = $this->root.'/ps2/ART/SLES_503.86_COV.png';
+    $path = $this->root.'/ps2/ART/SLES_503.86_COV.jpg';
     $size = getimagesize($path);
 
     expect($size[0])->toBe(256)
         ->and($size[1])->toBe(368)
-        ->and($size['mime'])->toBe('image/png');
+        ->and($size['mime'])->toBe('image/jpeg');
 });
 
 it('flattens a transparent cover onto something opaque', function () {
@@ -222,14 +230,19 @@ it('flattens a transparent cover onto something opaque', function () {
     imagepng($source);
     cover($game, (string) ob_get_clean());
 
-    app(PS2::class)->writeGameArt($this->console);
+    runExport('art');
 
-    $written = imagecreatefrompng($this->root.'/ps2/ART/SLES_503.86_COV.png');
+    $written = imagecreatefromjpeg($this->root.'/ps2/ART/SLES_503.86_COV.jpg');
     $colour = imagecolorsforindex($written, (int) imagecolorat($written, 128, 184));
 
     // OPL renders no alpha channel: whatever is transparent arrives on the
-    // console as whatever happened to be in that memory.
-    expect($colour['alpha'])->toBe(0);
+    // console as whatever happened to be in that memory. Asserted as a colour
+    // rather than an alpha, because JPEG carries no alpha to read back — the
+    // source was uniformly transparent, so a flattened frame is flat black,
+    // and a flat field is the one thing JPEG reproduces near-exactly.
+    expect($colour['red'])->toBeLessThan(8)
+        ->and($colour['green'])->toBeLessThan(8)
+        ->and($colour['blue'])->toBeLessThan(8);
 });
 
 it('does not fetch artwork it was never given', function () {
@@ -237,7 +250,7 @@ it('does not fetch artwork it was never given', function () {
 
     // A cover that was never scraped is a skip, not a provider request. A
     // quota spend hidden behind a file-export button is nobody's idea.
-    expect(app(PS2::class)->writeGameArt($this->console))
+    expect(runExport('art'))
         ->toBe(['written' => 0, 'skipped' => 1, 'failed' => 0])
         ->and(File::exists($this->root.'/ps2/ART'))->toBeFalse();
 });
@@ -246,12 +259,12 @@ it('does not re-encode art it has already written', function () {
     $game = exportGame();
     cover($game, pngOf(1000, 1400));
 
-    app(PS2::class)->writeGameArt($this->console);
-    $first = (string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.png');
+    runExport('art');
+    $first = (string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.jpg');
 
-    expect(app(PS2::class)->writeGameArt($this->console))
+    expect(runExport('art'))
         ->toBe(['written' => 0, 'skipped' => 1, 'failed' => 0])
-        ->and((string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBe($first);
+        ->and((string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBe($first);
 });
 
 it('counts a broken cover as a failure and keeps going', function () {
@@ -261,11 +274,11 @@ it('counts a broken cover as a failure and keeps going', function () {
     $bad = exportGame(['title' => 'Broken'], serial: 'SLES_512.22');
     cover($bad, 'this is not a png');
 
-    $counts = app(PS2::class)->writeGameArt($this->console);
+    $counts = runExport('art');
 
     expect($counts['written'])->toBe(1)
         ->and($counts['failed'])->toBe(1)
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue();
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue();
 });
 
 it('refuses a path that climbs out of the console folder', function () {
@@ -290,7 +303,7 @@ it('runs an export from the job only for a console that offers it', function () 
     (new WriteConsoleExports('snes', 'cfg'))->handle();
 
     expect(File::exists($this->root.'/ps2/CFG/SLES_503.86.cfg'))->toBeTrue()
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue();
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue();
 });
 
 it('counts files rather than jobs while an export runs', function () {
@@ -300,9 +313,12 @@ it('counts files rather than jobs while an export runs', function () {
 
     $seen = [];
 
-    (new PS2)->export($this->console, 'cfg', false, function (int $done, int $total) use (&$seen): void {
-        $seen[] = [$done, $total];
-    });
+    ConsoleTools::for($this->console)
+        ->export('cfg')
+        ->onProgress(function (int $done, int $total) use (&$seen): void {
+            $seen[] = [$done, $total];
+        })
+        ->run();
 
     // Three games, four reports: the zero the bar starts at and one per game.
     expect($seen)->toBe([[0, 3], [1, 3], [2, 3], [3, 3]]);

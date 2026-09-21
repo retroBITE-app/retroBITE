@@ -23,6 +23,19 @@ return [
      */
     'timeout' => env('CONSOLE_TOOLS_TIMEOUT', 900),
 
+    /*
+     * Where each console's toolbox lives, and what its entry point is called.
+     *
+     * Relative to the project root, joined with the console's key upper-cased:
+     * app/Scripts/PS2/Inspect.sh. One name for all of them, so adding a
+     * toolbox later means writing one file at a known path rather than
+     * inventing a name and wiring it up. Plain values rather than env(),
+     * because these ship inside the image and relocating them would break it.
+     */
+    'scripts_path' => 'app/Scripts',
+
+    'script' => 'Inspect.sh',
+
     'consoles' => [
         'ps2' => PS2::class,
     ],

@@ -9,11 +9,11 @@ use App\Enums\MediaKind;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
-use App\Support\Console;
 use App\Support\CoverArt;
 use App\Support\Layouts\ConsoleLayout;
 use App\Support\Layouts\OplLayout;
 use App\Support\LibraryPath;
+use App\Support\OplText;
 use App\Tools\ConsoleTools;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
@@ -26,7 +26,7 @@ use Throwable;
  *
  * Every PS2 disc carries a serial — SLES_503.86 and its kin — declared by BOOT2
  * in SYSTEM.CNF. ScreenScraper does not return it, and Open PS2 Loader keys
- * everything on it: ART/SLES_503.86_COV.png, CFG/SLES_503.86.cfg, and the
+ * everything on it: ART/SLES_503.86_COV.jpg, CFG/SLES_503.86.cfg, and the
  * filename prefix that tells OPL which disc it is looking at.
  *
  * That prefix is the reason this class, rather than OplLayout, understands the
@@ -36,43 +36,58 @@ use Throwable;
  */
 final class PS2 extends ConsoleTools
 {
-    /**
-     * Sony's PS2 serial prefixes. SCE* are Sony-published, SL** licensed.
-     *
-     * Kept in step with PS2_SERIAL_PREFIXES in Inspect.sh, which is the same
-     * list for the same reason.
-     */
-    private const SERIAL_PREFIXES = 'SLUS|SLES|SLPS|SLPM|SCUS|SCES|SCPS|SCPM|SCAJ|SLKA|SCKA|SLAJ';
+    /** The shape OPL reads a cover in. Every file on a working drive is this. */
+    public readonly CoverArt $cover;
 
-    /** Where OPL keeps a game's metadata, and what it calls its artwork. */
-    private const CONFIG_DIR = 'CFG';
-
-    private const ART_DIR = 'ART';
-
-    private const COVER_SUFFIX = '_COV';
+    /** The shape OPL reads words in: one ASCII line, cut to what it will show. */
+    public readonly OplText $text;
 
     /**
-     * How much of a synopsis OPL will show.
+     * The config a game's export is being written against.
      *
-     * Kept at the previous build's figure so regenerating a drive does not
-     * rewrite every file it already has for the sake of a different cut.
+     * A scratch value rather than a fact about this console: the text of the
+     * file about to be overwritten, read once by writeConfig() for its skip
+     * check and read again below to carry OPL's own settings over. Cleared
+     * between games.
      */
-    private const DESCRIPTION_MAX = 300;
+    private string $existing = '';
 
-    /** What OPL reads a cover at. Every file on a working drive is this size. */
-    private const COVER_WIDTH = 256;
-
-    private const COVER_HEIGHT = 368;
-
-    public function consoleKey(): string
-    {
-        return 'ps2';
+    /**
+     * Values, not constants, so a test can name one and nothing has to reach
+     * into a class to change what it reads.
+     *
+     * @param  string  $serialPrefixes  Sony's own list — SCE* published, SL**
+     *                                  licensed. Kept in step with
+     *                                  PS2_SERIAL_PREFIXES in Inspect.sh, and
+     *                                  deliberately not in config: a wrong
+     *                                  prefix silently mis-titles a library.
+     * @param  string  $configDir  OPL's own directories, which OplLayout
+     *                             scaffolds under the same names.
+     */
+    public function __construct(
+        public readonly string $serialPrefixes = 'SLUS|SLES|SLPS|SLPM|SCUS|SCES|SCPS|SCPM|SCAJ|SLKA|SCKA|SLAJ',
+        public readonly string $configDir = 'CFG',
+        public readonly string $artDir = 'ART',
+        public readonly string $coverSuffix = '_COV',
+    ) {
+        // Built here rather than promoted: PHP allows no `new` in a parameter
+        // default. The sizes live with the encoders that apply them, not in
+        // config, because "every file on a working drive is this size" is not
+        // something to invite somebody to tune.
+        $this->cover = new CoverArt(256, 368);
+        $this->text = new OplText;
     }
 
     /** @return string[] */
     public function exports(): array
     {
         return ['cfg', 'art'];
+    }
+
+    /** Only a drive arranged the way OPL expects has a CFG/ or an ART/. */
+    public function canExport(): bool
+    {
+        return $this->arrangedForOpl();
     }
 
     /**
@@ -82,9 +97,9 @@ final class PS2 extends ConsoleTools
      */
     public function inspect(GameFile $file): array
     {
-        $facts = $this->run(self::SCRIPT, [$this->absolutePath($file)]);
+        $this->file = $file;
 
-        return Arr::only($facts, ['license_id', 'cover_id', 'region', 'video_mode']);
+        return Arr::only($this->runScript(), ['license_id', 'cover_id', 'region', 'video_mode']);
     }
 
     /**
@@ -100,14 +115,11 @@ final class PS2 extends ConsoleTools
             return null;
         }
 
-        $title = $layout->titleFor($relative);
-        $stripped = preg_replace(
-            '/^('.self::SERIAL_PREFIXES.')[-_][0-9]{3}\.?[0-9]{2}[.\s_-]+/i',
+        $stripped = trim((string) preg_replace(
+            '/^('.$this->serialPrefixes.')[-_][0-9]{3}\.?[0-9]{2}[.\s_-]+/i',
             '',
-            $title,
-        );
-
-        $stripped = trim((string) $stripped);
+            $layout->titleFor($relative),
+        ));
 
         // A disc named after nothing but its serial keeps that name: an empty
         // title would slug to "game" and lose the only thing it said.
@@ -124,7 +136,7 @@ final class PS2 extends ConsoleTools
     public function serialFrom(string $filename): ?string
     {
         $matched = preg_match(
-            '/^('.self::SERIAL_PREFIXES.')[-_]([0-9]{3})\.?([0-9]{2})/i',
+            '/^('.$this->serialPrefixes.')[-_]([0-9]{3})\.?([0-9]{2})/i',
             basename($filename),
             $matches,
         );
@@ -137,20 +149,7 @@ final class PS2 extends ConsoleTools
     }
 
     /**
-     * @param  null|callable(int, int): void  $onProgress  called with (done, total) as it goes
-     * @return array{written: int, skipped: int, failed: int}
-     */
-    public function export(Console $console, string $export, bool $force = false, ?callable $onProgress = null): array
-    {
-        return match ($export) {
-            'cfg' => $this->writeGameConfigs($console, $force, $onProgress),
-            'art' => $this->writeGameArt($console, $force, $onProgress),
-            default => ['written' => 0, 'skipped' => 0, 'failed' => 0],
-        };
-    }
-
-    /**
-     * Write OPL's per-game config for every identified game on this console.
+     * Write the named export for every identified game on this console.
      *
      * A database read and a file write: the metadata is already here, which is
      * what makes this cheap enough to offer as a button. The previous build's
@@ -158,123 +157,39 @@ final class PS2 extends ConsoleTools
      *
      * @return array{written: int, skipped: int, failed: int}
      */
-    public function writeGameConfigs(Console $console, bool $force = false, ?callable $onProgress = null): array
+    public function run(): array
     {
-        return $this->exportEach($console, function (Game $game) use ($force): bool {
-            return $this->writeGameConfig($game, $force);
-        }, $onProgress);
+        return in_array($this->export, $this->exports(), true)
+            ? $this->runEach()
+            : parent::run();
     }
 
     /**
-     * Write one game's config, or decline to.
-     *
-     * False is a skip — no serial to name the file by, not identified yet, or
-     * already written. A failure throws.
-     */
-    public function writeGameConfig(Game $game, bool $force = false): bool
-    {
-        $console = $game->console();
-        $serial = $this->exportTargetFor($game, $console);
-
-        if ($console === null || $serial === null) {
-            return false;
-        }
-
-        $gate = app(LibraryPath::class);
-        $path = self::CONFIG_DIR.'/'.$serial.'.cfg';
-        $existing = $gate->get($console, $path);
-
-        // Already written. Rerunning is meant to be cheap and is meant not to
-        // fight somebody who edited a title by hand.
-        if (! $force && Str::contains($existing, 'Title=')) {
-            return false;
-        }
-
-        $gate->ensureDirectory($console, self::CONFIG_DIR);
-        $gate->put($console, $path, $this->configFor($game, $existing));
-
-        return true;
-    }
-
-    /**
-     * Re-encode each game's cached cover into the shape OPL reads.
-     *
-     * Nothing is downloaded: a game whose cover was never scraped is skipped
-     * rather than fetched, because a provider request hidden behind a file
-     * export is a quota spend nobody asked for.
+     * Run the chosen export over every game on the console, counting as it goes.
      *
      * @return array{written: int, skipped: int, failed: int}
      */
-    public function writeGameArt(Console $console, bool $force = false, ?callable $onProgress = null): array
-    {
-        return $this->exportEach($console, function (Game $game) use ($force): bool {
-            return $this->writeGameArtFor($game, $force);
-        }, $onProgress);
-    }
-
-    /** Write one game's cover, or decline to. */
-    public function writeGameArtFor(Game $game, bool $force = false): bool
-    {
-        $console = $game->console();
-        $serial = $this->exportTargetFor($game, $console);
-
-        if ($console === null || $serial === null) {
-            return false;
-        }
-
-        $game->loadMissing('media');
-        $cover = $game->artwork(MediaKind::Cover);
-
-        if ($cover === null) {
-            return false;
-        }
-
-        $gate = app(LibraryPath::class);
-        $path = self::ART_DIR.'/'.$serial.self::COVER_SUFFIX.'.png';
-
-        if (! $force && $gate->exists($console, $path)) {
-            return false;
-        }
-
-        $source = Storage::disk('media')->get($cover->path);
-
-        if (! is_string($source) || $source === '') {
-            return false;
-        }
-
-        $gate->ensureDirectory($console, self::ART_DIR);
-        $gate->put($console, $path, (new CoverArt(self::COVER_WIDTH, self::COVER_HEIGHT))->encode($source));
-
-        return true;
-    }
-
-    /**
-     * Run one export over every game on a console, counting as it goes.
-     *
-     * @param  callable(Game): bool  $export
-     * @param  null|callable(int, int): void  $onProgress  called with (done, total) after each game
-     * @return array{written: int, skipped: int, failed: int}
-     */
-    private function exportEach(Console $console, callable $export, ?callable $onProgress = null): array
+    private function runEach(): array
     {
         $counts = ['written' => 0, 'skipped' => 0, 'failed' => 0];
 
-        if (! $this->arrangedForOpl($console)) {
+        if (! $this->arrangedForOpl()) {
             return $counts;
         }
 
         // Counted up front so the caller can say twelve of nineteen rather
         // than twelve of nothing. One extra query per export, not per game.
-        $total = Game::query()->forConsole($console->key)->count();
-        $done = 0;
+        $this->total = Game::query()->forConsole($this->console->key)->count();
+        $this->done = 0;
 
-        if ($onProgress !== null) {
-            $onProgress(0, $total);
-        }
+        $this->report();
 
-        Game::query()->forConsole($console->key)->each(function (Game $game) use ($export, $onProgress, $total, &$counts, &$done): void {
+        Game::query()->forConsole($this->console->key)->each(function (Game $game) use (&$counts): void {
+            $this->game = $game;
+            $this->existing = '';
+
             try {
-                $counts[$export($game) ? 'written' : 'skipped']++;
+                $counts[$this->writeCurrent() ? 'written' : 'skipped']++;
             } catch (Throwable $e) {
                 // One unreadable cover or one unwritable file must not stop the
                 // other four hundred.
@@ -283,6 +198,7 @@ final class PS2 extends ConsoleTools
                 Log::warning('An OPL export failed for one game.', [
                     'game' => $game->id,
                     'console' => $game->console,
+                    'export' => $this->export,
                     'reason' => $e->getMessage(),
                 ]);
             }
@@ -290,66 +206,162 @@ final class PS2 extends ConsoleTools
             // Outside the try: a game that failed is still a game gone past,
             // and a bar that stalls on one unwritable cover says the wrong
             // thing about what the worker is doing.
-            $done++;
+            $this->done++;
 
-            if ($onProgress !== null) {
-                $onProgress($done, $total);
-            }
+            $this->report();
         });
+
+        $this->game = null;
+        $this->existing = '';
 
         return $counts;
     }
 
+    /** Write whichever export the chain named, for the game it is on. */
+    private function writeCurrent(): bool
+    {
+        return match ($this->export) {
+            'cfg' => $this->writeConfig(),
+            'art' => $this->writeArt(),
+            default => false,
+        };
+    }
+
     /**
-     * The serial to name an exported file after, or null where there is none.
+     * Write the current game's config, or decline to.
+     *
+     * False is a skip — no serial to name the file by, not identified yet, or
+     * already written. A failure throws.
+     */
+    private function writeConfig(): bool
+    {
+        $serial = $this->serialForCurrentGame();
+
+        if ($serial === null) {
+            return false;
+        }
+
+        $gate = app(LibraryPath::class);
+        $path = $this->configDir.'/'.$serial.'.cfg';
+        $this->existing = $gate->get($this->console, $path);
+
+        // Already written. Rerunning is meant to be cheap and is meant not to
+        // fight somebody who edited a title by hand.
+        if (! $this->force && Str::contains($this->existing, 'Title=')) {
+            return false;
+        }
+
+        $gate->ensureDirectory($this->console, $this->configDir);
+        $gate->put($this->console, $path, $this->configForCurrentGame());
+
+        return true;
+    }
+
+    /**
+     * Re-encode the current game's cached cover into the shape OPL reads.
+     *
+     * Nothing is downloaded: a game whose cover was never scraped is skipped
+     * rather than fetched, because a provider request hidden behind a file
+     * export is a quota spend nobody asked for.
+     *
+     * The file is written as JPEG, and the skip check therefore only ever asks
+     * about the JPEG. A drive written by an older build carries _COV.png for
+     * every game; those are left where they are — OPL reads them and deleting
+     * somebody's artwork is not this method's business — so the first run
+     * after the format changed re-encodes the whole library and leaves two
+     * files per game behind. Widening the check to the .png sibling would
+     * spare that at the cost of never migrating an old drive at all.
+     */
+    private function writeArt(): bool
+    {
+        $serial = $this->serialForCurrentGame();
+        $game = $this->game;
+
+        if ($serial === null || $game === null) {
+            return false;
+        }
+
+        $game->loadMissing('media');
+        $artwork = $game->artwork(MediaKind::Cover);
+
+        if ($artwork === null) {
+            return false;
+        }
+
+        $gate = app(LibraryPath::class);
+        $path = $this->artDir.'/'.$serial.$this->coverSuffix.'.'.$this->cover->format->value;
+
+        if (! $this->force && $gate->exists($this->console, $path)) {
+            return false;
+        }
+
+        $source = Storage::disk('media')->get($artwork->path);
+
+        if (! is_string($source) || $source === '') {
+            return false;
+        }
+
+        $gate->ensureDirectory($this->console, $this->artDir);
+        $gate->put($this->console, $path, $this->cover->encode($source));
+
+        return true;
+    }
+
+    /**
+     * The serial to name the current game's file after, or null where none.
      *
      * Three refusals in one: a console arranged some other way has no CFG/ or
      * ART/ to write into, a game still carrying its filename as a title would
      * write that filename back out as metadata, and a disc whose serial has not
      * been read has nothing to be named after.
      */
-    private function exportTargetFor(Game $game, ?Console $console): ?string
+    private function serialForCurrentGame(): ?string
     {
-        if ($console === null || ! $this->arrangedForOpl($console)) {
+        if ($this->game === null || ! $this->arrangedForOpl()) {
             return null;
         }
 
-        if ($game->status !== GameStatus::Matched) {
+        if ($this->game->status !== GameStatus::Matched) {
             return null;
         }
 
-        return $game->licenseId();
+        return $this->game->licenseId();
     }
 
     /** Whether this console's folder is arranged the way OPL expects. */
-    private function arrangedForOpl(Console $console): bool
+    private function arrangedForOpl(): bool
     {
-        return ConsoleSourceFolder::layoutKeyFor($console) === (new OplLayout)->key();
+        return ConsoleSourceFolder::layoutKeyFor($this->console) === (new OplLayout)->key();
     }
 
     /**
-     * The whole text of one game's config file.
+     * The whole text of the current game's config file.
      *
      * Any $-prefixed line already in the file is carried over. Those are OPL's
      * own per-game settings — $DMA, $VMC, a compatibility mask somebody worked
      * out by trial — and dropping them would quietly reset a game that ran.
      */
-    private function configFor(Game $game, string $existing): string
+    private function configForCurrentGame(): string
     {
+        $game = $this->game;
+
+        if ($game === null) {
+            return '';
+        }
+
         $fields = [
             'Title' => $game->title,
             'Genre' => (string) $game->genre,
             // Provider dates arrive as a date or a full timestamp.
             'Release' => Str::before((string) $game->release_date, 'T'),
             'Developer' => (string) $game->developer,
-            'Description' => $this->summarise((string) $game->description),
-            'Rating' => $game->rating !== null ? (string) $game->rating : '',
+            'Description' => $this->text->summarise((string) $game->description),
         ];
 
         $lines = [];
 
         foreach ($fields as $key => $value) {
-            $value = $this->oneLine($value);
+            $value = $this->text->oneLine($value);
 
             // An empty field is left out rather than written blank: OPL shows
             // the key either way, and "Developer=" reads as a missing answer.
@@ -358,7 +370,7 @@ final class PS2 extends ConsoleTools
             }
         }
 
-        $title = $this->oneLine($game->title);
+        $title = $this->text->oneLine($game->title);
 
         if ($title !== '') {
             // A comment to OPL. Kept because the files on a working drive have
@@ -366,7 +378,7 @@ final class PS2 extends ConsoleTools
             $lines[] = '#LongName='.$title;
         }
 
-        foreach ($this->userSettingsIn($existing) as $setting) {
+        foreach ($this->userSettings() as $setting) {
             $lines[] = $setting;
         }
 
@@ -374,55 +386,20 @@ final class PS2 extends ConsoleTools
     }
 
     /**
-     * OPL's own settings out of a config file we are about to overwrite.
+     * OPL's own settings out of the config file we are about to overwrite.
      *
      * @return string[]
      */
-    private function userSettingsIn(string $existing): array
+    private function userSettings(): array
     {
         $kept = [];
 
-        foreach (preg_split('/\R/', $existing) ?: [] as $line) {
+        foreach (preg_split('/\R/', $this->existing) ?: [] as $line) {
             if (Str::startsWith(trim($line), '$')) {
                 $kept[] = rtrim($line);
             }
         }
 
         return $kept;
-    }
-
-    /**
-     * A synopsis cut to what OPL will show, on a word boundary.
-     *
-     * The ellipsis is three ASCII dots rather than one character, which is what
-     * the files on a working drive carry — OPL's font has no glyph for the
-     * other one.
-     */
-    private function summarise(string $text): string
-    {
-        $text = $this->oneLine($text);
-
-        if (mb_strlen($text) <= self::DESCRIPTION_MAX) {
-            return $text;
-        }
-
-        $cut = mb_substr($text, 0, self::DESCRIPTION_MAX);
-        $lastSpace = mb_strrpos($cut, ' ');
-
-        if ($lastSpace !== false && $lastSpace > 0) {
-            $cut = mb_substr($cut, 0, $lastSpace);
-        }
-
-        return rtrim($cut, " \t.,;:!?-").'...';
-    }
-
-    /**
-     * One line of plain ASCII, because that is all OPL can draw.
-     */
-    private function oneLine(string $value): string
-    {
-        $value = (string) preg_replace('/\s+/u', ' ', $value);
-
-        return trim(Str::ascii($value));
     }
 }

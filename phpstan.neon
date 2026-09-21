@@ -22,3 +22,19 @@ parameters:
         -
             message: '#^Trait App\\Concerns\\(Password|Profile)ValidationRules is used zero times and is not analysed\.$#'
             path: app/Concerns/*.php
+
+        # A toolbox is resolved by ConsoleTools::for(), not constructed with
+        # its console: tests/Unit does not boot the application, and `new PS2`
+        # has to keep working without a container to read config from. PHP
+        # allows a readonly property to be initialised anywhere in its
+        # declaring class's scope, and for() is the only place that does it.
+        #
+        # The readonly is kept rather than dropped because it is the guard:
+        # a binding that ever became a singleton would throw here on the
+        # second resolve instead of quietly handing two callers one object.
+        -
+            identifier: property.uninitializedReadonly
+            path: app/Tools/ConsoleTools.php
+        -
+            identifier: property.readOnlyAssignNotInConstructor
+            path: app/Tools/ConsoleTools.php

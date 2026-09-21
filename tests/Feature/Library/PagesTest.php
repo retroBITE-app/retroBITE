@@ -12,10 +12,12 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\LibraryScanner;
 use App\Support\Console;
 use App\Support\ExportProgress;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
+use App\Support\Scanning\FolderCounts;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -573,4 +575,106 @@ it('says how many files an export has written, not how many jobs it queued', fun
     ExportProgress::finish('ps2', 'cfg');
 
     Livewire::test('consoles.index')->assertDontSee('Writing files');
+});
+
+/**
+ * The card counts what is on the disk, not what is in the database.
+ *
+ * A drive filled over SMB says nothing to the database until a scan runs, and
+ * a card claiming the folder is empty is the one number somebody checks
+ * against what they can see in Finder.
+ */
+it('counts the files on disk rather than the rows in the database', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
+
+    foreach (['One.iso', 'Two.iso', 'Three.iso'] as $filename) {
+        File::put($this->root.'/ps2/'.$filename, 'x');
+    }
+
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    // A row for a game nothing on this drive accounts for. The count is the
+    // disk's answer, so it says three either way.
+    Game::factory()->create(['console' => 'ps2', 'title' => 'Not on this drive']);
+
+    Livewire::test('consoles.index')->assertSee('3 games');
+});
+
+it('counts the same files the scanner would', function () {
+    foreach (['DVD', 'ART', 'CFG'] as $directory) {
+        File::ensureDirectoryExists($this->root.'/ps2/'.$directory);
+    }
+
+    File::put($this->root.'/ps2/DVD/Game.iso', 'x');
+    // The layout's furniture, and the console's own exclusion. Neither is a
+    // game, and counting them is how eleven titles become a hundred.
+    File::put($this->root.'/ps2/ART/Game_COV.jpg', 'x');
+    File::put($this->root.'/ps2/CFG/Game.cfg', 'x');
+    File::put($this->root.'/ps2/DVD/games.bin', 'x');
+
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+
+    Livewire::test('consoles.index')->assertSee('1 games');
+});
+
+it('does not count a bios dump as a game', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
+
+    File::put($this->root.'/ps2/Game.iso', 'x');
+    // PS2 lists .bin under both file_extensions and bios_extensions. The
+    // scanner resolves that in favour of the game, and so does the card.
+    File::put($this->root.'/ps2/scph39001.bin', 'x');
+
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('2 games');
+});
+
+it('does not walk the drive again on every poll', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
+    File::put($this->root.'/ps2/One.iso', 'x');
+
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('1 games');
+
+    File::put($this->root.'/ps2/Two.iso', 'x');
+
+    // Still the cached answer: the page polls itself every two seconds, and
+    // re-walking a five-thousand-file drive each time is the whole reason the
+    // count is cached at all.
+    Livewire::test('consoles.index')->assertSee('1 games');
+
+    FolderCounts::forget(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('2 games');
+});
+
+it('forgets the count once a scan has walked the folder', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
+    File::put($this->root.'/ps2/One.iso', 'x');
+
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('1 games');
+
+    File::put($this->root.'/ps2/Two.iso', 'x');
+
+    // Faked so the scan's follow-up work — a provider lookup per new game —
+    // stays out of a test that is only about the cached count.
+    Queue::fake();
+
+    (new ScanConsoleFolder('ps2'))->handle(app(LibraryScanner::class));
+
+    Livewire::test('consoles.index')->assertSee('2 games');
+});
+
+it('says nothing rather than throwing when the drive is not mounted', function () {
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    File::deleteDirectory($this->root.'/ps2');
+
+    // A card that renders is worth more than a page that does not. Finding out
+    // the mount has gone is the scan's job, not the list's.
+    Livewire::test('consoles.index')->assertSee('0 games');
 });

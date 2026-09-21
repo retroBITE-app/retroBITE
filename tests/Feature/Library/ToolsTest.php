@@ -7,7 +7,7 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Services\LibraryScanner;
 use App\Support\Console;
-use App\Tools\ConsoleTool\PS2;
+use App\Tools\ConsoleTools;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -31,6 +31,16 @@ beforeEach(function () {
 afterEach(function () {
     File::deleteDirectory($this->root);
 });
+
+/** The PS2 toolbox as every caller gets one: resolved for its console. */
+function ps2Tools(): ConsoleTools
+{
+    $tools = ConsoleTools::for(new Console('ps2'));
+
+    expect($tools)->not->toBeNull();
+
+    return $tools;
+}
 
 function ps2File(string $path = 'ps2/DVD/Castlevania (Europe).iso'): GameFile
 {
@@ -158,7 +168,7 @@ it('queues an inspection per file after a ps2 scan', function () {
 it('opens what the console config says it opens', function (string $extension, bool $handled) {
     $file = new GameFile(['extension' => $extension]);
 
-    expect(app(PS2::class)->handles($file))->toBe($handled);
+    expect(ps2Tools()->handles($file))->toBe($handled);
 })->with([
     ['iso', true],
     ['bin', true],
@@ -177,15 +187,80 @@ it('opens what the console config says it opens', function (string $extension, b
 it('follows the config rather than a copy of it', function () {
     $bin = new GameFile(['extension' => 'bin']);
 
-    expect(app(PS2::class)->handles($bin))->toBeTrue();
+    expect(ps2Tools()->handles($bin))->toBeTrue();
 
     config()->set('consoles.ps2.toolbox_file_extensions', ['iso']);
 
-    expect(app(PS2::class)->handles($bin))->toBeFalse();
+    // Resolved again, not reused: the toolbox holds the Console it was built
+    // with, so the snapshot is per-instance and a config change is picked up
+    // by the next caller rather than by the one already holding one.
+    expect(ps2Tools()->handles($bin))->toBeFalse();
 });
 
 it('opens nothing for a console that declares nothing', function () {
     config()->set('consoles.ps2.toolbox_file_extensions', []);
 
-    expect(app(PS2::class)->handles(new GameFile(['extension' => 'iso'])))->toBeFalse();
+    expect(ps2Tools()->handles(new GameFile(['extension' => 'iso'])))->toBeFalse();
+});
+
+/**
+ * The chain carries per-call state, which is the one thing that could leak
+ * between two callers in a request. for() clones, so it cannot.
+ */
+it('gives each caller a toolbox of its own', function () {
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+
+    $forceful = ps2Tools()->export('cfg')->force();
+    $ordinary = ps2Tools()->export('cfg');
+
+    expect($forceful)->not->toBe($ordinary);
+
+    // Nothing to write for either — no games — but the flag being separate is
+    // the assertion, and a shared instance would have handed the second one
+    // the first one's export and force.
+    expect($ordinary->run())->toBe(['written' => 0, 'skipped' => 0, 'failed' => 0]);
+});
+
+it('knows which console it serves without being told', function () {
+    $tools = ps2Tools();
+
+    // The registry in config/console_tools.php already filed this class under
+    // 'ps2'. Asking the class to repeat it was one more place to get wrong.
+    expect($tools->consoleKey)->toBe('ps2')
+        ->and($tools->console->key)->toBe('ps2');
+});
+
+it('resolves nothing for a registry entry that is not a toolbox', function () {
+    config()->set('console_tools.consoles.ps2', stdClass::class);
+
+    expect(ConsoleTools::for(new Console('ps2')))->toBeNull();
+});
+
+it('resolves nothing for a console with no toolbox at all', function () {
+    expect(ConsoleTools::for(new Console('snes')))->toBeNull();
+});
+
+it('runs the script the config names, from the directory it names', function () {
+    Process::fake(['*' => Process::result('license_id'."\t".'SLES_503.86')]);
+
+    config()->set('console_tools.scripts_path', 'app/Scripts');
+    config()->set('console_tools.script', 'Inspect.sh');
+
+    $facts = ps2Tools()->inspect(ps2File());
+
+    expect($facts)->toBe(['license_id' => 'SLES_503.86']);
+
+    Process::assertRan(function ($process) {
+        return $process->path === base_path('app/Scripts/PS2')
+            && $process->command[0] === 'bash'
+            && $process->command[1] === 'Inspect.sh';
+    });
+});
+
+it('offers an export only on a drive arranged for the loader', function () {
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+    expect(ps2Tools()->canExport())->toBeTrue();
+
+    ConsoleSourceFolder::setLayout(new Console('ps2'), 'custom');
+    expect(ps2Tools()->canExport())->toBeFalse();
 });

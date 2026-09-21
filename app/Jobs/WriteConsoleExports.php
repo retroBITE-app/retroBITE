@@ -64,7 +64,10 @@ class WriteConsoleExports implements ShouldQueue
         }
 
         try {
-            $counts = $tools->export($console, $this->export, $this->force, $this->reporter());
+            $counts = $tools->export($this->export)
+                ->force($this->force)
+                ->onProgress($this->reporter())
+                ->run();
         } finally {
             // However this ends, the page stops being told an export is running.
             ExportProgress::finish($console->key, $this->export);

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\GameStatus;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\WriteConsoleExports;
 use App\Models\ConsoleSourceFolder;
@@ -8,6 +9,7 @@ use App\Support\Console;
 use App\Support\ExportProgress;
 use App\Support\Layouts\Layouts;
 use App\Support\LibraryPath;
+use App\Support\Scanning\FolderCounts;
 use App\Support\Scanning\LibraryFolders;
 use App\Tools\ConsoleTools;
 use Flux\Flux;
@@ -52,29 +54,36 @@ new #[Title('Consoles')] class extends Component
      * leaves a hundred folders behind, and listing all of them buries the four
      * that hold games.
      *
+     * The count comes off the disk, not out of the database. Somebody who has
+     * just dropped forty ISOs on the share should see forty, and the row count
+     * says nothing until a scan has run. Identified has no on-disk answer —
+     * it is what the provider knew — so that half stays a query.
+     *
      * @return Collection<int, array<string, mixed>>
      */
     #[Computed]
     public function added(): Collection
     {
-        $counts = Game::query()
-            ->selectRaw('console, count(*) as games, sum(status = ?) as identified', ['matched'])
+        $identified = Game::query()
+            ->where('status', GameStatus::Matched)
+            ->selectRaw('console, count(*) as total')
             ->groupBy('console')
-            ->get()
-            ->keyBy('console');
+            ->pluck('total', 'console');
 
-        return ConsoleSourceFolder::consoles()->map(fn (Console $console) => [
-            'console' => $console,
-            'games' => (int) ($counts[$console->key]->games ?? 0),
-            'identified' => (int) ($counts[$console->key]->identified ?? 0),
-            'folder' => ConsoleSourceFolder::pathFor($console),
-            // Only where there was a choice to make. For the 134 consoles that
-            // know one arrangement it would say the same thing on every card
-            // and mean nothing.
-            'layout' => count(Layouts::keysFor($console)) > 1
-                ? ConsoleSourceFolder::layoutFor($console)->label()
-                : null,
-        ])->values();
+        return ConsoleSourceFolder::consoles()->map(function (Console $console) use ($identified): array {
+            return [
+                'console' => $console,
+                'games' => FolderCounts::gamesIn($console),
+                'identified' => (int) $identified->get($console->key, 0),
+                'folder' => ConsoleSourceFolder::pathFor($console),
+                // Only where there was a choice to make. For the 134 consoles
+                // that know one arrangement it would say the same thing on
+                // every card and mean nothing.
+                'layout' => count(Layouts::keysFor($console)) > 1
+                    ? ConsoleSourceFolder::layoutFor($console)->label()
+                    : null,
+            ];
+        })->values();
     }
 
     /**
@@ -517,15 +526,18 @@ new #[Title('Consoles')] class extends Component
     /**
      * The exports a console can write, for the card menu.
      *
+     * Which arrangement an export needs is the toolbox's own question — it is
+     * the class that writes the files — so the layout key is not spelled out
+     * here. Offering an item that then does nothing reads worse than not
+     * offering it.
+     *
      * @return string[]
      */
     public function exportsFor(Console $console): array
     {
-        if (ConsoleSourceFolder::layoutKeyFor($console) !== 'opl') {
-            return [];
-        }
+        $tools = ConsoleTools::for($console);
 
-        return ConsoleTools::for($console)?->exports() ?? [];
+        return $tools !== null && $tools->canExport() ? $tools->exports() : [];
     }
 
     /** Queue a scan. Never runs here: a large library takes minutes to walk. */
@@ -616,7 +628,11 @@ new #[Title('Consoles')] class extends Component
                             <p class="truncate font-medium text-fg-bright">{{ $row['console']->name }}</p>
                             <p class="mt-0.5 truncate text-sm text-fg-faint">
                                 {{ $row['games'] }} {{ __('games') }}
-                                @if ($row['games'] > 0)
+                                {{-- Gated on the identified count, not the file count: the
+                                     files are read off the disk and go to zero when a drive
+                                     is unmounted, which is no reason to hide what the
+                                     provider already told us. --}}
+                                @if ($row['identified'] > 0)
                                     · {{ $row['identified'] }} {{ __('identified') }}
                                 @endif
                             </p>

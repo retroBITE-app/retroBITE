@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tools;
 
+use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\Layouts\ConsoleLayout;
+use App\Support\Scanning\LibraryFolders;
+use Closure;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -24,19 +27,151 @@ use Illuminate\Support\Str;
  *
  * A console without a toolbox is the ordinary case. Every caller resolves one
  * with for() and does nothing when it comes back null.
+ *
+ * Built by chaining, and everything the work needs is declared here rather than
+ * threaded through argument lists:
+ *
+ *     ConsoleTools::for($console)->export('cfg')->force()->onProgress($fn)->run();
+ *
+ * The setters mutate rather than clone, which is safe because for() hands back
+ * a fresh instance every time — the sharing is closed at the one boundary that
+ * could leak it, and an idiom that returned copies would only pretend two
+ * chains off the same variable were independent.
  */
 abstract class ConsoleTools
 {
-    /**
-     * Where every console's toolbox answers: app/Scripts/{KEY}/Inspect.sh.
-     *
-     * One name, so adding a toolbox later means writing one file at a known
-     * path rather than inventing a name and wiring it up.
-     */
-    protected const SCRIPT = 'Inspect.sh';
+    /** The config/consoles key the registry filed this toolbox under. Set by for(). */
+    public readonly string $consoleKey;
 
-    /** The config/consoles key this toolbox serves. */
-    abstract public function consoleKey(): string;
+    /** The console this toolbox is working on. Set by for(). */
+    public readonly Console $console;
+
+    /** Where this console's scripts live, e.g. /app/app/Scripts/PS2. Set by for(). */
+    protected readonly string $scriptsPath;
+
+    /** The one entry point every toolbox answers on, from config. Set by for(). */
+    protected readonly string $script;
+
+    /** Seconds one script may run for. Set by for(). */
+    protected readonly int $timeout;
+
+    /** Which of exports() run() will write. Empty until export() names one. */
+    protected string $export = '';
+
+    /** Whether run() rewrites files that are already there. */
+    protected bool $force = false;
+
+    /** Called with (done, total) as run() goes, or null when nobody is watching. */
+    protected ?Closure $onProgress = null;
+
+    /** The game the current write is about. Set by run(), read by the writers. */
+    protected ?Game $game = null;
+
+    /** How many games the current run has been past, and how many there are. */
+    protected int $done = 0;
+
+    protected int $total = 0;
+
+    /** The file the current inspection is about. Set by inspect(). */
+    protected ?GameFile $file = null;
+
+    /**
+     * The toolbox for a console, ready to be told what to do, or null where
+     * none is registered.
+     */
+    public static function for(Console $console): ?self
+    {
+        $class = Arr::get((array) config('console_tools.consoles', []), $console->key);
+
+        if (! is_string($class) || ! class_exists($class)) {
+            return null;
+        }
+
+        $tools = app($class);
+
+        if (! $tools instanceof self) {
+            Log::warning('A console_tools entry is not a toolbox.', [
+                'console' => $console->key,
+                'class' => $class,
+            ]);
+
+            return null;
+        }
+
+        // Cloned rather than handed straight back: the chain carries per-call
+        // state on the instance, so a binding that ever became a singleton
+        // would put two exports in one request on the same object.
+        $tools = clone $tools;
+
+        // Written here rather than in a constructor, because tests/Unit does
+        // not boot the application and `new PS2` has to keep working without
+        // one. A readonly property may be initialised anywhere in its
+        // declaring class's scope, and this is the only place that does it.
+        $tools->consoleKey = $console->key;
+        $tools->console = $console;
+        $tools->scriptsPath = base_path(
+            trim((string) config('console_tools.scripts_path', 'app/Scripts'), '/')
+            .'/'.Str::upper($console->key),
+        );
+        $tools->script = (string) config('console_tools.script', 'Inspect.sh');
+        $tools->timeout = (int) config('console_tools.timeout', 900);
+
+        return $tools;
+    }
+
+    /** Which of exports() run() will write. */
+    public function export(string $export): static
+    {
+        $this->export = $export;
+
+        return $this;
+    }
+
+    /** Rewrite what is already there, rather than stepping over it. */
+    public function force(bool $force = true): static
+    {
+        $this->force = $force;
+
+        return $this;
+    }
+
+    /**
+     * Watch the export go past.
+     *
+     * @param  callable(int, int): void  $onProgress  called with (done, total)
+     */
+    public function onProgress(callable $onProgress): static
+    {
+        $this->onProgress = Closure::fromCallable($onProgress);
+
+        return $this;
+    }
+
+    /**
+     * Write the chosen export into the console's folder.
+     *
+     * Zeros here, which is the honest answer for a console with no loader to
+     * write for. Declared so a caller can ask any toolbox for any export and
+     * be told nothing happened, rather than having to know what it is holding.
+     *
+     * @return array{written: int, skipped: int, failed: int}
+     */
+    public function run(): array
+    {
+        return ['written' => 0, 'skipped' => 0, 'failed' => 0];
+    }
+
+    /**
+     * Whether this console's folder is arranged the way this toolbox writes for.
+     *
+     * True here: a toolbox that writes nothing cannot write it into the wrong
+     * shape. The menu asks before it offers an export, so the one class that
+     * knows which arrangement it needs is the one that answers.
+     */
+    public function canExport(): bool
+    {
+        return true;
+    }
 
     /**
      * Whether this toolbox can say anything about that file.
@@ -49,11 +184,9 @@ abstract class ConsoleTools
      */
     public function handles(GameFile $file): bool
     {
-        $console = Console::tryFrom($this->consoleKey());
-
-        return $console !== null && in_array(
+        return in_array(
             Str::lower($file->extension),
-            array_map('strtolower', $console->toolboxFileExtensions),
+            array_map('strtolower', $this->console->toolboxFileExtensions),
             true,
         );
     }
@@ -63,7 +196,9 @@ abstract class ConsoleTools
      *
      * Keys map onto game_files columns. An empty array means nothing was
      * learned, which is an ordinary answer for a file that is not what it
-     * looked like.
+     * looked like. Takes the file rather than reading one off the chain
+     * because it is a public entry point and its caller has just asked
+     * handles() about the same file.
      *
      * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string}
      */
@@ -83,28 +218,15 @@ abstract class ConsoleTools
     }
 
     /**
-     * Write one of the files exports() names, into the console's folder.
-     *
-     * Declared here so a caller can ask any toolbox for any export and be told
-     * nothing happened, rather than having to know which class it is holding.
-     * The base writes nothing, which is the honest answer for a console with
-     * no loader to write for.
-     *
-     * @param  null|callable(int, int): void  $onProgress  called with (done, total) as it goes
-     * @return array{written: int, skipped: int, failed: int}
-     */
-    public function export(Console $console, string $export, bool $force = false, ?callable $onProgress = null): array
-    {
-        return ['written' => 0, 'skipped' => 0, 'failed' => 0];
-    }
-
-    /**
      * This console's own reading of a filename under that layout.
      *
      * Null means no opinion, and the layout's own answer stands. The hook
      * exists for conventions that belong to a console and a layout together —
      * a PS2 serial prefix means nothing on a RetroArch drive and nothing at all
      * on a SNES one, so neither side can own it alone.
+     *
+     * Stateless, and takes both: the scanner calls it once per file and holds
+     * one toolbox for the whole walk.
      */
     public function titleFor(ConsoleLayout $layout, string $relative): ?string
     {
@@ -112,39 +234,28 @@ abstract class ConsoleTools
     }
 
     /**
-     * The toolbox for a console, or null where none is registered.
+     * Tell whoever is watching how far the current run has got.
+     *
+     * Reads the counters off the chain rather than taking them, so a progress
+     * report cannot disagree with the run it is reporting on.
      */
-    public static function for(Console $console): ?self
+    protected function report(): void
     {
-        $class = Arr::get((array) config('console_tools.consoles', []), $console->key);
-
-        if (! is_string($class) || ! class_exists($class)) {
-            return null;
+        if ($this->onProgress !== null) {
+            ($this->onProgress)($this->done, $this->total);
         }
-
-        $tools = app($class);
-
-        return $tools instanceof self ? $tools : null;
     }
 
     /**
-     * Where this console's scripts live, e.g. app/Scripts/PS2.
+     * The current file's absolute path, from the path relative to the library.
      */
-    protected function scriptsPath(): string
+    protected function absolutePath(): string
     {
-        return base_path('app/Scripts/'.Str::upper($this->consoleKey()));
+        return LibraryFolders::root().'/'.($this->file->path ?? '');
     }
 
     /**
-     * A file's absolute path, from the path relative to the library root.
-     */
-    protected function absolutePath(GameFile $file): string
-    {
-        return rtrim((string) config('settings.games_path'), '/').'/'.$file->path;
-    }
-
-    /**
-     * Run one of this console's scripts and read its tab-separated output.
+     * Run this console's script over the current file and read its output.
      *
      * Passed as an argument list rather than a command string, so there is no
      * shell between here and the script and nothing to escape. Exit 1 is the
@@ -152,14 +263,18 @@ abstract class ConsoleTools
      * anything higher is logged. stderr is never returned — it carries
      * absolute container paths, and nothing that leaves this method should.
      *
-     * @param  string[]  $arguments
+     * Takes nothing: the script, its directory, its timeout and its one
+     * argument are all on the chain. A toolbox that ever needs a second
+     * argument should declare it as a property rather than reopen this
+     * signature.
+     *
      * @return array<string, string>
      */
-    protected function run(string $script, array $arguments): array
+    protected function runScript(): array
     {
-        $result = Process::path($this->scriptsPath())
-            ->timeout((int) config('console_tools.timeout', 900))
-            ->run(array_merge(['bash', $script], $arguments));
+        $result = Process::path($this->scriptsPath)
+            ->timeout($this->timeout)
+            ->run(['bash', $this->script, $this->absolutePath()]);
 
         if ($result->exitCode() === 1) {
             return [];
@@ -167,8 +282,8 @@ abstract class ConsoleTools
 
         if ($result->failed()) {
             Log::warning('A console tool did not finish.', [
-                'console' => $this->consoleKey(),
-                'script' => $script,
+                'console' => $this->consoleKey,
+                'script' => $this->script,
                 'exit_code' => $result->exitCode(),
             ]);
 
@@ -180,6 +295,10 @@ abstract class ConsoleTools
 
     /**
      * Tab-separated key/value lines into an array.
+     *
+     * Keeps its argument: a pure text transform with one caller threads no
+     * state down anything, and a scratch property to hold the output would be
+     * state where there is none.
      *
      * @return array<string, string>
      */
