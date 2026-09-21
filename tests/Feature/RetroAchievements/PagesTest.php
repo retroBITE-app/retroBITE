@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AchievementKind;
 use App\Enums\RetroAchievementsStatus;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
@@ -50,18 +51,20 @@ function gameWithProgress(int $unlocked, int $possible, array $progress = []): G
     return $game;
 }
 
-it('shows progress on the shelf', function () {
+it('shows progress on the shelf, hardcore by default', function () {
+    // 31 unlocked, 15 of them hardcore. Hardcore is the figure the site
+    // itself leads with, so it is the one the shelf shows unless told not to.
     gameWithProgress(31, 49);
-
-    Livewire::test('games.index')->assertSee('31 / 49');
-});
-
-it('leads with hardcore when the setting says so', function () {
-    gameWithProgress(31, 49);
-
-    AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, true);
 
     Livewire::test('games.index')->assertSee('15 / 49')->assertDontSee('31 / 49');
+});
+
+it('falls back to softcore when the setting says so', function () {
+    gameWithProgress(31, 49);
+
+    AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, false);
+
+    Livewire::test('games.index')->assertSee('31 / 49')->assertDontSee('15 / 49');
 });
 
 it('shows nothing where there is no set', function () {
@@ -137,6 +140,90 @@ it('filters the achievement list', function () {
         ->assertDontSee('Already Done');
 });
 
+it('narrows the list by kind, on its own axis', function () {
+    $game = gameWithProgress(1, 4);
+
+    RaAchievement::factory()->create([
+        'ra_game_id' => $game->retroachievements_id, 'title' => 'Ordinary Business', 'kind' => null,
+    ]);
+    $found = RaAchievement::factory()->create([
+        'ra_game_id' => $game->retroachievements_id,
+        'title' => 'Already Spotted It',
+        'kind' => AchievementKind::Missable,
+    ]);
+    RaAchievement::factory()->create([
+        'ra_game_id' => $game->retroachievements_id,
+        'title' => 'Blink And Its Gone',
+        'kind' => AchievementKind::Missable,
+    ]);
+    // The win condition is the last step of beating the game, so Progression
+    // counts it rather than listing a path that stops before the end.
+    RaAchievement::factory()->create([
+        'ra_game_id' => $game->retroachievements_id,
+        'title' => 'Beat The Final Boss',
+        'kind' => AchievementKind::WinCondition,
+    ]);
+
+    RaUnlock::factory()->forAchievement($found)->create(['user_id' => $this->user->id]);
+
+    Livewire::test('games.show', ['game' => $game])
+        ->assertSeeInOrder(['Missable', '2', 'Progression', '1'])
+        ->call('toggleKind', 'missable')
+        ->assertSee('Blink And Its Gone')
+        ->assertSee('Already Spotted It')
+        ->assertDontSee('Ordinary Business')
+        ->assertDontSee('Beat The Final Boss')
+        // The axes are ANDed: what is still there to lose.
+        ->call('filterAchievements', 'locked')
+        ->assertSee('Blink And Its Gone')
+        ->assertDontSee('Already Spotted It')
+        // And the kind is a toggle, so the state filter survives it going off.
+        ->call('toggleKind', 'missable')
+        ->assertSet('achievementKind', '')
+        ->assertSee('Blink And Its Gone')
+        ->assertSee('Ordinary Business')
+        ->assertDontSee('Already Spotted It');
+
+    // Both axes are linkable, and they combine in the URL.
+    $this->get(route('games.show', $game).'?achievements=locked&kind=missable')
+        ->assertOk()
+        ->assertSee('Blink And Its Gone')
+        ->assertDontSee('Already Spotted It')
+        ->assertDontSee('Ordinary Business');
+});
+
+it('offers a kind only to a set that marks one', function () {
+    $game = gameWithProgress(0, 1);
+
+    RaAchievement::factory()->create([
+        'ra_game_id' => $game->retroachievements_id, 'title' => 'Nothing Special', 'kind' => null,
+    ]);
+
+    // No button, and a link into one narrows nothing rather than emptying
+    // the panel on a filter the page cannot show as being on.
+    $this->get(route('games.show', $game).'?kind=missable')
+        ->assertOk()
+        ->assertDontSee('Missable')
+        ->assertSee('Nothing Special');
+});
+
+it('says which kind of empty the panel is', function () {
+    $game = gameWithProgress(0, 1);
+
+    RaAchievement::factory()->create([
+        'ra_game_id' => $game->retroachievements_id,
+        'title' => 'Blink And Its Gone',
+        'kind' => AchievementKind::Missable,
+    ]);
+
+    // A filter that matches nothing is not a set that has not arrived yet.
+    Livewire::test('games.show', ['game' => $game])
+        ->call('toggleKind', 'missable')
+        ->call('filterAchievements', 'unlocked')
+        ->assertSee('No achievement matches both filters.')
+        ->assertDontSee('The set is fetched in the background.');
+});
+
 it('renders the whole way with the network down', function () {
     $game = gameWithProgress(31, 49);
 
@@ -163,5 +250,6 @@ it('totals a console on the console list', function () {
 
     gameWithProgress(31, 49);
 
-    $this->get(route('consoles.index'))->assertOk()->assertSee('31 / 49');
+    // Hardcore, for the same reason the shelf shows it.
+    $this->get(route('consoles.index'))->assertOk()->assertSee('15 / 49');
 });

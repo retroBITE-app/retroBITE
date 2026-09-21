@@ -12,7 +12,7 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Integrations')] class extends Component
+new #[Title('RetroAchievements')] class extends Component
 {
     public string $username = '';
 
@@ -25,7 +25,7 @@ new #[Title('Integrations')] class extends Component
      */
     public string $apiKey = '';
 
-    public bool $hardcorePrimary = false;
+    public bool $hardcorePrimary = true;
 
     public function mount(): void
     {
@@ -33,11 +33,25 @@ new #[Title('Integrations')] class extends Component
         $this->hardcorePrimary = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
     }
 
+    /** A key typed in here, which is the only one this screen can remove. */
+    #[Computed]
+    public function hasStoredKey(): bool
+    {
+        return AppSetting::getSecret(AppSetting::RA_API_KEY) !== null;
+    }
+
+    /** Seeded from the environment for a headless install. */
+    #[Computed]
+    public function hasEnvKey(): bool
+    {
+        return (string) config('retroachievements.api_key_fallback', '') !== '';
+    }
+
+    /** A key the API can be called with, from wherever it came. */
     #[Computed]
     public function hasKey(): bool
     {
-        return AppSetting::getSecret(AppSetting::RA_API_KEY) !== null
-            || (string) config('retroachievements.api_key_fallback', '') !== '';
+        return $this->hasStoredKey || $this->hasEnvKey;
     }
 
     #[Computed]
@@ -87,7 +101,7 @@ new #[Title('Integrations')] class extends Component
             AppSetting::putSecret(AppSetting::RA_API_KEY, $this->apiKey);
             $this->apiKey = '';
 
-            unset($this->hasKey);
+            unset($this->hasStoredKey, $this->hasKey);
         }
 
         // Null means the question could not be put — no key yet, or the
@@ -105,18 +119,27 @@ new #[Title('Integrations')] class extends Component
 
         AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, $this->hardcorePrimary);
 
-        unset($this->hasKey, $this->linked);
+        unset($this->hasStoredKey, $this->hasKey, $this->linked);
 
-        Flux::toast(variant: 'success', text: __('Integration settings saved.'));
+        Flux::toast(variant: 'success', text: __('Settings saved.'));
     }
 
+    /**
+     * Drop the stored key.
+     *
+     * Only ever the stored one: a key in the environment belongs to whoever
+     * deployed the container, and a button in here cannot reach it. Said out
+     * loud rather than left as a button that appears to do nothing.
+     */
     public function forgetKey(): void
     {
         AppSetting::putSecret(AppSetting::RA_API_KEY, null);
 
-        unset($this->hasKey, $this->linked);
+        unset($this->hasStoredKey, $this->hasKey, $this->linked);
 
-        Flux::toast(variant: 'success', text: __('API key removed.'));
+        Flux::toast(variant: 'success', text: $this->hasEnvKey
+            ? __('Stored key removed. The one in the environment is in use again.')
+            : __('API key removed.'));
     }
 
     public function syncProgress(bool $full = false): void
@@ -140,17 +163,19 @@ new #[Title('Integrations')] class extends Component
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout :heading="__('Integrations')" :subheading="__('The outside services retroBite talks to')">
+    <x-settings.layout :heading="__('RetroAchievements')" :subheading="__('Achievements, the hash index and your progress')">
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="integration-settings">{{ __('Save') }}</flux:button>
+            <flux:button variant="primary" type="submit" form="retroachievements-settings">{{ __('Save') }}</flux:button>
         </x-slot>
 
-        <form id="integration-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <form id="retroachievements-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div class="flex flex-col gap-6 lg:col-span-6">
                 <div class="rounded-xl border border-line bg-surface p-5">
                     <div class="mb-4 flex items-center gap-2.5">
                         <flux:icon.trophy class="size-[17px] text-accent" />
-                        <p class="flex-1 text-sm text-fg-bright">{{ __('RetroAchievements') }}</p>
+                        {{-- Not 'RetroAchievements': the screen is called that
+                             now, and this card is the account within it. --}}
+                        <p class="flex-1 text-sm text-fg-bright">{{ __('Account') }}</p>
                         <span @class([
                             'kicker rounded-md border px-1.75 py-0.75',
                             'border-accent/40 text-accent' => $this->linked,
@@ -165,11 +190,16 @@ new #[Title('Integrations')] class extends Component
 
                         <flux:input wire:model="apiKey" type="password" :label="__('API key')"
                                     :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From your RetroAchievements control panel')"
-                                    :description="__('Kept encrypted in the database and never shown again once saved.')" />
+                                    :description="$this->hasEnvKey && ! $this->hasStoredKey
+                                        ? __('Set in the environment. A key typed here is kept encrypted in the database and takes over from it.')
+                                        : __('Kept encrypted in the database and never shown again once saved.')" />
 
-                        @if ($this->hasKey)
+                        {{-- Only for a key this screen put there. The one in
+                             the environment is the operator's, and no button
+                             here can reach it. --}}
+                        @if ($this->hasStoredKey)
                             <div>
-                                <flux:button size="xs" variant="ghost" wire:click="forgetKey" type="button">
+                                <flux:button size="xs" variant="danger" wire:click="forgetKey" type="button">
                                     {{ __('Remove stored key') }}
                                 </flux:button>
                             </div>
@@ -177,7 +207,7 @@ new #[Title('Integrations')] class extends Component
 
                         <flux:switch wire:model="hardcorePrimary"
                                      :label="__('Lead with hardcore')"
-                                     :description="__('Hardcore is a mode in the emulator, which retroBite cannot switch on. What this decides is which figure the shelf, the console totals and the dashboard show. The game page always shows both.')" />
+                                     :description="__('Show your hardcore score rather than your softcore one.')" />
                     </div>
                 </div>
             </div>
@@ -211,16 +241,30 @@ new #[Title('Integrations')] class extends Component
                 <div class="rounded-xl border border-line bg-surface p-5">
                     <p class="kicker mb-1 text-fg-faint">{{ __('Progress') }}</p>
                     <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('Pulled every quarter of an hour and reconciled in full overnight. These queue the same work now.') }}
+                        {{ __('Both run on a schedule — recent unlocks every quarter of an hour, the reconcile overnight. These queue the same work now.') }}
                     </p>
 
-                    <div class="flex flex-wrap gap-2">
-                        <flux:button size="sm" variant="filled" type="button" wire:click="syncProgress(false)">
-                            {{ __('Sync recent unlocks') }}
-                        </flux:button>
-                        <flux:button size="sm" variant="ghost" type="button" wire:click="syncProgress(true)">
-                            {{ __('Reconcile everything') }}
-                        </flux:button>
+                    {{-- Two buttons because they answer different questions,
+                         and one of them is dear. Said on the page rather than
+                         left to be guessed from the labels. --}}
+                    <div class="flex flex-col gap-3">
+                        <div>
+                            <flux:button size="sm" variant="filled" type="button" wire:click="syncProgress(false)">
+                                {{ __('Sync recent unlocks') }}
+                            </flux:button>
+                            <p class="mt-1.5 text-xs text-fg-faint">
+                                {{ __('One request for everything you have unlocked since the last run. Cheap, and what the schedule uses.') }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <flux:button size="sm" variant="ghost" type="button" wire:click="syncProgress(true)">
+                                {{ __('Reconcile everything') }}
+                            </flux:button>
+                            <p class="mt-1.5 text-xs text-fg-faint">
+                                {{ __('Compares every game against RetroAchievements and re-fetches the ones that disagree. Catches revoked unlocks, re-scored sets and anything a long outage missed.') }}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

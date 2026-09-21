@@ -91,7 +91,15 @@ exist until the platform fetched it, and it can be deleted and fetched again
 without anything being lost.
 
 **Media type** — the provider's own name for a kind of artwork. Kept as the
-provider writes it.
+provider writes it. One slot per type *and* region: a game may hold the same
+cover from four regions on purpose, but never two European ones, so fetching
+again replaces a revised copy without touching the other regions.
+
+**Media region** — which region's artwork a game shows. Distinct from the
+game's `region`, which is the ROM's own: a Japanese import can be the copy
+somebody owns while the English box is the one they want to look at. Null is
+the ordinary state and means "whatever Settings says", so changing the
+library-wide preference still moves every game that has not been spoken for.
 
 **Display role** — what a piece of artwork is *for* in the interface: a cover,
 a logo, a backdrop. Several media types can fill one role, which is how a game

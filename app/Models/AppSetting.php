@@ -66,12 +66,12 @@ class AppSetting extends Model
     public const RA_API_KEY = 'ra_api_key';
 
     /**
-     * Whether hardcore is the figure the interface leads with.
+     * Which score the interface shows: hardcore, or softcore.
      *
-     * A presentation choice and nothing more. The toggle is labelled after
-     * RetroAchievements' emulator mode, which retroBite has no way to control;
-     * what it actually decides is which column drives the progress bars, the
-     * per-console totals and the dashboard. The game page always shows both.
+     * A presentation choice and nothing more — hardcore is a mode in the
+     * emulator, which retroBite cannot switch on. On by default, because it
+     * is the figure RetroAchievements itself leads with. The game page shows
+     * both whatever this says.
      */
     public const RA_HARDCORE_PRIMARY = 'ra_hardcore_primary';
 
@@ -88,7 +88,7 @@ class AppSetting extends Model
         self::MEDIA_REGION => '',
         self::UI_SCANLINES => true,
         self::UI_GAMES_VIEW => 'cards',
-        self::RA_HARDCORE_PRIMARY => false,
+        self::RA_HARDCORE_PRIMARY => true,
     ];
 
     /**

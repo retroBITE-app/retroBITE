@@ -11,27 +11,10 @@ return [
 
     'labels' => [
         'ss' => 'ScreenScraper default',
-        'wor' => 'World',
         'eu' => 'Europe',
-        'us' => 'United States',
         'jp' => 'Japan',
-        'uk' => 'United Kingdom',
-        'fr' => 'France',
-        'de' => 'Germany',
-        'sp' => 'Spain',
-        'it' => 'Italy',
-        'se' => 'Sweden',
-        'no' => 'Norway',
-        'dk' => 'Denmark',
-        'fi' => 'Finland',
-        'nl' => 'Netherlands',
-        'au' => 'Australia',
-        'br' => 'Brazil',
-        'kr' => 'Korea',
-        'cn' => 'China',
-        'asi' => 'Asia',
-        'ame' => 'Americas',
-        'oce' => 'Oceania',
+        'us' => 'United States',
+        'wor' => 'World',
     ],
 
     /*
@@ -51,14 +34,10 @@ return [
     'icons' => [
         // The provider's own neutral entry is a world release in practice.
         'ss' => '/images/regions/world.png',
-        'wor' => '/images/regions/world.png',
         'eu' => '/images/regions/eu.png',
-        'us' => '/images/regions/usa.png',
         'jp' => '/images/regions/japan.png',
-        'se' => '/images/regions/scandinavia.png',
-        'no' => '/images/regions/scandinavia.png',
-        'dk' => '/images/regions/scandinavia.png',
-        'fi' => '/images/regions/scandinavia.png',
+        'us' => '/images/regions/usa.png',
+        'wor' => '/images/regions/world.png',
     ],
 
 ];

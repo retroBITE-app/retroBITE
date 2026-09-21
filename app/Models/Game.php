@@ -7,6 +7,7 @@ use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Enums\RetroAchievementsStatus;
 use App\Support\Console;
+use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -42,6 +43,7 @@ use Illuminate\Support\Collection;
  * @property string|null $publisher
  * @property string|null $developer
  * @property string|null $region
+ * @property string|null $media_region
  * @property Carbon|null $matched_at
  * @property Carbon|null $retroachievements_matched_at
  * @property Carbon|null $created_at
@@ -51,7 +53,7 @@ use Illuminate\Support\Collection;
  */
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
-    'release_date', 'genre', 'players', 'publisher', 'developer', 'region',
+    'release_date', 'genre', 'players', 'publisher', 'developer', 'region', 'media_region',
     'matched_at', 'retroachievements_id', 'retroachievements_status',
     'retroachievements_matched_at',
 ])]
@@ -99,21 +101,39 @@ class Game extends Model
      * One piece of artwork of a kind, in the enum's preference order.
      *
      * Reads the relation rather than querying, so an eager-loaded page asks for
-     * a cover, a logo and a backdrop without three more round trips. Two of the
-     * same type break the tie on file size: the provider holds the same picture
-     * at several resolutions, and the biggest is the one worth showing.
+     * a cover, a logo and a backdrop without three more round trips.
+     *
+     * Region decides before size does. A game can hold the same cover from
+     * four regions at once — that is the point of being able to fetch another
+     * one — and without this the biggest file wins, which is how somebody who
+     * asked for the Japanese box keeps being shown the European one.
      */
     public function artwork(MediaKind $kind): ?Media
     {
         $order = array_flip($kind->screenScraperTypes());
+        $regions = array_flip(MediaRegions::chainFor($this->media_region));
 
         return $this->media
             ->filter(fn (Media $media) => Arr::has($order, $media->screenscraper_type))
             ->sortBy([
                 fn (Media $a, Media $b) => Arr::get($order, $a->screenscraper_type) <=> Arr::get($order, $b->screenscraper_type),
+                fn (Media $a, Media $b) => $this->regionRank($a, $regions) <=> $this->regionRank($b, $regions),
                 fn (Media $a, Media $b) => (int) $b->size_bytes <=> (int) $a->size_bytes,
             ])
             ->first();
+    }
+
+    /**
+     * How far down the chain this artwork's region sits.
+     *
+     * A region nobody named still beats nothing at all — an Italian cover is
+     * better than no cover — so it ranks last rather than being dropped.
+     *
+     * @param  array<string, int>  $regions
+     */
+    private function regionRank(Media $media, array $regions): int
+    {
+        return $regions[$media->region] ?? count($regions);
     }
 
     /**

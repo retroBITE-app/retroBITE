@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\FileRole;
+use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
@@ -245,7 +246,95 @@ it('offers our own checksum when replacing artwork we hold', function () {
 
     Http::assertSent(fn ($request) => str_contains($request->url(), 'md5='.md5($old)));
 
-    expect(Media::count())->toBe(2);
+    // Replacing, not accumulating: a type is one slot, and the copy that
+    // arrives last is the one the game holds.
+    expect(Media::count())->toBe(1)
+        ->and(Media::first()->md5)->toBe(md5($new));
+
+    // The old file goes with its row, or the disk keeps every cover the
+    // provider has ever revised.
+    expect(Storage::disk('media')->allFiles())->toHaveCount(1);
+});
+
+it('keeps each region side by side and lets the preference choose', function () {
+    $europe = PNG.'europe';
+    $japan = PNG.'japan';
+    $list = [entry('box-2D', $europe, region: 'eu'), entry('box-2D', $japan, region: 'jp')];
+
+    Http::fake(['*' => Http::sequence()->push($europe, 200)->push($japan, 200)]);
+
+    AppSetting::put(AppSetting::MEDIA_REGION, 'eu');
+    runScrape($this->game, $list);
+
+    expect(Media::sole()->region)->toBe('eu');
+
+    // The preference moves and the library is asked again. Both covers stay —
+    // somebody can hold four regions of the same box on purpose — and the
+    // preference decides which one the page leads with, not the file size.
+    AppSetting::put(AppSetting::MEDIA_REGION, 'jp');
+    runScrape($this->game->refresh(), $list);
+
+    expect(Media::count())->toBe(2)
+        ->and($this->game->refresh()->load('media')->artwork(MediaKind::Cover)->region)->toBe('jp');
+});
+
+it('replaces one region copy rather than piling revisions up', function () {
+    $old = PNG.'old-eu';
+    $new = PNG.'new-eu';
+
+    Http::fake(['*' => Http::sequence()->push($old, 200)->push($new, 200)]);
+
+    runScrape($this->game, [entry('box-2D', $old, region: 'eu')]);
+    runScrape($this->game->refresh(), [entry('box-2D', $new, region: 'eu')]);
+
+    // One slot per type AND region: a game may hold a European and a Japanese
+    // cover, never two European ones.
+    expect(Media::count())->toBe(1)
+        ->and(Media::sole()->md5)->toBe(md5($new))
+        ->and(Storage::disk('media')->allFiles())->toHaveCount(1);
+});
+
+it('fetches one named region and nothing else', function () {
+    $europe = PNG.'europe';
+    $japan = PNG.'japan';
+    $shot = PNG.'shot';
+
+    // entry() keys its URL on the type alone; here two entries share a type
+    // and differ only by region, so the region has to reach the URL for the
+    // fake to tell them apart — as it does in the provider's own list.
+    $of = function (string $type, string $body, string $region) {
+        $entry = entry($type, $body, region: $region);
+        $entry['url'] .= '&region='.$region;
+
+        return $entry;
+    };
+
+    $list = [
+        $of('box-2D', $europe, 'eu'),
+        $of('box-2D', $japan, 'jp'),
+        // Only Europe has one, so a Japanese fetch leaves it alone rather
+        // than spending a download on the copy already held.
+        $of('ss', $shot, 'eu'),
+    ];
+
+    Http::fake([
+        '*media=box-2D&region=eu*' => Http::response($europe, 200),
+        '*media=box-2D&region=jp*' => Http::response($japan, 200),
+        '*media=ss&region=eu*' => Http::response($shot, 200),
+    ]);
+
+    AppSetting::put(AppSetting::MEDIA_REGION, 'eu');
+    runScrape($this->game, $list);
+
+    expect(Media::pluck('region')->all())->toBe(['eu', 'eu']);
+
+    (new ScrapeGameMedia($this->game->id, $list, 'jp'))->handle(
+        app(ScreenScraperService::class),
+        app(MediaLibrary::class),
+    );
+
+    expect(Media::where('region', 'jp')->pluck('screenscraper_type')->all())->toBe(['box-2D'])
+        ->and(Media::count())->toBe(3);
 });
 
 it('records what each media type came back with', function () {

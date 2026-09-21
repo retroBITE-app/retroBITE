@@ -65,16 +65,29 @@ final class MediaRegions
      */
     public static function chain(): array
     {
+        return self::chainFor(self::preferred());
+    }
+
+    /**
+     * The same chain, led by a region chosen for one game.
+     *
+     * A game may name its own — an import whose owner wants the English box —
+     * and it leads over the library-wide preference, which in turn leads over
+     * the neutral fallbacks. Empty or null at either level simply drops out.
+     *
+     * @return array<int, string>
+     */
+    public static function chainFor(?string $preferred): array
+    {
         $fallback = (array) config('regions.fallback', []);
-        $preferred = self::preferred();
 
-        if ($preferred === '') {
-            return array_values($fallback);
-        }
+        $chain = array_filter([
+            (string) $preferred,
+            self::preferred(),
+        ], fn (string $region) => $region !== '');
 
-        // The preference leads, and stays out of the tail so it is not tried
-        // twice.
-        return array_values(array_unique([$preferred, ...$fallback]));
+        // Each stays out of the tail so none is tried twice.
+        return array_values(array_unique([...$chain, ...$fallback]));
     }
 
     /**
@@ -112,6 +125,51 @@ final class MediaRegions
      */
     public static function onePerType(array $medias): array
     {
+        return array_values(array_filter(array_map(
+            fn (array $entries) => self::pick($entries),
+            self::byType($medias),
+        )));
+    }
+
+    /**
+     * One entry per type, from one named region and nowhere else.
+     *
+     * For somebody who asked for the Japanese artwork by name. No fallback:
+     * a type this region has nothing for is left alone rather than fetched
+     * from the chain, which would spend a download re-fetching the copy they
+     * already have under a label that says Japan.
+     *
+     * Region-less media — fanart and video carry none — are left out for the
+     * same reason: they have no regional variant to go and get.
+     *
+     * @param  array<int, array<string, mixed>>  $medias
+     * @return array<int, array<string, mixed>>
+     */
+    public static function onlyRegion(array $medias, string $region): array
+    {
+        $picked = [];
+
+        foreach (self::byType($medias) as $entries) {
+            foreach ($entries as $entry) {
+                if (Arr::get($entry, 'region') === $region) {
+                    $picked[] = $entry;
+
+                    break;
+                }
+            }
+        }
+
+        return $picked;
+    }
+
+    /**
+     * The provider's list grouped by media type, in the order it arrived.
+     *
+     * @param  array<int, array<string, mixed>>  $medias
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private static function byType(array $medias): array
+    {
         $byType = [];
 
         foreach ($medias as $entry) {
@@ -124,9 +182,6 @@ final class MediaRegions
             $byType[$type][] = $entry;
         }
 
-        return array_values(array_filter(array_map(
-            fn (array $entries) => self::pick($entries),
-            $byType,
-        )));
+        return $byType;
     }
 }

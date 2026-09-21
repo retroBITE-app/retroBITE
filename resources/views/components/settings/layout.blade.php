@@ -13,7 +13,7 @@
         ['label' => __('User'), 'route' => 'user.edit', 'active' => request()->routeIs('user.*')],
         ['label' => __('Media'), 'route' => 'media.edit', 'active' => request()->routeIs('media.edit')],
         ['label' => __('Consoles'), 'route' => 'console-config.edit', 'active' => request()->routeIs('console-config.edit')],
-        ['label' => __('Integrations'), 'route' => 'integrations.edit', 'active' => request()->routeIs('integrations.edit')],
+        ['label' => __('RetroAchievements'), 'route' => 'retroachievements.edit', 'active' => request()->routeIs('retroachievements.edit')],
     ];
 @endphp
 

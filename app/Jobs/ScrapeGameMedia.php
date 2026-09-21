@@ -41,10 +41,12 @@ class ScrapeGameMedia implements ShouldQueue
 
     /**
      * @param  array<int, array<string, mixed>>|null  $medias  from the match that triggered this
+     * @param  string|null  $region  one region by name, instead of the preference chain
      */
     public function __construct(
         public readonly int $gameId,
         public readonly ?array $medias = null,
+        public readonly ?string $region = null,
     ) {
         $this->onQueue('media');
     }
@@ -73,8 +75,11 @@ class ScrapeGameMedia implements ShouldQueue
 
         // One copy of each type, not every region the provider holds: otherwise
         // the same cover lands four times in four languages and the interface
-        // picks between them at random.
-        $medias = MediaRegions::onePerType($medias);
+        // picks between them at random. Somebody who named a region gets that
+        // one and only that one — see onlyRegion().
+        $medias = $this->region !== null
+            ? MediaRegions::onlyRegion($medias, $this->region)
+            : MediaRegions::onePerType($medias);
 
         $stored = 0;
         $skipped = 0;
@@ -91,7 +96,12 @@ class ScrapeGameMedia implements ShouldQueue
 
             // The metadata already told us this file's checksum, so a copy we
             // hold can be recognised without spending a request at all.
-            if (isset($entry['md5']) && $game->media()->where('md5', strtolower((string) $entry['md5']))->exists()) {
+            if (isset($entry['md5']) && $game->media()->where('md5', $claimed = strtolower((string) $entry['md5']))->exists()) {
+                // Held, so nothing to download — but if it is this type's
+                // copy, an older one from before a region change may still be
+                // sitting beside it. keepOne() ignores the call otherwise.
+                $library->keepOne($game, $type, $entry['region'] ?? null, $claimed);
+
                 $skipped++;
 
                 continue;
@@ -156,6 +166,7 @@ class ScrapeGameMedia implements ShouldQueue
             ->withProperties([
                 'endpoint' => 'mediaJeu.php',
                 'requested' => $wanted,
+                'region' => $this->region,
                 'outcomes' => $outcomes,
                 'stored' => $stored,
                 'skipped' => $skipped,
