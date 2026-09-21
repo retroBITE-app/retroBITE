@@ -90,14 +90,16 @@
             <flux:spacer />
 
             <div class="mt-auto border-t border-line pt-4">
-                {{-- What the providers will still answer, above the disk that
-                     holds what they answered with. Its own component because it
-                     polls: the rest of this layout is static until the next
-                     navigation. --}}
+                {{--
+                    Three readings in one grammar: what the provider will still
+                    answer, what the workers are doing with those answers, and
+                    the disk it all lands on. Label and figure on one line, one
+                    bar under it, detail a fold away. The first two are
+                    components rather than partials because they poll; the rest
+                    of this layout is static until the next navigation.
+                --}}
                 <livewire:api-status />
 
-                {{-- What the workers are doing, between what the providers
-                     will still answer and the disk it all lands on. --}}
                 <livewire:system-activity />
 
                 {{--
@@ -109,7 +111,7 @@
                     <span class="font-mono text-xs whitespace-nowrap">{{ $storageUsed }} / {{ $storageTotal }}</span>
                 </div>
 
-                <div class="mt-2 mb-4 h-1 overflow-hidden rounded-sm bg-raised">
+                <div class="mt-2 mb-3.5 h-1 overflow-hidden rounded-sm bg-raised">
                     <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" style="width: {{ $storagePercent }}%"></div>
                 </div>
 

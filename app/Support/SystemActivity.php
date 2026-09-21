@@ -22,10 +22,10 @@ use Illuminate\Support\Facades\DB;
  * itself. `hash` and `ra-hash` are folded into one row because the same two
  * workers serve both: they fill and drain together.
  *
- * Deliberately not cached, unlike {@see RetroAchievements\SyncFreshness} next
- * to it in the sidebar. Freshness moves nightly, so a minute of lag there is
- * invisible. Queue depth is the number somebody is watching move, and a cached
- * one would be wrong at exactly the moment it is looked at.
+ * Deliberately not cached, unlike the quota snapshot beside it in the sidebar.
+ * An allowance changes only when a response arrives, so a minute of lag there
+ * is invisible. Queue depth is the number somebody is watching move, and a
+ * cached one would be wrong at exactly the moment it is looked at.
  */
 final class SystemActivity
 {
@@ -83,6 +83,21 @@ final class SystemActivity
     }
 
     /**
+     * Every queue, busy or not, in the order {@see GROUPS} lists them.
+     *
+     * What the sidebar draws once somebody unfolds it. A queue at zero is
+     * worth a row there: the list is also the only place the application says
+     * out loud what kinds of work exist, and a fold that shows nothing on an
+     * idle system would be a control with no answer.
+     *
+     * @return list<QueueActivity>
+     */
+    public function all(): array
+    {
+        return array_values($this->queues);
+    }
+
+    /**
      * The queues with work in them, in the order {@see GROUPS} lists them.
      *
      * @return list<QueueActivity>
@@ -100,12 +115,35 @@ final class SystemActivity
         return $this->active() !== [];
     }
 
+    /**
+     * Every queue added together, so the sidebar can draw one bar.
+     *
+     * A QueueActivity rather than a pair of integers because the rounding
+     * rules that make a bar honest — never full while a job is left, nothing
+     * at all before a denominator exists — belong in one place, and this is
+     * the same kind of thing as the rows it sums.
+     */
+    public function total(): QueueActivity
+    {
+        return new QueueActivity(
+            key: 'total',
+            label: 'Activity',
+            running: $this->sum(fn (QueueActivity $queue): int => $queue->running),
+            pending: $this->sum(fn (QueueActivity $queue): int => $queue->pending),
+            delayed: $this->sum(fn (QueueActivity $queue): int => $queue->delayed),
+            peak: $this->sum(fn (QueueActivity $queue): int => $queue->peak),
+        );
+    }
+
     public function remaining(): int
     {
-        return array_sum(array_map(
-            fn (QueueActivity $queue): int => $queue->remaining(),
-            $this->queues,
-        ));
+        return $this->sum(fn (QueueActivity $queue): int => $queue->remaining());
+    }
+
+    /** @param  callable(QueueActivity): int  $of */
+    private function sum(callable $of): int
+    {
+        return array_sum(array_map($of, $this->queues));
     }
 
     public static function forget(): void
