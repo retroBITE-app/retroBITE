@@ -44,13 +44,23 @@
 @endphp
 
 {{-- The link is stretched over the card rather than wrapping it, so the
-     actions can sit above it instead of nesting a button inside an anchor. --}}
-<div class="group relative flex w-fit max-w-full flex-col gap-2">
+     actions can sit above it instead of nesting a button inside an anchor.
+
+     Hovering lights the whole card — cover, title and the region row under
+     it — rather than only the art. What you are pointing at is a game, and
+     the title is as much a part of it as the box.
+
+     The border is always there and merely changes colour, because one that
+     appears on hover is one pixel of layout arriving with it, and a shelf
+     that twitches as the pointer crosses it is worse than no outline at all.
+     The padding is likewise unconditional, which is what leaves the colour
+     somewhere to go. --}}
+<div class="group relative flex w-fit max-w-full flex-col gap-2 rounded-2xl border border-transparent p-2 transition-colors hover:border-accent-tint focus-within:border-accent-tint">
     <a
         href="{{ route('games.show', $game) }}"
         wire:navigate
         aria-label="{{ $game->title }}"
-        class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-deep"
+        class="absolute inset-0 z-10 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-deep"
     ></a>
 
     {{-- No height of its own: the frame is whatever the image turns out to
@@ -58,7 +68,7 @@
          same shape. The placeholder below is the exception and says so. --}}
     <div
         @if ($cover === null) style="height: {{ $coverHeight }}px; width: {{ $coverWidth }}px" @endif
-        class="relative flex w-fit max-w-full items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken transition-colors group-hover:border-accent-tint/50"
+        class="relative flex w-fit max-w-full items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken"
     >
         @if ($cover !== null)
             <img
@@ -117,6 +127,25 @@
             <span class="font-mono text-xs text-fg-dim">
                 {{ Illuminate\Support\Number::fileSize((int) ($game->size_bytes_sum ?? 0), 1) }}
             </span>
+
+            @if ($game->rating !== null)
+                {{-- The far end of the region row. Off the artwork entirely:
+                     over a cover it had to fight whatever was behind it, and
+                     here it sits on the page's own ground, so the fill alone
+                     carries it and it needs no ring or shadow to stay legible.
+
+                     ms-auto rather than a spacer, so it holds the right edge
+                     whether or not the game has a flag to its left.
+
+                     Inline styles because the colour is chosen at runtime, and
+                     a class Tailwind never saw in the source is one it never
+                     generated — the same reason the geometry above is inline. --}}
+                <span
+                    title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
+                    style="background-color: {{ App\Support\RatingBand::color($game->rating) }}; color: {{ App\Support\RatingBand::ink() }}"
+                    class="ms-auto shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums"
+                >{{ $game->rating }}</span>
+            @endif
         </div>
 
         @if ($achievementsPossible > 0)
