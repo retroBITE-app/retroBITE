@@ -12,6 +12,7 @@ return [
     'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 12,
+    'retroachievements_id' => 5,
     'cover_aspect' => '2/3',
     'cover_height' => 240,
     'layouts' => ['custom'],

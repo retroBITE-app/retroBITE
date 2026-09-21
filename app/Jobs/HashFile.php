@@ -14,9 +14,16 @@ use Throwable;
 /**
  * Compute a file's checksums, on demand.
  *
- * On the media queue rather than the scraper queue: reading four gigabytes is
- * disk work, and the single scraper worker exists to pace provider requests,
- * not to sit blocked behind a disc image.
+ * On its own queue and its own connection, for two separate reasons. Reading
+ * four gigabytes is disk work, and the single scraper worker exists to pace
+ * provider requests rather than sit blocked behind a disc image — that is why
+ * it is not on the scraper queue.
+ *
+ * And the jobs table has no connection column: a job is re-reserved after the
+ * retry_after of whichever connection's worker popped it, so isolation is by
+ * queue name alone. On the 90-second default this job, with its hour-long
+ * timeout, was handed to a second worker four minutes in and the same image
+ * was read twice at once.
  */
 class HashFile implements ShouldQueue
 {
@@ -29,7 +36,7 @@ class HashFile implements ShouldQueue
 
     public function __construct(public readonly int $fileId)
     {
-        $this->onQueue('media');
+        $this->onConnection('database-long')->onQueue('hash');
     }
 
     public function handle(): void

@@ -12,6 +12,7 @@ return [
     'toolbox_file_extensions' => ['iso', 'bin', 'img', 'mdf', 'nrg'],
     'exclude_files' => ['games.bin'],
     'screenscraper_id' => 58,
+    'retroachievements_id' => 21,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
     'layouts' => ['custom', 'opl', 'retroarch'],

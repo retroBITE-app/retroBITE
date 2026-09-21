@@ -2,15 +2,19 @@
 
 use App\Enums\GameStatus;
 use App\Jobs\ScanConsoleFolder;
+use App\Jobs\ScrapeGameMedia;
 use App\Jobs\WriteConsoleExports;
+use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
 use App\Support\ExportProgress;
 use App\Support\Layouts\Layouts;
 use App\Support\LibraryPath;
+use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
 use App\Support\Scanning\LibraryFolders;
+use App\Support\SystemActivity;
 use App\Tools\ConsoleTools;
 use Flux\Flux;
 use Illuminate\Support\Arr;
@@ -70,12 +74,41 @@ new #[Title('Consoles')] class extends Component
             ->groupBy('console')
             ->pluck('total', 'console');
 
-        return ConsoleSourceFolder::consoles()->map(function (Console $console) use ($identified): array {
+        // One grouped query for every console rather than a sum per row. The
+        // join is to the denormalised progress table, so nothing here counts
+        // individual unlocks.
+        $achievements = Game::query()
+            ->leftJoin('ra_progress', function ($join): void {
+                $join->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
+                    ->where('ra_progress.user_id', '=', auth()->id() ?? 0);
+            })
+            ->selectRaw(
+                'games.console,'
+                .' coalesce(sum(ra_progress.unlocked_count), 0) as unlocked,'
+                .' coalesce(sum(ra_progress.unlocked_hardcore_count), 0) as unlocked_hardcore,'
+                .' coalesce(sum(ra_progress.achievements_possible), 0) as possible'
+            )
+            ->groupBy('games.console')
+            ->get()
+            ->keyBy('console');
+
+        $hardcore = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
+
+        return ConsoleSourceFolder::consoles()->map(function (Console $console) use ($identified, $achievements, $hardcore): array {
+            $progress = $achievements->get($console->key);
+            $possible = (int) ($progress->possible ?? 0);
+
             return [
                 'console' => $console,
                 'games' => FolderCounts::gamesIn($console),
                 'identified' => (int) $identified->get($console->key, 0),
                 'folder' => ConsoleSourceFolder::pathFor($console),
+                'achievements' => $possible > 0
+                    ? [
+                        'unlocked' => (int) ($hardcore ? $progress->unlocked_hardcore : $progress->unlocked),
+                        'possible' => $possible,
+                    ]
+                    : null,
                 // Only where there was a choice to make. For the 134 consoles
                 // that know one arrangement it would say the same thing on
                 // every card and mean nothing.
@@ -129,55 +162,58 @@ new #[Title('Consoles')] class extends Component
     /**
      * Work still queued, so the page can say something is happening.
      *
-     * Exports ride the media queue with the artwork — both are disk work, and
-     * neither belongs behind the scraper's single paced worker — so they are
-     * counted apart here rather than reported as covers being fetched.
+     * The same reading the sidebar draws, rather than a second count written
+     * here: the hand-made one this replaces named three queues and ignored the
+     * four that hashing and RetroAchievements run on, so a library busy for
+     * ten minutes could look idle from this page.
      *
-     * A queue depth is the wrong number for an export: one job writes a whole
-     * console, so "1" would sit there while nineteen files went past. The
-     * running one reports its own count, and the queue is only asked about
-     * those not started yet.
-     *
-     * @return array<int, array{label: string, count: ?int, total: ?int}>
+     * A running export is reported separately, by exporting(): its queue depth
+     * is the wrong number for it — one job writes a whole console, so "1"
+     * would sit there while nineteen files went past.
      */
     #[Computed]
-    public function queued(): array
+    public function activity(): SystemActivity
     {
-        $rows = DB::table('jobs')->selectRaw('queue, count(*) as total')->groupBy('queue')->pluck('total', 'queue');
+        return SystemActivity::current();
+    }
 
+    /**
+     * Loader exports going past, which a queue depth cannot describe.
+     *
+     * One job writes a whole console, so the jobs table can only ever say an
+     * export is waiting. The running one reports its own file count, and the
+     * queue is asked only about those not started yet. Exports ride the media
+     * queue with the artwork — both are disk work, and neither belongs behind
+     * the scraper's single paced worker — so one still waiting is also in the
+     * artwork depth SystemActivity reports. Worth knowing when reading the
+     * strip: the two rows overlap by the number of exports not yet started.
+     *
+     * @return array<int, array{count: ?int, total: ?int}>
+     */
+    #[Computed]
+    public function exporting(): array
+    {
         // The class name is in the serialised payload; the jobs table carries
         // no column for it. Matched rather than given a queue of its own,
-        // which would mean a fourth worker in both entrypoints.
-        $exports = DB::table('jobs')
+        // which would mean another worker in both entrypoints.
+        $queued = DB::table('jobs')
             ->where('queue', 'media')
             ->where('payload', 'like', '%WriteConsoleExports%')
             ->count();
 
-        $running = ExportProgress::all();
+        $running = Collection::make(ExportProgress::all())
+            ->map(function (array $export): array {
+                return [
+                    'count' => (int) Arr::get($export, 'done', 0),
+                    'total' => (int) Arr::get($export, 'total', 0),
+                ];
+            });
 
-        $counts = [
-            ['label' => __('Scanning'), 'count' => (int) ($rows['default'] ?? 0), 'total' => null],
-            ['label' => __('Identifying'), 'count' => (int) ($rows['scraper'] ?? 0), 'total' => null],
-            ['label' => __('Artwork'), 'count' => max(0, (int) ($rows['media'] ?? 0) - $exports), 'total' => null],
-        ];
-
-        foreach ($running as $export) {
-            $counts[] = [
-                'label' => __('Writing files'),
-                'count' => (int) Arr::get($export, 'done', 0),
-                'total' => (int) Arr::get($export, 'total', 0),
-            ];
-        }
-
-        return Collection::make($counts)
-            ->filter(function (array $row): bool {
-                return (int) Arr::get($row, 'count', 0) > 0 || Arr::get($row, 'total') !== null;
-            })
-            // Queued and not picked up yet: the count is meaningless — one job
-            // is a console, not a file — so it is left off and the row says
-            // only that an export is waiting.
-            ->when($exports > count($running), function (Collection $rows): Collection {
-                return $rows->push(['label' => __('Writing files'), 'count' => null, 'total' => null]);
+        return $running
+            // Queued and not picked up yet: the count is meaningless, so it is
+            // left off and the row says only that an export is waiting.
+            ->when($queued > $running->count(), function (Collection $rows): Collection {
+                return $rows->push(['count' => null, 'total' => null]);
             })
             ->values()
             ->all();
@@ -494,6 +530,47 @@ new #[Title('Consoles')] class extends Component
     }
 
     /**
+     * Queue artwork for every game on a console.
+     *
+     * `$held` is the difference between filling the gaps and starting over:
+     * without it, only games holding nothing at all are asked about, which is
+     * what somebody wants after a scan. With it, every identified game on the
+     * console is asked again — the way to pick up a media type that was
+     * switched on after the artwork was first fetched.
+     */
+    public function fetchMedia(string $key, bool $held = false): void
+    {
+        $console = Console::tryFrom($key);
+
+        if ($console === null) {
+            return;
+        }
+
+        // Said once here rather than discovered one job at a time: with
+        // nothing switched on, every one of them would return having done
+        // nothing and the page would look broken.
+        if (MediaTypes::enabled() === []) {
+            Flux::toast(variant: 'warning', text: __('No media types are switched on. Choose some in Settings → Media.'));
+
+            return;
+        }
+
+        $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
+
+        unset($this->activity);
+
+        $this->dispatch('system-activity-changed');
+
+        Flux::toast(text: $queued === 0
+            ? __('Nothing to fetch — every identified game on :console already has artwork.', ['console' => $console->name])
+            : trans_choice(
+                '{1} Fetching artwork for one game.|[2,*] Fetching artwork for :count games. The library fills in as it goes.',
+                $queued,
+                ['count' => $queued],
+            ));
+    }
+
+    /**
      * Write a loader's own files back into a console's folder.
      *
      * The only thing here that writes to somebody's library, so it is asked for
@@ -515,7 +592,9 @@ new #[Title('Consoles')] class extends Component
 
         WriteConsoleExports::dispatch($console->key, $export);
 
-        unset($this->queued);
+        unset($this->exporting);
+
+        $this->dispatch('system-activity-changed');
 
         Flux::toast(text: __('Writing :console\'s :export files. Nothing else in the folder is touched.', [
             'console' => $console->name,
@@ -551,7 +630,10 @@ new #[Title('Consoles')] class extends Component
 
         ScanConsoleFolder::dispatch($console->key);
 
-        unset($this->queued, $this->added);
+        unset($this->activity, $this->added);
+
+        // The sidebar polls slowly while it believes nothing is happening.
+        $this->dispatch('system-activity-changed');
 
         Flux::toast(text: __('Scanning :console. The library fills in as it goes.', ['console' => $console->name]));
     }
@@ -572,21 +654,30 @@ new #[Title('Consoles')] class extends Component
 
         {{-- Only polls while there is something to watch, so an idle page is
              not asking the database every two seconds. --}}
-        @if ($this->queued !== [])
+        @if ($this->activity->busy() || $this->exporting !== [])
             <div wire:poll.2s
                  role="status"
                  aria-live="polite"
                  class="relative overflow-hidden rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-4">
                 <div class="flex flex-wrap items-center gap-x-6 gap-y-1.5">
                     <flux:icon.arrow-path class="size-4 shrink-0 animate-spin text-accent" />
-                    @foreach ($this->queued as ['label' => $label, 'count' => $count, 'total' => $total])
+                    @foreach ($this->activity->active() as $queue)
+                        <p class="text-sm text-accent">
+                            <span class="font-medium text-accent-bright">{{ $queue->remaining() }}</span>
+                            {{ __($queue->label) }}
+                        </p>
+                    @endforeach
+
+                    {{-- Apart from the queues: an export counts files, not
+                         jobs, so it has a denominator none of them do. --}}
+                    @foreach ($this->exporting as ['count' => $count, 'total' => $total])
                         <p class="text-sm text-accent">
                             @if ($count !== null)
                                 <span class="font-medium text-accent-bright">
                                     {{ $count }}@if ($total !== null)<span class="text-accent">/{{ $total }}</span>@endif
                                 </span>
                             @endif
-                            {{ $label }}
+                            {{ __('Writing files') }}
                         </p>
                     @endforeach
                 </div>
@@ -635,6 +726,9 @@ new #[Title('Consoles')] class extends Component
                                 @if ($row['identified'] > 0)
                                     · {{ $row['identified'] }} {{ __('identified') }}
                                 @endif
+                                @if ($row['achievements'] !== null)
+                                    · <span class="text-accent">{{ $row['achievements']['unlocked'] }} / {{ $row['achievements']['possible'] }} {{ __('achievements') }}</span>
+                                @endif
                             </p>
                             <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-fg-faint">
                                 <span class="font-mono">{{ $row['folder'] }}</span>
@@ -674,6 +768,24 @@ new #[Title('Consoles')] class extends Component
                                             {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
                                         </flux:menu.item>
                                     @endforeach
+
+                                    <flux:menu.item icon="photo"
+                                                    wire:click="fetchMedia('{{ $row['console']->key }}')">
+                                        {{ __('Fetch missing artwork') }}
+                                    </flux:menu.item>
+
+                                    {{-- Confirmed, and the scraper's own count
+                                         is in the question: this is one
+                                         provider lookup per identified game,
+                                         and on a large console that is a
+                                         visible bite out of the day. --}}
+                                    <flux:menu.item icon="arrow-path"
+                                                    wire:click="fetchMedia('{{ $row['console']->key }}', true)"
+                                                    wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
+                                        {{ __('Re-fetch all artwork') }}
+                                    </flux:menu.item>
+
+                                    <flux:menu.separator />
 
                                     <flux:menu.item icon="trash" variant="danger"
                                                     wire:click="remove('{{ $row['console']->key }}')"

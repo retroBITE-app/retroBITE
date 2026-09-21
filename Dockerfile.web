@@ -22,7 +22,49 @@ COPY --from=vendor /app/vendor/laravel/framework/src/Illuminate/Pagination \
 
 RUN npm run build
 
-# Stage 3: PHP-FPM + nginx runtime
+# Stage 3: RAHasher, from rcheevos by way of RALibretro
+#
+# RetroAchievements identifies a game by a hash that is not an MD5 of the file:
+# the iNES header comes off a NES rom, copier headers off a SNES one, and for a
+# disc it is the primary executable named in SYSTEM.CNF that gets hashed rather
+# than the disc. That logic lives in rcheevos, and reimplementing it would mean
+# keeping a second copy of somebody else's format knowledge in step with theirs.
+#
+# There is no official Linux binary, so it is built here — on Alpine, because
+# the runtime below is musl and a glibc build would not run on it.
+FROM alpine:3.21 AS rahasher
+
+RUN apk add --no-cache build-base git zlib-dev zlib-static
+
+# Pinned. A hasher that quietly changed what it returned between deploys would
+# invalidate the cached hash on every file in the library.
+ARG RALIBRETRO_TAG=1.8.4
+
+# Four deviations from the documented build, each for a reason:
+#
+#  * Only three submodules. The full set pulls SDL2, which RAHasher does not
+#    link and which is most of the download.
+#  * Two includes added to src/Util.h. It uses time_t and FILE without
+#    including <ctime> or <cstdio>; glibc drags both in through <string> and
+#    musl does not, so upstream compiles on Debian and not here.
+#  * RA_BuildVer.h written by hand. The rule that generates it runs a script
+#    from the RAInterface submodule, which is otherwise not needed; the header
+#    defines one version string.
+#  * -DZ_HAVE_UNISTD_H through CC. libchdr vendors zlib with the unistd guard
+#    off, so gzlib.c calls lseek() with no declaration. It rides on CC rather
+#    than CFLAGS because Makefile.common assigns CFLAGS outright and overriding
+#    it would drop every include path.
+RUN git clone --depth 1 --branch "$RALIBRETRO_TAG" \
+        https://github.com/RetroAchievements/RALibretro.git /src \
+    && cd /src \
+    && git submodule update --init --depth 1 src/miniz src/rcheevos src/libchdr \
+    && sed -i '/#include <stddef.h>/a #include <cstdio>\n#include <ctime>' src/Util.h \
+    && printf '#define RA_LIBRETRO_VERSION_SHORT "%s"\n' "$RALIBRETRO_TAG" > src/RA_BuildVer.h \
+    && make -f Makefile.RAHasher HAVE_CHD=1 -j"$(nproc)" CC="gcc -DZ_HAVE_UNISTD_H" \
+    && cp "$(find /src -type f -name RAHasher -perm -u+x | head -n 1)" /usr/local/bin/RAHasher \
+    && /usr/local/bin/RAHasher | head -n 1
+
+# Stage 4: PHP-FPM + nginx runtime
 FROM php:8.5-fpm-alpine AS runner
 
 # php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
@@ -84,6 +126,9 @@ COPY . .
 RUN composer dump-autoload --optimize --no-dev
 
 COPY --from=frontend-builder /app/public/build ./public/build
+
+# On PATH, which is where config/retroachievements.php looks by default.
+COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/RAHasher
 
 # Nginx server block
 COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf

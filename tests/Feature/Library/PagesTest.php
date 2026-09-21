@@ -114,6 +114,57 @@ it('does not offer a console that is already in the library', function () {
         ->assertSee('Nothing matches that.');
 });
 
+it('fetches artwork for a whole console, skipping the games that already have some', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $bare = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
+    $dressed = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 102]);
+    Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+
+    // A placeholder has no provider id, and artwork is fetched by provider id.
+    Game::factory()->forConsole('snes')->create(['screenscraper_id' => null, 'status' => GameStatus::Placeholder]);
+
+    // And another console's game is not this console's business.
+    Game::factory()->forConsole('nes')->create(['screenscraper_id' => 103]);
+
+    Livewire::test('consoles.index')->call('fetchMedia', 'snes');
+
+    Queue::assertPushed(ScrapeGameMedia::class, 1);
+    Queue::assertPushed(ScrapeGameMedia::class, fn ($job) => $job->gameId === $bare->id);
+});
+
+it('re-fetches every identified game when asked to start over', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $bare = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
+    $dressed = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 102]);
+    Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+
+    // What somebody does after switching a media type on: the games that
+    // already hold a cover are exactly the ones that need asking again.
+    Livewire::test('consoles.index')->call('fetchMedia', 'snes', true);
+
+    Queue::assertPushed(ScrapeGameMedia::class, 2);
+});
+
+it('says so rather than queueing nothing when no media types are switched on', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+    Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
+
+    AppSetting::put(AppSetting::MEDIA_TYPES, []);
+
+    // Every job would return having done nothing, and the page would look
+    // broken rather than misconfigured.
+    Livewire::test('consoles.index')
+        ->call('fetchMedia', 'snes')
+        ->assertDispatched('toast-show');
+
+    Queue::assertNothingPushed();
+});
+
 it('removes a console from the library without touching its games', function () {
     File::ensureDirectoryExists($this->root.'/snes');
     ConsoleSourceFolder::add(new Console('snes'));
@@ -199,10 +250,139 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
         '<img src="'.route('media.show', ['path' => $logo->path]).'" alt="Final Fantasy IX" class="h-auto w-28 shrink-0" />'
     );
 
-    $page->assertSee('Cover · Europe');
+    // The strip itself lives behind the Artwork tab, which the URL names, so
+    // a link into it opens on the pictures rather than on the file table.
+    $strip = $this->get(route('games.show', $game).'?tab=artwork')->assertOk();
+
+    $strip->assertSee('Cover · Europe');
 
     // A type filling no slot we name keeps the provider's own word for it.
-    $page->assertSee($clip->screenscraper_type);
+    $strip->assertSee($clip->screenscraper_type);
+});
+
+it('puts the panels behind tabs, offering only the ones the game has', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/d1.bin', 'filename' => 'd1.bin']);
+
+    // The table's own column, not the filename: the Actions menu carries the
+    // path too, so a filename says nothing about which panel is open.
+    $table = 'Last seen';
+
+    // No set and nothing downloaded: one tab, and its panel is the page.
+    Livewire::test('games.show', ['game' => $game])
+        ->assertSet('tab', '')
+        ->assertSee($table)
+        ->assertDontSee('Artwork');
+
+    Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    // Artwork arriving puts a second tab up, and the table gives way to it.
+    Livewire::test('games.show', ['game' => $game])
+        ->assertSee('Artwork')
+        ->assertDontSee('Cover · Europe')
+        ->call('selectTab', 'artwork')
+        ->assertSee('Cover · Europe')
+        ->assertDontSee($table);
+
+    // A tab this game does not have falls back to the first one rather than
+    // leaving the page empty under the row.
+    $this->get(route('games.show', $game).'?tab=achievements')->assertOk()->assertSee($table);
+});
+
+it('holds the artwork in one order, whichever request asks', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
+
+    // Created back to front, so id order and slot order disagree.
+    $shot = Media::factory()->for($game)->ofType('ss')->create();
+    $backdrop = Media::factory()->for($game)->ofType('fanart')->create();
+    $logo = Media::factory()->for($game)->ofType('wheel', 'eu')->create();
+    $cover = Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    $order = fn ($component) => array_column($component->instance()->gallery, 'key');
+
+    $expected = [$cover->path, $logo->path, $backdrop->path, $shot->path];
+
+    $component = Livewire::test('games.show', ['game' => $game]);
+
+    expect($order($component))->toBe($expected);
+
+    // The same order on an update. Livewire re-resolves the model from the
+    // database here, so a relation ordered once at mount would be back to
+    // whatever the table hands over — which is what made the strip reshuffle
+    // between clicking a tab and reloading the page.
+    $component->call('selectTab', 'artwork');
+
+    expect($order($component))->toBe($expected);
+
+    // And after a delete, which is the case that stops insertion order being
+    // insertion order at all: a replaced cover leaves a hole behind it.
+    $logo->delete();
+
+    $component->call('selectTab', 'files')->call('selectTab', 'artwork');
+
+    expect($order($component))->toBe([$cover->path, $backdrop->path, $shot->path]);
+});
+
+it('groups the artwork by region and lets a game pick one', function () {
+    AppSetting::put(AppSetting::MEDIA_REGION, 'eu');
+
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
+
+    // The European box is the bigger file, which is how it used to win
+    // regardless of what anybody asked for.
+    $europe = Media::factory()->for($game)->ofType('box-2D', 'eu')->create(['size_bytes' => 900_000]);
+    $japan = Media::factory()->for($game)->ofType('box-2D', 'jp')->create(['size_bytes' => 120_000]);
+    Media::factory()->for($game)->ofType('fanart')->create();
+
+    $component = Livewire::test('games.show', ['game' => $game])->call('selectTab', 'artwork');
+
+    $groups = $component->instance()->galleryByRegion;
+
+    // Chain order, and the region-less group last under a name of its own.
+    expect(array_column($groups, 'label'))->toBe(['Europe', 'Japan', 'No region'])
+        ->and(array_column($groups, 'selected'))->toBe([true, false, false]);
+
+    expect($game->refresh()->load('media')->artwork(MediaKind::Cover)->id)->toBe($europe->id);
+
+    // Choosing moves the hero cover, not just the label on the group.
+    $component->call('useRegion', 'jp');
+
+    // The groups stay where they were. Choosing a region marks it; it does
+    // not lift it over the one somebody is comparing it against.
+    expect($game->refresh()->media_region)->toBe('jp')
+        ->and($game->load('media')->artwork(MediaKind::Cover)->id)->toBe($japan->id)
+        ->and(array_column($component->instance()->galleryByRegion, 'label'))->toBe(['Europe', 'Japan', 'No region'])
+        ->and(array_column($component->instance()->galleryByRegion, 'selected'))->toBe([false, true, false]);
+
+    // And back to whatever Settings says.
+    $component->call('useRegion', null);
+
+    expect($game->refresh()->media_region)->toBeNull()
+        ->and($game->load('media')->artwork(MediaKind::Cover)->id)->toBe($europe->id);
+});
+
+it('offers only the regions it does not already hold, and queues one by name', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
+    Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    $component = Livewire::test('games.show', ['game' => $game])->call('selectTab', 'artwork');
+
+    // A button that would re-download what is already on the page is not a
+    // choice worth offering.
+    expect($component->instance()->fetchableRegions)->not->toHaveKey('eu')
+        ->and($component->instance()->fetchableRegions)->toHaveKey('jp');
+
+    $component->set('fetchRegion', 'jp')->call('fetchRegionMedia');
+
+    Queue::assertPushed(ScrapeGameMedia::class, fn ($job) => $job->gameId === $game->id && $job->region === 'jp');
+
+    // A region nobody has heard of never reaches the queue.
+    $component->call('fetchMedia', 'zz');
+
+    Queue::assertPushed(ScrapeGameMedia::class, fn ($job) => $job->region === 'jp');
+    Queue::assertNotPushed(ScrapeGameMedia::class, fn ($job) => $job->region === 'zz');
 });
 
 it('keeps screenshots and thumbnails out of the login backdrop', function () {
@@ -459,17 +639,33 @@ it('waits for artwork to arrive, then stops', function () {
         ->assertSee('Fetch artwork')
         ->call('fetchMedia');
 
-    // Asserted on what a person sees: assertNotSet compares loosely, and
-    // 0 == null in PHP, so a count of zero would satisfy either claim.
-    $component->assertSet('fetchingFrom', 0)->assertSee('Fetching artwork');
+    // A string, so there is no count that reads as "not waiting": assertNotSet
+    // compares loosely and 0 == null in PHP.
+    $component->assertSet('fetchingFrom', '0:0')->assertSee('Fetching artwork');
     Queue::assertPushed(ScrapeGameMedia::class);
 
     $component->call('checkMedia')->assertSee('Fetching artwork');
 
     Media::factory()->for($game)->create();
 
-    // Artwork leaves the game row untouched, so arrival is counted, not
-    // fingerprinted.
+    $component->call('checkMedia')->assertDontSee('Fetching artwork');
+});
+
+it('notices artwork that was replaced rather than added', function () {
+    Queue::fake();
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
+
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+    $old = Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    $component = Livewire::test('games.show', ['game' => $game])->call('fetchMedia');
+
+    // What a scrape after a region change does: one row out, one row in. The
+    // count is where it started, and a poll watching only that would wait out
+    // its two minutes while the new cover sat there unshown.
+    Media::factory()->for($game)->ofType('box-2D', 'jp')->create();
+    $old->delete();
+
     $component->call('checkMedia')->assertDontSee('Fetching artwork');
 });
 
@@ -677,4 +873,30 @@ it('says nothing rather than throwing when the drive is not mounted', function (
     // A card that renders is worth more than a page that does not. Finding out
     // the mount has gone is the scan's job, not the list's.
     Livewire::test('consoles.index')->assertSee('0 games');
+
+    it('caps a cover by its console rather than stretching it to the column', function () {
+        $game = Game::factory()->forConsole('gba')->matched()->create(['title' => 'Metroid Fusion', 'slug' => 'fusion']);
+        Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+        // The one knob that makes one console's shelf smaller than another's, and
+        // a ceiling rather than a height: a narrow column shrinks the cover
+        // further instead of putting bars around it.
+        Livewire::test('games.index', ['console' => 'gba'])
+            ->assertSee('max-height: 240px', escape: false)
+            ->assertDontSee('height: 240px;', escape: false);
+    });
+
+    it('caps how many covers a row can hold, at every width', function () {
+        Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+        // The cap is the point: covers stretch to their column, so without one a
+        // wide screen draws either postage stamps or posters.
+        Livewire::test('games.index', ['console' => 'snes'])
+            ->assertSee('grid-cols-2', escape: false)
+            ->assertSee('sm:grid-cols-3', escape: false)
+            ->assertSee('lg:grid-cols-4', escape: false)
+            ->assertSee('xl:grid-cols-5', escape: false)
+            ->assertSee('2xl:grid-cols-6', escape: false);
+    });
+
 });

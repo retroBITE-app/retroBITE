@@ -28,8 +28,11 @@ final class MediaLibrary
      * Save one downloaded file against a game.
      *
      * Returns null when the game already holds this exact image — the unique
-     * index is on content, so five screenshots are fine and the same image
-     * twice is not.
+     * index is on content, so the same image twice is not allowed.
+     *
+     * Either way the game is left holding one copy of the type: see
+     * keepOne(), which is what makes a second scrape replace rather than
+     * accumulate.
      *
      * @param  array<string, mixed>  $entry  one item from the provider's media list
      */
@@ -38,18 +41,20 @@ final class MediaLibrary
         // The checksum of what actually arrived, not what the metadata claimed
         // it would be. They disagree often enough to matter.
         $md5 = md5($contents);
+        $type = (string) ($entry['type'] ?? 'unknown');
 
         if ($game->media()->where('md5', $md5)->exists()) {
+            $this->keepOne($game, $type, $entry['region'] ?? null, $md5);
+
             return null;
         }
 
-        $type = (string) ($entry['type'] ?? 'unknown');
         $extension = $this->extensionFor($entry, $contents);
         $path = $this->pathFor($game, $type, $md5, $extension);
 
         $this->disk()->put($path, $contents);
 
-        return $game->media()->create([
+        $media = $game->media()->create([
             'screenscraper_type' => $type,
             'region' => $entry['region'] ?? null,
             'md5' => $md5,
@@ -59,6 +64,51 @@ final class MediaLibrary
             'source_url' => $entry['url'] ?? null,
             'downloaded_at' => now(),
         ]);
+
+        $this->keepOne($game, $type, $entry['region'] ?? null, $md5);
+
+        return $media;
+    }
+
+    /**
+     * Leave the game holding this copy of the type from this region, no other.
+     *
+     * One slot per type *and* region, not per type: a game may hold the same
+     * cover from four regions at once, which is what makes choosing between
+     * them on the game page possible. What it may not hold is two European
+     * covers, which is what a provider revising its artwork would otherwise
+     * leave behind every time.
+     *
+     * Does nothing unless the copy to keep is really there, which makes it
+     * safe to call on a skipped download: an md5 held under another type is
+     * not this type's answer and takes nothing with it.
+     *
+     * @return int how many were dropped
+     */
+    public function keepOne(Game $game, string $type, ?string $region, string $md5): int
+    {
+        $ofSlot = fn () => $game->media()
+            ->where('screenscraper_type', $type)
+            ->when($region === null, fn ($query) => $query->whereNull('region'))
+            ->when($region !== null, fn ($query) => $query->where('region', $region));
+
+        $keeper = $ofSlot()->where('md5', $md5)->first();
+
+        if ($keeper === null) {
+            return 0;
+        }
+
+        $stale = $ofSlot()->whereKeyNot($keeper->getKey())->get();
+
+        foreach ($stale as $media) {
+            $this->forget($media);
+        }
+
+        // The loaded collection still holds what was just deleted, and the
+        // page that asked for the scrape reads it.
+        $game->unsetRelation('media');
+
+        return $stale->count();
     }
 
     /**

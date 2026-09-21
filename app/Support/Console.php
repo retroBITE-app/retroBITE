@@ -59,6 +59,15 @@ final class Console
     /** The layout to assume until somebody says otherwise. */
     public readonly string $defaultLayout;
 
+    /**
+     * RetroAchievements' ConsoleID, which is also RAHasher's systemid.
+     *
+     * Unrelated to screenscraperId despite both being small integers, and the
+     * ranges overlap: NES is 3 at ScreenScraper and 7 here, while 3 here is the
+     * Super Nintendo. Null for the consoles RetroAchievements does not cover.
+     */
+    public readonly ?int $retroachievementsId;
+
     public function __construct(string $key)
     {
         $meta = config("consoles.{$key}");
@@ -68,6 +77,7 @@ final class Console
         }
 
         $ssId = Arr::get($meta, 'screenscraper_id');
+        $raId = Arr::get($meta, 'retroachievements_id');
 
         $this->key = $key;
         $this->name = (string) Arr::get($meta, 'name', '');
@@ -82,6 +92,7 @@ final class Console
         $this->screenscraperId = $ssId !== null ? (int) $ssId : null;
         $this->layouts = (array) Arr::get($meta, 'layouts', [Layouts::FALLBACK]);
         $this->defaultLayout = (string) Arr::get($meta, 'default_layout', Layouts::FALLBACK);
+        $this->retroachievementsId = $raId !== null ? (int) $raId : null;
     }
 
     /**
