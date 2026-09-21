@@ -60,29 +60,4 @@ final class RetroArchLayout extends ConsoleLayout
     {
         return ['media/Named_Boxarts', 'media/Named_Snaps', 'media/Named_Titles'];
     }
-
-    /**
-     * The filename with its trailing region and dump tags removed.
-     *
-     * "Castlevania (Europe) (En,Fr,De,Es,It).iso" is one game, and so is the
-     * USA copy beside it. Only groups at the end are taken, so a title that
-     * carries brackets of its own keeps them.
-     */
-    public function titleFor(string $relative): string
-    {
-        $title = parent::titleFor($relative);
-
-        // One group at a time, from the right: a title can carry several.
-        while (preg_match('/^(.*?)\s*[\(\[][^()\[\]]*[\)\]]$/', $title, $matches) === 1) {
-            $stripped = trim($matches[1]);
-
-            if ($stripped === '') {
-                break;
-            }
-
-            $title = $stripped;
-        }
-
-        return $title;
-    }
 }

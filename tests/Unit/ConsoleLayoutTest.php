@@ -47,20 +47,6 @@ it('skips retroarch\'s thumbnail cache at any depth', function (string $path, bo
     ['Named_Snaps/Super Mario World.png', false],
 ]);
 
-it('strips trailing region and dump tags for retroarch', function (string $filename, string $title) {
-    expect((new RetroArchLayout)->titleFor($filename))->toBe($title);
-})->with([
-    ['Castlevania (Europe) (En,Fr,De,Es,It).iso', 'Castlevania'],
-    ['Grand Theft Auto III (Europe) (v1.40).iso', 'Grand Theft Auto III'],
-    ['Super Mario World [!].sfc', 'Super Mario World'],
-    // Nothing trailing, nothing taken.
-    ['Super Mario World.sfc', 'Super Mario World'],
-    // Brackets in the middle are part of the name and stay.
-    ['Ratchet & Clank (2002) Special.iso', 'Ratchet & Clank (2002) Special'],
-    // A name that is nothing but a tag keeps it rather than becoming empty.
-    ['(Europe).iso', '(Europe)'],
-]);
-
 it('accepts everything under the custom layout', function (string $path) {
     expect((new CustomLayout)->accepts($path))->toBeTrue();
 })->with([

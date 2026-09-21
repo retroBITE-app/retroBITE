@@ -41,9 +41,9 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRuntimeSettings(): void
     {
-        /** 
+        /**
          * Four views ask whether the CRT overlay is on. A directive keeps the
-         * model out of the markup and reads as what it means. 
+         * model out of the markup and reads as what it means.
          */
         Blade::if('scanlines', fn (): bool => AppSetting::enabled(AppSetting::UI_SCANLINES));
 
