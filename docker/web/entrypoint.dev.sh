@@ -68,6 +68,23 @@ for _ in 1 2 3; do
         --queue=media,default --sleep=3 --tries=3 &
 done
 
+# RetroAchievements. Note that queue:listen ignores retry_after entirely — it
+# reboots per job and goes by --timeout — so the long-connection split that
+# matters in production is invisible here. Worth knowing before concluding from
+# a working dev container that the production one is fine.
+su-exec "$WEB_USER" php /app/artisan queue:listen \
+    --queue=ra --sleep=3 --tries=3 &
+
+su-exec "$WEB_USER" php /app/artisan queue:listen \
+    --queue=ra-progress --sleep=3 --tries=3 &
+
+for _ in 1 2; do
+    su-exec "$WEB_USER" php /app/artisan queue:listen database-long \
+        --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3600 &
+done
+
+su-exec "$WEB_USER" php /app/artisan schedule:work &
+
 # Vite, in here rather than on the host, so working on the frontend needs
 # nothing installed locally. Starting it writes public/hot, which Laravel reads
 # to point asset URLs at the dev server instead of the built bundle — which is

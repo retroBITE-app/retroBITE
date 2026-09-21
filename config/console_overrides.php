@@ -75,6 +75,12 @@ return [
         'description' => 'The provider\'s systemeid. Wrong here and nothing matches.',
     ],
 
+    'retroachievements_id' => [
+        'type' => 'number',
+        'label' => 'RetroAchievements id',
+        'description' => 'RetroAchievements\' ConsoleID, also RAHasher\'s systemid. Not the ScreenScraper one.',
+    ],
+
     'cover_aspect' => [
         'type' => 'text',
         'label' => 'Cover aspect',

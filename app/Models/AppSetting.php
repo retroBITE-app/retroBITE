@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 
 /**
  * A setting a person can change while the app is running.
@@ -54,6 +56,26 @@ class AppSetting extends Model
     public const CONSOLE_OVERRIDES = 'console_overrides';
 
     /**
+     * The RetroAchievements web API key, stored encrypted.
+     *
+     * Here rather than in .env because it belongs in the settings screen, and
+     * an operator who has to redeploy to change a key will not change it. Read
+     * and written through getSecret()/putSecret(); reading it raw gives you
+     * ciphertext.
+     */
+    public const RA_API_KEY = 'ra_api_key';
+
+    /**
+     * Which score the interface shows: hardcore, or softcore.
+     *
+     * A presentation choice and nothing more — hardcore is a mode in the
+     * emulator, which retroBite cannot switch on. On by default, because it
+     * is the figure RetroAchievements itself leads with. The game page shows
+     * both whatever this says.
+     */
+    public const RA_HARDCORE_PRIMARY = 'ra_hardcore_primary';
+
+    /**
      * What a key means before anybody has set it.
      *
      * Here rather than at each call site: the auto-queue default was spelled
@@ -66,6 +88,7 @@ class AppSetting extends Model
         self::MEDIA_REGION => '',
         self::UI_SCANLINES => true,
         self::UI_GAMES_VIEW => 'cards',
+        self::RA_HARDCORE_PRIMARY => true,
     ];
 
     /**
@@ -112,6 +135,35 @@ class AppSetting extends Model
     public static function enabled(string $key, ?bool $default = null): bool
     {
         return (bool) static::get($key, $default);
+    }
+
+    /**
+     * Read a value that was stored encrypted.
+     *
+     * Returns null rather than throwing when the ciphertext will not open,
+     * which happens for real: rotating APP_KEY leaves every secret in here
+     * unreadable, and a settings page that fatals is worse than one that shows
+     * an empty field to type into again.
+     */
+    public static function getSecret(string $key, ?string $default = null): ?string
+    {
+        $stored = static::get($key);
+
+        if (! is_string($stored) || $stored === '') {
+            return $default;
+        }
+
+        try {
+            return Crypt::decryptString($stored);
+        } catch (DecryptException) {
+            return $default;
+        }
+    }
+
+    /** Store a value encrypted, so it is not sitting in plain text in a dump. */
+    public static function putSecret(string $key, ?string $value): void
+    {
+        static::put($key, ($value === null || $value === '') ? null : Crypt::encryptString($value));
     }
 
     /**

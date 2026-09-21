@@ -44,6 +44,26 @@ return [
             'after_commit' => false,
         ],
 
+        /*
+         * The same driver and the same jobs table as 'database', with one
+         * difference that matters: retry_after.
+         *
+         * A job is re-reserved after retry_after seconds by whichever worker
+         * pops it, and the jobs table has no connection column — isolation is
+         * by queue name alone. Hashing a CHD takes minutes, so it runs here,
+         * on its own queues, served only by a worker started as
+         * `queue:work database-long`. The short queues keep their 90 seconds,
+         * which is the right number for them.
+         */
+        'database-long' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => env('DB_QUEUE', 'default'),
+            'retry_after' => (int) env('DB_QUEUE_LONG_RETRY_AFTER', 7200),
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

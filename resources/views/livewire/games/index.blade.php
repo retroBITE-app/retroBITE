@@ -122,15 +122,40 @@ new #[Title('Games')] class extends Component
     #[Computed]
     public function games(): LengthAwarePaginator
     {
+        // Never null in practice — the route is behind auth — but a null
+        // binding compiles to `= NULL`, which matches nothing without saying so.
+        $userId = auth()->id() ?? 0;
+
         return Game::query()
-            ->when($this->query !== '', fn ($q) => $q->where('title', 'like', '%'.$this->query.'%'))
+            // Before withSum/withCount, and that order is load-bearing: those
+            // append a subselect only while no columns have been chosen, and a
+            // select() after them would wipe what they added.
+            ->select(
+                'games.*',
+                'ra_progress.unlocked_count as ra_unlocked',
+                'ra_progress.unlocked_hardcore_count as ra_unlocked_hardcore',
+                'ra_progress.achievements_possible as ra_achievements_possible',
+                'ra_progress.points_earned as ra_points',
+                'ra_progress.points_hardcore_earned as ra_points_hardcore',
+                'ra_progress.points_possible as ra_points_possible',
+            )
+            // One join and no aggregation per row, which is the whole reason
+            // achievements_possible is denormalised onto ra_progress. Safe for
+            // the paginator's count because ra_progress is unique on
+            // (user_id, ra_game_id), so it cannot multiply rows.
+            ->leftJoin('ra_progress', fn ($join) => $join
+                ->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
+                ->where('ra_progress.user_id', '=', $userId))
+            // Qualified from here down, because the join makes a bare column
+            // name one added column away from being ambiguous at runtime.
+            ->when($this->query !== '', fn ($q) => $q->where('games.title', 'like', '%'.$this->query.'%'))
             ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
-            ->when($this->status !== '', fn ($q) => $q->where('status', $this->status))
+            ->when($this->status !== '', fn ($q) => $q->where('games.status', $this->status))
             // Matched as one of the comma-separated parts rather than with a
             // LIKE, or picking "Action" would also pull in every "Action /
             // Adventure" the provider spells as its own genre.
             ->when($this->genre !== '', fn ($q) => $q->whereRaw(
-                "FIND_IN_SET(?, REPLACE(REPLACE(genre, ' ,', ','), ', ', ',')) > 0",
+                "FIND_IN_SET(?, REPLACE(REPLACE(games.genre, ' ,', ','), ', ', ',')) > 0",
                 [$this->genre],
             ))
             // Both for the cards: the cover comes out of the media relation in
@@ -138,7 +163,10 @@ new #[Title('Games')] class extends Component
             ->with(['media' => fn ($q) => $q->ofKind(MediaKind::Cover)])
             ->withSum('files as size_bytes_sum', 'size_bytes')
             ->withCount('files')
-            ->orderBy('title')
+            // Read by blockedFromLookup(), which otherwise runs a files query
+            // per row — twenty-four extra selects on a page of placeholders.
+            ->withCount(['files as identifiable_files_count' => fn ($q) => $q->identifiable()->present()])
+            ->orderBy('games.title')
             ->paginate(24);
     }
 
@@ -410,10 +438,15 @@ new #[Title('Games')] class extends Component
                     </tbody>
                 </table>
             </div>
+        @endif
 
-            {{-- Flux's, not Laravel's: the stock pagination view is painted from
-                 the gray ramp, and only zinc is remapped onto the warm grounds,
-                 so it came out cold blue beside everything else. --}}
+        {{-- Outside the branch: the cards were the only view without it, so
+             page two of a shelf could only be reached by typing ?page=2.
+
+             Flux's, not Laravel's: the stock pagination view is painted from
+             the gray ramp, and only zinc is remapped onto the warm grounds,
+             so it came out cold blue beside everything else. --}}
+        @if ($this->games->isNotEmpty())
             <flux:pagination :paginator="$this->games" />
         @endif
     </div>

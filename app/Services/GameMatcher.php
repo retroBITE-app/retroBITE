@@ -120,6 +120,18 @@ final class GameMatcher
             return DB::transaction(function () use ($game, $existing, $payload) {
                 $game->files()->update(['game_id' => $existing->id]);
 
+                // The files carry their RA hashes across with them, so nothing
+                // needs rehashing — but the identification itself lives on the
+                // game, and the game about to be deleted may be the one that
+                // has it. Hand it over rather than pay for it again.
+                if ($existing->retroachievements_id === null && $game->retroachievements_id !== null) {
+                    $existing->update([
+                        'retroachievements_id' => $game->retroachievements_id,
+                        'retroachievements_status' => $game->retroachievements_status,
+                        'retroachievements_matched_at' => $game->retroachievements_matched_at,
+                    ]);
+                }
+
                 // The surviving game keeps its own artwork; the placeholder's
                 // is removed from disk as well as from the table, or the files
                 // would be left behind with nothing pointing at them. In the

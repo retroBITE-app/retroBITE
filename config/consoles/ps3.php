@@ -11,6 +11,7 @@ return [
     'bios_extensions' => ['bin', 'pup'],
     'exclude_files' => [],
     'screenscraper_id' => 59,
+    'retroachievements_id' => 82,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
 ];

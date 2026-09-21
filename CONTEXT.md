@@ -68,8 +68,12 @@ trusted about.
 
 ## Metadata and artwork
 
-**Provider** — ScreenScraper, the service consulted about what a file is. The
-only outside party retroBite talks to.
+**Provider** — an outside service consulted about a game. There are two, and
+they answer different questions. ScreenScraper says what a file *is*;
+RetroAchievements says what there is to *do* in it. Neither depends on the
+other, and a game one of them has never heard of can be perfectly well known to
+the other. Unqualified, the word means ScreenScraper, which is the older of the
+two and the one a game's identity comes from.
 
 **Match** — putting a game to the provider and recording the answer. A match is
 asked once per game, never once per file.
@@ -87,11 +91,55 @@ exist until the platform fetched it, and it can be deleted and fetched again
 without anything being lost.
 
 **Media type** — the provider's own name for a kind of artwork. Kept as the
-provider writes it.
+provider writes it. One slot per type *and* region: a game may hold the same
+cover from four regions on purpose, but never two European ones, so fetching
+again replaces a revised copy without touching the other regions.
+
+**Media region** — which region's artwork a game shows. Distinct from the
+game's `region`, which is the ROM's own: a Japanese import can be the copy
+somebody owns while the English box is the one they want to look at. Null is
+the ordinary state and means "whatever Settings says", so changing the
+library-wide preference still moves every game that has not been spoken for.
 
 **Display role** — what a piece of artwork is *for* in the interface: a cover,
 a logo, a backdrop. Several media types can fill one role, which is how a game
 gets a cover whether the provider had a flat box or a rendered one.
+
+## Achievements
+
+**Achievement set** — everything RetroAchievements defines for a title. Not a
+game in retroBite's sense: one set answers for every region and every disc of a
+title, it belongs to RetroAchievements rather than to us, and it can be deleted
+and fetched again without anything being lost. A game points at a set; the set
+does not belong to the game.
+
+**Achievement** — one goal inside a set. Worth points, and pictured by a badge.
+
+**Unlock** — that a person has an achievement. Said about a person and an
+achievement, never about a game. An unlock outlives the achievement leaving the
+set: the set is theirs to change, the unlock is a fact about somebody's evening.
+
+**Hardcore** — a mode in the emulator where save states and rewind are off. A
+property of an *unlock*, not of a person and not of a game: the same game can be
+forty out of forty softcore and three out of forty hardcore at the same time,
+which is why it is two dates on one row and never a flag.
+
+**Award** — RetroAchievements' own verdict on how far somebody got in a game:
+beaten, completed, mastered. Beaten is recorded separately for the two modes.
+Always taken from them and never worked out here, because it is their judgement
+and not a sum.
+
+**Hash index** — RetroAchievements' own table of which file hashes belong to
+which set, fetched a console at a time and ahead of need. The reason
+identifying a game costs no request. Being absent from it is never final: sets
+are added constantly, and a game that was in no set in January is identified the
+night its set appears.
+
+**RA hash** — how RetroAchievements recognises a file. Not a checksum of the
+file: what is hashed depends on the console, with headers stripped on some and,
+for a disc, the game's own executable hashed instead of the disc. Computed by
+their tool rather than by us, and remembered against the file's size and
+modification time so a disc image is never read twice for it.
 
 ## Grouping
 
