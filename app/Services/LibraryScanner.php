@@ -392,19 +392,15 @@ final class LibraryScanner
     /**
      * Whether a loose file is something this console plays.
      *
-     * file_extensions wins over bios_extensions where a console lists the same
-     * one in both — PS2 has .bin games and a .bin BIOS, and a game the user
-     * owns matters more than a firmware image the library does not track.
+     * Console::playsExtension() is the one definition, shared with the count
+     * the console cards show, so the card and the scan cannot disagree about
+     * what is in a folder.
      */
     private function isPlayable(Console $console, string $relative): bool
     {
         $extension = $this->extension($relative);
 
-        if ($extension === '') {
-            return false;
-        }
-
-        return in_array($extension, array_map('strtolower', $console->fileExtensions), true);
+        return $extension !== '' && $console->playsExtension($extension);
     }
 
     /**

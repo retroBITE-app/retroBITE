@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Support\Console;
 use App\Support\Layouts\ConsoleLayout;
 use App\Support\Layouts\Layouts;
+use App\Support\Scanning\FolderCounts;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -70,13 +71,19 @@ class ConsoleSourceFolder extends Model
      */
     public static function add(Console $console, ?string $path = null, ?string $layout = null): self
     {
-        return static::updateOrCreate(
+        $row = static::updateOrCreate(
             ['console' => $console->key],
             [
                 'path' => trim($path ?? $console->folder, '/'),
                 'layout' => $layout,
             ],
         );
+
+        // The path and the layout both decide which files count, so any cached
+        // number taken before this was written is about a different folder.
+        FolderCounts::forget($console);
+
+        return $row;
     }
 
     /**
@@ -88,6 +95,8 @@ class ConsoleSourceFolder extends Model
     public static function forget(Console $console): void
     {
         static::query()->where('console', $console->key)->delete();
+
+        FolderCounts::forget($console);
     }
 
     public static function pathFor(Console $console): ?string
@@ -140,5 +149,9 @@ class ConsoleSourceFolder extends Model
         }
 
         static::query()->where('console', $console->key)->update(['layout' => $layout]);
+
+        // A mass update fires no model events, which is why every one of these
+        // clears the count by hand rather than through a saved() hook.
+        FolderCounts::forget($console);
     }
 }

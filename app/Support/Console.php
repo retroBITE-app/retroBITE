@@ -144,6 +144,19 @@ final class Console
     }
 
     /**
+     * Is a file with that extension a game, rather than a firmware image?
+     *
+     * Narrower than hasExtension() on purpose: file_extensions wins over
+     * bios_extensions where a console lists the same one in both — PS2 has
+     * .bin games and a .bin BIOS — so a count taken here agrees with what the
+     * scanner actually imports.
+     */
+    public function playsExtension(string $ext): bool
+    {
+        return in_array(strtolower($ext), array_map('strtolower', $this->fileExtensions), true);
+    }
+
+    /**
      * Absolute filesystem path for this console, optionally joined with a subfolder.
      */
     public function path(string $subfolder = ''): string

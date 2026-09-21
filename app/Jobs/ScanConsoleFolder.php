@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Exceptions\ScanAborted;
 use App\Services\LibraryScanner;
 use App\Support\Console;
+use App\Support\Scanning\FolderCounts;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -51,6 +52,12 @@ class ScanConsoleFolder implements ShouldQueue
             Log::warning('Scan aborted.', ['console' => $console->key, 'reason' => $e->getMessage()]);
 
             return;
+        } finally {
+            // Whatever the scan found, it has just walked the folder, so the
+            // cards' cached count is the older answer. Cleared even on an
+            // abort: a drive that has gone away should stop reporting the
+            // number it had before it did.
+            FolderCounts::forget($console);
         }
 
         // Recording what is on disk is only half of it. Without this the
