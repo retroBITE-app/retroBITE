@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ImageFormat;
 use App\Support\CoverArt;
 
 /**
@@ -62,9 +63,44 @@ it('never asks for more than the source has', function (int $width, int $height)
 ]);
 
 it('refuses an image with no area rather than dividing by it', function () {
-    expect(fn () => opl()->cropFor(0, 368))->toThrow(RuntimeException::class);
+    expect(function (): void {
+        opl()->cropFor(0, 368);
+    })->toThrow(RuntimeException::class);
 });
 
 it('refuses something that is not an image', function () {
-    expect(fn () => opl()->encode('not a png'))->toThrow(RuntimeException::class);
+    expect(function (): void {
+        opl()->encode('not a png');
+    })->toThrow(RuntimeException::class);
 });
+
+it('refuses a quality GD would silently ignore', function () {
+    // GD treats an out-of-range quality as its own default and says nothing,
+    // so a typo would quietly write the whole library at the wrong setting.
+    expect(function (): void {
+        new CoverArt(256, 368, ImageFormat::Jpeg, 140);
+    })->toThrow(RuntimeException::class);
+});
+
+it('encodes jpeg unless told otherwise', function () {
+    $encoded = opl()->encode(flatPng(500, 700));
+
+    expect(getimagesizefromstring($encoded)['mime'])->toBe(ImageFormat::Jpeg->mime());
+});
+
+it('still encodes png when a loader needs one', function () {
+    $encoded = (new CoverArt(256, 368, ImageFormat::Png))->encode(flatPng(500, 700));
+
+    expect(getimagesizefromstring($encoded)['mime'])->toBe(ImageFormat::Png->mime());
+});
+
+/** A plain PNG to feed the encoder, so these stay free of the filesystem. */
+function flatPng(int $width, int $height): string
+{
+    $image = imagecreatetruecolor($width, $height);
+
+    ob_start();
+    imagepng($image);
+
+    return (string) ob_get_clean();
+}

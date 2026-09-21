@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Enums\ImageFormat;
 use GdImage;
 use RuntimeException;
 
 /**
  * Re-encode a piece of cached artwork into the exact shape a loader wants.
  *
- * Open PS2 Loader reads ART/<serial>_COV.png at 256x368, opaque, PNG24 — the
- * size every file on a working drive turns out to be. The provider's box art is
- * whatever size it was scanned at, so something has to do this, and GD is in
- * the runtime image while ImageMagick is not.
+ * Open PS2 Loader reads ART/<serial>_COV at 256x368, opaque — the size every
+ * file on a working drive turns out to be. The provider's box art is whatever
+ * size it was scanned at, so something has to do this, and GD is in the runtime
+ * image while ImageMagick is not.
+ *
+ * JPEG by default rather than PNG24: at this size and quality it is about a
+ * fifth of the bytes, which is the difference between a few megabytes and tens
+ * of them on a drive holding several hundred covers, and neither OPL nor any
+ * frontend can tell the two apart at 256 pixels wide.
  *
  * Scaling is cover-and-crop rather than fit-and-pad. Box art runs about 5:7
  * against OPL's 0.696, so the crop takes a few pixels off the sides; a padded
@@ -24,9 +30,17 @@ final class CoverArt
     public function __construct(
         public readonly int $width,
         public readonly int $height,
+        public readonly ImageFormat $format = ImageFormat::Jpeg,
+        public readonly int $quality = 90,
     ) {
         if ($width < 1 || $height < 1) {
             throw new RuntimeException('A cover has to have a size.');
+        }
+
+        // Refused here rather than passed to GD, which silently treats an
+        // out-of-range quality as its own default and gives no sign of it.
+        if ($quality < 0 || $quality > 100) {
+            throw new RuntimeException('A quality has to be between 0 and 100.');
         }
     }
 
@@ -69,7 +83,7 @@ final class CoverArt
     }
 
     /**
-     * PNG bytes at this size, from whatever was handed in.
+     * This format's bytes at this size, from whatever was handed in.
      *
      * @param  string  $contents  a PNG, JPEG or WebP as it came off the disk
      *
@@ -105,8 +119,9 @@ final class CoverArt
 
         try {
             // Composited onto opaque black: OPL renders no alpha channel, and
-            // a transparent PNG arrives on the console full of whatever was in
-            // that memory.
+            // a transparent source arrives on the console full of whatever was
+            // in that memory. JPEG has no alpha at all, so this matters more
+            // under the default format rather than less.
             imagealphablending($target, true);
             imagefilledrectangle(
                 $target, 0, 0, $width - 1, $height - 1,
@@ -128,7 +143,11 @@ final class CoverArt
             imagesavealpha($target, false);
 
             ob_start();
-            imagepng($target, null, 6);
+
+            match ($this->format) {
+                ImageFormat::Jpeg => imagejpeg($target, null, $this->quality),
+                ImageFormat::Png => imagepng($target, null, 6),
+            };
 
             return (string) ob_get_clean();
         } finally {
