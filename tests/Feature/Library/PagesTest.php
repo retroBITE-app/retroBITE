@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Support\Console;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -779,4 +780,131 @@ it('caps how many covers a row can hold, at every width', function () {
         ->assertSee('lg:grid-cols-4', escape: false)
         ->assertSee('xl:grid-cols-5', escape: false)
         ->assertSee('2xl:grid-cols-6', escape: false);
+});
+
+/*
+ * The provider's rating, which is what makes a shelf of three thousand games
+ * navigable: sorted by it, filtered by it, and readable without opening a game.
+ */
+
+it('sorts by rating with the unrated last, not first', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(64)->create(['title' => 'Middling', 'slug' => 'mid']);
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+
+    // Descending alone puts NULL at the top on MariaDB, which reads as the
+    // best games being the ones nobody has an opinion about.
+    Livewire::test('games.index')
+        ->set('sort', 'rating')
+        ->assertSeeInOrder(['Excellent', 'Middling', 'Unrated']);
+});
+
+it('sorts by title by default, whatever the ratings say', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Zeta', 'slug' => 'zeta']);
+    Game::factory()->forConsole('snes')->matched()->rated(20)->create(['title' => 'Alpha', 'slug' => 'alpha']);
+
+    Livewire::test('games.index')->assertSeeInOrder(['Alpha', 'Zeta']);
+});
+
+it('filters out everything below the rating asked for', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+    Game::factory()->forConsole('snes')->matched()->rated(64)->create(['title' => 'Middling', 'slug' => 'mid']);
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+
+    Livewire::test('games.index')
+        ->set('minRating', '80')
+        ->assertSee('Excellent')
+        ->assertDontSee('Middling')
+        // A game with no rating is not a game rated below eighty, but it is
+        // not one the filter was asked for either.
+        ->assertDontSee('Unrated');
+});
+
+it('clears the rating filter but keeps the sort', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create();
+
+    // Clear is about which games are shown. How they are ordered is a way of
+    // reading the library, and somebody who chose it meant it to stick.
+    Livewire::test('games.index')
+        ->set('sort', 'rating')
+        ->set('minRating', '80')
+        ->set('query', 'nothing')
+        ->call('clear')
+        ->assertSet('minRating', '')
+        ->assertSet('query', '')
+        ->assertSet('sort', 'rating');
+});
+
+it('shows the rating on the shelf and on the game', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->rated(84)->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+    ]);
+
+    Livewire::test('games.index')->assertSee('84');
+
+    $this->get(route('games.show', $game))->assertOk()->assertSee('84 / 100');
+});
+
+it('says nothing about the rating of a game that has none', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+    ]);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertDontSee('/ 100')
+        // Nothing stands in for an absent rating: no dash, no empty chip.
+        ->assertDontSee('out of 100 by ScreenScraper');
+});
+
+it('states the rating once on the game page, not twice', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->rated(84)->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+    ]);
+
+    // It used to be a chip beside the title and a row in the metadata grid
+    // below, which left the reader working out which of the two was the
+    // other one. The chip is the one that stayed.
+    $page = $this->get(route('games.show', $game))->assertOk();
+
+    expect(substr_count($page->getContent(), '84 / 100'))->toBe(1);
+
+    expect(Livewire::test('games.show', ['game' => $game])->instance()->detailRows)
+        ->each->not->toHaveKey('key', 'Rating');
+});
+
+it('does not add a query per row to show ratings', function () {
+    Game::factory()->forConsole('snes')->matched()->rated()->count(12)->create();
+
+    DB::enableQueryLog();
+    Livewire::test('games.index')->set('sort', 'rating');
+    $queries = count(DB::getRawQueryLog());
+    DB::disableQueryLog();
+
+    // The rating is a column on games, so it rides along with the row it
+    // belongs to. Twelve more selects would mean it had become a relation.
+    expect($queries)->toBeLessThan(15);
+});
+
+it('colours the shelf badge by how good the game is', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+    Game::factory()->forConsole('snes')->matched()->rated(22)->create(['title' => 'Poor', 'slug' => 'poor']);
+
+    // Inline styles, because the colour is picked at runtime and Tailwind only
+    // generates the classes it saw in the source. If these ever become classes
+    // this test is what says the badge went blank.
+    Livewire::test('games.index')
+        ->assertSee('background-color: var(--color-accent);', escape: false)
+        ->assertSee('background-color: var(--color-danger);', escape: false);
+});
+
+it('gives the game page the same band as the shelf', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->rated(45)->create([
+        'title' => 'Middling', 'slug' => 'middling',
+    ]);
+
+    // A game must not change verdict on the way from the shelf to its page.
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSee('var(--color-warn)', escape: false);
 });

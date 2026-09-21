@@ -43,6 +43,7 @@ use Illuminate\Support\Collection;
  * @property string|null $publisher
  * @property string|null $developer
  * @property string|null $region
+ * @property int|null $rating
  * @property string|null $media_region
  * @property Carbon|null $matched_at
  * @property Carbon|null $retroachievements_matched_at
@@ -53,7 +54,8 @@ use Illuminate\Support\Collection;
  */
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
-    'release_date', 'genre', 'players', 'publisher', 'developer', 'region', 'media_region',
+    'release_date', 'genre', 'players', 'publisher', 'developer', 'region', 'rating',
+    'media_region',
     'matched_at', 'retroachievements_id', 'retroachievements_status',
     'retroachievements_matched_at',
 ])]
@@ -70,6 +72,7 @@ class Game extends Model
         return [
             'status' => GameStatus::class,
             'matched_at' => 'datetime',
+            'rating' => 'integer',
             'retroachievements_status' => RetroAchievementsStatus::class,
             'retroachievements_matched_at' => 'datetime',
 
@@ -314,6 +317,21 @@ class Game extends Model
             RetroAchievementsStatus::Pending->value,
             RetroAchievementsStatus::NoMatch->value,
         ]);
+    }
+
+    /**
+     * Games identified before ratings existed.
+     *
+     * The backfill's whole selection. Keyed off the rating being absent rather
+     * than off a timestamp, so a game the provider had no rating for last time
+     * is asked again — the votes are theirs and they accumulate. A game with
+     * no screenscraper_id is skipped because there is nothing to ask about.
+     *
+     * @param  Builder<Game>  $query
+     */
+    public function scopeAwaitingRating(Builder $query): void
+    {
+        $query->whereNotNull('games.screenscraper_id')->whereNull('games.rating');
     }
 
     /**

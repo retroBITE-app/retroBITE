@@ -85,6 +85,12 @@ title. The surviving game keeps its identity; the other's files move across.
 and the one for questions that fail is much the smaller. This is why the system
 prefers not to ask rather than ask and miss.
 
+**Rating** — ScreenScraper's own mark for a game, voted on by their users.
+Not a critic's score and not ours. It rides along in every answer, so it costs
+nothing to have, but it only exists for games the provider knows, and a game
+with no rating is commoner than one with. Held out of a hundred because that is
+how the library reads it; the provider counts to twenty.
+
 **Media** — artwork retroBite downloaded and owns: covers, screenshots, logos,
 backdrops. The opposite of a game file in every way that matters — it did not
 exist until the platform fetched it, and it can be deleted and fetched again
