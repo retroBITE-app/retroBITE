@@ -3,6 +3,7 @@
 use App\Models\AppSetting;
 use App\Support\ConsoleOverrides;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Tests\TestCase;
@@ -74,7 +75,43 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * A row in `jobs`, written rather than queued.
+ *
+ * The suite runs on the sync connection, so a dispatch never leaves anything
+ * behind to count. Real columns, because queue depth is read straight off them:
+ * a reserved row is one a worker is holding, and an `available_at` in the
+ * future is a job that released itself.
+ */
+function queueRow(string $queue, ?int $reservedAt = null, ?int $availableAt = null): void
 {
-    // ..
+    DB::table('jobs')->insert([
+        'queue' => $queue,
+        'payload' => '{}',
+        'attempts' => 0,
+        'reserved_at' => $reservedAt,
+        'available_at' => $availableAt ?? now()->getTimestamp(),
+        'created_at' => now()->getTimestamp(),
+    ]);
+}
+
+/**
+ * The same, in bulk. One insert rather than a few hundred, because the tests
+ * that care about a percentage need a denominator big enough for rounding to
+ * matter.
+ *
+ * @param  positive-int  $times
+ */
+function queueRows(string $queue, int $times): void
+{
+    $now = now()->getTimestamp();
+
+    DB::table('jobs')->insert(array_fill(0, $times, [
+        'queue' => $queue,
+        'payload' => '{}',
+        'attempts' => 0,
+        'reserved_at' => null,
+        'available_at' => $now,
+        'created_at' => $now,
+    ]));
 }

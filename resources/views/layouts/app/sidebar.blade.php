@@ -96,6 +96,10 @@
                      navigation. --}}
                 <livewire:api-status />
 
+                {{-- What the workers are doing, between what the providers
+                     will still answer and the disk it all lands on. --}}
+                <livewire:system-activity />
+
                 {{--
                     `kicker` goes on the label only. On the flex parent its
                     0.14em tracking also stretched the figure, which then wrapped.
