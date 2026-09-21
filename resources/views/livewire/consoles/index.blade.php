@@ -6,9 +6,9 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
 use App\Support\Scanning\LibraryFolders;
+use App\Support\SystemActivity;
 use Flux\Flux;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -121,18 +121,15 @@ new #[Title('Consoles')] class extends Component
     /**
      * Work still queued, so the page can say something is happening.
      *
-     * @return array<string, int>
+     * The same reading the sidebar draws, rather than a second count written
+     * here: the hand-made one this replaces named three queues and ignored the
+     * four that hashing and RetroAchievements run on, so a library busy for
+     * ten minutes could look idle from this page.
      */
     #[Computed]
-    public function queued(): array
+    public function activity(): SystemActivity
     {
-        $rows = DB::table('jobs')->selectRaw('queue, count(*) as total')->groupBy('queue')->pluck('total', 'queue');
-
-        return [
-            'scanning' => (int) ($rows['default'] ?? 0),
-            'identifying' => (int) ($rows['scraper'] ?? 0),
-            'artwork' => (int) ($rows['media'] ?? 0),
-        ];
+        return SystemActivity::current();
     }
 
     public function openAdd(): void
@@ -231,7 +228,10 @@ new #[Title('Consoles')] class extends Component
 
         ScanConsoleFolder::dispatch($console->key);
 
-        unset($this->queued, $this->added);
+        unset($this->activity, $this->added);
+
+        // The sidebar polls slowly while it believes nothing is happening.
+        $this->dispatch('system-activity-changed');
 
         Flux::toast(text: __('Scanning :console. The library fills in as it goes.', ['console' => $console->name]));
     }
@@ -252,15 +252,13 @@ new #[Title('Consoles')] class extends Component
 
         {{-- Only polls while there is something to watch, so an idle page is
              not asking the database every two seconds. --}}
-        @if (array_sum($this->queued) > 0)
+        @if ($this->activity->busy())
             <div wire:poll.2s class="flex flex-wrap items-center gap-6 rounded-xl border border-accent-tint bg-accent-tint px-5 py-4">
                 <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-                @foreach ($this->queued as $label => $count)
-                    @if ($count > 0)
-                        <p class="text-sm text-fg">
-                            <span class="font-medium text-fg-bright">{{ $count }}</span> {{ __(ucfirst($label)) }}
-                        </p>
-                    @endif
+                @foreach ($this->activity->active() as $queue)
+                    <p class="text-sm text-fg">
+                        <span class="font-medium text-fg-bright">{{ $queue->remaining() }}</span> {{ __($queue->label) }}
+                    </p>
                 @endforeach
             </div>
         @endif
