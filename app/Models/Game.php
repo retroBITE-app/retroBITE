@@ -38,7 +38,6 @@ use Illuminate\Support\Collection;
  * @property string|null $publisher
  * @property string|null $developer
  * @property string|null $region
- * @property int|null $rating 0-5, folded down from the provider's /20 note
  * @property Carbon|null $matched_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -48,7 +47,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
     'release_date', 'genre', 'players', 'publisher', 'developer', 'region',
-    'rating', 'matched_at',
+    'matched_at',
 ])]
 class Game extends Model
 {
@@ -62,7 +61,6 @@ class Game extends Model
     {
         return [
             'status' => GameStatus::class,
-            'rating' => 'integer',
             'matched_at' => 'datetime',
         ];
     }

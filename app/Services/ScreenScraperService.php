@@ -282,7 +282,6 @@ class ScreenScraperService
             'players' => (string) Arr::get($jeu, 'joueurs.text', ''),
             'publisher' => (string) Arr::get($jeu, 'editeur.text', ''),
             'developer' => (string) Arr::get($jeu, 'developpeur.text', ''),
-            'rating' => $this->rating($jeu),
             'medias' => $medias,
             'roms' => is_array($roms = Arr::get($jeu, 'roms')) ? $roms : [],
             // The media list inside raw is replaced by the sanitised one: the
@@ -290,26 +289,6 @@ class ScreenScraperService
             // sspassword, and raw is what gets written to the activity log.
             'raw' => ['medias' => $medias] + $jeu,
         ];
-    }
-
-    /**
-     * The provider's score, folded from its scale of twenty onto one of five.
-     *
-     * Normalised here rather than at the reader because the /20 scale is the
-     * provider's business and nothing downstream should have to know it. Null
-     * for a game nobody has rated, which is most of them.
-     *
-     * @param  array<string, mixed>  $jeu
-     */
-    private function rating(array $jeu): ?int
-    {
-        $note = trim((string) Arr::get($jeu, 'note.text', ''));
-
-        if ($note === '' || ! is_numeric($note)) {
-            return null;
-        }
-
-        return (int) max(0, min(5, (int) round(((float) $note) / 4)));
     }
 
     /**

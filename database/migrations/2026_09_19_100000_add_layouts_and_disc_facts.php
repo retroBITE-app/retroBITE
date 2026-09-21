@@ -23,21 +23,10 @@ return new class extends Migration
             $table->string('license_id', 16)->nullable()->index();
             $table->string('video_mode', 4)->nullable();
         });
-
-        Schema::table('games', function (Blueprint $table) {
-            // 0-5, folded down from ScreenScraper's /20 note. Open PS2 Loader
-            // writes a Rating= line into its per-game config and has nowhere
-            // else to get one.
-            $table->unsignedTinyInteger('rating')->nullable();
-        });
     }
 
     public function down(): void
     {
-        Schema::table('games', function (Blueprint $table) {
-            $table->dropColumn('rating');
-        });
-
         Schema::table('game_files', function (Blueprint $table) {
             $table->dropColumn(['license_id', 'video_mode']);
         });
