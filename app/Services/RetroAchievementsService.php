@@ -235,6 +235,18 @@ class RetroAchievementsService
     }
 
     /**
+     * Whether a key exists at all, from either source.
+     *
+     * Public because the sidebar asks before it draws anything: "no key
+     * anywhere" and "a key, but nothing has run yet" look identical from the
+     * outside and mean opposite things.
+     */
+    public function hasKey(): bool
+    {
+        return $this->apiKey() !== '';
+    }
+
+    /**
      * The key from Settings, falling back to the environment.
      *
      * The fallback is what lets a headless install work before anybody has

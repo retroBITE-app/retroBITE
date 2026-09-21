@@ -90,6 +90,12 @@
             <flux:spacer />
 
             <div class="mt-auto border-t border-line pt-4">
+                {{-- What the providers will still answer, above the disk that
+                     holds what they answered with. Its own component because it
+                     polls: the rest of this layout is static until the next
+                     navigation. --}}
+                <livewire:api-status />
+
                 {{--
                     `kicker` goes on the label only. On the flex parent its
                     0.14em tracking also stretched the figure, which then wrapped.
