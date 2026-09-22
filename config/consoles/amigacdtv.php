@@ -4,6 +4,7 @@ return [
     'order' => 520,
     'name' => 'Commodore CDTV',
     'brand' => 'Commodore',
+    'released' => 1991,
     'folder' => 'amigacdtv',
     'icon' => '/images/consoles/Commodore - Amiga.png',
     'file_icon' => '/images/consoles/Commodore - Amiga-content.png',

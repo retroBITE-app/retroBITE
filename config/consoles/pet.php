@@ -4,6 +4,7 @@ return [
     'order' => 530,
     'name' => 'Commodore PET',
     'brand' => 'Commodore',
+    'released' => 1977,
     'folder' => 'pet',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

@@ -4,6 +4,7 @@ return [
     'order' => 30,
     'name' => 'PlayStation 3',
     'brand' => 'Sony',
+    'released' => 2006,
     'folder' => 'ps3',
     'icon' => '/images/consoles/Sony - PlayStation 3.png',
     'file_icon' => '/images/consoles/Sony - PlayStation 3-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 470,
     'name' => 'ColecoVision',
     'brand' => 'Coleco',
+    'released' => 1982,
     'folder' => 'colecovision',
     'icon' => '/images/consoles/Coleco - ColecoVision.png',
     'file_icon' => '/images/consoles/Coleco - ColecoVision-content.png',

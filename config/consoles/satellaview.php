@@ -4,6 +4,7 @@ return [
     'order' => 940,
     'name' => 'Satellaview',
     'brand' => 'Nintendo',
+    'released' => 1995,
     'folder' => 'satellaview',
     'icon' => '/images/consoles/Nintendo - Satellaview.png',
     'file_icon' => '/images/consoles/Nintendo - Satellaview-content.png',

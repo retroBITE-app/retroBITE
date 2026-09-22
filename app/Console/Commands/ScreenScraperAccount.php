@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Services\ScreenScraperService;
+use App\Support\ScreenScraperCredentials;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
@@ -30,8 +31,8 @@ class ScreenScraperAccount extends Command
     {
         $this->line('');
         $this->components->twoColumnDetail('<fg=gray>Sending</>', '');
-        $this->components->twoColumnDetail('  ssid', $this->shown((string) config('screenscraper.user')));
-        $this->components->twoColumnDetail('  sspassword', $this->passwordState((string) config('screenscraper.password')));
+        $this->components->twoColumnDetail('  ssid', $this->shown(ScreenScraperCredentials::user()));
+        $this->components->twoColumnDetail('  sspassword', $this->passwordState(ScreenScraperCredentials::password()));
         $this->components->twoColumnDetail('  devid', $this->shown((string) config('screenscraper.dev_id')));
         $this->components->twoColumnDetail('  endpoint', (string) config('screenscraper.endpoint'));
         $this->line('');
@@ -78,7 +79,7 @@ class ScreenScraperAccount extends Command
      */
     private function verdict(string $id): int
     {
-        $sent = (string) config('screenscraper.user');
+        $sent = ScreenScraperCredentials::user();
 
         if ($id === '') {
             $this->components->warn(
@@ -91,7 +92,7 @@ class ScreenScraperAccount extends Command
 
         if ($sent !== '' && Str::contains($sent, '@')) {
             $this->components->warn(
-                'SCREENSCRAPER_USER looks like an email address. ScreenScraper wants the '
+                'The account name looks like an email address. ScreenScraper wants the '
                 .'login shown on your profile page, not the address you registered with — '
                 ."and it answers on the developer account rather than refusing. It named \"{$id}\"; "
                 .'if that is not your account, that is the reason.'

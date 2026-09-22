@@ -4,6 +4,7 @@ return [
     'order' => 1110,
     'name' => 'Sega Pico',
     'brand' => 'Sega',
+    'released' => 1993,
     'folder' => 'pico',
     'icon' => '/images/consoles/Sega - PICO.png',
     'file_icon' => '/images/consoles/Sega - PICO-content.png',

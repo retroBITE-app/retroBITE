@@ -4,6 +4,7 @@ return [
     'order' => 1340,
     'name' => 'DAPHNE',
     'brand' => 'Various',
+    'released' => null,
     'folder' => 'daphne',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

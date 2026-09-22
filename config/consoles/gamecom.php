@@ -4,6 +4,7 @@ return [
     'order' => 1320,
     'name' => 'Game.com',
     'brand' => 'Tiger Electronics',
+    'released' => 1997,
     'folder' => 'gamecom',
     'icon' => '/images/consoles/Tiger - Game.com.png',
     'file_icon' => '/images/consoles/Tiger - Game.com-content.png',

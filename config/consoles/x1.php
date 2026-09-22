@@ -4,6 +4,7 @@ return [
     'order' => 1150,
     'name' => 'Sharp X1',
     'brand' => 'Sharp',
+    'released' => 1982,
     'folder' => 'x1',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

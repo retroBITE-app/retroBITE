@@ -4,6 +4,7 @@ return [
     'order' => 290,
     'name' => 'Arduboy',
     'brand' => 'Arduboy',
+    'released' => 2014,
     'folder' => 'arduboy',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

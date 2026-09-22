@@ -304,11 +304,58 @@
     }
 }
 
+/*
+ * The soft open on an action menu.
+ *
+ * Flux draws its menus as a popover, which is shown by toggling `display` —
+ * and display is a discrete property, so an ordinary transition on it does
+ * nothing at all. Two things are needed: `allow-discrete`, which lets the
+ * display switch wait for the rest of the transition rather than happening
+ * first; and `@starting-style`, which gives the popover a from-state for the
+ * frame it is shown on. Without the second the element has nothing to animate
+ * away from and simply appears.
+ *
+ * Short and small on purpose. This is a menu under a pointer that is already
+ * on its way to an item, not a panel being introduced.
+ */
+@layer components {
+    ui-menu[popover] {
+        transition:
+            opacity 0.12s ease-out,
+            transform 0.12s ease-out,
+            display 0.12s allow-discrete,
+            overlay 0.12s allow-discrete;
+    }
+
+    ui-menu[popover]:popover-open {
+        opacity: 1;
+        transform: none;
+    }
+
+    @starting-style {
+        ui-menu[popover]:popover-open {
+            opacity: 0;
+            transform: translateY(-0.25rem) scale(0.98);
+        }
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .work-rail::after {
         animation: none;
         width: 100%;
         opacity: 0.5;
+    }
+
+    ui-menu[popover] {
+        transition: none;
+    }
+
+    @starting-style {
+        ui-menu[popover]:popover-open {
+            opacity: 1;
+            transform: none;
+        }
     }
 }
 

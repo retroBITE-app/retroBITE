@@ -4,6 +4,7 @@ return [
     'order' => 260,
     'name' => 'Apple II',
     'brand' => 'Apple',
+    'released' => 1977,
     'folder' => 'apple2',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

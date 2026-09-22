@@ -4,6 +4,7 @@ return [
     'order' => 120,
     'name' => 'Nintendo 64',
     'brand' => 'Nintendo',
+    'released' => 1996,
     'folder' => 'n64',
     'icon' => '/images/consoles/Nintendo - Nintendo 64.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo 64-content.png',

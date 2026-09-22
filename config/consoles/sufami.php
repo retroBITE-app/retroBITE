@@ -4,6 +4,7 @@ return [
     'order' => 390,
     'name' => 'SuFami Turbo',
     'brand' => 'Bandai',
+    'released' => 1996,
     'folder' => 'sufami',
     'icon' => '/images/consoles/Nintendo - Sufami Turbo.png',
     'file_icon' => '/images/consoles/Nintendo - Sufami Turbo-content.png',

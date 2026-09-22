@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 new #[Title('Console settings')] class extends Component
@@ -16,7 +17,16 @@ new #[Title('Console settings')] class extends Component
     /** 135 consoles is a long way to scroll to reach one. */
     public string $search = '';
 
-    /** The console open in the modal, '' when none is. */
+    /**
+     * The console open in the modal, '' when none is.
+     *
+     * In the URL, which makes an open modal a place rather than a state: the
+     * shelf and the console list both link straight to one console's settings,
+     * and the link can be shared or come back on the browser's back button.
+     * It clears itself when the modal closes, so the address is never left
+     * claiming something is open that is not.
+     */
+    #[Url(as: 'console', except: '')]
     public string $editing = '';
 
     /** @var array<string, string> raw form values, keyed by config key */
@@ -104,9 +114,29 @@ new #[Title('Console settings')] class extends Component
         return $this->editing !== '' && ConsoleOverrides::has($this->editing);
     }
 
+    /**
+     * Open the console the address asked for, if it asked for one.
+     *
+     * The property is already filled from the query string by the time this
+     * runs, so this is only the seeding and the showing that a click would
+     * otherwise have done. An unknown key leaves the page as it is rather than
+     * opening an empty form — edit() is what refuses it.
+     */
+    public function mount(): void
+    {
+        if ($this->editing !== '') {
+            $this->edit($this->editing);
+        }
+    }
+
     public function edit(string $key): void
     {
         if (! ConsoleResource::exists($key)) {
+            // Including one that arrived in the URL. Left blank rather than
+            // kept, or the address would go on naming a console that is not
+            // open and cannot be.
+            $this->editing = '';
+
             return;
         }
 

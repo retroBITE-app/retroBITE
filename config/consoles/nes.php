@@ -4,6 +4,7 @@ return [
     'order' => 910,
     'name' => 'Nintendo Entertainment System',
     'brand' => 'Nintendo',
+    'released' => 1983,
     'folder' => 'nes',
     'icon' => '/images/consoles/Nintendo - Nintendo Entertainment System.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo Entertainment System-content.png',

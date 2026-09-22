@@ -4,6 +4,7 @@ return [
     'order' => 1300,
     'name' => 'TI-99/4A',
     'brand' => 'Texas Instruments',
+    'released' => 1981,
     'folder' => 'ti99',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

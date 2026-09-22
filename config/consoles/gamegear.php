@@ -4,6 +4,7 @@ return [
     'order' => 1030,
     'name' => 'Sega Game Gear',
     'brand' => 'Sega',
+    'released' => 1990,
     'folder' => 'gamegear',
     'icon' => '/images/consoles/Sega - Game Gear.png',
     'file_icon' => '/images/consoles/Sega - Game Gear-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 1070,
     'name' => 'Sega Model 2',
     'brand' => 'Sega',
+    'released' => 1993,
     'folder' => 'model2',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

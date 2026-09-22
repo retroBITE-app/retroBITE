@@ -4,6 +4,7 @@ return [
     'order' => 1060,
     'name' => 'Sega Master System',
     'brand' => 'Sega',
+    'released' => 1985,
     'folder' => 'mastersystem',
     'icon' => '/images/consoles/Sega - Master System - Mark III.png',
     'file_icon' => '/images/consoles/Sega - Master System - Mark III-content.png',

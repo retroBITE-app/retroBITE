@@ -4,6 +4,7 @@ return [
     'order' => 930,
     'name' => 'Pokemon Mini',
     'brand' => 'Nintendo',
+    'released' => 2001,
     'folder' => 'pokemini',
     'icon' => '/images/consoles/Nintendo - Pokemon Mini.png',
     'file_icon' => '/images/consoles/Nintendo - Pokemon Mini-content.png',

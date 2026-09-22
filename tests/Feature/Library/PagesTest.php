@@ -4,6 +4,7 @@ use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
+use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
@@ -18,6 +19,7 @@ use App\Support\ExportProgress;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -208,9 +210,8 @@ it('lists games and filters them', function () {
         ->assertSee('Super Mario World')
         ->assertDontSee('Tekken 3')
         ->set('consoleFilter', '')
-        ->set('status', 'placeholder')
-        ->assertSee('Tekken 3')
-        ->assertDontSee('Super Mario World');
+        ->assertSee('Super Mario World')
+        ->assertSee('Tekken 3');
 });
 
 it('shows a game with its files, marking the missing ones', function () {
@@ -755,13 +756,14 @@ it('remembers whether the library is drawn as covers or as a list', function () 
     $game = Game::factory()->forConsole('snes')->unmatched()->create(['title' => 'Unknown Disc', 'slug' => 'unknown']);
     GameFile::factory()->for($game)->create(['path' => 'snes/unknown.sfc', 'filename' => 'unknown.sfc', 'size_bytes' => 3145728]);
 
-    // Cards by default, and a card carries the word the table puts in a column
-    // header instead.
+    // Cards by default. Achievements is a column header the table has and a
+    // card has not — genre used to stand in for this, and now it is a line
+    // under the title rather than a column, so it says nothing about the mode.
     Livewire::test('games.index')
         ->assertSee('Unidentified')
-        ->assertDontSee('Genre')
+        ->assertDontSee('Achievements')
         ->call('setView', 'table')
-        ->assertSee('Genre');
+        ->assertSee('Achievements');
 
     expect(AppSetting::get(AppSetting::UI_GAMES_VIEW))->toBe('table');
 
@@ -769,15 +771,15 @@ it('remembers whether the library is drawn as covers or as a list', function () 
     // reads the row back.
     AppSetting::flush();
 
-    Livewire::test('games.index')->assertSee('Genre');
-    Livewire::test('games.index', ['console' => 'snes'])->assertSee('Genre');
+    Livewire::test('games.index')->assertSee('Achievements');
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('Achievements');
 
     // Anything else leaves it alone rather than drawing nothing at all.
-    Livewire::test('games.index')->call('setView', 'mosaic')->assertSee('Genre');
+    Livewire::test('games.index')->call('setView', 'mosaic')->assertSee('Achievements');
 
     // A link in the other mode still overrides what was remembered. Last,
     // because withQueryParams sticks to every Livewire::test after it.
-    Livewire::withQueryParams(['view' => 'cards'])->test('games.index')->assertDontSee('Genre');
+    Livewire::withQueryParams(['view' => 'cards'])->test('games.index')->assertDontSee('Achievements');
 });
 
 it('sizes an empty slot from the console it belongs to', function () {
@@ -931,4 +933,972 @@ it('says nothing rather than throwing when the drive is not mounted', function (
             ->assertSee('2xl:grid-cols-6', escape: false);
     });
 
+});
+
+/*
+ * The provider's rating, which is what makes a shelf of three thousand games
+ * navigable: sorted by it, filtered by it, and readable without opening a game.
+ */
+
+it('sorts by rating with the unrated last, not first', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(64)->create(['title' => 'Middling', 'slug' => 'mid']);
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+
+    // Descending alone puts NULL at the top on MariaDB, which reads as the
+    // best games being the ones nobody has an opinion about.
+    Livewire::test('games.index')
+        ->set('sort', 'rating')
+        ->assertSeeInOrder(['Excellent', 'Middling', 'Unrated']);
+});
+
+it('sorts by title by default, whatever the ratings say', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Zeta', 'slug' => 'zeta']);
+    Game::factory()->forConsole('snes')->matched()->rated(20)->create(['title' => 'Alpha', 'slug' => 'alpha']);
+
+    Livewire::test('games.index')->assertSeeInOrder(['Alpha', 'Zeta']);
+});
+
+it('filters out everything below the rating asked for', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+    Game::factory()->forConsole('snes')->matched()->rated(64)->create(['title' => 'Middling', 'slug' => 'mid']);
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+
+    Livewire::test('games.index')
+        ->set('minRating', '80')
+        ->assertSee('Excellent')
+        ->assertDontSee('Middling')
+        // A game with no rating is not a game rated below eighty, but it is
+        // not one the filter was asked for either.
+        ->assertDontSee('Unrated');
+});
+
+it('clears the rating filter but keeps the sort', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create();
+
+    // Clear is about which games are shown. How they are ordered is a way of
+    // reading the library, and somebody who chose it meant it to stick.
+    Livewire::test('games.index')
+        ->set('sort', 'rating')
+        ->set('minRating', '80')
+        ->set('query', 'nothing')
+        ->call('clear')
+        ->assertSet('minRating', '')
+        ->assertSet('query', '')
+        ->assertSet('sort', 'rating');
+});
+
+it('shows the rating on the shelf and on the game', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->rated(84)->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+    ]);
+
+    Livewire::test('games.index')->assertSee('84');
+
+    $this->get(route('games.show', $game))->assertOk()->assertSee('84 / 100');
+});
+
+it('says nothing about the rating of a game that has none', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+    ]);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertDontSee('/ 100')
+        // Nothing stands in for an absent rating: no dash, no empty chip.
+        ->assertDontSee('out of 100 by ScreenScraper');
+});
+
+it('states the rating once on the game page, not twice', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->rated(84)->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+    ]);
+
+    // It used to be a chip beside the title and a row in the metadata grid
+    // below, which left the reader working out which of the two was the
+    // other one. The chip is the one that stayed.
+    $page = $this->get(route('games.show', $game))->assertOk();
+
+    expect(substr_count($page->getContent(), '84 / 100'))->toBe(1);
+
+    expect(Livewire::test('games.show', ['game' => $game])->instance()->detailRows)
+        ->each->not->toHaveKey('key', 'Rating');
+});
+
+it('does not add a query per row to show ratings', function () {
+    // flushQueryLog between measurements, or the second reading is the first
+    // one plus the second: the log accumulates and disableQueryLog() does not
+    // empty it.
+    $count = function (int $games): int {
+        Game::query()->delete();
+        Game::factory()->forConsole('snes')->matched()->rated()->count($games)->create();
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        Livewire::test('games.index')->set('sort', 'rating');
+        $queries = count(DB::getRawQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    // Once before measuring: the first render of the suite pays for a session
+    // and the settings memo, and that is not what is being counted.
+    $count(1);
+
+    // Measured against itself rather than against a number. What matters is
+    // that the page costs the same whatever is on it, and a fixed budget has
+    // to be raised every time a filter's list is added — which is exactly how
+    // a real per-row query gets waved through.
+    //
+    // The rating is a column on games, so it rides along with the row it
+    // belongs to. Eighteen more selects would mean it had become a relation.
+    expect($count(20))->toBe($count(2));
+});
+
+it('colours the shelf badge by how good the game is', function () {
+    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+    Game::factory()->forConsole('snes')->matched()->rated(22)->create(['title' => 'Poor', 'slug' => 'poor']);
+
+    // Inline styles, because the colour is picked at runtime and Tailwind only
+    // generates the classes it saw in the source. If these ever become classes
+    // this test is what says the badge went blank.
+    Livewire::test('games.index')
+        ->assertSee('background-color: var(--color-accent);', escape: false)
+        ->assertSee('background-color: var(--color-danger);', escape: false);
+});
+
+it('gives the game page the same band as the shelf', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->rated(45)->create([
+        'title' => 'Middling', 'slug' => 'middling',
+    ]);
+
+    // A game must not change verdict on the way from the shelf to its page.
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSee('var(--color-warn)', escape: false);
+});
+
+/*
+ * Asking for a rating by hand, from a console's menu or a game's.
+ *
+ * The backfill command reaches a whole library once; these are the two places
+ * somebody asks about a shelf or a single game after the fact, which is the
+ * only way to pick up votes cast since the match.
+ */
+
+it('fetches ratings for a whole console, skipping the games that already have one', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $bare = Game::factory()->forConsole('snes')->matched(101)->create();
+    Game::factory()->forConsole('snes')->matched(102)->rated(80)->create();
+
+    // A placeholder has no provider id, and the rating comes back by one.
+    Game::factory()->forConsole('snes')->create(['screenscraper_id' => null, 'status' => GameStatus::Placeholder]);
+
+    // And another console's game is not this console's business.
+    Game::factory()->forConsole('nes')->matched(103)->create();
+
+    Livewire::test('consoles.index')->call('fetchRatings', 'snes');
+
+    Queue::assertPushed(RateGame::class, 1);
+    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $bare->id && $job->force === false);
+});
+
+it('re-fetches every rating on a console when asked to start over', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    Game::factory()->forConsole('snes')->matched(101)->create();
+    Game::factory()->forConsole('snes')->matched(102)->rated(80)->create();
+
+    Livewire::test('consoles.index')->call('fetchRatings', 'snes', true);
+
+    // Forced, or the job's own guard would drop the one that already has a
+    // rating — which is the very game somebody asking again means.
+    Queue::assertPushed(RateGame::class, 2);
+    Queue::assertPushed(RateGame::class, fn ($job) => $job->force === true);
+});
+
+it('says so rather than queueing nothing when a console has every rating already', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+    Game::factory()->forConsole('snes')->matched(101)->rated(80)->create();
+
+    Livewire::test('consoles.index')
+        ->call('fetchRatings', 'snes')
+        ->assertDispatched('toast-show');
+
+    Queue::assertNothingPushed();
+});
+
+it('needs no media types switched on to fetch a rating', function () {
+    Queue::fake();
+    ConsoleSourceFolder::add(new Console('snes'));
+    Game::factory()->forConsole('snes')->matched(101)->create();
+
+    // The artwork actions refuse here. A rating rides along in the same answer
+    // and there is nothing to choose, so this one has no such gate.
+    AppSetting::put(AppSetting::MEDIA_TYPES, []);
+
+    Livewire::test('consoles.index')->call('fetchRatings', 'snes');
+
+    Queue::assertPushed(RateGame::class, 1);
+});
+
+it('offers a rating fetch on the game page and forces it', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->rated(70)->create([
+        'title' => 'Tekken 3', 'slug' => 'tekken-3',
+    ]);
+
+    Livewire::test('games.show', ['game' => $game])
+        // The label says which of the two this is; the action is the same.
+        ->assertSee('Fetch rating again')
+        ->call('fetchRating');
+
+    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === true);
+});
+
+it('refuses a rating for a game nobody has identified', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->create(['title' => 'Mystery', 'slug' => 'mystery']);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSee('Fetch rating')
+        ->assertSee('Identify the game first — the rating comes back by provider id.');
+
+    Livewire::test('games.show', ['game' => $game])->call('fetchRating');
+
+    Queue::assertNothingPushed();
+});
+
+it('waits for a rating to arrive, then stops', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->create([
+        'title' => 'Tekken 3', 'slug' => 'tekken-3',
+    ]);
+
+    $component = Livewire::test('games.show', ['game' => $game])
+        ->assertSee('Fetch rating')
+        ->call('fetchRating');
+
+    // A string, so an unrated game does not read as "not waiting": null means
+    // idle here, the same as it does for artwork.
+    $component->assertSet('ratingFrom', '')->assertSee('Fetching the rating');
+
+    $component->call('checkRating')->assertSee('Fetching the rating');
+
+    $game->update(['rating' => 90]);
+
+    $component->call('checkRating')->assertDontSee('Fetching the rating');
+});
+
+it('gives up waiting when the provider holds no rating', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->create([
+        'title' => 'Obscure', 'slug' => 'obscure',
+    ]);
+
+    // Nothing is written for a game nobody has voted on, so there is no
+    // arrival to notice — the same shape as artwork the provider does not hold.
+    $component = Livewire::test('games.show', ['game' => $game])->call('fetchRating');
+
+    $component->call('checkRating')->assertSee('Fetching the rating');
+
+    $this->travel(3)->minutes();
+
+    $component->call('checkRating')->assertDontSee('Fetching the rating');
+});
+
+/*
+ * The list view's rows, which are two text lines tall with a square cover at
+ * the left edge.
+ */
+
+it('puts a square cover at the left of a list row', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    $cover = Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    // size-12 is the frame and object-contain is what keeps the art its own
+    // shape inside it. Cropping a square out of box art cuts the title off.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('size-12', escape: false)
+        ->assertSee('object-contain', escape: false)
+        ->assertSee(route('media.show', ['path' => $cover->path]), escape: false);
+});
+
+it('stands the console icon in for a list row with no cover', function () {
+    Game::factory()->forConsole('snes')->create(['title' => 'Unknown Disc', 'slug' => 'unknown']);
+
+    // The frame is there either way, or the rows either side of an unidentified
+    // game would be a different height from it.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('size-12', escape: false)
+        ->assertSee((new Console('snes'))->fileIcon, escape: false);
+});
+
+it('moves the console and the genre under the title rather than into columns', function () {
+    Game::factory()->forConsole('snes')->matched()->create([
+        'title' => 'Super Mario World', 'slug' => 'smw', 'genre' => 'Platform',
+    ]);
+
+    // Both are still on the page, as the row's second line. Neither is a column
+    // header any more, which is the width the achievement bar was given.
+    $component = Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('Super Nintendo')
+        ->assertSee('Platform');
+
+    expect($component->html())->not->toContain('font-medium">Genre<');
+});
+
+it('keeps the second line of a list row even with nothing to put on it', function () {
+    // A console's own shelf drops the console from the line, and an
+    // unidentified game has no genre — so the line has nothing at all. It is
+    // still drawn, or this row would be shorter than the ones around it.
+    Game::factory()->forConsole('snes')->create(['title' => 'Unknown Disc', 'slug' => 'unknown']);
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index', ['console' => 'snes'])
+        ->assertSee('Unknown Disc')
+        ->assertSee('text-xs text-fg-dim', escape: false);
+});
+
+/*
+ * The list row's menu, which replaced the single button that showed Identify
+ * or Artwork and never both.
+ */
+
+it('offers every per-game action from a list row', function () {
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/t.bin', 'filename' => 't.bin', 'role' => FileRole::Track]);
+
+    // The same three the console's own menu runs over a whole shelf, aimed at
+    // one game. The old row could only ever show one of them.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('Identify game')
+        ->assertSee('Fetch artwork')
+        ->assertSee('Fetch rating')
+        ->assertSee('Open game');
+});
+
+it('says why a list row cannot run an action rather than hiding it', function () {
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
+
+    // A placeholder can be identified but has no provider id, so neither
+    // artwork nor a rating can be fetched for it yet.
+    $game = Game::factory()->forConsole('psx')->create(['title' => 'Unknown', 'slug' => 'unknown']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/u.bin', 'filename' => 'u.bin', 'role' => FileRole::Track]);
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('Identify the game first — artwork is fetched by provider id.')
+        ->assertSee('Identify the game first — the rating comes back by provider id.');
+});
+
+it('labels a list row by what the game already holds', function () {
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->rated(70)->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+    Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('Fetch artwork again')
+        ->assertSee('Fetch rating again');
+});
+
+it('fetches a rating for one game from the list, forced', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->rated(70)->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+
+    Livewire::test('games.index')->call('fetchRating', $game->id);
+
+    // Unforced, the job would drop a game that already has a rating — which is
+    // the very game somebody picking this item most likely meant.
+    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === true);
+});
+
+it('refuses a rating from the list for a game nobody has identified', function () {
+    Queue::fake();
+
+    $game = Game::factory()->forConsole('psx')->create(['title' => 'Unknown', 'slug' => 'unknown']);
+
+    Livewire::test('games.index')
+        ->call('fetchRating', $game->id)
+        ->assertDispatched('toast-show');
+
+    Queue::assertNothingPushed();
+});
+
+/*
+ * Year and Players, and the widths that keep the columns still.
+ */
+
+it('shows the year and the player count in the list', function () {
+    Game::factory()->forConsole('psx')->matched()->create([
+        'title' => 'Tekken 3', 'slug' => 'tekken-3',
+        'release_date' => '1998-03-26', 'players' => '1-2',
+    ]);
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('Year')
+        ->assertSee('Players')
+        ->assertSee('1998')
+        ->assertSee('1-2')
+        // The date is a column of years, not of dates: the rest of the string
+        // is a different shape from one submission to the next.
+        ->assertDontSee('1998-03-26');
+});
+
+it('takes the year off whatever shape the provider\'s date arrived in', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Bare Year', 'slug' => 'bare', 'release_date' => '1995']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Full Date', 'slug' => 'full', 'release_date' => '1996-11-04']);
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('1995')
+        ->assertSee('1996');
+});
+
+it('leaves the year and players blank rather than empty when unknown', function () {
+    Game::factory()->forConsole('psx')->create([
+        'title' => 'Unknown', 'slug' => 'unknown', 'release_date' => null, 'players' => null,
+    ]);
+
+    // A placeholder knows neither, and a cell with nothing in it reads as a
+    // rendering fault rather than as an answer.
+    $html = Livewire::withQueryParams(['view' => 'table'])->test('games.index')->html();
+
+    expect(substr_count($html, '—'))->toBeGreaterThanOrEqual(2);
+});
+
+it('pins every list column but the title', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+
+    // table-fixed is what makes the widths hold and what makes truncate on the
+    // title work at all — without it the column follows its longest cell and
+    // the same shelf is a different shape on page two.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('table-fixed', escape: false)
+        ->assertSee('<colgroup>', escape: false);
+});
+
+/*
+ * The console shelf's hero, which borrows its key art from the games on the
+ * shelf because nothing ships artwork per console.
+ */
+
+it('carries key art from the console\'s own games behind the shelf header', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    $art = Media::factory()->for($game)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
+
+    // The same fade as the game page's hero: down into the page's own ground,
+    // not sideways off the text.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('Super Nintendo')
+        ->assertSee(route('media.show', ['path' => $art->path]), escape: false)
+        ->assertSee('hero-fade-y', escape: false)
+        ->assertDontSee('hero-fade-x', escape: false);
+});
+
+it('will not blow up a screenshot or a thumbnail behind the header', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    // An in-game grab is filed as a backdrop beside real wallpaper, and a
+    // piece of key art can still arrive thumbnail sized.
+    $shot = Media::factory()->for($game)->ofType('ss', 'us')->create(['size_bytes' => 400_000]);
+    $tiny = Media::factory()->for($game)->ofType('fanart', 'us')->create(['size_bytes' => 4_000]);
+
+    $html = Livewire::test('games.index', ['console' => 'snes'])->html();
+
+    expect($html)->not->toContain($shot->path)
+        ->and($html)->not->toContain($tiny->path);
+});
+
+it('picks the same art for a shelf every time it is drawn', function () {
+    $best = Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Best', 'slug' => 'best']);
+    $worst = Game::factory()->forConsole('snes')->matched()->rated(20)->create(['title' => 'Worst', 'slug' => 'worst']);
+    $unrated = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+
+    $bestArt = Media::factory()->for($best)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
+    Media::factory()->for($worst)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
+    Media::factory()->for($unrated)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
+
+    // Best rated first, and the unrated last rather than ahead of everything —
+    // the trap DESC alone falls into on MariaDB.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee(route('media.show', ['path' => $bestArt->path]), escape: false);
+});
+
+it('keeps the header band when the shelf has no artwork at all', function () {
+    Game::factory()->forConsole('snes')->create(['title' => 'Unknown Disc', 'slug' => 'unknown']);
+
+    // Most of a new library. The band keeps its height and its ground rather
+    // than collapsing back to the plain heading it used to be.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('Super Nintendo')
+        ->assertSee('h-[170px]', escape: false)
+        ->assertSee('var(--color-raised)', escape: false);
+});
+
+it('runs the shelf hero to the page edges', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    Media::factory()->for($game)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
+
+    // The page asks its layout for `bleed`, so flux:main is not rendered and
+    // nothing here sits inside its padding. The band carries none, which is
+    // what lets the art reach the window edges; the filters below carry their
+    // own, which is what keeps them lined up with the console's name.
+    $html = Livewire::test('games.index', ['console' => 'snes'])->html();
+
+    expect($html)->toContain('lg:inset-x-7.5')   // the bar, at the game page's offsets
+        ->and($html)->toContain('lg:px-8');      // the bands below, carrying their own gutters
+});
+
+it('sets the console figures against its name on one row', function () {
+    $matched = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Identified One', 'slug' => 'one']);
+    GameFile::factory()->for($matched)->create(['path' => 'snes/one.sfc', 'filename' => 'one.sfc', 'size_bytes' => 3_145_728]);
+
+    // Name and maker on the left, figures hard right, both on the baseline —
+    // one row is what the band is half its old height for.
+    $html = Livewire::test('games.index', ['console' => 'snes'])->html();
+
+    expect($html)->toContain('justify-between')
+        ->and($html)->toContain('text-end');
+
+    // Name first, then who made it and when under it, then the figures.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSeeInOrder(['Super Nintendo', 'Nintendo · 1990', 'Games', 'On disk']);
+});
+
+it('counts the console in the shelf header', function () {
+    $matched = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Identified One', 'slug' => 'one']);
+    GameFile::factory()->for($matched)->create(['path' => 'snes/one.sfc', 'filename' => 'one.sfc', 'size_bytes' => 3_145_728]);
+
+    $placeholder = Game::factory()->forConsole('snes')->create(['title' => 'Unknown', 'slug' => 'unknown']);
+    GameFile::factory()->for($placeholder)->create(['path' => 'snes/u.sfc', 'filename' => 'u.sfc', 'size_bytes' => 1_048_576]);
+
+    // Another console's games are not this shelf's business.
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Elsewhere', 'slug' => 'elsewhere']);
+
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('Nintendo')
+        ->assertSee('On disk')
+        ->assertSee('1 / 2')
+        ->assertSee('4.0 MB');
+});
+
+it('counts a multi-disc game once in the shelf header', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
+
+    foreach (['a', 'b', 'c', 'd'] as $disc) {
+        GameFile::factory()->for($game)->create([
+            'path' => "psx/ff9-{$disc}.bin", 'filename' => "ff9-{$disc}.bin",
+            'role' => FileRole::Track, 'size_bytes' => 1_048_576,
+        ]);
+    }
+
+    // The files join multiplies a game by its tracks, so a four-disc game
+    // would read as four games without count(distinct).
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('1 / 1');
+});
+
+it('says nothing about achievements on a console with no sets', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'No Set', 'slug' => 'no-set']);
+
+    // Nought out of nought would read as nobody having unlocked anything,
+    // which is a different thing from there being nothing to unlock.
+    //
+    // Cards explicitly: the list view has an Achievements column header of its
+    // own, and this is about the hero.
+    Livewire::withQueryParams(['view' => 'cards'])->test('games.index', ['console' => 'snes'])
+        ->assertDontSee('Achievements');
+});
+
+it('leaves the whole library without a console hero', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    // There is no one console to be specific about, so there is no backdrop to
+    // borrow and nothing to count.
+    Livewire::test('games.index')
+        ->assertSee('Library')
+        ->assertDontSee('On disk');
+});
+
+/*
+ * The shelf hero's Actions menu, which runs the console's actions from the
+ * console's own page rather than only from the list of all of them.
+ */
+
+it('offers the console actions from the shelf header', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('Scan folder')
+        ->assertSee('Fetch missing artwork')
+        ->assertSee('Re-fetch all artwork')
+        ->assertSee('Fetch missing ratings')
+        ->assertSee('Re-fetch all ratings')
+        ->assertSee('Manage console');
+});
+
+it('keeps the shelf actions off the whole library', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    // There is no one console for them to act on.
+    Livewire::test('games.index')->assertDontSee('Scan folder');
+});
+
+it('scans this console from its own shelf', function () {
+    Queue::fake();
+
+    Livewire::test('games.index', ['console' => 'snes'])->call('scanConsole');
+
+    Queue::assertPushed(ScanConsoleFolder::class, fn ($job) => $job->console === 'snes');
+});
+
+it('fetches artwork for this console from its own shelf', function () {
+    Queue::fake();
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
+
+    $bare = Game::factory()->forConsole('snes')->matched(101)->create();
+    $dressed = Game::factory()->forConsole('snes')->matched(102)->create();
+    Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+
+    // Another console's games are not this shelf's business, however the menu
+    // was reached.
+    Game::factory()->forConsole('psx')->matched(103)->create();
+
+    Livewire::test('games.index', ['console' => 'snes'])->call('fetchConsoleMedia');
+
+    Queue::assertPushed(ScrapeGameMedia::class, 1);
+    Queue::assertPushed(ScrapeGameMedia::class, fn ($job) => $job->gameId === $bare->id);
+});
+
+it('re-fetches every rating on this console from its own shelf', function () {
+    Queue::fake();
+
+    Game::factory()->forConsole('snes')->matched(101)->create();
+    Game::factory()->forConsole('snes')->matched(102)->rated(80)->create();
+
+    Livewire::test('games.index', ['console' => 'snes'])->call('fetchConsoleRatings', true);
+
+    Queue::assertPushed(RateGame::class, 2);
+    Queue::assertPushed(RateGame::class, fn ($job) => $job->force === true);
+});
+
+it('says so from the shelf too when no media types are switched on', function () {
+    Queue::fake();
+    Game::factory()->forConsole('snes')->matched(101)->create();
+
+    AppSetting::put(AppSetting::MEDIA_TYPES, []);
+
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->call('fetchConsoleMedia')
+        ->assertDispatched('toast-show');
+
+    Queue::assertNothingPushed();
+});
+
+it('will not run a shelf action on a page fixed to no console', function () {
+    Queue::fake();
+
+    // Every one of them reads lockedTo rather than taking a console key, so
+    // the whole library has nothing for them to act on and they do nothing.
+    Livewire::test('games.index')
+        ->call('scanConsole')
+        ->call('fetchConsoleMedia')
+        ->call('fetchConsoleRatings')
+        ->call('writeConsoleExport', 'cfg');
+
+    Queue::assertNothingPushed();
+});
+
+it('offers an export only where the console\'s toolbox writes one', function () {
+    Queue::fake();
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    // The SNES has no loader files to write, so the item is not drawn — and the
+    // handler refuses the name even when it is called directly, which is the
+    // half that a hidden menu item does not cover.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertDontSee('Write OPL configs')
+        ->call('writeConsoleExport', 'cfg');
+
+    Queue::assertNothingPushed();
+});
+
+/*
+ * What the shelf header says about the machine itself.
+ */
+
+it('shows the console at a size it can be read at', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('size-20', escape: false)
+        ->assertSee((new Console('snes'))->icon, escape: false);
+});
+
+it('says who made the console and when, under its name', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('Sony · 1994');
+});
+
+it('says the maker alone for an entry that was never a machine', function () {
+    Game::factory()->forConsole('mame')->matched()->create(['title' => 'Some Arcade Game', 'slug' => 'arcade']);
+
+    // MAME and the other front-ends cover many systems and were released as
+    // none of them. A middot with nothing after it would read as a gap where a
+    // year should be.
+    Livewire::test('games.index', ['console' => 'mame'])
+        ->assertSee('Various')
+        ->assertDontSee('Various ·');
+});
+
+it('carries a release year for every console it lists', function () {
+    // Null is an answer here, not a hole — but the key has to be present, or a
+    // console file added later would silently read as one of the front-ends.
+    foreach (array_keys(config('consoles')) as $key) {
+        expect(config("consoles.{$key}"))->toHaveKey('released');
+    }
+});
+
+it('reads the earliest name a system shipped under', function () {
+    // The Famicom is 1983 and the NES 1985; the Mark III is 1985 and the
+    // Master System 1986. The earliest is the one stored, so a system does not
+    // change age with the region it is named for.
+    expect((new Console('nes'))->released)->toBe(1983)
+        ->and((new Console('mastersystem'))->released)->toBe(1985)
+        ->and((new Console('mame'))->released)->toBeNull();
+});
+
+/*
+ * Manage console, which is one link from either list straight into that
+ * console's settings form.
+ */
+
+it('links a shelf to its own console settings', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('Manage console')
+        ->assertSee(route('console-config.edit', ['console' => 'snes']), escape: false);
+});
+
+it('offers the same link from the console list', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    Livewire::test('consoles.index')
+        ->assertSee('Manage console')
+        ->assertSee(route('console-config.edit', ['console' => 'snes']), escape: false);
+});
+
+it('opens the settings form for the console the address names', function () {
+    Livewire::withQueryParams(['console' => 'snes'])->test('settings.consoles')
+        ->assertSet('editing', 'snes')
+        // Flux modals are opened by an event rather than by state, so this is
+        // what says the form is actually on screen and not merely selected.
+        ->assertDispatched('modal-show')
+        ->assertSee('Super Nintendo');
+});
+
+it('renders the settings page with a console named in the address', function () {
+    // The Livewire test drives mount() directly; this is the ordinary page
+    // load, where the modal's open event has to survive the initial render.
+    $this->get(route('console-config.edit', ['console' => 'snes']))
+        ->assertOk()
+        ->assertSee('Super Nintendo');
+});
+
+it('leaves the settings page alone when the address names no console', function () {
+    Livewire::test('settings.consoles')
+        ->assertSet('editing', '')
+        ->assertNotDispatched('modal-show');
+});
+
+it('refuses a console the address made up', function () {
+    // Left blank rather than kept, or the address would go on naming a console
+    // that is not open and cannot be.
+    Livewire::withQueryParams(['console' => 'notaconsole'])->test('settings.consoles')
+        ->assertSet('editing', '')
+        ->assertNotDispatched('modal-show');
+});
+
+/*
+ * The rules between groups in the action menus. Each menu runs setup, then
+ * artwork, then ratings, then whatever is left, and a rule stands between them.
+ */
+
+it('rules off each kind of action in the row menu', function () {
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
+
+    $game = Game::factory()->forConsole('psx')->matched(19256)->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/t.bin', 'filename' => 't.bin', 'role' => FileRole::Track]);
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSeeInOrder([
+            'Identify game', 'data-flux-menu-separator',
+            'Fetch artwork', 'data-flux-menu-separator',
+            'Fetch rating', 'data-flux-menu-separator',
+            'Open game',
+        ], escape: false);
+});
+
+it('rules artwork off from ratings in the shelf menu', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSeeInOrder([
+            'Re-fetch all artwork', 'data-flux-menu-separator', 'Fetch missing ratings',
+        ], escape: false);
+});
+
+it('rules artwork off from ratings in the console list menu', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    Livewire::test('consoles.index')
+        ->assertSeeInOrder([
+            'Re-fetch all artwork', 'data-flux-menu-separator', 'Fetch missing ratings',
+        ], escape: false);
+});
+
+it('does not open a console menu on a rule', function () {
+    // The SNES knows one arrangement and has no loader to write for, so the
+    // first group is empty and its rule would have nothing above it.
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $html = Livewire::test('consoles.index')->html();
+    $beforeArtwork = substr($html, 0, strpos($html, 'Fetch missing artwork'));
+
+    expect($beforeArtwork)->not->toContain('data-flux-menu-separator');
+});
+
+it('keeps the rule where the first group has something in it', function () {
+    // A PS2 folder arranged the way OPL expects is the one case with a loader
+    // to write for, so there is a group above the artwork actions and a rule
+    // belongs between them.
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+
+    Livewire::test('consoles.index')
+        ->assertSeeInOrder([
+            'Write OPL', 'data-flux-menu-separator', 'Fetch missing artwork',
+        ], escape: false);
+});
+
+it('no longer filters or lists by status', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Identified One', 'slug' => 'one']);
+    Game::factory()->forConsole('snes')->create(['title' => 'Unknown', 'slug' => 'unknown']);
+
+    // The column and its filter are gone. The menu still says what a game is
+    // by which identify item it offers, which is the only place the state
+    // changes what anybody can do about it.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertDontSee('Any status')
+        ->assertDontSee('Not yet identified')
+        ->assertSee('Identified One')
+        ->assertSee('Unknown');
+});
+
+it('softens the menu open rather than snapping it', function () {
+    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+
+    // The game page's menu is hand-rolled, so it carries Alpine's transition
+    // rather than the popover one the Flux menus get from the stylesheet.
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSee('x-transition:enter', escape: false)
+        ->assertSee('origin-top-right', escape: false);
+});
+
+/*
+ * Sorting by year and filtering by player count, and the rules that group the
+ * filter row into what / where / how ordered / how drawn.
+ */
+
+it('sorts by year with the undated last', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Older', 'slug' => 'older', 'release_date' => '1994']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Newer', 'slug' => 'newer', 'release_date' => '2001-09-14']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Undated', 'slug' => 'undated', 'release_date' => null]);
+
+    // Descending alone puts NULL at the top on MariaDB, which reads as the
+    // newest games being the ones with no date at all.
+    Livewire::test('games.index')
+        ->set('sort', 'year')
+        ->assertSeeInOrder(['Newer', 'Older', 'Undated']);
+});
+
+it('counts an empty date as no date when sorting by year', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Dated', 'slug' => 'dated', 'release_date' => '1994']);
+
+    // A match that came back without one stores '' rather than null, and both
+    // mean the same thing here.
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Blank', 'slug' => 'blank', 'release_date' => '']);
+
+    Livewire::test('games.index')
+        ->set('sort', 'year')
+        ->assertSeeInOrder(['Dated', 'Blank']);
+});
+
+it('filters by the player count as the provider spells it', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Solo', 'slug' => 'solo', 'players' => '1']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Versus', 'slug' => 'versus', 'players' => '1-2']);
+
+    // Matched whole, not as a number: "1-2" is an ordinary answer and there is
+    // no arithmetic that turns it into one figure without inventing it.
+    Livewire::test('games.index')
+        ->set('players', '1-2')
+        ->assertSee('Versus')
+        ->assertDontSee('Solo');
+});
+
+it('orders the player counts naturally', function () {
+    foreach (['1', '10', '2', '1-4'] as $i => $count) {
+        Game::factory()->forConsole('psx')->matched()->create([
+            'title' => "Game {$i}", 'slug' => "game-{$i}", 'players' => $count,
+        ]);
+    }
+
+    // A straight sort puts "10" between "1" and "2".
+    Livewire::test('games.index')->assertSeeInOrder(['>1<', '>1-4<', '>2<', '>10<'], escape: false);
+});
+
+it('leaves out the player filter where the shelf has one answer', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Solo', 'slug' => 'solo', 'players' => '1']);
+
+    // A select whose whole list is "1" filters nothing and takes the width of
+    // one that does.
+    Livewire::test('games.index', ['console' => 'snes'])->assertDontSee('Any players');
+});
+
+it('clears the player filter along with the rest', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Versus', 'slug' => 'versus', 'players' => '1-2']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Solo', 'slug' => 'solo', 'players' => '1']);
+
+    Livewire::test('games.index')
+        ->set('players', '1-2')
+        ->set('sort', 'year')
+        ->call('clear')
+        ->assertSet('players', '')
+        // Not the sort: it says how to read the library rather than which part
+        // of it to show.
+        ->assertSet('sort', 'year');
+});
+
+it('rules the filter row into its four jobs', function () {
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
+
+    // Search | filters | sort | view. Three rules, and they are hidden below
+    // lg where the row wraps and a rule would point at nothing.
+    $html = Livewire::test('games.index')->html();
+
+    expect(substr_count($html, 'h-6 w-px shrink-0 bg-line'))->toBe(3);
 });

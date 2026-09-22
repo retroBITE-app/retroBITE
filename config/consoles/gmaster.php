@@ -4,6 +4,7 @@ return [
     'order' => 670,
     'name' => 'Game Master',
     'brand' => 'Hartung',
+    'released' => 1990,
     'folder' => 'gmaster',
     'icon' => '/images/consoles/Hartung - Game Master.png',
     'file_icon' => '/images/consoles/Hartung - Game Master-content.png',

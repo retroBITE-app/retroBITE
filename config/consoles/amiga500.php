@@ -4,6 +4,7 @@ return [
     'order' => 490,
     'name' => 'Amiga 500',
     'brand' => 'Commodore',
+    'released' => 1987,
     'folder' => 'amiga500',
     'icon' => '/images/consoles/Commodore - Amiga.png',
     'file_icon' => '/images/consoles/Commodore - Amiga-content.png',

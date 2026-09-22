@@ -4,6 +4,7 @@ return [
     'order' => 500,
     'name' => 'Amiga CD32',
     'brand' => 'Commodore',
+    'released' => 1993,
     'folder' => 'amigacd32',
     'icon' => '/images/consoles/Commodore - Amiga.png',
     'file_icon' => '/images/consoles/Commodore - Amiga-content.png',

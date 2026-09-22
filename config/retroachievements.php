@@ -22,11 +22,18 @@ return [
     'media_url' => env('RETROACHIEVEMENTS_MEDIA_URL') ?: 'https://media.retroachievements.org',
 
     /*
-     * Used only when AppSetting::RA_API_KEY has not been set, so a headless
-     * install can be seeded from the environment and a person can still change
-     * the key later in Settings without a redeploy.
+     * Empty on purpose, as ScreenScraper's account is. The key lives in
+     * AppSetting::RA_API_KEY and is set in Settings; this remains only so a
+     * test can stand one up without the database. A key somebody has to
+     * redeploy to change is a key they will not change.
      */
-    'api_key_fallback' => env('RETROACHIEVEMENTS_API_KEY', ''),
+    'api_key_fallback' => '',
+
+    /*
+     * As above: only the migration that moves the key into the settings table
+     * reads this, and only on an install that still has the variable set.
+     */
+    'legacy_env_api_key' => env('RETROACHIEVEMENTS_API_KEY', ''),
 
     'connect_timeout' => (int) (env('RETROACHIEVEMENTS_CONNECT_TIMEOUT') ?: 15),
 

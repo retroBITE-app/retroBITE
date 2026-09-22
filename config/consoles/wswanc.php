@@ -4,6 +4,7 @@ return [
     'order' => 410,
     'name' => 'WonderSwan Color',
     'brand' => 'Bandai',
+    'released' => 2000,
     'folder' => 'wswanc',
     'icon' => '/images/consoles/Bandai - WonderSwan Color.png',
     'file_icon' => '/images/consoles/Bandai - WonderSwan Color-content.png',

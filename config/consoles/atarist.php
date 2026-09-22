@@ -4,6 +4,7 @@ return [
     'order' => 370,
     'name' => 'Atari ST',
     'brand' => 'Atari',
+    'released' => 1985,
     'folder' => 'atarist',
     'icon' => '/images/consoles/Atari - ST.png',
     'file_icon' => '/images/consoles/Atari - ST-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 740,
     'name' => 'Microsoft MSX2',
     'brand' => 'Microsoft',
+    'released' => 1985,
     'folder' => 'msx2',
     'icon' => '/images/consoles/Microsoft - MSX2.png',
     'file_icon' => '/images/consoles/Microsoft - MSX2-content.png',

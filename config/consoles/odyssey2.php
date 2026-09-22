@@ -4,6 +4,7 @@ return [
     'order' => 700,
     'name' => 'Magnavox Odyssey 2',
     'brand' => 'Magnavox',
+    'released' => 1978,
     'folder' => 'odyssey2',
     'icon' => '/images/consoles/Magnavox - Odyssey2.png',
     'file_icon' => '/images/consoles/Magnavox - Odyssey2-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 860,
     'name' => 'Family Computer Disk System',
     'brand' => 'Nintendo',
+    'released' => 1986,
     'folder' => 'fds',
     'icon' => '/images/consoles/Nintendo - Family Computer Disk System.png',
     'file_icon' => '/images/consoles/Nintendo - Family Computer Disk System-content.png',

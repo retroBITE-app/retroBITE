@@ -4,6 +4,7 @@ return [
     'order' => 1190,
     'name' => 'Neo Geo',
     'brand' => 'SNK',
+    'released' => 1990,
     'folder' => 'neogeo',
     'icon' => '/images/consoles/SNK - Neo Geo.png',
     'file_icon' => '/images/consoles/SNK - Neo Geo-content.png',

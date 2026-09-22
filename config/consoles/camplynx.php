@@ -4,6 +4,7 @@ return [
     'order' => 430,
     'name' => 'Camputers Lynx',
     'brand' => 'Camputers',
+    'released' => 1983,
     'folder' => 'camplynx',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

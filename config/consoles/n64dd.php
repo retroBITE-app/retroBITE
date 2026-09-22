@@ -4,6 +4,7 @@ return [
     'order' => 890,
     'name' => 'Nintendo 64DD',
     'brand' => 'Nintendo',
+    'released' => 1999,
     'folder' => 'n64dd',
     'icon' => '/images/consoles/Nintendo - Nintendo 64DD.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo 64DD-content.png',

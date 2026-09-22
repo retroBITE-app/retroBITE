@@ -4,6 +4,7 @@ return [
     'order' => 1260,
     'name' => 'Spectravideo',
     'brand' => 'Spectravideo',
+    'released' => 1983,
     'folder' => 'spectravideo',
     'icon' => '/images/consoles/Spectravideo - SVI-318 - SVI-328.png',
     'file_icon' => '/images/consoles/Spectravideo - SVI-318 - SVI-328-content.png',

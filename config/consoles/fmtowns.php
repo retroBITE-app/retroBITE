@@ -4,6 +4,7 @@ return [
     'order' => 630,
     'name' => 'FM Towns',
     'brand' => 'Fujitsu',
+    'released' => 1989,
     'folder' => 'fmtowns',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

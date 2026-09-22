@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\GameStatus;
+use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
 use App\Jobs\WriteConsoleExports;
@@ -571,6 +572,41 @@ new #[Title('Consoles')] class extends Component
     }
 
     /**
+     * Queue a rating fetch for every identified game on a console.
+     *
+     * $held reads as it does for artwork: without it only the games holding no
+     * rating are asked about, which is what somebody wants after a scan has
+     * added to the shelf. With it every identified game on the console is asked
+     * again, which is the way to pick up votes cast since the last time.
+     *
+     * No media-types check to make first — a rating needs nothing switched on.
+     * A console that is not mapped to ScreenScraper has no identified games, so
+     * it queues nothing and says so rather than being refused up front.
+     */
+    public function fetchRatings(string $key, bool $held = false): void
+    {
+        $console = Console::tryFrom($key);
+
+        if ($console === null) {
+            return;
+        }
+
+        $queued = RateGame::queueForConsole($console->key, held: $held);
+
+        unset($this->activity);
+
+        $this->dispatch('system-activity-changed');
+
+        Flux::toast(text: $queued === 0
+            ? __('Nothing to fetch — every identified game on :console already has a rating.', ['console' => $console->name])
+            : trans_choice(
+                '{1} Fetching the rating for one game.|[2,*] Fetching ratings for :count games.',
+                $queued,
+                ['count' => $queued],
+            ));
+    }
+
+    /**
      * Write a loader's own files back into a console's folder.
      *
      * The only thing here that writes to somebody's library, so it is asked for
@@ -747,7 +783,17 @@ new #[Title('Consoles')] class extends Component
                             <flux:dropdown position="bottom" align="end">
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
                                 <flux:menu>
-                                    @if (count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1)
+                                    @php
+                                        // The first group is two optional items:
+                                        // most consoles know one arrangement and
+                                        // only a couple have a loader to write
+                                        // for. Without this the menu would open
+                                        // on a rule with nothing above it.
+                                        $rowLayouts = count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1;
+                                        $rowExports = $this->exportsFor($row['console']);
+                                    @endphp
+
+                                    @if ($rowLayouts)
                                         <flux:menu.item icon="folder-open"
                                                         wire:click="changeLayout('{{ $row['console']->key }}')">
                                             {{ __('Change layout') }}
@@ -758,7 +804,7 @@ new #[Title('Consoles')] class extends Component
                                          library, so each says where it writes before it
                                          does it. Offered only where the loader that reads
                                          those folders is the one in use. --}}
-                                    @foreach ($this->exportsFor($row['console']) as $export)
+                                    @foreach ($rowExports as $export)
                                         <flux:menu.item icon="arrow-down-tray"
                                                         wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
                                                         wire:confirm="{{ __('Write OPL :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
@@ -768,6 +814,10 @@ new #[Title('Consoles')] class extends Component
                                             {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
                                         </flux:menu.item>
                                     @endforeach
+
+                                    @if ($rowLayouts || $rowExports !== [])
+                                        <flux:menu.separator />
+                                    @endif
 
                                     <flux:menu.item icon="photo"
                                                     wire:click="fetchMedia('{{ $row['console']->key }}')">
@@ -783,6 +833,35 @@ new #[Title('Consoles')] class extends Component
                                                     wire:click="fetchMedia('{{ $row['console']->key }}', true)"
                                                     wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
                                         {{ __('Re-fetch all artwork') }}
+                                    </flux:menu.item>
+
+                                    <flux:menu.separator />
+
+                                    <flux:menu.item icon="star"
+                                                    wire:click="fetchRatings('{{ $row['console']->key }}')">
+                                        {{ __('Fetch missing ratings') }}
+                                    </flux:menu.item>
+
+                                    {{-- Confirmed for the same reason as the
+                                         artwork above it: one provider lookup
+                                         per identified game, spent against the
+                                         same daily allowance. --}}
+                                    <flux:menu.item icon="arrow-path"
+                                                    wire:click="fetchRatings('{{ $row['console']->key }}', true)"
+                                                    wire:confirm="{{ __('Re-fetch ratings for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
+                                        {{ __('Re-fetch all ratings') }}
+                                    </flux:menu.item>
+
+                                    <flux:menu.separator />
+
+                                    {{-- The same destination the console's own
+                                         shelf offers, so there is one place a
+                                         console is configured and one way in
+                                         from either list. --}}
+                                    <flux:menu.item icon="cog-6-tooth"
+                                                    href="{{ route('console-config.edit', ['console' => $row['console']->key]) }}"
+                                                    wire:navigate>
+                                        {{ __('Manage console') }}
                                     </flux:menu.item>
 
                                     <flux:menu.separator />

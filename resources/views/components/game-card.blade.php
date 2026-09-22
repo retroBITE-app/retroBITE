@@ -127,6 +127,25 @@
             <span class="font-mono text-xs text-fg-dim">
                 {{ Illuminate\Support\Number::fileSize((int) ($game->size_bytes_sum ?? 0), 1) }}
             </span>
+
+            @if ($game->rating !== null)
+                {{-- The far end of the region row. Off the artwork entirely:
+                     over a cover it had to fight whatever was behind it, and
+                     here it sits on the page's own ground, so the fill alone
+                     carries it and it needs no ring or shadow to stay legible.
+
+                     ms-auto rather than a spacer, so it holds the right edge
+                     whether or not the game has a flag to its left.
+
+                     Inline styles because the colour is chosen at runtime, and
+                     a class Tailwind never saw in the source is one it never
+                     generated — the same reason the geometry above is inline. --}}
+                <span
+                    title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
+                    style="background-color: {{ App\Support\RatingBand::color($game->rating) }}; color: {{ App\Support\RatingBand::ink() }}"
+                    class="ms-auto shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums"
+                >{{ $game->rating }}</span>
+            @endif
         </div>
 
         @if ($achievementsPossible > 0)

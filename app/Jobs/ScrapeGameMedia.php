@@ -219,6 +219,14 @@ class ScrapeGameMedia implements ShouldQueue
     {
         $payload = $provider->fetchById($game->screenscraper_id);
 
+        // The answer carries the provider's rating as well, and this request
+        // has already been paid for. A game scraped for artwork therefore
+        // fills in a rating it was matched too early to have, which is that
+        // much less for the backfill to ask about.
+        if ($game->rating === null && ($rating = $payload['rating'] ?? null) !== null) {
+            $game->update(['rating' => $rating]);
+        }
+
         $medias = $payload['medias'] ?? [];
 
         return is_array($medias) ? $medias : [];

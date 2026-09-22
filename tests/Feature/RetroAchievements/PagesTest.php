@@ -73,6 +73,41 @@ it('shows nothing where there is no set', function () {
     Livewire::test('games.index')->assertDontSee(' / 0');
 });
 
+it('shows progress in the list view as well as on the shelf', function () {
+    gameWithProgress(31, 49);
+
+    // The list used to say nothing about achievements at all, so the two views
+    // disagreed about what was known. Same figure, same hardcore default.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('Achievements')
+        ->assertSee('15 / 49');
+});
+
+it('leaves a list row blank where the game has no set', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'No Set', 'slug' => 'no-set']);
+
+    // A bar at nought would read as a set nobody has started, which is a
+    // different thing from a game RetroAchievements has never heard of.
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('No Set')
+        ->assertDontSee(' / 0');
+});
+
+it('does not add a query per row in the list view either', function () {
+    Game::factory()->count(12)->forConsole('snes')->matched()->create()
+        ->each(fn (Game $game) => GameFile::factory()->for($game)->create());
+
+    DB::enableQueryLog();
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')->assertOk();
+    $queries = count(DB::getRawQueryLog());
+    DB::disableQueryLog();
+
+    // The cover comes off the eager-loaded media relation and the progress off
+    // the join, so neither costs a select. The hardcore setting is read once
+    // for the table rather than once per row.
+    expect($queries)->toBeLessThan(15);
+});
+
 it('does not add a query per row', function () {
     // Placeholders, because blockedFromLookup() short-circuits on a matched
     // game and would hide the N+1 this guards.

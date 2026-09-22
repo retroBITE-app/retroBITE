@@ -4,6 +4,7 @@ return [
     'order' => 780,
     'name' => 'Vectrex',
     'brand' => 'Milton Bradley',
+    'released' => 1982,
     'folder' => 'vectrex',
     'icon' => '/images/consoles/GCE - Vectrex.png',
     'file_icon' => '/images/consoles/GCE - Vectrex-content.png',

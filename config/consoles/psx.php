@@ -4,6 +4,7 @@ return [
     'order' => 1240,
     'name' => 'Sony PlayStation',
     'brand' => 'Sony',
+    'released' => 1994,
     'folder' => 'psx',
     'icon' => '/images/consoles/Sony - PlayStation.png',
     'file_icon' => '/images/consoles/Sony - PlayStation-content.png',

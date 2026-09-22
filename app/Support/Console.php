@@ -17,6 +17,19 @@ final class Console
 
     public readonly string $brand;
 
+    /**
+     * The year the machine first reached anyone, or null.
+     *
+     * Null is not "unknown": it is the answer for the entries here that are a
+     * front-end or an emulator rather than a machine — MAME, ScummVM, WINE and
+     * their like cover many systems and were never released as one.
+     *
+     * Where a system shipped under different names in different regions the
+     * year is the earliest of them, so the Famicom's 1983 stands for the NES
+     * and the Mark III's 1985 for the Master System.
+     */
+    public readonly ?int $released;
+
     public readonly string $icon;
 
     public readonly string $fileIcon;
@@ -82,6 +95,7 @@ final class Console
         $this->key = $key;
         $this->name = (string) Arr::get($meta, 'name', '');
         $this->brand = (string) Arr::get($meta, 'brand', '');
+        $this->released = ($year = Arr::get($meta, 'released')) !== null ? (int) $year : null;
         $this->icon = (string) Arr::get($meta, 'icon', '');
         $this->fileIcon = (string) Arr::get($meta, 'file_icon', '');
         $this->folder = (string) Arr::get($meta, 'folder', '');

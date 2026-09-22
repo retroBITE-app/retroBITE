@@ -4,6 +4,7 @@ return [
     'order' => 1290,
     'name' => 'Oric Atmos',
     'brand' => 'Tangerine',
+    'released' => 1984,
     'folder' => 'oricatmos',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

@@ -4,6 +4,7 @@ return [
     'order' => 110,
     'name' => 'PlayStation Portable',
     'brand' => 'Sony',
+    'released' => 2004,
     'folder' => 'psp',
     'icon' => '/images/consoles/Sony - PlayStation Portable.png',
     'file_icon' => '/images/consoles/Sony - PlayStation Portable-content.png',

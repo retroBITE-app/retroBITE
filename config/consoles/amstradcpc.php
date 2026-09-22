@@ -4,6 +4,7 @@ return [
     'order' => 240,
     'name' => 'Amstrad CPC',
     'brand' => 'Amstrad',
+    'released' => 1984,
     'folder' => 'amstradcpc',
     'icon' => '/images/consoles/Amstrad - CPC.png',
     'file_icon' => '/images/consoles/Amstrad - CPC-content.png',

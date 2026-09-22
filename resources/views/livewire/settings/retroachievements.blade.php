@@ -33,25 +33,18 @@ new #[Title('RetroAchievements')] class extends Component
         $this->hardcorePrimary = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
     }
 
-    /** A key typed in here, which is the only one this screen can remove. */
-    #[Computed]
-    public function hasStoredKey(): bool
-    {
-        return AppSetting::getSecret(AppSetting::RA_API_KEY) !== null;
-    }
-
-    /** Seeded from the environment for a headless install. */
-    #[Computed]
-    public function hasEnvKey(): bool
-    {
-        return (string) config('retroachievements.api_key_fallback', '') !== '';
-    }
-
-    /** A key the API can be called with, from wherever it came. */
+    /**
+     * Whether a key is stored at all.
+     *
+     * The settings table is the only place one lives now — the environment
+     * used to seed it, and does not any more. A key you have to redeploy to
+     * change is a key nobody changes, and a newcomer should not have to edit a
+     * file before achievements work.
+     */
     #[Computed]
     public function hasKey(): bool
     {
-        return $this->hasStoredKey || $this->hasEnvKey;
+        return AppSetting::getSecret(AppSetting::RA_API_KEY) !== null;
     }
 
     #[Computed]
@@ -101,7 +94,7 @@ new #[Title('RetroAchievements')] class extends Component
             AppSetting::putSecret(AppSetting::RA_API_KEY, $this->apiKey);
             $this->apiKey = '';
 
-            unset($this->hasStoredKey, $this->hasKey);
+            unset($this->hasKey);
         }
 
         // Null means the question could not be put — no key yet, or the
@@ -119,27 +112,18 @@ new #[Title('RetroAchievements')] class extends Component
 
         AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, $this->hardcorePrimary);
 
-        unset($this->hasStoredKey, $this->hasKey, $this->linked);
+        unset($this->hasKey, $this->linked);
 
         Flux::toast(variant: 'success', text: __('Settings saved.'));
     }
 
-    /**
-     * Drop the stored key.
-     *
-     * Only ever the stored one: a key in the environment belongs to whoever
-     * deployed the container, and a button in here cannot reach it. Said out
-     * loud rather than left as a button that appears to do nothing.
-     */
     public function forgetKey(): void
     {
         AppSetting::putSecret(AppSetting::RA_API_KEY, null);
 
-        unset($this->hasStoredKey, $this->hasKey, $this->linked);
+        unset($this->hasKey, $this->linked);
 
-        Flux::toast(variant: 'success', text: $this->hasEnvKey
-            ? __('Stored key removed. The one in the environment is in use again.')
-            : __('API key removed.'));
+        Flux::toast(variant: 'success', text: __('API key removed.'));
     }
 
     public function syncProgress(bool $full = false): void
@@ -183,21 +167,33 @@ new #[Title('RetroAchievements')] class extends Component
                         ])>{{ $this->linked ? __('Linked') : __('Not linked') }}</span>
                     </div>
 
+                    <p class="mb-4 text-sm text-fg-soft">
+                        {{ __('RetroAchievements adds achievements to retro games. retroBite matches your library against its sets and follows what you have unlocked. It needs your account name and a web API key, both free.') }}
+                    </p>
+
+                    {{-- Straight to the tab the key is on. It is not on the
+                         profile and not on the front of Settings, and hunting
+                         for it is the step people write in to ask about. --}}
+                    <div class="mb-4">
+                        <flux:button size="xs" variant="ghost" icon-trailing="arrow-top-right-on-square"
+                                     href="https://retroachievements.org/settings?tab=applications" target="_blank" rel="noopener">
+                            {{ __('Find your API key') }}
+                        </flux:button>
+                        <p class="mt-1.5 text-xs text-fg-faint">
+                            {{ __('Opens Settings → Applications on retroachievements.org, where the web API key is shown. Signing up is free.') }}
+                        </p>
+                    </div>
+
                     <div class="flex flex-col gap-4">
                         <flux:input wire:model="username" :label="__('Username')"
                                     :placeholder="__('Your account name, not your key')"
                                     :description="__('The name on your RetroAchievements profile — the last part of retroachievements.org/user/…. Achievement sets are fetched whatever this says; progress needs it to be right.')" />
 
                         <flux:input wire:model="apiKey" type="password" :label="__('API key')"
-                                    :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From your RetroAchievements control panel')"
-                                    :description="$this->hasEnvKey && ! $this->hasStoredKey
-                                        ? __('Set in the environment. A key typed here is kept encrypted in the database and takes over from it.')
-                                        : __('Kept encrypted in the database and never shown again once saved.')" />
+                                    :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From Settings → Applications on retroachievements.org')"
+                                    :description="__('Kept encrypted in the database and never shown again once saved.')" />
 
-                        {{-- Only for a key this screen put there. The one in
-                             the environment is the operator's, and no button
-                             here can reach it. --}}
-                        @if ($this->hasStoredKey)
+                        @if ($this->hasKey)
                             <div>
                                 <flux:button size="xs" variant="danger" wire:click="forgetKey" type="button">
                                     {{ __('Remove stored key') }}

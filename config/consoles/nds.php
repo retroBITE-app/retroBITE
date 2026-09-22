@@ -4,6 +4,7 @@ return [
     'order' => 900,
     'name' => 'Nintendo DS',
     'brand' => 'Nintendo',
+    'released' => 2004,
     'folder' => 'nds',
     'icon' => '/images/consoles/Nintendo - Nintendo DS.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo DS-content.png',

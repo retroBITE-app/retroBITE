@@ -4,6 +4,7 @@ return [
     'order' => 1000,
     'name' => 'Sammy Atomiswave',
     'brand' => 'Sammy',
+    'released' => 2003,
     'folder' => 'atomiswave',
     'icon' => '/images/consoles/Arcade - Misc.png',
     'file_icon' => '/images/consoles/Arcade - Misc-content.png',

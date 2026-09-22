@@ -4,6 +4,7 @@ return [
     'order' => 210,
     'name' => 'Acorn Electron',
     'brand' => 'Acorn Computers',
+    'released' => 1983,
     'folder' => 'electron',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

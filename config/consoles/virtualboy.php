@@ -4,6 +4,7 @@ return [
     'order' => 950,
     'name' => 'Virtual Boy',
     'brand' => 'Nintendo',
+    'released' => 1995,
     'folder' => 'virtualboy',
     'icon' => '/images/consoles/Nintendo - Virtual Boy.png',
     'file_icon' => '/images/consoles/Nintendo - Virtual Boy-content.png',

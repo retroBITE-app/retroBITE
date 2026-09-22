@@ -4,6 +4,7 @@ return [
     'order' => 1330,
     'name' => 'TIC-80',
     'brand' => 'Vadim Grigoruk',
+    'released' => 2017,
     'folder' => 'tic80',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

@@ -4,6 +4,7 @@ return [
     'order' => 380,
     'name' => 'Bally Astrocade',
     'brand' => 'Bally',
+    'released' => 1977,
     'folder' => 'astrocade',
     'icon' => '/images/consoles/Bally - Astrocade.png',
     'file_icon' => '/images/consoles/Bally - Astrocade-content.png',

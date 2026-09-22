@@ -4,6 +4,7 @@ return [
     'order' => 50,
     'name' => 'Wii',
     'brand' => 'Nintendo',
+    'released' => 2006,
     'folder' => 'wii',
     'icon' => '/images/consoles/Nintendo - Wii.png',
     'file_icon' => '/images/consoles/Nintendo - Wii-content.png',

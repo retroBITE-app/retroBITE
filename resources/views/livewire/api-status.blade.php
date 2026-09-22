@@ -4,8 +4,13 @@ use App\Support\ScreenScraperQuota;
 use Livewire\Component;
 
 /**
- * What ScreenScraper will still answer today, in the sidebar where a scan is
+ * What ScreenScraper has been asked for today, in the sidebar where a scan is
  * started from.
+ *
+ * Spent rather than left: it is the figure the bar underneath already draws,
+ * and the two disagreed — the number fell as the bar filled. It is also the
+ * one that answers the question somebody opens this for, which is how much a
+ * scan has just cost, not how much room is left before it stops.
  *
  * One provider, not two. RetroAchievements reports no allowance of any kind —
  * there is no number to read — so what it had here was freshness wearing a
@@ -47,7 +52,7 @@ new class extends Component
             // A snapshot is only ever written by a response, so an account that
             // was never filled in cannot produce one. Saying "no account" beats
             // a blank panel that looks like a provider outage.
-            'scraperAccount' => (string) config('screenscraper.user', '') !== '',
+            'scraperAccount' => App\Support\ScreenScraperCredentials::configured(),
 
             'requests' => $quota === null ? null : [
                 'used' => $quota['requests_today'],
@@ -92,7 +97,7 @@ new class extends Component
             @if ($requests === null)
                 <span class="text-fg-faint">{{ __('—') }}</span>
             @elseif ($requests['max'] > 0)
-                {{ Number::format(max($requests['max'] - $requests['used'], 0)) }}
+                {{ Number::format($requests['used']) }}
                 <span class="text-fg-faint">/ {{ Number::format($requests['max']) }}</span>
             @else
                 <span class="text-fg-faint">{{ __('not reported') }}</span>
@@ -141,7 +146,7 @@ new class extends Component
 
                     <span class="font-mono whitespace-nowrap text-fg-dim">
                         @if ($failed['max'] > 0)
-                            {{ Number::format(max($failed['max'] - $failed['used'], 0)) }}
+                            {{ Number::format($failed['used']) }}
                             <span class="text-fg-faint">/ {{ Number::format($failed['max']) }}</span>
                         @else
                             <span class="text-fg-faint">{{ __('not reported') }}</span>

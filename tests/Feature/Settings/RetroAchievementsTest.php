@@ -111,33 +111,36 @@ it('clears the key only when asked', function () {
     AppSetting::putSecret(AppSetting::RA_API_KEY, 'secret-key');
 
     Livewire::test('settings.retroachievements')
-        ->assertSet('hasStoredKey', true)
+        ->assertSet('hasKey', true)
         ->call('forgetKey')
-        ->assertSet('hasStoredKey', false);
+        ->assertSet('hasKey', false);
 
     expect(AppSetting::getSecret(AppSetting::RA_API_KEY))->toBeNull();
 });
 
-it('offers to remove only a key it stored itself', function () {
-    // A key from the environment is whoever deployed the container's, and no
-    // button in here can reach it. Offering one would be a lie: it would
-    // clear nothing and the screen would still say a key is configured.
-    config()->set('retroachievements.api_key_fallback', 'env-key');
-
+it('offers to remove a key only once there is one', function () {
+    // The settings table is the only place a key lives now. There is nothing
+    // to remove until somebody has typed one, and a button that clears nothing
+    // would be a lie.
     Livewire::test('settings.retroachievements')
-        ->assertSet('hasKey', true)
-        ->assertSet('hasStoredKey', false)
+        ->assertSet('hasKey', false)
         ->assertDontSee('Remove stored key');
 
     AppSetting::putSecret(AppSetting::RA_API_KEY, 'typed-key');
 
     Livewire::test('settings.retroachievements')
-        ->assertSet('hasStoredKey', true)
+        ->assertSet('hasKey', true)
         ->assertSee('Remove stored key')
-        // And removing it hands the API back to the one in the environment
-        // rather than leaving the integration unlinked.
         ->call('forgetKey')
-        ->assertSet('hasKey', true);
+        ->assertSet('hasKey', false);
+});
+
+it('says where the API key is found', function () {
+    // The key is not on the profile and not on the front of Settings, and
+    // hunting for it is the step people write in to ask about.
+    Livewire::test('settings.retroachievements')
+        ->assertSee('https://retroachievements.org/settings?tab=applications', escape: false)
+        ->assertSee('Find your API key');
 });
 
 it('queues a sync rather than running one in the request', function () {

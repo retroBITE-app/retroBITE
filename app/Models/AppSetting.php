@@ -66,6 +66,18 @@ class AppSetting extends Model
     public const RA_API_KEY = 'ra_api_key';
 
     /**
+     * The ScreenScraper account name.
+     *
+     * Not a secret, and stored plainly so the settings screen can show it
+     * back — an account name you cannot read is one you cannot check against
+     * the site when a lookup starts answering as somebody else.
+     */
+    public const SS_USER = 'ss_user';
+
+    /** The ScreenScraper account password, stored encrypted. */
+    public const SS_PASSWORD = 'ss_password';
+
+    /**
      * Which score the interface shows: hardcore, or softcore.
      *
      * A presentation choice and nothing more — hardcore is a mode in the

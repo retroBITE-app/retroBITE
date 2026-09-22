@@ -256,6 +256,9 @@ class RetroAchievementsService
     {
         $stored = AppSetting::getSecret(AppSetting::RA_API_KEY);
 
+        // config carries nothing but an empty string now — the key is set in
+        // Settings → RetroAchievements. It is consulted only so a test can
+        // stand a key up without the database.
         return trim((string) ($stored ?? config('retroachievements.api_key_fallback', '')));
     }
 

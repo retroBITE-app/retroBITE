@@ -4,6 +4,7 @@ return [
     'order' => 400,
     'name' => 'WonderSwan',
     'brand' => 'Bandai',
+    'released' => 1999,
     'folder' => 'wswan',
     'icon' => '/images/consoles/Bandai - WonderSwan.png',
     'file_icon' => '/images/consoles/Bandai - WonderSwan-content.png',

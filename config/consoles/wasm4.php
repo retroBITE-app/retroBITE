@@ -4,6 +4,7 @@ return [
     'order' => 220,
     'name' => 'WASM-4',
     'brand' => 'Aduros',
+    'released' => 2021,
     'folder' => 'wasm4',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

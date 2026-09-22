@@ -4,6 +4,7 @@ return [
     'order' => 1020,
     'name' => 'Sega CD/Mega CD',
     'brand' => 'Sega',
+    'released' => 1991,
     'folder' => 'megacd',
     'icon' => '/images/consoles/Sega - Mega-CD - Sega CD.png',
     'file_icon' => '/images/consoles/Sega - Mega-CD - Sega CD-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 270,
     'name' => 'Apple IIGS',
     'brand' => 'Apple',
+    'released' => 1986,
     'folder' => 'apple2gs',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

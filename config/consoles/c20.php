@@ -4,6 +4,7 @@ return [
     'order' => 550,
     'name' => 'Commodore VIC-20',
     'brand' => 'Commodore',
+    'released' => 1980,
     'folder' => 'c20',
     'icon' => '/images/consoles/Commodore - VIC-20.png',
     'file_icon' => '/images/consoles/Commodore - VIC-20-content.png',

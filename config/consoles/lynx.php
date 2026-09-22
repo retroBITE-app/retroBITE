@@ -4,6 +4,7 @@ return [
     'order' => 360,
     'name' => 'Atari Lynx',
     'brand' => 'Atari',
+    'released' => 1989,
     'folder' => 'lynx',
     'icon' => '/images/consoles/Atari - Lynx.png',
     'file_icon' => '/images/consoles/Atari - Lynx-content.png',

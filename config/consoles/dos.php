@@ -4,6 +4,7 @@ return [
     'order' => 970,
     'name' => 'DOSBox',
     'brand' => 'PC',
+    'released' => null,
     'folder' => 'dos',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

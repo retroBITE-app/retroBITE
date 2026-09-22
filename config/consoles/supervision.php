@@ -4,6 +4,7 @@ return [
     'order' => 1410,
     'name' => 'Watara Supervision',
     'brand' => 'Watara',
+    'released' => 1992,
     'folder' => 'supervision',
     'icon' => '/images/consoles/Watara - Supervision.png',
     'file_icon' => '/images/consoles/Watara - Supervision-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 770,
     'name' => 'SAM Coupe',
     'brand' => 'Miles Gordon Technology',
+    'released' => 1989,
     'folder' => 'samcoupe',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

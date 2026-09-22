@@ -4,6 +4,7 @@ return [
     'order' => 800,
     'name' => 'NEC PC-8800',
     'brand' => 'NEC',
+    'released' => 1981,
     'folder' => 'pc88',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

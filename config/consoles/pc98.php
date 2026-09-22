@@ -4,6 +4,7 @@ return [
     'order' => 810,
     'name' => 'NEC PC-9800',
     'brand' => 'NEC',
+    'released' => 1982,
     'folder' => 'pc98',
     'icon' => '/images/consoles/NEC - PC-98.png',
     'file_icon' => '/images/consoles/NEC - PC-98-content.png',

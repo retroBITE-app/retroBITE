@@ -3,6 +3,7 @@
 use App\Enums\AchievementKind;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
+use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\Game;
 use App\Models\GameFile;
@@ -193,6 +194,69 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }
 
         $this->fetchMedia($this->fetchRegion);
+    }
+
+    /**
+     * The rating the game held when a fetch was queued, or null when idle.
+     *
+     * A string rather than the int, so an unrated game reads as '' and not as
+     * a null that also means "not waiting" — the same reason fetchingFrom is
+     * one. Held on the component because Livewire hydrates $game out of the
+     * database on every request: a before-and-after taken inside one poll is
+     * two reads of the same row and can never differ.
+     */
+    public ?string $ratingFrom = null;
+
+    /** When the fetch was queued, for the poll to give up on. */
+    public ?int $ratingSince = null;
+
+    /**
+     * Ask the provider what this game is rated, now.
+     *
+     * Always forced. The job's own guard leaves a game that already has a
+     * rating alone, which is what makes the backfill safe to run twice — but
+     * somebody who opened this menu and chose this is asking a second time on
+     * purpose, and votes accumulate, so the answer can have moved.
+     */
+    public function fetchRating(): void
+    {
+        if ($reason = $this->game->blockedFromRating()) {
+            Flux::toast(variant: 'warning', text: $reason);
+
+            return;
+        }
+
+        $this->ratingFrom = (string) $this->game->rating;
+        $this->ratingSince = now()->timestamp;
+
+        RateGame::dispatch($this->game->id, force: true);
+
+        Flux::toast(text: __('Fetching the rating for :title.', ['title' => $this->game->title]));
+    }
+
+    /**
+     * Called by the poll while a rating fetch is outstanding.
+     *
+     * An answer that comes back the same number is indistinguishable from no
+     * answer at all, and a game nobody has voted on gets nothing written for it
+     * either. Both are what the timeout is for — the same one the artwork poll
+     * gives up on.
+     */
+    public function checkRating(): void
+    {
+        $this->game->refresh();
+
+        if ((string) $this->game->rating !== $this->ratingFrom) {
+            $this->ratingFrom = null;
+            $this->ratingSince = null;
+
+            return;
+        }
+
+        if ($this->ratingSince !== null && now()->timestamp - $this->ratingSince >= self::WAIT_SECONDS) {
+            $this->ratingFrom = null;
+            $this->ratingSince = null;
+        }
     }
 
     /**
@@ -611,6 +675,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             ['key' => __('Publisher'), 'value' => $this->game->publisher],
             ['key' => __('Genre'), 'value' => $this->game->genre],
             ['key' => __('Players'), 'value' => $this->game->players],
+            // No rating here. It is on the chip row above, and a page cannot
+            // say the same number twice without the reader wondering which
+            // of the two is the other one.
         ])
             ->filter(fn (array $row) => filled(Arr::get($row, 'value')))
             ->map(fn (array $row) => [
@@ -1082,6 +1149,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
             @php($identifyBlocked = $game->blockedFromLookup())
             @php($mediaBlocked = $game->blockedFromMediaScrape())
+            @php($ratingBlocked = $game->blockedFromRating())
 
             {{-- Hand-written rather than flux:dropdown: the panel's ground,
                  border, radius, padding and shadow all differ from flux:menu's,
@@ -1105,11 +1173,21 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     <flux:icon.chevron-down class="size-[11px] text-fg-dim" />
                 </button>
 
+                {{-- Hand-rolled, so its open is Alpine's rather than the
+                     popover transition the Flux menus get from app.css. The
+                     same distance and the same twelfth of a second, so the two
+                     kinds of menu open alike. --}}
                 <div
                     x-show="open"
                     x-cloak
+                    x-transition:enter="transition ease-out duration-[120ms]"
+                    x-transition:enter-start="opacity-0 -translate-y-1 scale-[0.98]"
+                    x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                    x-transition:leave="transition ease-in duration-75"
+                    x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                    x-transition:leave-end="opacity-0 -translate-y-1 scale-[0.98]"
                     role="menu"
-                    class="absolute top-10 right-0 z-20 w-[214px] rounded-xl border border-line-input bg-surface p-1.25 shadow-2xl"
+                    class="absolute top-10 right-0 z-20 w-[214px] origin-top-right rounded-xl border border-line-input bg-surface p-1.25 shadow-2xl"
                 >
                     <button
                         type="button"
@@ -1128,6 +1206,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         {{ $game->status === App\Enums\GameStatus::Unmatched ? __('Try identifying again') : __('Identify game') }}
                     </button>
 
+                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+
                     <button
                         type="button"
                         role="menuitem"
@@ -1143,6 +1223,28 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         {{ $game->media->isEmpty() ? __('Fetch artwork') : __('Fetch artwork again') }}
                     </button>
 
+                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+
+                    {{-- Offered whether or not the game already has one: a
+                         rating is votes, and the number can have moved since
+                         the match that first wrote it. --}}
+                    <button
+                        type="button"
+                        role="menuitem"
+                        @disabled($ratingBlocked !== null)
+                        @if ($ratingBlocked !== null) title="{{ $ratingBlocked }}" @else wire:click="fetchRating" @endif
+                        @class([
+                            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+                            'cursor-pointer hover:bg-raised' => $ratingBlocked === null,
+                            'cursor-not-allowed opacity-45' => $ratingBlocked !== null,
+                        ])
+                    >
+                        <flux:icon.star class="size-[15px] text-fg-muted" />
+                        {{ $game->rating === null ? __('Fetch rating') : __('Fetch rating again') }}
+                    </button>
+
+                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+
                     {{-- Present because the design has it. Moving a file needs a
                          containment gate the rewrite has not built yet, so it
                          carries no handler at all rather than a half of one. --}}
@@ -1156,8 +1258,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         <flux:icon.folder-open class="size-[15px] text-fg-muted" />
                         {{ __('Move to folder') }}
                     </button>
-
-                    <div class="my-1.25 mx-2 h-px bg-line"></div>
 
                     <x-copy-button variant="menu" role="menuitem" :text="$this->libraryPath" :label="__('Copy path')">
                         <flux:icon.document-duplicate class="size-[15px] text-fg-muted" />
@@ -1241,6 +1341,23 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 @foreach ($this->chips as $chip)
                     <span class="rounded-md border border-line-strong bg-surface px-2 py-1 font-mono text-xs text-fg-muted">{{ $chip }}</span>
                 @endforeach
+
+                @if ($game->rating !== null)
+                    {{-- The same band colour and the same corners as the
+                         shelf badge, so a game does not change verdict — or
+                         shape — on the way here. Tinted rather than filled
+                         though: this one stands in a row of chips, and a
+                         solid block among them would read as a control. --}}
+                    <span
+                        title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
+                        @style([
+                            'border-color: color-mix(in srgb, '.App\Support\RatingBand::color($game->rating).' 55%, transparent)',
+                            'background-color: color-mix(in srgb, '.App\Support\RatingBand::color($game->rating).' 14%, transparent)',
+                            'color: '.App\Support\RatingBand::color($game->rating),
+                        ])
+                        class="rounded-md border px-2 py-1 font-mono text-xs font-semibold tabular-nums"
+                    >{{ $game->rating }} / 100</span>
+                @endif
             </div>
 
             @if ($this->detailRows !== [])
@@ -1260,7 +1377,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </div>
     </div>
 
-    @if ($awaiting !== null || $fetchingFrom !== null)
+    @if ($awaiting !== null || $fetchingFrom !== null || $ratingFrom !== null)
         <section class="relative z-1 flex flex-col gap-3 px-4 pt-6.5 lg:px-8 lg:pt-10">
             @if ($awaiting !== null)
                 <div wire:poll.3s="checkAnswer"
@@ -1275,6 +1392,14 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                      class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
                     <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
                     <p class="text-sm text-accent">{{ __('Fetching artwork…') }}</p>
+                </div>
+            @endif
+
+            @if ($ratingFrom !== null)
+                <div wire:poll.3s="checkRating"
+                     class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
+                    <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
+                    <p class="text-sm text-accent">{{ __('Fetching the rating…') }}</p>
                 </div>
             @endif
         </section>

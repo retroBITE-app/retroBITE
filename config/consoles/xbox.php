@@ -4,6 +4,7 @@ return [
     'order' => 60,
     'name' => 'Xbox',
     'brand' => 'Microsoft',
+    'released' => 2001,
     'folder' => 'xbox',
     'icon' => '/images/consoles/Microsoft - Xbox.png',
     'file_icon' => '/images/consoles/Microsoft - Xbox-content.png',

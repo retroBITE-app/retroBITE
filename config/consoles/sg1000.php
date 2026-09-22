@@ -4,6 +4,7 @@ return [
     'order' => 1130,
     'name' => 'Sega SG-1000',
     'brand' => 'Sega',
+    'released' => 1983,
     'folder' => 'sg1000',
     'icon' => '/images/consoles/Sega - SG-1000.png',
     'file_icon' => '/images/consoles/Sega - SG-1000-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 1420,
     'name' => 'Mega Duck',
     'brand' => 'Welback Holdings',
+    'released' => 1993,
     'folder' => 'megaduck',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

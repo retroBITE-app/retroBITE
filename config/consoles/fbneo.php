@@ -4,6 +4,7 @@ return [
     'order' => 1350,
     'name' => 'FinalBurn Neo',
     'brand' => 'Various',
+    'released' => null,
     'folder' => 'fbneo',
     'icon' => '/images/consoles/FBNeo - Arcade Games.png',
     'file_icon' => '/images/consoles/FBNeo - Arcade Games-content.png',

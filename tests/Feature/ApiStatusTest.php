@@ -55,17 +55,23 @@ it('tells "nothing asked yet" apart from a spent allowance', function () {
         ->assertDontSee('20,000');
 });
 
-it('draws what is left of both allowances, not just the large one', function () {
+it('draws what has been spent of both allowances, not just the large one', function () {
     recordQuota();
 
     $response = $this->get(route('dashboard'))->assertOk();
 
-    // 20 000 - 15 000 successful …
-    $response->assertSee('5,000')->assertSee('20,000');
-    // … and 2 000 - 1 900 failed, which is the one that runs out first. Folded
-    // away by default, but rendered: the fold is the viewer's, not the
+    // 15 000 of 20 000 successful. Spent rather than left, so the figure and
+    // the bar under it move the same way — they used to disagree.
+    //
+    // No assertDontSee on the old figure: assertSee is a substring match, and
+    // "5,000" is inside "15,000". The two counters below carry the proof
+    // instead — 1,900 spent is not 100 left.
+    $response->assertSee('15,000')->assertSee('20,000');
+
+    // … and 1 900 of 2 000 failed, which is the one that runs out first.
+    // Folded away by default, but rendered: the fold is the viewer's, not the
     // server's, so opening it costs no round trip.
-    $response->assertSee('100')->assertSee('2,000');
+    $response->assertSee('1,900')->assertSee('2,000');
 });
 
 it('carries the figure on the heading row rather than spending a line on a title', function () {
@@ -159,13 +165,13 @@ it('warns when the server is turning accounts like ours away', function () {
 it('re-reads the figures on every poll rather than freezing at page load', function () {
     recordQuota();
 
-    $panel = Livewire::test('api-status')->assertSee('5,000');
+    $panel = Livewire::test('api-status')->assertSee('15,000');
 
     // A worker spends another four thousand lookups while the page sits open.
     recordQuota(['requeststoday' => 19000]);
 
     // What wire:poll.60s asks for, and the reason this is a component at all.
     $panel->call('$refresh')
-        ->assertSee('1,000')
-        ->assertDontSee('5,000');
+        ->assertSee('19,000')
+        ->assertDontSee('15,000');
 });

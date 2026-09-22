@@ -9,6 +9,7 @@ return [
     'order' => 10,
     'name' => 'Super Nintendo',
     'brand' => 'Nintendo',
+    'released' => 1990,
     'folder' => 'snes',
     'icon' => '/images/consoles/Nintendo - Super Nintendo Entertainment System.png',
     'file_icon' => '/images/consoles/Nintendo - Super Nintendo Entertainment System-content.png',

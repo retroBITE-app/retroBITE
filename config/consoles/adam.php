@@ -4,6 +4,7 @@ return [
     'order' => 460,
     'name' => 'Coleco Adam',
     'brand' => 'Coleco',
+    'released' => 1983,
     'folder' => 'adam',
     'icon' => '/images/consoles/Coleco - ColecoVision ADAM.png',
     'file_icon' => '/images/consoles/Coleco - ColecoVision ADAM-content.png',

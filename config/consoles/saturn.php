@@ -4,6 +4,7 @@ return [
     'order' => 1120,
     'name' => 'Sega Saturn',
     'brand' => 'Sega',
+    'released' => 1994,
     'folder' => 'saturn',
     'icon' => '/images/consoles/Sega - Saturn.png',
     'file_icon' => '/images/consoles/Sega - Saturn-content.png',

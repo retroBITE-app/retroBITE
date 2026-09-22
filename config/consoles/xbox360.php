@@ -4,6 +4,7 @@ return [
     'order' => 760,
     'name' => 'Microsoft Xbox 360',
     'brand' => 'Microsoft',
+    'released' => 2005,
     'folder' => 'xbox360',
     'icon' => '/images/consoles/Microsoft - Xbox 360.png',
     'file_icon' => '/images/consoles/Microsoft - Xbox 360-content.png',

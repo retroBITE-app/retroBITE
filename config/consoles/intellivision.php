@@ -4,6 +4,7 @@ return [
     'order' => 710,
     'name' => 'Intellivision',
     'brand' => 'Mattel',
+    'released' => 1979,
     'folder' => 'intellivision',
     'icon' => '/images/consoles/Mattel - Intellivision.png',
     'file_icon' => '/images/consoles/Mattel - Intellivision-content.png',

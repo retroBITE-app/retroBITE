@@ -4,6 +4,7 @@ return [
     'order' => 1170,
     'name' => 'Sinclair ZX81',
     'brand' => 'Sinclair',
+    'released' => 1981,
     'folder' => 'zx81',
     'icon' => '/images/consoles/Sinclair - ZX 81.png',
     'file_icon' => '/images/consoles/Sinclair - ZX 81-content.png',

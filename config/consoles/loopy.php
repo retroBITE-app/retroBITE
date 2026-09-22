@@ -4,6 +4,7 @@ return [
     'order' => 440,
     'name' => 'Casio Loopy',
     'brand' => 'Casio',
+    'released' => 1995,
     'folder' => 'loopy',
     'icon' => '/images/consoles/Casio - Loopy.png',
     'file_icon' => '/images/consoles/Casio - Loopy-content.png',

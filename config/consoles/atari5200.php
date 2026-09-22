@@ -4,6 +4,7 @@ return [
     'order' => 310,
     'name' => 'Atari 5200',
     'brand' => 'Atari',
+    'released' => 1982,
     'folder' => 'atari5200',
     'icon' => '/images/consoles/Atari - 5200.png',
     'file_icon' => '/images/consoles/Atari - 5200-content.png',

@@ -4,6 +4,7 @@ return [
     'order' => 1140,
     'name' => 'Sega System SP',
     'brand' => 'Sega',
+    'released' => 2004,
     'folder' => 'systemsp',
     'icon' => '/images/consoles/Arcade - Misc.png',
     'file_icon' => '/images/consoles/Arcade - Misc-content.png',

@@ -16,6 +16,7 @@ use App\Exceptions\ScreenScraper\SoftwareBlacklisted;
 use App\Exceptions\ScreenScraper\ThreadLimitReached;
 use App\Support\Console;
 use App\Support\Matching\MediaFetch;
+use App\Support\ScreenScraperCredentials;
 use App\Support\ScreenScraperQuota;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -313,6 +314,7 @@ class ScreenScraperService
             'players' => (string) Arr::get($jeu, 'joueurs.text', ''),
             'publisher' => (string) Arr::get($jeu, 'editeur.text', ''),
             'developer' => (string) Arr::get($jeu, 'developpeur.text', ''),
+            'rating' => $this->rating(Arr::get($jeu, 'note.text')),
             'medias' => $medias,
             'roms' => is_array($roms = Arr::get($jeu, 'roms')) ? $roms : [],
             // The media list inside raw is replaced by the sanitised one: the
@@ -489,6 +491,34 @@ class ScreenScraperService
     }
 
     /**
+     * ScreenScraper's `note`, from their scale of twenty onto ours of a
+     * hundred.
+     *
+     * Zero is read as "nobody has voted", not as the mark zero: that is what
+     * the provider sends for a game with no votes, and a library sorted by
+     * rating would otherwise put those games below the ones it knows nothing
+     * about at all.
+     *
+     * Everything else is tolerated rather than trusted — the field is
+     * contributed, and an empty string, a comma decimal and a value past the
+     * top of the scale have all been seen.
+     */
+    private function rating(mixed $note): ?int
+    {
+        if (is_string($note)) {
+            $note = str_replace(',', '.', trim($note));
+        }
+
+        if (! is_numeric($note)) {
+            return null;
+        }
+
+        $value = (float) $note;
+
+        return $value <= 0.0 ? null : (int) round(min($value, 20.0) * 5);
+    }
+
+    /**
      * Perform an authenticated GET against the SS v2 API, returning the decoded body.
      * Returns [] on 404 / missing game; throws on other failures.
      *
@@ -562,6 +592,11 @@ class ScreenScraperService
         if (Arr::get($credentials, 'dev_id') === '' || Arr::get($credentials, 'dev_password') === '') {
             throw new RuntimeException('ScreenScraper dev credentials missing — see config/screenscraper.php.');
         }
+
+        // The account is settings, not config: it is set in Settings →
+        // ScreenScraper and the rest of this array is deployment.
+        $credentials['user'] = ScreenScraperCredentials::user();
+        $credentials['password'] = ScreenScraperCredentials::password();
 
         return $credentials;
     }
@@ -731,7 +766,7 @@ class ScreenScraperService
 
         if ($this->bodyMatches($body, self::BODY_BAD_USER)) {
             return new BadCredentials(
-                $message('user login rejected — check SCREENSCRAPER_USER and SCREENSCRAPER_PASSWORD'),
+                $message('user login rejected — check the account in Settings → ScreenScraper'),
                 $status,
                 $body,
             );

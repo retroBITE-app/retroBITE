@@ -4,6 +4,7 @@ return [
     'order' => 1200,
     'name' => 'Neo Geo CD',
     'brand' => 'SNK',
+    'released' => 1994,
     'folder' => 'neogeocd',
     'icon' => '/images/consoles/SNK - Neo Geo CD.png',
     'file_icon' => '/images/consoles/SNK - Neo Geo CD-content.png',

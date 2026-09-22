@@ -4,6 +4,7 @@ return [
     'order' => 510,
     'name' => 'Commodore 64',
     'brand' => 'Commodore',
+    'released' => 1982,
     'folder' => 'c64',
     'icon' => '/images/consoles/Commodore - 64.png',
     'file_icon' => '/images/consoles/Commodore - 64-content.png',

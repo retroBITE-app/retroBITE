@@ -4,6 +4,7 @@ return [
     'order' => 20,
     'name' => 'PlayStation 2',
     'brand' => 'Sony',
+    'released' => 2000,
     'folder' => 'ps2',
     'icon' => '/images/consoles/Sony - PlayStation 2.png',
     'file_icon' => '/images/consoles/Sony - PlayStation 2-content.png',

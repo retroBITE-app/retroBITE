@@ -4,6 +4,7 @@ return [
     'order' => 920,
     'name' => 'Nintendo Wii U',
     'brand' => 'Nintendo',
+    'released' => 2012,
     'folder' => 'wiiu',
     'icon' => '/images/consoles/Nintendo - Wii U.png',
     'file_icon' => '/images/consoles/Nintendo - Wii U-content.png',

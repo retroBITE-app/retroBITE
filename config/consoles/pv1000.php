@@ -4,6 +4,7 @@ return [
     'order' => 450,
     'name' => 'Casio PV-1000',
     'brand' => 'Casio',
+    'released' => 1983,
     'folder' => 'pv1000',
     'icon' => '/images/consoles/Casio - PV-1000.png',
     'file_icon' => '/images/consoles/Casio - PV-1000-content.png',

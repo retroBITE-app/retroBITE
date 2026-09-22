@@ -4,6 +4,7 @@ return [
     'order' => 350,
     'name' => 'Atari Jaguar CD',
     'brand' => 'Atari',
+    'released' => 1995,
     'folder' => 'jaguarcd',
     'icon' => '/images/consoles/Atari - Jaguar CD.png',
     'file_icon' => '/images/consoles/Atari - Jaguar CD-content.png',
