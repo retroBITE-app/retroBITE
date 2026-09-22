@@ -6,6 +6,7 @@ use App\Support\DocPath;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -136,22 +137,14 @@ final class DocResource
     /**
      * File size for the meta line.
      *
-     * Hand-rolled rather than Number::fileSize(). That needed the intl
-     * extension, which the runtime image and CI now both carry — so this is
-     * kept only because it works, not because it has to exist.
+     * The same helper every other size in the application goes through, so a
+     * document and a disc image are weighed on one scale. This used to carry
+     * its own copy of the arithmetic, which said the same thing in its own
+     * words and was one more place for the two to drift apart.
      */
     public function humanSize(): string
     {
-        $units = ['B', 'KB', 'MB', 'GB'];
-        $size = (float) $this->bytes;
-        $unit = 0;
-
-        while ($size >= 1024 && $unit < count($units) - 1) {
-            $size /= 1024;
-            $unit++;
-        }
-
-        return ($unit === 0 ? (string) (int) $size : number_format($size, 1)).' '.$units[$unit];
+        return Number::fileSize($this->bytes, 1);
     }
 
     /**

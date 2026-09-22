@@ -4,11 +4,11 @@
     use App\Enums\ShareProtocol;
     use App\Models\Game;
     use App\Models\ConsoleSourceFolder;
-    use App\Models\GameFile;
     use App\Models\RaProgress;
     use App\Models\RaUnlock;
     use App\Services\NetworkService;
     use App\Support\Console;
+    use App\Support\LibraryStorage;
     use Illuminate\Support\Number;
 
     // Media rides along because both the hero and the cards behind it are key
@@ -51,7 +51,12 @@
 
     $games = Game::count();
     $identified = Game::where('status', GameStatus::Matched)->count();
-    $bytes = (int) GameFile::whereNull('missing_since')->sum('size_bytes');
+
+    // Measured off the disk rather than summed from game_files: the database
+    // knows only what a scan has imported, which leaves out the artwork and
+    // configs the exports write, a BIOS, and anything copied in over the share
+    // since. Against what is free, so the figure says what room is left.
+    $storage = LibraryStorage::current();
 
     // One grouped row for the whole library. The counters are denormalised
     // onto ra_progress precisely so this is a sum and not an aggregation over
@@ -73,7 +78,19 @@
         ['label' => 'Consoles', 'value' => (string) $consoles->count(), 'sub' => __('in your library')],
         ['label' => 'Achievements', 'value' => Number::format((int) $ra->unlocked), 'sub' => __('of :count tracked', ['count' => Number::format((int) $ra->possible)])],
         ['label' => 'Points', 'value' => Number::format((int) $ra->points), 'sub' => __('hardcore :count', ['count' => Number::format((int) $ra->points_hardcore)])],
-        ['label' => 'Storage', 'value' => Number::fileSize($bytes, 1), 'sub' => __('on disk')],
+        // Dashed rather than dropped when the mount cannot be read: this grid
+        // is six cells over two and three columns, and removing one leaves a
+        // hole in it.
+        [
+            'label' => 'Storage',
+            'value' => $storage === null ? __('—') : Number::fileSize($storage->used, 1),
+            'sub' => $storage === null
+                ? __('library folder unreadable')
+                : __('of :total, :free free', [
+                    'total' => Number::fileSize($storage->total(), 1),
+                    'free' => Number::fileSize($storage->free, 1),
+                ]),
+        ],
     ];
 
     // The five most recent unlocks, and what they were worth this week.

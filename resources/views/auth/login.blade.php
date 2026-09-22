@@ -1,8 +1,8 @@
 @php
     use App\Models\ConsoleSourceFolder;
     use App\Models\Game;
-    use App\Models\GameFile;
     use App\Models\Media;
+    use App\Support\LibraryStorage;
     use Illuminate\Support\Number;
 
     // A different game's key art on every visit, and nothing at all on a host
@@ -16,10 +16,6 @@
     if (config('settings.login_show_stats')) {
         $games = Game::count();
         $consoles = ConsoleSourceFolder::consoles()->count();
-        $bytes = (int) GameFile::whereNull('missing_since')->sum('size_bytes');
-        $capacity = is_dir((string) config('settings.games_path'))
-            ? @disk_total_space((string) config('settings.games_path'))
-            : false;
 
         $stats = [
             [
@@ -30,13 +26,21 @@
                 'value' => (string) $consoles,
                 'label' => trans_choice('console installed|consoles installed', $consoles),
             ],
-            [
-                'value' => Number::fileSize($bytes, 1),
-                'label' => $capacity === false
-                    ? __('of library on disk')
-                    : __('of :total used', ['total' => Number::fileSize((int) $capacity, 1)]),
-            ],
         ];
+
+        // The same reading the sidebar draws, so the figure somebody sees before
+        // signing in is the one they see after. Dropped rather than dashed when
+        // the mount cannot be read: a stat tile is a bare number over a caption,
+        // with no label or track to hang an em dash on, and the row is centred
+        // so two of them sit as well as three.
+        $storage = LibraryStorage::current();
+
+        if ($storage !== null) {
+            $stats[] = [
+                'value' => Number::fileSize($storage->used, 1),
+                'label' => __('of :total used', ['total' => Number::fileSize($storage->total(), 1)]),
+            ];
+        }
     }
 @endphp
 
