@@ -5,11 +5,6 @@
         ->selectRaw('console, count(*) as games')
         ->groupBy('console')
         ->pluck('games', 'console');
-
-    // Placeholder figures, until something measures the disk.
-    $storageUsed = '412 GB';
-    $storageTotal = '1.8 TB';
-    $storagePercent = 23;
 @endphp
 
 <!DOCTYPE html>
@@ -94,26 +89,15 @@
                     Three readings in one grammar: what the provider will still
                     answer, what the workers are doing with those answers, and
                     the disk it all lands on. Label and figure on one line, one
-                    bar under it, detail a fold away. The first two are
-                    components rather than partials because they poll; the rest
-                    of this layout is static until the next navigation.
+                    bar under it, detail a fold away. All three are components
+                    rather than partials because they poll; the rest of this
+                    layout is static until the next navigation.
                 --}}
                 <livewire:api-status />
 
                 <livewire:system-activity />
 
-                {{--
-                    `kicker` goes on the label only. On the flex parent its
-                    0.14em tracking also stretched the figure, which then wrapped.
-                --}}
-                <div class="flex items-baseline justify-between gap-2 text-fg-muted">
-                    <span class="kicker">{{ __('Storage') }}</span>
-                    <span class="font-mono text-xs whitespace-nowrap">{{ $storageUsed }} / {{ $storageTotal }}</span>
-                </div>
-
-                <div class="mt-2 mb-3.5 h-1 overflow-hidden rounded-sm bg-raised">
-                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" style="width: {{ $storagePercent }}%"></div>
-                </div>
+                <livewire:library-storage />
 
                 <div class="flex items-center gap-2.5">
                     <span class="grid h-6.5 w-6.5 shrink-0 place-items-center rounded-md border border-line-input bg-raised font-mono text-xs text-fg-muted">

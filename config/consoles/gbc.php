@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Nintendo - Game Boy Color-content.png',
     'file_extensions' => ['gbc', 'gb', 'sgb', 'zip', '7z'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 10,
     'retroachievements_id' => 6,
     'cover_aspect' => '5/7',
     'cover_height' => 260,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

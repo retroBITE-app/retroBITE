@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Nintendo - Family Computer Disk System-content.png',
     'file_extensions' => ['fds', 'zip', '7z'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 106,
     'retroachievements_id' => 81,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

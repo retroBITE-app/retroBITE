@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Sega - Mega-CD - Sega CD-content.png',
     'file_extensions' => ['cue', 'iso', 'chd', 'm3u'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 20,
     'retroachievements_id' => 9,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

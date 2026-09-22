@@ -32,11 +32,6 @@ class GameFactory extends Factory
             'slug' => Str::slug($title),
             'status' => GameStatus::Placeholder,
             'matched_at' => null,
-
-            // Not faked even on matched(): most of what the provider knows
-            // nobody has voted on, so a test that wants a rating should say so
-            // and every other test gets the ordinary case.
-            'rating' => null,
         ];
     }
 
@@ -50,14 +45,6 @@ class GameFactory extends Factory
             'developer' => $this->faker->company(),
             'release_date' => (string) $this->faker->year(),
             'region' => 'wor',
-        ]);
-    }
-
-    /** A game the provider holds a rating for. */
-    public function rated(?int $rating = null): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'rating' => $rating ?? $this->faker->numberBetween(1, 100),
         ]);
     }
 

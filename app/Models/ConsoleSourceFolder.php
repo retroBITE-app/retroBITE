@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Support\Console;
+use App\Support\Layouts\ConsoleLayout;
+use App\Support\Layouts\Layouts;
+use App\Support\Scanning\FolderCounts;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -21,13 +24,18 @@ use Illuminate\Support\Collection;
  * asking when that directory is already there. It differs only when somebody
  * pointed the console somewhere else.
  *
+ * How the folder is arranged is remembered here too, for the same reason: it
+ * is a fact about this install of this console, chosen once when it was added,
+ * not something to re-derive from the filesystem every time somebody asks.
+ *
  * @property int $id
  * @property string $console
  * @property string $path relative to the library root
+ * @property string|null $layout null means the console's declared default
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['console', 'path'])]
+#[Fillable(['console', 'path', 'layout'])]
 class ConsoleSourceFolder extends Model
 {
     /**
@@ -61,12 +69,21 @@ class ConsoleSourceFolder extends Model
      * A null path means "wherever convention says", which is the ordinary case
      * and the reason adding a console usually asks nothing.
      */
-    public static function add(Console $console, ?string $path = null): self
+    public static function add(Console $console, ?string $path = null, ?string $layout = null): self
     {
-        return static::updateOrCreate(
+        $row = static::updateOrCreate(
             ['console' => $console->key],
-            ['path' => trim($path ?? $console->folder, '/')],
+            [
+                'path' => trim($path ?? $console->folder, '/'),
+                'layout' => $layout,
+            ],
         );
+
+        // The path and the layout both decide which files count, so any cached
+        // number taken before this was written is about a different folder.
+        FolderCounts::forget($console);
+
+        return $row;
     }
 
     /**
@@ -78,6 +95,8 @@ class ConsoleSourceFolder extends Model
     public static function forget(Console $console): void
     {
         static::query()->where('console', $console->key)->delete();
+
+        FolderCounts::forget($console);
     }
 
     public static function pathFor(Console $console): ?string
@@ -89,5 +108,50 @@ class ConsoleSourceFolder extends Model
         }
 
         return $console->folder !== '' ? $console->folder : null;
+    }
+
+    /**
+     * The layout key stored for this console, or its declared default.
+     *
+     * The cheap lookup: one indexed read, no filesystem and no config walk. A
+     * stored key config no longer carries falls back rather than throwing, so
+     * an install that outlives a layout keeps working.
+     */
+    public static function layoutKeyFor(Console $console): string
+    {
+        return static::layoutFor($console)->key();
+    }
+
+    /**
+     * The layout object for this console, for the scanner and the toolbox.
+     */
+    public static function layoutFor(Console $console): ConsoleLayout
+    {
+        $stored = static::query()->where('console', $console->key)->value('layout');
+
+        $layout = is_string($stored) && Layouts::supports($console, $stored)
+            ? Layouts::make($stored)
+            : null;
+
+        return $layout ?? Layouts::default($console);
+    }
+
+    /**
+     * Change how an already-added console is read.
+     *
+     * Silently ignores a layout the console does not offer: the picker only
+     * shows supported ones, so anything else arrived by hand.
+     */
+    public static function setLayout(Console $console, string $layout): void
+    {
+        if (! Layouts::supports($console, $layout)) {
+            return;
+        }
+
+        static::query()->where('console', $console->key)->update(['layout' => $layout]);
+
+        // A mass update fires no model events, which is why every one of these
+        // clears the count by hand rather than through a saved() hook.
+        FolderCounts::forget($console);
     }
 }

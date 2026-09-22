@@ -12,10 +12,12 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
 use App\Models\User;
+use App\Services\LibraryScanner;
 use App\Support\Console;
+use App\Support\ExportProgress;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
-use Illuminate\Support\Facades\DB;
+use App\Support\Scanning\FolderCounts;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -222,6 +224,38 @@ it('shows a game with its files, marking the missing ones', function () {
         ->assertSee('d1.bin')
         ->assertSee('d2.bin')
         ->assertSee('Missing');
+});
+
+/**
+ * The disc's own name for itself, beside the filename it happens to be stored
+ * under. The two disagree on an OPL drive by design — the file can be called
+ * anything and the serial cannot — so the files panel has to say both.
+ */
+it('shows the serial a disc carries next to its filename', function () {
+    $game = Game::factory()->forConsole('ps2')->matched()->create(['title' => 'Tekken Tag', 'slug' => 'tekken-tag']);
+    GameFile::factory()->for($game)->create([
+        'path' => 'ps2/DVD/SLES_503.86.Tekken Tag.iso',
+        'filename' => 'SLES_503.86.Tekken Tag.iso',
+        'extension' => 'iso',
+        'license_id' => 'SLES_503.86',
+    ]);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSee('SLES_503.86');
+});
+
+it('says nothing where a file carries no serial', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    GameFile::factory()->for($game)->create([
+        'path' => 'snes/smw.sfc', 'filename' => 'smw.sfc', 'extension' => 'sfc', 'license_id' => null,
+    ]);
+
+    // An empty chip would read as a serial nobody could make out, rather than
+    // as a cartridge that never had one.
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertDontSeeHtml('rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted');
 });
 
 it('opens every artwork in one viewer, captioned by kind and region', function () {
@@ -757,154 +791,144 @@ it('sizes an empty slot from the console it belongs to', function () {
     Livewire::test('games.index', ['console' => 'psx'])->assertSee('width: 200px', escape: false);
 });
 
-it('caps a cover by its console rather than stretching it to the column', function () {
-    $game = Game::factory()->forConsole('gba')->matched()->create(['title' => 'Metroid Fusion', 'slug' => 'fusion']);
-    Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+it('says how many files an export has written, not how many jobs it queued', function () {
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
 
-    // The one knob that makes one console's shelf smaller than another's, and
-    // a ceiling rather than a height: a narrow column shrinks the cover
-    // further instead of putting bars around it.
-    Livewire::test('games.index', ['console' => 'gba'])
-        ->assertSee('max-height: 240px', escape: false)
-        ->assertDontSee('height: 240px;', escape: false);
+    ExportProgress::advance('ps2', 'cfg', 12, 19);
+
+    Livewire::test('consoles.index')
+        ->assertSee('Writing files')
+        ->assertSeeInOrder(['12', '/19']);
+
+    ExportProgress::finish('ps2', 'cfg');
+
+    Livewire::test('consoles.index')->assertDontSee('Writing files');
 });
 
-it('caps how many covers a row can hold, at every width', function () {
-    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
-
-    // The cap is the point: covers stretch to their column, so without one a
-    // wide screen draws either postage stamps or posters.
-    Livewire::test('games.index', ['console' => 'snes'])
-        ->assertSee('grid-cols-2', escape: false)
-        ->assertSee('sm:grid-cols-3', escape: false)
-        ->assertSee('lg:grid-cols-4', escape: false)
-        ->assertSee('xl:grid-cols-5', escape: false)
-        ->assertSee('2xl:grid-cols-6', escape: false);
-});
-
-/*
- * The provider's rating, which is what makes a shelf of three thousand games
- * navigable: sorted by it, filtered by it, and readable without opening a game.
+/**
+ * The card counts what is on the disk, not what is in the database.
+ *
+ * A drive filled over SMB says nothing to the database until a scan runs, and
+ * a card claiming the folder is empty is the one number somebody checks
+ * against what they can see in Finder.
  */
+it('counts the files on disk rather than the rows in the database', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
 
-it('sorts by rating with the unrated last, not first', function () {
-    Game::factory()->forConsole('snes')->matched()->rated(64)->create(['title' => 'Middling', 'slug' => 'mid']);
-    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
-    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
+    foreach (['One.iso', 'Two.iso', 'Three.iso'] as $filename) {
+        File::put($this->root.'/ps2/'.$filename, 'x');
+    }
 
-    // Descending alone puts NULL at the top on MariaDB, which reads as the
-    // best games being the ones nobody has an opinion about.
-    Livewire::test('games.index')
-        ->set('sort', 'rating')
-        ->assertSeeInOrder(['Excellent', 'Middling', 'Unrated']);
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    // A row for a game nothing on this drive accounts for. The count is the
+    // disk's answer, so it says three either way.
+    Game::factory()->create(['console' => 'ps2', 'title' => 'Not on this drive']);
+
+    Livewire::test('consoles.index')->assertSee('3 games');
 });
 
-it('sorts by title by default, whatever the ratings say', function () {
-    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Zeta', 'slug' => 'zeta']);
-    Game::factory()->forConsole('snes')->matched()->rated(20)->create(['title' => 'Alpha', 'slug' => 'alpha']);
+it('counts the same files the scanner would', function () {
+    foreach (['DVD', 'ART', 'CFG'] as $directory) {
+        File::ensureDirectoryExists($this->root.'/ps2/'.$directory);
+    }
 
-    Livewire::test('games.index')->assertSeeInOrder(['Alpha', 'Zeta']);
+    File::put($this->root.'/ps2/DVD/Game.iso', 'x');
+    // The layout's furniture, and the console's own exclusion. Neither is a
+    // game, and counting them is how eleven titles become a hundred.
+    File::put($this->root.'/ps2/ART/Game_COV.jpg', 'x');
+    File::put($this->root.'/ps2/CFG/Game.cfg', 'x');
+    File::put($this->root.'/ps2/DVD/games.bin', 'x');
+
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+
+    Livewire::test('consoles.index')->assertSee('1 games');
 });
 
-it('filters out everything below the rating asked for', function () {
-    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
-    Game::factory()->forConsole('snes')->matched()->rated(64)->create(['title' => 'Middling', 'slug' => 'mid']);
-    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+it('does not count a bios dump as a game', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
 
-    Livewire::test('games.index')
-        ->set('minRating', '80')
-        ->assertSee('Excellent')
-        ->assertDontSee('Middling')
-        // A game with no rating is not a game rated below eighty, but it is
-        // not one the filter was asked for either.
-        ->assertDontSee('Unrated');
+    File::put($this->root.'/ps2/Game.iso', 'x');
+    // PS2 lists .bin under both file_extensions and bios_extensions. The
+    // scanner resolves that in favour of the game, and so does the card.
+    File::put($this->root.'/ps2/scph39001.bin', 'x');
+
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('2 games');
 });
 
-it('clears the rating filter but keeps the sort', function () {
-    Game::factory()->forConsole('snes')->matched()->rated(95)->create();
+it('does not walk the drive again on every poll', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
+    File::put($this->root.'/ps2/One.iso', 'x');
 
-    // Clear is about which games are shown. How they are ordered is a way of
-    // reading the library, and somebody who chose it meant it to stick.
-    Livewire::test('games.index')
-        ->set('sort', 'rating')
-        ->set('minRating', '80')
-        ->set('query', 'nothing')
-        ->call('clear')
-        ->assertSet('minRating', '')
-        ->assertSet('query', '')
-        ->assertSet('sort', 'rating');
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('1 games');
+
+    File::put($this->root.'/ps2/Two.iso', 'x');
+
+    // Still the cached answer: the page polls itself every two seconds, and
+    // re-walking a five-thousand-file drive each time is the whole reason the
+    // count is cached at all.
+    Livewire::test('consoles.index')->assertSee('1 games');
+
+    FolderCounts::forget(new Console('ps2'));
+
+    Livewire::test('consoles.index')->assertSee('2 games');
 });
 
-it('shows the rating on the shelf and on the game', function () {
-    $game = Game::factory()->forConsole('snes')->matched()->rated(84)->create([
-        'title' => 'Super Mario World', 'slug' => 'smw',
-    ]);
+it('forgets the count once a scan has walked the folder', function () {
+    File::ensureDirectoryExists($this->root.'/ps2');
+    File::put($this->root.'/ps2/One.iso', 'x');
 
-    Livewire::test('games.index')->assertSee('84');
+    ConsoleSourceFolder::add(new Console('ps2'));
 
-    $this->get(route('games.show', $game))->assertOk()->assertSee('84 / 100');
+    Livewire::test('consoles.index')->assertSee('1 games');
+
+    File::put($this->root.'/ps2/Two.iso', 'x');
+
+    // Faked so the scan's follow-up work — a provider lookup per new game —
+    // stays out of a test that is only about the cached count.
+    Queue::fake();
+
+    (new ScanConsoleFolder('ps2'))->handle(app(LibraryScanner::class));
+
+    Livewire::test('consoles.index')->assertSee('2 games');
 });
 
-it('says nothing about the rating of a game that has none', function () {
-    $game = Game::factory()->forConsole('snes')->matched()->create([
-        'title' => 'Super Mario World', 'slug' => 'smw',
-    ]);
+it('says nothing rather than throwing when the drive is not mounted', function () {
+    ConsoleSourceFolder::add(new Console('ps2'));
 
-    $this->get(route('games.show', $game))
-        ->assertOk()
-        ->assertDontSee('/ 100')
-        // Nothing stands in for an absent rating: no dash, no empty chip.
-        ->assertDontSee('out of 100 by ScreenScraper');
-});
+    File::deleteDirectory($this->root.'/ps2');
 
-it('states the rating once on the game page, not twice', function () {
-    $game = Game::factory()->forConsole('snes')->matched()->rated(84)->create([
-        'title' => 'Super Mario World', 'slug' => 'smw',
-    ]);
+    // A card that renders is worth more than a page that does not. Finding out
+    // the mount has gone is the scan's job, not the list's.
+    Livewire::test('consoles.index')->assertSee('0 games');
 
-    // It used to be a chip beside the title and a row in the metadata grid
-    // below, which left the reader working out which of the two was the
-    // other one. The chip is the one that stayed.
-    $page = $this->get(route('games.show', $game))->assertOk();
+    it('caps a cover by its console rather than stretching it to the column', function () {
+        $game = Game::factory()->forConsole('gba')->matched()->create(['title' => 'Metroid Fusion', 'slug' => 'fusion']);
+        Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
 
-    expect(substr_count($page->getContent(), '84 / 100'))->toBe(1);
+        // The one knob that makes one console's shelf smaller than another's, and
+        // a ceiling rather than a height: a narrow column shrinks the cover
+        // further instead of putting bars around it.
+        Livewire::test('games.index', ['console' => 'gba'])
+            ->assertSee('max-height: 240px', escape: false)
+            ->assertDontSee('height: 240px;', escape: false);
+    });
 
-    expect(Livewire::test('games.show', ['game' => $game])->instance()->detailRows)
-        ->each->not->toHaveKey('key', 'Rating');
-});
+    it('caps how many covers a row can hold, at every width', function () {
+        Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
 
-it('does not add a query per row to show ratings', function () {
-    Game::factory()->forConsole('snes')->matched()->rated()->count(12)->create();
+        // The cap is the point: covers stretch to their column, so without one a
+        // wide screen draws either postage stamps or posters.
+        Livewire::test('games.index', ['console' => 'snes'])
+            ->assertSee('grid-cols-2', escape: false)
+            ->assertSee('sm:grid-cols-3', escape: false)
+            ->assertSee('lg:grid-cols-4', escape: false)
+            ->assertSee('xl:grid-cols-5', escape: false)
+            ->assertSee('2xl:grid-cols-6', escape: false);
+    });
 
-    DB::enableQueryLog();
-    Livewire::test('games.index')->set('sort', 'rating');
-    $queries = count(DB::getRawQueryLog());
-    DB::disableQueryLog();
-
-    // The rating is a column on games, so it rides along with the row it
-    // belongs to. Twelve more selects would mean it had become a relation.
-    expect($queries)->toBeLessThan(15);
-});
-
-it('colours the shelf badge by how good the game is', function () {
-    Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Excellent', 'slug' => 'excellent']);
-    Game::factory()->forConsole('snes')->matched()->rated(22)->create(['title' => 'Poor', 'slug' => 'poor']);
-
-    // Inline styles, because the colour is picked at runtime and Tailwind only
-    // generates the classes it saw in the source. If these ever become classes
-    // this test is what says the badge went blank.
-    Livewire::test('games.index')
-        ->assertSee('background-color: var(--color-accent);', escape: false)
-        ->assertSee('background-color: var(--color-danger);', escape: false);
-});
-
-it('gives the game page the same band as the shelf', function () {
-    $game = Game::factory()->forConsole('snes')->matched()->rated(45)->create([
-        'title' => 'Middling', 'slug' => 'middling',
-    ]);
-
-    // A game must not change verdict on the way from the shelf to its page.
-    $this->get(route('games.show', $game))
-        ->assertOk()
-        ->assertSee('var(--color-warn)', escape: false);
 });

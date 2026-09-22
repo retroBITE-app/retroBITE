@@ -14,9 +14,12 @@ return [
     'file_icon' => '/images/consoles/Nintendo - Super Nintendo Entertainment System-content.png',
     'file_extensions' => ['smc', 'sfc', 'fig', 'swc', 'bs', 'gd3', 'gd7', 'dx2', 'bsx', 'zip', '7z'],
     'bios_extensions' => ['rom'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 4,
     'retroachievements_id' => 3,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

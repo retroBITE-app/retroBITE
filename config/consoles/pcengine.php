@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/NEC - PC Engine - TurboGrafx 16-content.png',
     'file_extensions' => ['pce', 'bin', 'zip', '7z'],
     'bios_extensions' => [],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 31,
     'retroachievements_id' => 8,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

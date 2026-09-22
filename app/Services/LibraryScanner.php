@@ -11,9 +11,11 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Console;
+use App\Support\Layouts\ConsoleLayout;
 use App\Support\Scanning\CueSheet;
 use App\Support\Scanning\Playlist;
 use App\Support\Scanning\ScanResult;
+use App\Tools\ConsoleTools;
 use FilesystemIterator;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
@@ -47,6 +49,15 @@ final class LibraryScanner
     /** @var array<string, true> relative paths seen anywhere in this scan */
     private array $seen = [];
 
+    /** How this console's folder is arranged, as whoever added it said. */
+    private ConsoleLayout $layout;
+
+    /** This console's own reading of its filenames, where it has one. */
+    private ?ConsoleTools $tools = null;
+
+    /** The console's root, relative to the library root. */
+    private string $relativeRoot = '';
+
     public function scan(Console $console): ScanResult
     {
         $relativeRoot = ConsoleSourceFolder::pathFor($console);
@@ -60,6 +71,10 @@ final class LibraryScanner
         if (! is_dir($root)) {
             throw ScanAborted::missingFolder($console->key, $root);
         }
+
+        $this->relativeRoot = $relativeRoot;
+        $this->layout = ConsoleSourceFolder::layoutFor($console);
+        $this->tools = ConsoleTools::for($console);
 
         $files = $this->filesUnder($root, $console);
 
@@ -305,7 +320,16 @@ final class LibraryScanner
                 continue;
             }
 
-            $found[str_replace($prefix, '', $info->getPathname())] = clone $info;
+            $relative = str_replace($prefix, '', $info->getPathname());
+
+            // The layout decides what is even a candidate. On an OPL drive
+            // that drops ART/, CFG/ and VMC/ before any of them can be read
+            // as a game; on a custom one it drops nothing.
+            if (! $this->layout->accepts($this->consoleRelative($relative))) {
+                continue;
+            }
+
+            $found[$relative] = clone $info;
         }
 
         ksort($found);
@@ -368,19 +392,15 @@ final class LibraryScanner
     /**
      * Whether a loose file is something this console plays.
      *
-     * file_extensions wins over bios_extensions where a console lists the same
-     * one in both — PS2 has .bin games and a .bin BIOS, and a game the user
-     * owns matters more than a firmware image the library does not track.
+     * Console::playsExtension() is the one definition, shared with the count
+     * the console cards show, so the card and the scan cannot disagree about
+     * what is in a folder.
      */
     private function isPlayable(Console $console, string $relative): bool
     {
         $extension = $this->extension($relative);
 
-        if ($extension === '') {
-            return false;
-        }
-
-        return in_array($extension, array_map('strtolower', $console->fileExtensions), true);
+        return $extension !== '' && $console->playsExtension($extension);
     }
 
     /**
@@ -438,10 +458,33 @@ final class LibraryScanner
         }
     }
 
-    /** A placeholder title: the filename, minus its extension. */
+    /**
+     * A placeholder title, before the provider has been asked.
+     *
+     * The console is asked first and the layout second. Where a filename
+     * convention belongs to the two together — a PS2 serial prefix, which is
+     * OPL's idea and means nothing on a RetroArch drive — neither can answer
+     * alone, so the console's toolbox gets the first word and the layout's own
+     * reading is the fallback.
+     */
     private function titleFrom(string $relative): string
     {
-        return pathinfo($relative, PATHINFO_FILENAME);
+        $consoleRelative = $this->consoleRelative($relative);
+
+        return $this->tools?->titleFor($this->layout, $consoleRelative)
+            ?? $this->layout->titleFor($consoleRelative);
+    }
+
+    /**
+     * A library-relative path as the console's own folder sees it.
+     *
+     * Layouts think in console-relative terms — DVD/Game.iso, not
+     * games/ps2/DVD/Game.iso — because where a console's root sits is
+     * ConsoleSourceFolder's business and none of theirs.
+     */
+    private function consoleRelative(string $relative): string
+    {
+        return Str::after($relative, $this->relativeRoot.'/');
     }
 
     private function extension(string $relative): string

@@ -1,17 +1,29 @@
 <?php
 
+use App\Enums\GameStatus;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
+use App\Jobs\WriteConsoleExports;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
+use App\Support\ExportProgress;
+use App\Support\Layouts\Layouts;
+use App\Support\LibraryPath;
 use App\Support\MediaTypes;
+use App\Support\Scanning\FolderCounts;
 use App\Support\Scanning\LibraryFolders;
 use App\Support\SystemActivity;
+use App\Tools\ConsoleTools;
 use Flux\Flux;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -22,10 +34,22 @@ new #[Title('Consoles')] class extends Component
     /** Narrows the list of consoles to choose from. 135 of them is a lot to scroll. */
     public string $search = '';
 
-    /** The console being added, once one has been chosen and its folder is missing. */
+    /** The console being added, once one has been chosen. */
     public string $adding = '';
 
     public string $chosenFolder = '';
+
+    /**
+     * Which part of the modal is showing: 'console', 'folder' or 'layout'.
+     *
+     * A console is written once, at the end. Walking away from a half-finished
+     * wizard leaves nothing behind, and the folder step is skipped entirely
+     * when convention already answers it.
+     */
+    public string $step = 'console';
+
+    /** Set while changing the layout of a console that is already in the library. */
+    public bool $editingLayout = false;
 
     /**
      * The consoles in the library, with their counts.
@@ -34,24 +58,30 @@ new #[Title('Consoles')] class extends Component
      * leaves a hundred folders behind, and listing all of them buries the four
      * that hold games.
      *
+     * The count comes off the disk, not out of the database. Somebody who has
+     * just dropped forty ISOs on the share should see forty, and the row count
+     * says nothing until a scan has run. Identified has no on-disk answer —
+     * it is what the provider knew — so that half stays a query.
+     *
      * @return Collection<int, array<string, mixed>>
      */
     #[Computed]
     public function added(): Collection
     {
-        $counts = Game::query()
-            ->selectRaw('console, count(*) as games, sum(status = ?) as identified', ['matched'])
+        $identified = Game::query()
+            ->where('status', GameStatus::Matched)
+            ->selectRaw('console, count(*) as total')
             ->groupBy('console')
-            ->get()
-            ->keyBy('console');
+            ->pluck('total', 'console');
 
         // One grouped query for every console rather than a sum per row. The
         // join is to the denormalised progress table, so nothing here counts
         // individual unlocks.
         $achievements = Game::query()
-            ->leftJoin('ra_progress', fn ($join) => $join
-                ->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
-                ->where('ra_progress.user_id', '=', auth()->id() ?? 0))
+            ->leftJoin('ra_progress', function ($join): void {
+                $join->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
+                    ->where('ra_progress.user_id', '=', auth()->id() ?? 0);
+            })
             ->selectRaw(
                 'games.console,'
                 .' coalesce(sum(ra_progress.unlocked_count), 0) as unlocked,'
@@ -64,20 +94,29 @@ new #[Title('Consoles')] class extends Component
 
         $hardcore = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
 
-        return ConsoleSourceFolder::consoles()->map(fn (Console $console) => [
-            'console' => $console,
-            'games' => (int) ($counts[$console->key]->games ?? 0),
-            'identified' => (int) ($counts[$console->key]->identified ?? 0),
-            'folder' => ConsoleSourceFolder::pathFor($console),
-            'achievements' => (int) ($achievements[$console->key]->possible ?? 0) > 0
-                ? [
-                    'unlocked' => (int) ($hardcore
-                        ? $achievements[$console->key]->unlocked_hardcore
-                        : $achievements[$console->key]->unlocked),
-                    'possible' => (int) $achievements[$console->key]->possible,
-                ]
-                : null,
-        ])->values();
+        return ConsoleSourceFolder::consoles()->map(function (Console $console) use ($identified, $achievements, $hardcore): array {
+            $progress = $achievements->get($console->key);
+            $possible = (int) ($progress->possible ?? 0);
+
+            return [
+                'console' => $console,
+                'games' => FolderCounts::gamesIn($console),
+                'identified' => (int) $identified->get($console->key, 0),
+                'folder' => ConsoleSourceFolder::pathFor($console),
+                'achievements' => $possible > 0
+                    ? [
+                        'unlocked' => (int) ($hardcore ? $progress->unlocked_hardcore : $progress->unlocked),
+                        'possible' => $possible,
+                    ]
+                    : null,
+                // Only where there was a choice to make. For the 134 consoles
+                // that know one arrangement it would say the same thing on
+                // every card and mean nothing.
+                'layout' => count(Layouts::keysFor($console)) > 1
+                    ? ConsoleSourceFolder::layoutFor($console)->label()
+                    : null,
+            ];
+        })->values();
     }
 
     /**
@@ -127,6 +166,10 @@ new #[Title('Consoles')] class extends Component
      * here: the hand-made one this replaces named three queues and ignored the
      * four that hashing and RetroAchievements run on, so a library busy for
      * ten minutes could look idle from this page.
+     *
+     * A running export is reported separately, by exporting(): its queue depth
+     * is the wrong number for it — one job writes a whole console, so "1"
+     * would sit there while nineteen files went past.
      */
     #[Computed]
     public function activity(): SystemActivity
@@ -134,16 +177,58 @@ new #[Title('Consoles')] class extends Component
         return SystemActivity::current();
     }
 
+    /**
+     * Loader exports going past, which a queue depth cannot describe.
+     *
+     * One job writes a whole console, so the jobs table can only ever say an
+     * export is waiting. The running one reports its own file count, and the
+     * queue is asked only about those not started yet. Exports ride the media
+     * queue with the artwork — both are disk work, and neither belongs behind
+     * the scraper's single paced worker — so one still waiting is also in the
+     * artwork depth SystemActivity reports. Worth knowing when reading the
+     * strip: the two rows overlap by the number of exports not yet started.
+     *
+     * @return array<int, array{count: ?int, total: ?int}>
+     */
+    #[Computed]
+    public function exporting(): array
+    {
+        // The class name is in the serialised payload; the jobs table carries
+        // no column for it. Matched rather than given a queue of its own,
+        // which would mean another worker in both entrypoints.
+        $queued = DB::table('jobs')
+            ->where('queue', 'media')
+            ->where('payload', 'like', '%WriteConsoleExports%')
+            ->count();
+
+        $running = Collection::make(ExportProgress::all())
+            ->map(function (array $export): array {
+                return [
+                    'count' => (int) Arr::get($export, 'done', 0),
+                    'total' => (int) Arr::get($export, 'total', 0),
+                ];
+            });
+
+        return $running
+            // Queued and not picked up yet: the count is meaningless, so it is
+            // left off and the row says only that an export is waiting.
+            ->when($queued > $running->count(), function (Collection $rows): Collection {
+                return $rows->push(['count' => null, 'total' => null]);
+            })
+            ->values()
+            ->all();
+    }
+
     public function openAdd(): void
     {
-        $this->reset('search', 'adding', 'chosenFolder');
+        $this->reset('search', 'adding', 'chosenFolder', 'step', 'editingLayout');
 
         Flux::modal(self::MODAL)->show();
     }
 
     public function closeAdd(): void
     {
-        $this->reset('search', 'adding', 'chosenFolder');
+        $this->reset('search', 'adding', 'chosenFolder', 'step', 'editingLayout');
 
         Flux::modal(self::MODAL)->close();
     }
@@ -151,9 +236,10 @@ new #[Title('Consoles')] class extends Component
     /**
      * Choose a console to add.
      *
-     * Convention first: when games_path/{folder} is already there, nothing
-     * needs asking and the scan starts. The picker is only for the case it is
-     * not, which is the whole reason it exists.
+     * Convention first: when games_path/{folder} is already there, the folder
+     * step has nothing to ask and is skipped. Whether anything is asked at all
+     * comes down to how many arrangements the console knows about — one, for
+     * all but a handful, and then adding it is still a single click.
      */
     public function choose(string $key): void
     {
@@ -163,16 +249,74 @@ new #[Title('Consoles')] class extends Component
             return;
         }
 
-        if ($console->installed()) {
-            ConsoleSourceFolder::add($console);
-            $this->closeAdd();
-            $this->scan($console->key);
+        $this->adding = $key;
+        $this->chosenFolder = '';
+
+        if (! $console->installed()) {
+            $this->step = 'folder';
 
             return;
         }
 
-        $this->adding = $key;
+        $this->askLayoutOrFinish($console);
+    }
+
+    /**
+     * The folder this console would make for itself, or null if it is there.
+     *
+     * Config knows the name — every console file declares one — so the folder
+     * step can offer it rather than leave somebody to go and make it by hand.
+     */
+    #[Computed]
+    public function creatable(): ?string
+    {
+        $console = Console::tryFrom($this->adding);
+
+        if ($console === null || $console->folder === '' || $console->installed()) {
+            return null;
+        }
+
+        return $console->folder;
+    }
+
+    /**
+     * Make the console's own folder and carry on.
+     *
+     * Made now rather than held to the end: the rest of the wizard is about a
+     * folder that has to exist before anything can be pointed at it. Walking
+     * away afterwards leaves an empty directory, which the next attempt reuses.
+     */
+    public function createFolder(): void
+    {
+        $console = Console::tryFrom($this->adding);
+
+        if ($console === null) {
+            return;
+        }
+
+        try {
+            app(LibraryPath::class)->createConsoleRoot($console);
+        } catch (\Throwable $e) {
+            // The message names an absolute path inside the container and is
+            // no business of the browser's. Logged, and answered with a fixed
+            // string that says where to look.
+            Log::error('Could not create a console folder.', [
+                'console' => $console->key,
+                'reason' => $e->getMessage(),
+            ]);
+
+            $this->addError('chosenFolder', __('That folder could not be created. Check the library mount.'));
+
+            return;
+        }
+
+        unset($this->folders, $this->creatable);
+
+        // Left empty on purpose, so finishAdd() writes the conventional path —
+        // which is what has just been made true.
         $this->chosenFolder = '';
+
+        $this->askLayoutOrFinish($console);
     }
 
     /** Point a console at a folder that is not where convention says. */
@@ -188,17 +332,183 @@ new #[Title('Consoles')] class extends Component
             return;
         }
 
-        ConsoleSourceFolder::add($console, $this->chosenFolder);
+        $this->askLayoutOrFinish($console);
+    }
 
-        $key = $console->key;
+    /**
+     * Change how a console already in the library is read.
+     *
+     * Reopens the same modal at its last step, so a wrong choice is fixable
+     * without taking the console out and putting it back.
+     */
+    public function changeLayout(string $key): void
+    {
+        $console = Console::tryFrom($key);
+
+        if ($console === null) {
+            return;
+        }
+
+        $this->reset('search', 'chosenFolder');
+
+        $this->adding = $key;
+        $this->editingLayout = true;
+        $this->step = 'layout';
+
+        Flux::modal(self::MODAL)->show();
+    }
+
+    /**
+     * Write the console down, now that everything has been asked.
+     */
+    #[On('layout-chosen')]
+    public function finishAdd(string $console, ?string $layout = null): void
+    {
+        $consoleObject = Console::tryFrom($console);
+
+        if ($consoleObject === null) {
+            return;
+        }
+
+        // Null where nobody was asked, and null again for anything the console
+        // does not offer — which can only have arrived by hand. Either way the
+        // console's own default stands, and keeps standing if it ever changes.
+        if ($layout !== null && ! Layouts::supports($consoleObject, $layout)) {
+            $layout = null;
+        }
+
+        if ($this->editingLayout && $layout !== null) {
+            ConsoleSourceFolder::setLayout($consoleObject, $layout);
+
+            $made = $this->scaffoldFor($consoleObject);
+
+            $this->closeAdd();
+            unset($this->added);
+
+            Flux::toast(variant: 'success', text: __(':console is now read as :layout.:made', [
+                'console' => $consoleObject->name,
+                'layout' => Layouts::make($layout)?->label() ?? $layout,
+                'made' => $this->madeSentence($made),
+            ]));
+
+            $this->scan($consoleObject->key);
+
+            return;
+        }
+
+        $folder = $this->chosenFolder !== '' ? $this->chosenFolder : null;
+
+        ConsoleSourceFolder::add($consoleObject, $folder, $layout);
+
+        // After the row, because the layout is only settled once it is written
+        // and the gate reads the console's folder back off it.
+        $made = $this->scaffoldFor($consoleObject);
+
         $this->closeAdd();
 
-        Flux::toast(variant: 'success', text: __(':console now reads from :folder.', [
-            'console' => $console->name,
-            'folder' => trim($this->chosenFolder, '/'),
-        ]));
+        if ($folder !== null || $made !== []) {
+            Flux::toast(variant: 'success', text: $folder !== null
+                ? __(':console now reads from :folder.:made', [
+                    'console' => $consoleObject->name,
+                    'folder' => trim($folder, '/'),
+                    'made' => $this->madeSentence($made),
+                ])
+                : __(':console added.:made', [
+                    'console' => $consoleObject->name,
+                    'made' => $this->madeSentence($made),
+                ]));
+        }
 
-        $this->scan($key);
+        $this->scan($consoleObject->key);
+    }
+
+    /**
+     * Make the folders this console's layout expects and the drive does not have.
+     *
+     * Only the missing ones, so choosing the same layout twice does nothing the
+     * second time and a drive already arranged that way is left alone.
+     *
+     * One that cannot be made is logged and stepped over: the console is still
+     * added and still scanned, because somewhere the app cannot write is still
+     * somewhere it can read.
+     *
+     * @return string[] the ones that were actually created
+     */
+    private function scaffoldFor(Console $console): array
+    {
+        $gate = app(LibraryPath::class);
+        $made = [];
+
+        foreach (ConsoleSourceFolder::layoutFor($console)->scaffold() as $directory) {
+            try {
+                if ($gate->exists($console, $directory)) {
+                    continue;
+                }
+
+                $gate->ensureDirectory($console, $directory);
+                $made[] = $directory;
+            } catch (\Throwable $e) {
+                Log::warning('Could not make a folder the layout expects.', [
+                    'console' => $console->key,
+                    'directory' => $directory,
+                    'reason' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $made;
+    }
+
+    /**
+     * " Created DVD/, CD/." — or nothing at all, which is the common case.
+     *
+     * @param  string[]  $made
+     */
+    private function madeSentence(array $made): string
+    {
+        if ($made === []) {
+            return '';
+        }
+
+        return ' '.__('Created :folders.', [
+            'folders' => implode(', ', array_map(function (string $directory): string {
+                return $directory.'/';
+            }, $made)),
+        ]);
+    }
+
+    /** The layout step's Back button, and the escape hatch out of it. */
+    #[On('layout-cancelled')]
+    public function backFromLayout(): void
+    {
+        if ($this->editingLayout) {
+            $this->closeAdd();
+
+            return;
+        }
+
+        $this->step = $this->chosenFolder !== '' ? 'folder' : 'console';
+    }
+
+    /**
+     * Ask about the layout, or write the console down where there is nothing
+     * to ask.
+     *
+     * A console offering one arrangement is every console but a handful, and
+     * putting a single-option question in front of somebody is worse than
+     * putting none.
+     */
+    private function askLayoutOrFinish(Console $console): void
+    {
+        $layouts = Layouts::keysFor($console);
+
+        if (count($layouts) > 1) {
+            $this->step = 'layout';
+
+            return;
+        }
+
+        $this->finishAdd($console->key);
     }
 
     /** Take a console out of the library. Its games and files stay. */
@@ -260,6 +570,55 @@ new #[Title('Consoles')] class extends Component
             ));
     }
 
+    /**
+     * Write a loader's own files back into a console's folder.
+     *
+     * The only thing here that writes to somebody's library, so it is asked for
+     * explicitly and confirmed at the call site, never triggered by a scan.
+     */
+    public function writeExport(string $key, string $export): void
+    {
+        $console = Console::tryFrom($key);
+
+        if ($console === null) {
+            return;
+        }
+
+        $tools = ConsoleTools::for($console);
+
+        if ($tools === null || ! in_array($export, $tools->exports(), true)) {
+            return;
+        }
+
+        WriteConsoleExports::dispatch($console->key, $export);
+
+        unset($this->exporting);
+
+        $this->dispatch('system-activity-changed');
+
+        Flux::toast(text: __('Writing :console\'s :export files. Nothing else in the folder is touched.', [
+            'console' => $console->name,
+            'export' => Str::upper($export),
+        ]));
+    }
+
+    /**
+     * The exports a console can write, for the card menu.
+     *
+     * Which arrangement an export needs is the toolbox's own question — it is
+     * the class that writes the files — so the layout key is not spelled out
+     * here. Offering an item that then does nothing reads worse than not
+     * offering it.
+     *
+     * @return string[]
+     */
+    public function exportsFor(Console $console): array
+    {
+        $tools = ConsoleTools::for($console);
+
+        return $tools !== null && $tools->canExport() ? $tools->exports() : [];
+    }
+
     /** Queue a scan. Never runs here: a large library takes minutes to walk. */
     public function scan(string $key): void
     {
@@ -295,14 +654,37 @@ new #[Title('Consoles')] class extends Component
 
         {{-- Only polls while there is something to watch, so an idle page is
              not asking the database every two seconds. --}}
-        @if ($this->activity->busy())
-            <div wire:poll.2s class="flex flex-wrap items-center gap-6 rounded-xl border border-accent-tint bg-accent-tint px-5 py-4">
-                <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-                @foreach ($this->activity->active() as $queue)
-                    <p class="text-sm text-fg">
-                        <span class="font-medium text-fg-bright">{{ $queue->remaining() }}</span> {{ __($queue->label) }}
-                    </p>
-                @endforeach
+        @if ($this->activity->busy() || $this->exporting !== [])
+            <div wire:poll.2s
+                 role="status"
+                 aria-live="polite"
+                 class="relative overflow-hidden rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-4">
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-1.5">
+                    <flux:icon.arrow-path class="size-4 shrink-0 animate-spin text-accent" />
+                    @foreach ($this->activity->active() as $queue)
+                        <p class="text-sm text-accent">
+                            <span class="font-medium text-accent-bright">{{ $queue->remaining() }}</span>
+                            {{ __($queue->label) }}
+                        </p>
+                    @endforeach
+
+                    {{-- Apart from the queues: an export counts files, not
+                         jobs, so it has a denominator none of them do. --}}
+                    @foreach ($this->exporting as ['count' => $count, 'total' => $total])
+                        <p class="text-sm text-accent">
+                            @if ($count !== null)
+                                <span class="font-medium text-accent-bright">
+                                    {{ $count }}@if ($total !== null)<span class="text-accent">/{{ $total }}</span>@endif
+                                </span>
+                            @endif
+                            {{ __('Writing files') }}
+                        </p>
+                    @endforeach
+                </div>
+
+                {{-- Indeterminate on purpose: the queue knows how much is left,
+                     never how far through the current job it is. --}}
+                <span class="work-rail" aria-hidden="true"></span>
             </div>
         @endif
 
@@ -337,14 +719,24 @@ new #[Title('Consoles')] class extends Component
                             <p class="truncate font-medium text-fg-bright">{{ $row['console']->name }}</p>
                             <p class="mt-0.5 truncate text-sm text-fg-faint">
                                 {{ $row['games'] }} {{ __('games') }}
-                                @if ($row['games'] > 0)
+                                {{-- Gated on the identified count, not the file count: the
+                                     files are read off the disk and go to zero when a drive
+                                     is unmounted, which is no reason to hide what the
+                                     provider already told us. --}}
+                                @if ($row['identified'] > 0)
                                     · {{ $row['identified'] }} {{ __('identified') }}
                                 @endif
                                 @if ($row['achievements'] !== null)
                                     · <span class="text-accent">{{ $row['achievements']['unlocked'] }} / {{ $row['achievements']['possible'] }} {{ __('achievements') }}</span>
                                 @endif
                             </p>
-                            <p class="mt-0.5 truncate font-mono text-xs text-fg-faint">{{ $row['folder'] }}</p>
+                            <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-fg-faint">
+                                <span class="font-mono">{{ $row['folder'] }}</span>
+                                @if ($row['layout'] !== null)
+                                    <span aria-hidden="true">·</span>
+                                    <span class="truncate">{{ $row['layout'] }}</span>
+                                @endif
+                            </p>
                         </div>
 
                         <div class="relative z-20 flex shrink-0 items-center gap-1">
@@ -355,6 +747,28 @@ new #[Title('Consoles')] class extends Component
                             <flux:dropdown position="bottom" align="end">
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
                                 <flux:menu>
+                                    @if (count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1)
+                                        <flux:menu.item icon="folder-open"
+                                                        wire:click="changeLayout('{{ $row['console']->key }}')">
+                                            {{ __('Change layout') }}
+                                        </flux:menu.item>
+                                    @endif
+
+                                    {{-- The only actions in the app that write into the
+                                         library, so each says where it writes before it
+                                         does it. Offered only where the loader that reads
+                                         those folders is the one in use. --}}
+                                    @foreach ($this->exportsFor($row['console']) as $export)
+                                        <flux:menu.item icon="arrow-down-tray"
+                                                        wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
+                                                        wire:confirm="{{ __('Write OPL :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
+                                                            'export' => Str::upper($export),
+                                                            'folder' => $row['folder'].'/'.Str::upper($export),
+                                                        ]) }}">
+                                            {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
+                                        </flux:menu.item>
+                                    @endforeach
+
                                     <flux:menu.item icon="photo"
                                                     wire:click="fetchMedia('{{ $row['console']->key }}')">
                                         {{ __('Fetch missing artwork') }}
@@ -388,7 +802,7 @@ new #[Title('Consoles')] class extends Component
     </div>
 
     <flux:modal :name="$this::MODAL" wire:close="closeAdd" class="w-full max-w-lg">
-        @if ($adding === '')
+        @if ($step === 'console')
             <div class="flex flex-col gap-4">
                 <div>
                     <flux:heading size="lg">{{ __('Add a console') }}</flux:heading>
@@ -422,35 +836,48 @@ new #[Title('Consoles')] class extends Component
                     </div>
                 @endif
             </div>
+        @elseif ($step === 'layout')
+            <livewire:consoles.choose-layout
+                :console="$adding"
+                :editing="$editingLayout"
+                :key="'layout-'.$adding.'-'.($editingLayout ? 'edit' : 'add')"
+            />
         @else
             @php($console = App\Support\Console::tryFrom($adding))
             <div class="flex flex-col gap-5">
                 <div>
                     <flux:heading size="lg">{{ __('Where are the ROMs?') }}</flux:heading>
                     <flux:text class="mt-2">
-                        {{ __('There is no :folder folder, so pick the one that holds :console.', [
+                        {{ __('There is no :folder folder yet. Make one, or point :console at a folder that is already there.', [
                             'folder' => $console?->folder ?? $adding,
                             'console' => $console?->name ?? $adding,
                         ]) }}
                     </flux:text>
                 </div>
 
-                @if ($this->folders->isEmpty())
-                    <p class="rounded-lg border border-dashed border-line-input px-4 py-6 text-center text-sm text-fg-faint">
-                        {{ __('No folders under the library root. Add one over the network share first.') }}
-                    </p>
-                @else
-                    <flux:select wire:model="chosenFolder" :label="__('Folder')">
+                {{-- Config already knows what the folder is called, so offer it
+                     rather than send somebody off to make it over the share.
+                     Offered beside the picker, not instead of it: a library of
+                     folders named some other way is just as common as none. --}}
+                @if ($this->creatable !== null)
+                    <flux:button size="sm" variant="primary" icon="folder-plus" wire:click="createFolder">
+                        {{ __('Create :folder/', ['folder' => $this->creatable]) }}
+                    </flux:button>
+                @endif
+
+                @if ($this->folders->isNotEmpty())
+                    <flux:select wire:model="chosenFolder" :label="__('Or use an existing folder')">
                         <flux:select.option value="">{{ __('Choose…') }}</flux:select.option>
                         @foreach ($this->folders as $folder)
                             <flux:select.option value="{{ $folder }}">{{ $folder }}</flux:select.option>
                         @endforeach
                     </flux:select>
-                    <flux:error name="chosenFolder" />
                 @endif
 
+                <flux:error name="chosenFolder" />
+
                 <div class="flex justify-end gap-2">
-                    <flux:button size="sm" variant="ghost" wire:click="$set('adding', '')">{{ __('Back') }}</flux:button>
+                    <flux:button size="sm" variant="ghost" wire:click="$set('step', 'console')">{{ __('Back') }}</flux:button>
                     <flux:button size="sm" variant="primary" wire:click="useFolder" :disabled="$this->folders->isEmpty()">
                         {{ __('Use this folder') }}
                     </flux:button>

@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Atari - 5200-content.png',
     'file_extensions' => ['rom', 'xfd', 'atr', 'atx', 'cdm', 'cas', 'car', 'bin', 'a52', 'xex', 'zip', '7z'],
     'bios_extensions' => [],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 40,
     'retroachievements_id' => 50,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

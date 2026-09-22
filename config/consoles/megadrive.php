@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Sega - Mega Drive - Genesis-content.png',
     'file_extensions' => ['bin', 'gen', 'md', 'sg', 'smd', 'zip', '7z'],
     'bios_extensions' => [],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 1,
     'retroachievements_id' => 1,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

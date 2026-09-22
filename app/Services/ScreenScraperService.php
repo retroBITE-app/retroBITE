@@ -59,6 +59,16 @@ class ScreenScraperService
 
     private const BODY_BLACKLISTED = ['blacklist'];
 
+    /**
+     * "Erreur de login : Verifier les identifiants utilisateurs !"
+     *
+     * The user pair, not the developer pair — and the status is the same 403
+     * either way, so only the body tells them apart. Worth the distinction
+     * because the two are fixed in different places: one is in .env, the other
+     * ships with the application.
+     */
+    private const BODY_BAD_USER = ['identifiants utilisateur'];
+
     /** Connect timeout, in seconds. ScreenScraper is regularly slow to answer. */
     private const CONNECT_TIMEOUT = 15;
 
@@ -201,6 +211,27 @@ class ScreenScraperService
     }
 
     /**
+     * What the provider says about the account the credentials name.
+     *
+     * The cheapest call there is — no game, no media, just the `ssuser` block
+     * every response carries anyway. Worth having on its own because that
+     * block is the only place the real allowance is stated, and a login the
+     * provider did not accept is not an error: it answers on the developer
+     * account instead, with the developer account's smaller allowance, and
+     * nothing in a game lookup says which of the two answered.
+     *
+     * @return array<string, mixed> the raw `ssuser` block, or [] if there is none
+     *
+     * @throws ScreenScraperException
+     */
+    public function account(): array
+    {
+        $user = Arr::get($this->call('ssuserInfos.php', []), 'response.ssuser');
+
+        return is_array($user) ? $user : [];
+    }
+
+    /**
      * Fetch one media file.
      *
      * The URL is the stripped one from normalize(); credentials go back on
@@ -282,7 +313,6 @@ class ScreenScraperService
             'players' => (string) Arr::get($jeu, 'joueurs.text', ''),
             'publisher' => (string) Arr::get($jeu, 'editeur.text', ''),
             'developer' => (string) Arr::get($jeu, 'developpeur.text', ''),
-            'rating' => $this->rating(Arr::get($jeu, 'note.text')),
             'medias' => $medias,
             'roms' => is_array($roms = Arr::get($jeu, 'roms')) ? $roms : [],
             // The media list inside raw is replaced by the sanitised one: the
@@ -456,34 +486,6 @@ class ScreenScraperService
             ->all();
 
         return $names === [] ? null : implode(', ', $names);
-    }
-
-    /**
-     * ScreenScraper's `note`, from their scale of twenty onto ours of a
-     * hundred.
-     *
-     * Zero is read as "nobody has voted", not as the mark zero: that is what
-     * the provider sends for a game with no votes, and a library sorted by
-     * rating would otherwise put those games below the ones it knows nothing
-     * about at all.
-     *
-     * Everything else is tolerated rather than trusted — the field is
-     * contributed, and an empty string, a comma decimal and a value past the
-     * top of the scale have all been seen.
-     */
-    private function rating(mixed $note): ?int
-    {
-        if (is_string($note)) {
-            $note = str_replace(',', '.', trim($note));
-        }
-
-        if (! is_numeric($note)) {
-            return null;
-        }
-
-        $value = (float) $note;
-
-        return $value <= 0.0 ? null : (int) round(min($value, 20.0) * 5);
     }
 
     /**
@@ -727,6 +729,14 @@ class ScreenScraperService
             return new ApiUnavailable($message('API closed'), $status, $body);
         }
 
+        if ($this->bodyMatches($body, self::BODY_BAD_USER)) {
+            return new BadCredentials(
+                $message('user login rejected — check SCREENSCRAPER_USER and SCREENSCRAPER_PASSWORD'),
+                $status,
+                $body,
+            );
+        }
+
         return match (true) {
             $status === 430 => new QuotaExhausted($message('daily quota exhausted'), $status, $body),
             $status === 431 => new FailedLookupQuotaExhausted($message('daily failed-lookup quota exhausted'), $status, $body),
@@ -735,6 +745,9 @@ class ScreenScraperService
             // 401 is not about our credentials: ScreenScraper sheds non-members
             // whenever its own CPU passes 60 %.
             $status === 401, $status === 423 => new ApiUnavailable($message('API closed'), $status, $body),
+            // Reached only when the body said nothing recognisable: a 403 whose
+            // text names the user pair is caught above, and this is the other
+            // one, which is the developer pair.
             $status === 403 => new BadCredentials($message('developer credentials rejected'), $status, $body),
             // A 400 that is not a miss is our bug: a path in romnom, a
             // malformed hash, a missing mandatory field.

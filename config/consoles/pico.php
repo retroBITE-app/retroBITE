@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Sega - PICO-content.png',
     'file_extensions' => ['bin', 'md', 'zip', '7z'],
     'bios_extensions' => [],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 250,
     'retroachievements_id' => 68,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

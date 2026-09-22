@@ -349,6 +349,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      *     lastSeen: string,
      *     missing: bool,
      *     md5: string|null,
+     *     licenseId: string|null,
      * }>
      */
     #[Computed]
@@ -369,6 +370,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 'lastSeen' => $file->isPresent() ? __('Present') : $this->relative($file->missing_since),
                 'missing' => ! $file->isPresent(),
                 'md5' => $file->md5,
+                // Read out of the disc rather than from the provider, and the
+                // only name Open PS2 Loader knows this game by.
+                'licenseId' => $file->license_id,
             ])
             ->values()
             ->all();
@@ -607,9 +611,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             ['key' => __('Publisher'), 'value' => $this->game->publisher],
             ['key' => __('Genre'), 'value' => $this->game->genre],
             ['key' => __('Players'), 'value' => $this->game->players],
-            // No rating here. It is on the chip row above, and a page cannot
-            // say the same number twice without the reader wondering which
-            // of the two is the other one.
         ])
             ->filter(fn (array $row) => filled(Arr::get($row, 'value')))
             ->map(fn (array $row) => [
@@ -1240,23 +1241,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 @foreach ($this->chips as $chip)
                     <span class="rounded-md border border-line-strong bg-surface px-2 py-1 font-mono text-xs text-fg-muted">{{ $chip }}</span>
                 @endforeach
-
-                @if ($game->rating !== null)
-                    {{-- The same band colour and the same corners as the
-                         shelf badge, so a game does not change verdict — or
-                         shape — on the way here. Tinted rather than filled
-                         though: this one stands in a row of chips, and a
-                         solid block among them would read as a control. --}}
-                    <span
-                        title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
-                        @style([
-                            'border-color: color-mix(in srgb, '.App\Support\RatingBand::color($game->rating).' 55%, transparent)',
-                            'background-color: color-mix(in srgb, '.App\Support\RatingBand::color($game->rating).' 14%, transparent)',
-                            'color: '.App\Support\RatingBand::color($game->rating),
-                        ])
-                        class="rounded-md border px-2 py-1 font-mono text-xs font-semibold tabular-nums"
-                    >{{ $game->rating }} / 100</span>
-                @endif
             </div>
 
             @if ($this->detailRows !== [])
@@ -1496,6 +1480,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 'lastSeen' => $lastSeen,
                                 'missing' => $missing,
                                 'md5' => $md5,
+                                'licenseId' => $licenseId,
                             ])
                                 <tr wire:key="file-{{ $id }}" class="border-t border-raised first:border-t-0">
                                     <td class="px-4.5 py-3">
@@ -1511,6 +1496,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
                                         @if ($folder !== '')
                                             <p class="mt-0.5 font-mono text-xs text-fg-faint">{{ $folder }}</p>
+                                        @endif
+
+                                        {{-- The disc's own name for itself. Shown beside the
+                                             filename because on an OPL drive the two disagree:
+                                             the file can be called anything, the serial cannot. --}}
+                                        @if ($licenseId)
+                                            <p class="mt-1 inline-block rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted">
+                                                {{ $licenseId }}
+                                            </p>
                                         @endif
                                     </td>
                                     <td class="px-4.5 py-3 whitespace-nowrap text-fg-soft">{{ $role }}</td>

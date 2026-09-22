@@ -5,8 +5,10 @@ use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
+use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
+use App\Support\Layouts\Layouts;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -52,12 +54,8 @@ new #[Title('Games')] class extends Component
     #[Url(as: 'genre', except: '')]
     public string $genre = '';
 
-    /** The lowest provider rating to list, out of a hundred, or '' for all. */
-    #[Url(as: 'rating', except: '')]
-    public string $minRating = '';
-
     /**
-     * 'title' | 'rating' | 'newest'.
+     * 'title' | 'newest'.
      *
      * A view rather than a filter: Clear leaves it alone, because somebody who
      * asked for the best games first meant it about the next search too.
@@ -89,7 +87,7 @@ new #[Title('Games')] class extends Component
     public function updated(string $property): void
     {
         // Any change to a filter invalidates the page you were on.
-        if (in_array($property, ['query', 'consoleFilter', 'status', 'genre', 'minRating', 'sort'], true)) {
+        if (in_array($property, ['query', 'consoleFilter', 'status', 'genre', 'sort'], true)) {
             $this->resetPage();
         }
     }
@@ -106,6 +104,25 @@ new #[Title('Games')] class extends Component
     public function lockedTo(): ?Console
     {
         return Console::tryFrom($this->lockedConsole);
+    }
+
+    /**
+     * How this console's folder is read, for the badge beside the title.
+     *
+     * Null where the console knows one arrangement — saying so on 134 of the
+     * 135 consoles tells nobody anything — and null for the whole library,
+     * which is read every way at once.
+     */
+    #[Computed]
+    public function layoutLabel(): ?string
+    {
+        $console = $this->lockedTo;
+
+        if ($console === null || count(Layouts::keysFor($console)) <= 1) {
+            return null;
+        }
+
+        return ConsoleSourceFolder::layoutFor($console)->label();
     }
 
     /** How to list the games: this visit's choice, else the remembered one. */
@@ -171,7 +188,6 @@ new #[Title('Games')] class extends Component
                 "FIND_IN_SET(?, REPLACE(REPLACE(games.genre, ' ,', ','), ', ', ',')) > 0",
                 [$this->genre],
             ))
-            ->when($this->minRating !== '', fn ($q) => $q->where('games.rating', '>=', (int) $this->minRating))
             // Both for the cards: the cover comes out of the media relation in
             // memory, and the size is a sum rather than every file loaded.
             ->with(['media' => fn ($q) => $q->ofKind(MediaKind::Cover)])
@@ -181,11 +197,6 @@ new #[Title('Games')] class extends Component
             // per row — twenty-four extra selects on a page of placeholders.
             ->withCount(['files as identifiable_files_count' => fn ($q) => $q->identifiable()->present()])
             ->tap(fn ($q) => match ($this->sort) {
-                // `rating IS NULL` first puts the unrated last rather than
-                // ahead of everything, which is what DESC alone does on
-                // MariaDB. Title breaks the ties, so a page of games that all
-                // scored 80 is still in an order somebody can read.
-                'rating' => $q->orderByRaw('games.rating IS NULL, games.rating DESC')->orderBy('games.title'),
                 'newest' => $q->orderByDesc('games.created_at')->orderBy('games.title'),
                 default => $q->orderBy('games.title'),
             })
@@ -284,7 +295,7 @@ new #[Title('Games')] class extends Component
     {
         // Not $sort: it says how to read the library rather than which part of
         // it to show, and clearing a search should not undo that.
-        $this->reset('query', 'consoleFilter', 'status', 'genre', 'minRating');
+        $this->reset('query', 'consoleFilter', 'status', 'genre');
         $this->resetPage();
     }
 }; ?>
@@ -301,9 +312,18 @@ new #[Title('Games')] class extends Component
                     <flux:icon.arrow-left variant="micro" />
                     {{ __('Consoles') }}
                 </a>
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3">
                     <img src="{{ $this->lockedTo->icon }}" alt="" class="size-9 shrink-0 object-contain" />
                     <h1 class="text-display font-medium tracking-display text-fg-bright">{{ $this->lockedTo->name }}</h1>
+
+                    {{-- Only where the console offers more than one arrangement:
+                         the folders on the share are read that way, and getting
+                         it wrong is what an empty shelf usually means. --}}
+                    @if ($this->layoutLabel !== null)
+                        <span class="rounded-md border border-accent-tint/55 bg-accent-tint/10 px-2 py-1 font-mono text-xs text-accent">
+                            {{ $this->layoutLabel }}
+                        </span>
+                    @endif
                 </div>
             </div>
         @else
@@ -339,21 +359,12 @@ new #[Title('Games')] class extends Component
                 @endforeach
             </flux:select>
 
-            <flux:select wire:model.live="minRating" size="sm" class="w-44">
-                <flux:select.option value="">{{ __('Any rating') }}</flux:select.option>
-                <flux:select.option value="90">{{ __('90 and above') }}</flux:select.option>
-                <flux:select.option value="80">{{ __('80 and above') }}</flux:select.option>
-                <flux:select.option value="70">{{ __('70 and above') }}</flux:select.option>
-                <flux:select.option value="60">{{ __('60 and above') }}</flux:select.option>
-            </flux:select>
-
             <flux:select wire:model.live="sort" size="sm" class="w-44">
                 <flux:select.option value="title">{{ __('Title, A to Z') }}</flux:select.option>
-                <flux:select.option value="rating">{{ __('Best rated first') }}</flux:select.option>
                 <flux:select.option value="newest">{{ __('Recently added') }}</flux:select.option>
             </flux:select>
 
-            @if ($query !== '' || $consoleFilter !== '' || $status !== '' || $genre !== '' || $minRating !== '')
+            @if ($query !== '' || $consoleFilter !== '' || $status !== '' || $genre !== '')
                 <flux:button size="sm" variant="ghost" wire:click="clear">{{ __('Clear') }}</flux:button>
             @endif
 
@@ -434,7 +445,6 @@ new #[Title('Games')] class extends Component
                                 <th class="px-4 py-2.5 font-medium">{{ __('Console') }}</th>
                             @endif
                             <th class="px-4 py-2.5 font-medium">{{ __('Genre') }}</th>
-                            <th class="px-4 py-2.5 font-medium">{{ __('Rating') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Files') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Status') }}</th>
                             <th class="px-4 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
@@ -457,7 +467,6 @@ new #[Title('Games')] class extends Component
                                 <td class="max-w-44 truncate px-4 py-2.5 text-fg-soft" title="{{ $game->genre }}">
                                     {{ $game->genre ?: '—' }}
                                 </td>
-                                <td class="px-4 py-2.5 font-mono text-fg-soft">{{ $game->rating ?? '—' }}</td>
                                 <td class="px-4 py-2.5 text-fg-soft">{{ $game->files_count }}</td>
                                 <td class="px-4 py-2.5">
                                     <flux:badge size="sm" :color="match ($game->status) {

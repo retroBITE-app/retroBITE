@@ -132,14 +132,6 @@ final class GameMatcher
                     ]);
                 }
 
-                // The answer we are holding is about the surviving game too —
-                // it is the same provider id. A row matched before ratings
-                // existed has none, and this is the one moment it can be
-                // filled without paying for a second lookup.
-                if ($existing->rating === null && ($rating = Arr::get($payload, 'rating')) !== null) {
-                    $existing->update(['rating' => $rating]);
-                }
-
                 // The surviving game keeps its own artwork; the placeholder's
                 // is removed from disk as well as from the table, or the files
                 // would be left behind with nothing pointing at them. In the
@@ -168,7 +160,6 @@ final class GameMatcher
             'publisher' => Arr::get($payload, 'publisher') ?: null,
             'developer' => Arr::get($payload, 'developer') ?: null,
             'region' => Arr::get($payload, 'region'),
-            'rating' => Arr::get($payload, 'rating'),
         ]);
 
         $this->applyDiscNumbers($game, $payload);

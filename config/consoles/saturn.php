@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Sega - Saturn-content.png',
     'file_extensions' => ['cue', 'ccd', 'm3u', 'chd', 'iso', 'zip'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 22,
     'retroachievements_id' => 39,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

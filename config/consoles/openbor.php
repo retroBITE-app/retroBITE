@@ -9,9 +9,12 @@ return [
     'file_icon' => '/images/consoles/Libretro - Pad.png',
     'file_extensions' => ['pak'],
     'bios_extensions' => ['bin'],
+    'toolbox_file_extensions' => [],
     'exclude_files' => [],
     'screenscraper_id' => 214,
     'retroachievements_id' => null,
     'cover_aspect' => '2/3',
     'cover_height' => 280,
+    'layouts' => ['custom'],
+    'default_layout' => 'custom',
 ];

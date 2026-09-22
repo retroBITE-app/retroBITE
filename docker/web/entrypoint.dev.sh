@@ -25,9 +25,29 @@ composer install --no-interaction --working-dir=/app
 # package.json pins linux-x64-gnu binaries and this is musl, so the two trees
 # cannot be shared. Skipped when it is already populated, since npm ci would
 # throw the whole thing away on every restart.
+_node_installed=
 if [ ! -d /app/node_modules/vite ]; then
     echo "Installing node dependencies ..."
     npm install --prefix /app --no-audit --no-fund
+    _node_installed=1
+fi
+
+# Docker creates the node_modules volume owned by root, and the install above
+# runs as root too — but Vite is started as WEB_USER further down, and the
+# first thing it wants is to mkdir node_modules/.vite. Without this it dies on
+# startup with EACCES while nginx and php-fpm come up perfectly, so the
+# container looks healthy and the frontend simply serves nothing.
+#
+# Not folded into the branch above: the volume outlives the container, so the
+# usual case is a tree left root-owned by an earlier run that this boot has no
+# reason to reinstall.
+#
+# Guarded on whether WEB_USER can actually write there, which is the condition
+# that fails — a populated node_modules is too large to walk on every boot for
+# nothing.
+if [ -n "$_node_installed" ] || ! su-exec "$WEB_USER" test -w /app/node_modules; then
+    echo "Taking ownership of node_modules ..."
+    chown -R "$WEB_USER:$WEB_GROUP" /app/node_modules
 fi
 
 # MariaDB accepts connections well after its container reports started, and
