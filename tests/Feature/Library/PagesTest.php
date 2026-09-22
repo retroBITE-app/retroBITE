@@ -226,6 +226,38 @@ it('shows a game with its files, marking the missing ones', function () {
         ->assertSee('Missing');
 });
 
+/**
+ * The disc's own name for itself, beside the filename it happens to be stored
+ * under. The two disagree on an OPL drive by design — the file can be called
+ * anything and the serial cannot — so the files panel has to say both.
+ */
+it('shows the serial a disc carries next to its filename', function () {
+    $game = Game::factory()->forConsole('ps2')->matched()->create(['title' => 'Tekken Tag', 'slug' => 'tekken-tag']);
+    GameFile::factory()->for($game)->create([
+        'path' => 'ps2/DVD/SLES_503.86.Tekken Tag.iso',
+        'filename' => 'SLES_503.86.Tekken Tag.iso',
+        'extension' => 'iso',
+        'license_id' => 'SLES_503.86',
+    ]);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSee('SLES_503.86');
+});
+
+it('says nothing where a file carries no serial', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    GameFile::factory()->for($game)->create([
+        'path' => 'snes/smw.sfc', 'filename' => 'smw.sfc', 'extension' => 'sfc', 'license_id' => null,
+    ]);
+
+    // An empty chip would read as a serial nobody could make out, rather than
+    // as a cartridge that never had one.
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertDontSeeHtml('rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted');
+});
+
 it('opens every artwork in one viewer, captioned by kind and region', function () {
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
 
