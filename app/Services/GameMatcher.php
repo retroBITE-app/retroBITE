@@ -68,6 +68,34 @@ final class GameMatcher
     }
 
     /**
+     * Apply a provider id somebody chose by hand, through the same path an automatic hit takes.
+     *
+     * @throws ScreenScraperException when the provider could not be asked at all
+     */
+    public function assign(Game $game, int $providerId): MatchResult
+    {
+        if ($providerId <= 0) {
+            return MatchResult::skipped($game, 'no provider id');
+        }
+
+        $payload = $this->provider->fetchById($providerId);
+
+        if ($payload === null) {
+            return MatchResult::skipped($game, 'the provider holds no game under that id');
+        }
+
+        // Artwork held under another id is another game's, and its path names
+        // that game's slug and id, so a re-identification would strand it.
+        if ($game->screenscraper_id !== null && (int) $game->screenscraper_id !== $providerId) {
+            $this->media->forgetAll($game);
+        }
+
+        $this->log($game, 'manual', ['gameid' => $providerId]);
+
+        return $this->apply($game, $payload);
+    }
+
+    /**
      * A miss is only final once checksums have been tried.
      *
      * @param  array<string, mixed>  $criteria

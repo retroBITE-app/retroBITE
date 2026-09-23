@@ -5,9 +5,11 @@ use App\Enums\GameStatus;
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Models\Game;
 use App\Models\GameFile;
+use App\Models\Media;
 use App\Services\GameMatcher;
 use App\Support\Matching\MatchOutcome;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 
 function providerHit(array $jeu = []): void
@@ -333,4 +335,29 @@ it('leaves a rating the surviving game already holds alone', function () {
     matcher()->match($second);
 
     expect($first->refresh()->rating)->toBe(90);
+});
+
+it('re-identifies a matched game by hand, dropping the artwork of the game it was', function () {
+    Storage::fake('media');
+    providerHit(['id' => '19257', 'noms' => [['region' => 'ss', 'text' => 'Final Fantasy VIII']]]);
+
+    $game = psxGame();
+    $game->update(['screenscraper_id' => 19256, 'status' => GameStatus::Matched]);
+    Media::factory()->for($game)->create();
+
+    $result = matcher()->assign($game, 19257);
+
+    expect($result->outcome)->toBe(MatchOutcome::Matched)
+        ->and($game->refresh()->screenscraper_id)->toBe(19257)
+        ->and($game->title)->toBe('Final Fantasy VIII')
+        ->and($game->media()->count())->toBe(0);
+});
+
+it('skips a hand-picked id the provider does not hold', function () {
+    providerMiss();
+
+    $game = psxGame();
+
+    expect(matcher()->assign($game, 19256)->outcome)->toBe(MatchOutcome::Skipped)
+        ->and($game->refresh()->screenscraper_id)->toBeNull();
 });
