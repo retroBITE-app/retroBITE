@@ -128,6 +128,15 @@ class RateGame implements ShouldQueue
             return;
         }
 
+        // Paid for either way, and the artwork list rides in the same answer.
+        // Kept before the rating is read, so a game nobody has voted on still
+        // leaves with its list.
+        $medias = Arr::get($payload ?? [], 'medias');
+
+        if (is_array($medias)) {
+            $game->rememberMediaList($medias);
+        }
+
         $rating = Arr::get($payload ?? [], 'rating');
 
         if ($rating === null) {
@@ -139,8 +148,9 @@ class RateGame implements ShouldQueue
             return;
         }
 
-        // One column. Everything else in the payload is already on the row and
-        // overwriting it here would make a backfill a re-identification.
+        // One column on the game. Everything else in the payload is already on
+        // the row and overwriting it here would make a backfill a
+        // re-identification.
         $game->update(['rating' => $rating]);
     }
 

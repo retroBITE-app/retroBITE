@@ -10,6 +10,7 @@ use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Exceptions\ScreenScraper\SoftwareBlacklisted;
 use App\Exceptions\ScreenScraper\ThreadLimitReached;
 use App\Models\Game;
+use App\Models\MediaList;
 use App\Services\MediaLibrary;
 use App\Services\ScreenScraperService;
 use App\Support\MediaRegions;
@@ -24,7 +25,9 @@ use Throwable;
  *
  * The media list is handed over by the match that just ran, so the ordinary
  * path costs no extra metadata request — the answer already contained every
- * URL. A job dispatched on its own fetches the record again.
+ * URL. A job dispatched on its own uses the list the last answer left on the
+ * game ({@see MediaList}), and asks the provider only when there is none or
+ * when $fresh says the list itself is what somebody wants renewed.
  *
  * One broken URL does not sink the rest: a type that fails is logged and
  * skipped, because losing a screenshot is not a reason to lose the box art
@@ -40,6 +43,17 @@ class ScrapeGameMedia implements ShouldQueue
     public int $tries = 3;
 
     /**
+     * Ask the provider for the list again rather than use the kept one.
+     *
+     * Declared with its default rather than promoted. A queued job is
+     * unserialised, not constructed, so a job queued before this property
+     * existed never runs the constructor that would set it — and a promoted
+     * readonly one is then left uninitialised and throws on first read, which
+     * took every waiting artwork job down on the upgrade that added it.
+     */
+    public bool $fresh = false;
+
+    /**
      * @param  array<int, array<string, mixed>>|null  $medias  from the match that triggered this
      * @param  string|null  $region  one region by name, instead of the preference chain
      */
@@ -47,27 +61,33 @@ class ScrapeGameMedia implements ShouldQueue
         public readonly int $gameId,
         public readonly ?array $medias = null,
         public readonly ?string $region = null,
+        bool $fresh = false,
     ) {
+        $this->fresh = $fresh;
         $this->onQueue('media');
     }
 
     /**
      * Queue artwork for a whole console.
      *
-     * One job per game, on the media queue, so the three workers there share
-     * the console between them and nothing waits on the single scraper
-     * worker. Only games the provider has already named: artwork is fetched
+     * One job per game, on the media queue, so however many workers
+     * QUEUE_WORKERS_MEDIA starts share the console between them and nothing
+     * waits on the scraper worker. Only games the provider has already named: artwork is fetched
      * by provider id, so a placeholder or an unmatched game has nothing to
      * fetch by — the same rule {@see Game::blockedFromMediaScrape()} states
      * one game at a time.
      *
-     * The cost that matters is one metadata request per game. The bytes are
-     * mostly free on a second run, because a media whose checksum we already
-     * hold is recognised without being downloaded, but the lookup that
-     * carries those checksums is spent either way. Hence the default: games
-     * holding nothing at all, which is the set a bulk fetch is usually for.
+     * The metadata request is spent only where it buys something. Filling
+     * gaps uses the list kept from the last answer, which is what a type
+     * switched on in Settings needs, and costs a lookup only for a game
+     * identified before lists were kept. $held is the other job — every game
+     * again, with the list itself renewed, to pick up artwork people have
+     * uploaded since — and that is one lookup per game, as its confirmation
+     * says. The bytes are mostly free on a second run either way, because a
+     * media whose checksum we already hold is recognised without being
+     * downloaded.
      *
-     * @param  bool  $held  include games that already have artwork
+     * @param  bool  $held  include games that already have artwork, and renew their lists
      * @return int how many were queued
      */
     public static function queueForConsole(string $console, bool $held = false): int
@@ -79,7 +99,7 @@ class ScrapeGameMedia implements ShouldQueue
             ->pluck('id');
 
         foreach ($ids as $id) {
-            self::dispatch($id);
+            self::dispatch($id, fresh: $held);
         }
 
         return $ids->count();
@@ -100,7 +120,9 @@ class ScrapeGameMedia implements ShouldQueue
         }
 
         try {
-            $medias = $this->medias ?? $this->refetch($provider, $game);
+            $medias = $this->medias
+                ?? ($this->fresh ? null : $game->mediaList?->medias)
+                ?? $this->refetch($provider, $game);
         } catch (ScreenScraperException $e) {
             $this->waitAndRetry($e);
 
@@ -228,8 +250,11 @@ class ScrapeGameMedia implements ShouldQueue
         }
 
         $medias = $payload['medias'] ?? [];
+        $medias = is_array($medias) ? $medias : [];
 
-        return is_array($medias) ? $medias : [];
+        $game->rememberMediaList($medias);
+
+        return $medias;
     }
 
     /**

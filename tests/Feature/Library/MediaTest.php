@@ -3,6 +3,7 @@
 use App\Enums\FileRole;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
+use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
 use App\Models\Game;
@@ -432,4 +433,131 @@ it('keeps one of each type, not one overall', function () {
     ]);
 
     expect(Media::pluck('screenscraper_type')->sort()->values()->all())->toBe(['box-2D', 'ss']);
+});
+
+/*
+ * The kept list. One jeuInfos answer names the game, carries its rating and
+ * lists its artwork; keeping the list is what lets everything after the match
+ * choose artwork again without paying for that answer twice.
+ */
+
+function jeuInfos(array $medias): array
+{
+    return ['response' => ['jeu' => [
+        'id' => '19256',
+        'noms' => [['region' => 'ss', 'text' => 'Final Fantasy IX']],
+        'note' => ['text' => '17'],
+        'medias' => $medias,
+    ]]];
+}
+
+it('keeps the artwork list from the answer that identified the game', function () {
+    Bus::fake();
+    Http::fake(['*' => Http::response(jeuInfos([entry('box-2D'), entry('ss')]), 200)]);
+
+    $game = Game::factory()->forConsole('psx')->create();
+    GameFile::factory()->for($game)->create(['path' => 'psx/a.bin', 'filename' => 'a.bin', 'extension' => 'bin', 'role' => FileRole::Track]);
+
+    (new MatchGame($game->id))->handle(app(GameMatcher::class));
+
+    // The survivor of the merge into the game beforeEach made, which holds the
+    // same provider id — the list follows the identity.
+    $kept = $this->game->refresh()->mediaList;
+
+    expect($kept)->not->toBeNull()
+        ->and(array_column($kept->medias, 'type'))->toBe(['box-2D', 'ss'])
+        ->and($this->game->rating)->toBe(85);
+
+    Http::assertSentCount(1);
+});
+
+it('chooses from the kept list without asking the provider again', function () {
+    $cover = PNG.'cover';
+    $this->game->rememberMediaList([entry('box-2D', $cover)]);
+
+    Http::fake([
+        '*jeuInfos*' => Http::response(jeuInfos([]), 200),
+        '*mediaJeu*' => Http::response($cover, 200),
+    ]);
+
+    (new ScrapeGameMedia($this->game->id))->handle(app(ScreenScraperService::class), app(MediaLibrary::class));
+
+    expect(Media::count())->toBe(1);
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'jeuInfos'));
+});
+
+it('asks once for a game identified before lists were kept, and keeps the answer', function () {
+    $cover = PNG.'cover';
+
+    Http::fake([
+        '*jeuInfos*' => Http::response(jeuInfos([entry('box-2D', $cover)]), 200),
+        '*mediaJeu*' => Http::response($cover, 200),
+    ]);
+
+    (new ScrapeGameMedia($this->game->id))->handle(app(ScreenScraperService::class), app(MediaLibrary::class));
+
+    expect($this->game->refresh()->mediaList?->medias)->toHaveCount(1)
+        ->and(Media::count())->toBe(1);
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'jeuInfos'));
+});
+
+it('renews the list when asked to, rather than trusting the kept one', function () {
+    $shot = PNG.'shot';
+    $this->game->rememberMediaList([entry('box-2D')]);
+
+    Http::fake([
+        '*jeuInfos*' => Http::response(jeuInfos([entry('ss', $shot)]), 200),
+        '*mediaJeu*' => Http::response($shot, 200),
+    ]);
+
+    (new ScrapeGameMedia($this->game->id, fresh: true))->handle(app(ScreenScraperService::class), app(MediaLibrary::class));
+
+    expect(array_column($this->game->refresh()->mediaList->medias, 'type'))->toBe(['ss'])
+        ->and(Media::sole()->screenscraper_type)->toBe('ss');
+});
+
+it('fills gaps from the kept list and renews it only for re-fetch all', function () {
+    Bus::fake();
+
+    ScrapeGameMedia::queueForConsole('psx');
+    Bus::assertDispatched(ScrapeGameMedia::class, fn (ScrapeGameMedia $job): bool => ! $job->fresh);
+
+    Bus::fake();
+
+    ScrapeGameMedia::queueForConsole('psx', held: true);
+    Bus::assertDispatched(ScrapeGameMedia::class, fn (ScrapeGameMedia $job): bool => $job->fresh);
+});
+
+it('keeps the list from a rating fetch too', function () {
+    Http::fake(['*' => Http::response(jeuInfos([entry('box-2D')]), 200)]);
+
+    (new RateGame($this->game->id))->handle(app(ScreenScraperService::class));
+
+    $this->game->refresh();
+
+    expect($this->game->rating)->toBe(85)
+        ->and(array_column($this->game->mediaList->medias, 'type'))->toBe(['box-2D']);
+});
+
+it('still runs a job queued before the list was kept', function () {
+    // A job is unserialised, not constructed. One serialised before $fresh
+    // existed carries no value for it, and reading an uninitialised property
+    // is fatal — which is what took the whole waiting artwork queue down.
+    $cover = PNG.'cover';
+    $this->game->rememberMediaList([entry('box-2D', $cover)]);
+
+    // A payload as the release before this one queued it, byte for byte:
+    // no fresh at all.
+    $old = sprintf(
+        'O:24:"App\\Jobs\\ScrapeGameMedia":4:{s:6:"gameId";i:%d;s:6:"medias";N;s:6:"region";N;s:5:"queue";s:5:"media";}',
+        $this->game->id,
+    );
+
+    Http::fake(['*mediaJeu*' => Http::response($cover, 200)]);
+
+    unserialize($old)->handle(app(ScreenScraperService::class), app(MediaLibrary::class));
+
+    expect(Media::count())->toBe(1);
 });

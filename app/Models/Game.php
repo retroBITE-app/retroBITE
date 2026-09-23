@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -51,6 +52,7 @@ use Illuminate\Support\Collection;
  * @property Carbon|null $updated_at
  * @property-read Collection<int, GameFile> $files
  * @property-read Collection<int, Media> $media
+ * @property-read MediaList|null $mediaList
  */
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
@@ -98,6 +100,25 @@ class Game extends Model
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
+    }
+
+    /** @return HasOne<MediaList, $this> */
+    public function mediaList(): HasOne
+    {
+        return $this->hasOne(MediaList::class);
+    }
+
+    /**
+     * Keep the artwork list out of a provider answer, replacing any older one.
+     *
+     * Called by everything that has just paid for a jeuInfos answer, so that
+     * nothing after it has to pay again to learn what artwork there is.
+     *
+     * @param  array<int, array<string, mixed>>  $medias
+     */
+    public function rememberMediaList(array $medias): void
+    {
+        $this->mediaList()->updateOrCreate([], ['medias' => $medias, 'fetched_at' => now()]);
     }
 
     /**

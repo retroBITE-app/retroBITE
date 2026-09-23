@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
  *
  * The jobs table can only say an export is queued, never that it is on its
  * twelfth disc of nineteen — one job writes the whole console. So the worker
- * leaves its count here as it goes and the library page reads it back.
+ * leaves its count here as it goes and the sidebar reads it back.
  *
  * Cache rather than a table: it is worth nothing once the export is over, and
  * a worker killed mid-run must not leave a bar on somebody's screen for ever.
@@ -20,7 +20,14 @@ use Illuminate\Support\Facades\Cache;
  */
 final class ExportProgress
 {
-    /** One key for all of them: the media queue runs a single worker. */
+    /**
+     * One key for all of them, keyed inside by console and export.
+     *
+     * Read, changed and written back without a lock, so two exports running
+     * on two media workers at once can each drop the other's latest count.
+     * It is back on that export's next file, and a progress figure one file
+     * behind for a moment is not worth a lock around every write.
+     */
     private const KEY = 'exports.progress';
 
     /** Just past WriteConsoleExports::$timeout, so a killed worker's entry goes by itself. */

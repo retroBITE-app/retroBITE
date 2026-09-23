@@ -139,8 +139,9 @@ COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 COPY docker/web/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
+COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
 COPY docker/web/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh
 
 EXPOSE 80
 

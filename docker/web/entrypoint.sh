@@ -43,32 +43,36 @@ php /app/artisan db:seed --class=DefaultUserSeeder --force
 # "must be present and writable".
 chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 
-# Queue workers, split by what actually limits them.
+# Queue workers, split by what actually limits them. One per queue unless
+# .env says otherwise (see .env.example): the smallest footprint that still
+# works every queue, on hardware nobody here has measured.
 #
-# The scraper queue runs exactly one worker because ScreenScraper allows a
-# plain account one thread: a second worker would earn HTTP 429, not speed.
-# Media downloads and checksumming are bound by disk and bandwidth instead, so
-# those get a few. --max-time recycles a worker hourly, which is the ordinary
-# guard against a long-lived PHP process accumulating memory.
+# The scraper queue must stay at one on a plain ScreenScraper account, which is
+# allowed one thread: a second worker earns HTTP 429, not speed. Raise it only
+# as far as the max_threads your account shows under Settings → ScreenScraper.
+# Media downloads and checksumming are bound by disk and bandwidth instead, and
+# are the ones worth raising on a machine that has the room. --max-time
+# recycles a worker hourly, which is the ordinary guard against a long-lived
+# PHP process accumulating memory.
 #
 # Backgrounded rather than run under a supervisor: nginx is PID 1 and the
 # container is restarted as a unit, so a dead worker is a restarted container.
-su-exec "$WEB_USER" php /app/artisan queue:work \
-    --queue=scraper --sleep=3 --tries=3 --max-time=3600 &
+. /usr/local/bin/queue-workers.sh
 
-for _ in 1 2 3; do
-    su-exec "$WEB_USER" php /app/artisan queue:work \
-        --queue=media,default --sleep=3 --tries=3 --max-time=3600 &
-done
+workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:work \
+    --queue=scraper --sleep=3 --tries=3 --max-time=3600
+
+workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:work \
+    --queue=media,default --sleep=3 --tries=3 --max-time=3600
 
 # RetroAchievements: identification and set downloads are HTTP and quick, so
 # one worker keeps up; progress gets its own so a library-wide backfill of the
 # first two cannot starve it.
-su-exec "$WEB_USER" php /app/artisan queue:work \
-    --queue=ra --sleep=3 --tries=3 --max-time=3600 &
+workers QUEUE_WORKERS_RA 1 php /app/artisan queue:work \
+    --queue=ra --sleep=3 --tries=3 --max-time=3600
 
-su-exec "$WEB_USER" php /app/artisan queue:work \
-    --queue=ra-progress --sleep=3 --tries=3 --max-time=3600 &
+workers QUEUE_WORKERS_RA_PROGRESS 1 php /app/artisan queue:work \
+    --queue=ra-progress --sleep=3 --tries=3 --max-time=3600
 
 # The long connection, and the connection is a positional argument rather than
 # a flag: `queue:work --queue=ra-hash` would quietly run on the default
@@ -76,12 +80,10 @@ su-exec "$WEB_USER" php /app/artisan queue:work \
 # connection column, so queue names are the only isolation there is — which is
 # why the checksum queue is named `hash` and not left on `media`.
 #
-# Two workers. Hashing is disk and CPU bound on one machine, so more processes
-# mostly means more seeking.
-for _ in 1 2; do
-    su-exec "$WEB_USER" php /app/artisan queue:work database-long \
-        --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3600 --max-time=3600 &
-done
+# Hashing is disk and CPU bound on one machine, so past two or so more
+# processes mostly means more seeking.
+workers QUEUE_WORKERS_HASH 1 php /app/artisan queue:work database-long \
+    --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3600 --max-time=3600
 
 # The scheduler, for the nightly index sync and the progress pulse.
 su-exec "$WEB_USER" php /app/artisan schedule:work &

@@ -179,6 +179,10 @@ final class GameMatcher
 
                 $this->applyDiscNumbers($existing, $payload);
 
+                // Same provider id, so the list is the surviving game's too,
+                // and fresher than whatever it was holding.
+                $existing->rememberMediaList($this->mediasIn($payload));
+
                 return MatchResult::merged($existing, $this->mediasIn($payload));
             });
         }
@@ -200,6 +204,11 @@ final class GameMatcher
         ]);
 
         $this->applyDiscNumbers($game, $payload);
+
+        // Kept as well as handed on: the artwork job that follows uses the copy
+        // it is given, and a later "fetch missing artwork" uses this one instead
+        // of asking the provider again.
+        $game->rememberMediaList($this->mediasIn($payload));
 
         return MatchResult::matched($game->refresh(), $this->mediasIn($payload));
     }

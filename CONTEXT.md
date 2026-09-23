@@ -96,6 +96,13 @@ backdrops. The opposite of a game file in every way that matters — it did not
 exist until the platform fetched it, and it can be deleted and fetched again
 without anything being lost.
 
+**Media list** — the artwork the provider *offers* for a game, as its last
+answer listed it. Not media: nothing in it has been downloaded. Every jeuInfos
+answer carries it, so identifying a game, reading its rating and learning its
+artwork are one request, and the list is kept (`media_lists`) so choosing
+artwork again later costs none. Renewed only by "re-fetch all", or by any
+other answer that happens to arrive.
+
 **Media type** — the provider's own name for a kind of artwork. Kept as the
 provider writes it. One slot per type *and* region: a game may hold the same
 cover from four regions on purpose, but never two European ones, so fetching
