@@ -50,6 +50,14 @@ class AppSetting extends Model
     public const UI_GAMES_VIEW = 'ui_games_view';
 
     /**
+     * What heads the game page's hero, 'logo' or 'text'.
+     *
+     * Logo falls back to the text for a game the provider holds no logo for,
+     * since a hero without a title is not a choice anybody made.
+     */
+    public const UI_HERO_TITLE = 'ui_hero_title';
+
+    /**
      * Runtime edits to the shipped console config, keyed by console then by
      * config key. Absent means every console is as its file declares it.
      */
@@ -100,6 +108,7 @@ class AppSetting extends Model
         self::MEDIA_REGION => '',
         self::UI_SCANLINES => true,
         self::UI_GAMES_VIEW => 'cards',
+        self::UI_HERO_TITLE => 'text',
         self::RA_HARDCORE_PRIMARY => true,
     ];
 

@@ -17,8 +17,6 @@ new #[Title('Media settings')] class extends Component
 
     public bool $autoQueue = true;
 
-    public bool $scanlines = true;
-
     /** '' means no preference. */
     public string $region = '';
 
@@ -31,7 +29,6 @@ new #[Title('Media settings')] class extends Component
             ->all();
 
         $this->autoQueue = AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE);
-        $this->scanlines = AppSetting::enabled(AppSetting::UI_SCANLINES);
         $this->region = MediaRegions::preferred();
     }
 
@@ -77,7 +74,6 @@ new #[Title('Media settings')] class extends Component
 
         AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, $this->autoQueue);
         AppSetting::put(AppSetting::MEDIA_REGION, $this->region);
-        AppSetting::put(AppSetting::UI_SCANLINES, $this->scanlines);
 
         Flux::toast(variant: 'success', text: __('Media settings saved.'));
     }
@@ -86,7 +82,7 @@ new #[Title('Media settings')] class extends Component
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout :heading="__('Media')" :subheading="__('What artwork retroBite fetches, when, and how it is drawn')">
+    <x-settings.layout :heading="__('Media')" :subheading="__('What artwork retroBite fetches, and when')">
         {{-- Outside the form, bound back to it by id: the header row is where
              the control belongs, and the whole pane sits between them. --}}
         <x-slot name="actions">
@@ -111,14 +107,6 @@ new #[Title('Media settings')] class extends Component
                             <flux:select.option value="{{ $code }}">{{ $label }}</flux:select.option>
                         @endforeach
                     </flux:select>
-                </div>
-
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    {{-- Last in the column, because it is about how artwork is drawn
-                         rather than which of it is fetched. --}}
-                    <flux:switch wire:model="scanlines"
-                                 :label="__('CRT scanlines')"
-                                 :description="__('Lays the faint horizontal banding of a tube over key art and the sign-in backdrop. Part of the look rather than decoration you can ignore — turn it off for a flat presentation.')" />
                 </div>
             </div>
 

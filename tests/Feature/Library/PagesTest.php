@@ -266,6 +266,9 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
     $logo = Media::factory()->for($game)->ofType('wheel', 'eu')->create();
     $clip = Media::factory()->for($game)->ofType('video')->create();
 
+    // The hero shows the title as text unless Settings → UI asks for the logo.
+    AppSetting::put(AppSetting::UI_HERO_TITLE, 'logo');
+
     $page = $this->get(route('games.show', $game))->assertOk();
 
     // One set, passed whole, so the strip and the hero cover agree on it.
@@ -280,7 +283,7 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
     // would be a gallery. Asserted as the whole tag, since the attribute alone
     // appears legitimately on the thumbnail.
     $page->assertSeeHtml(
-        '<img src="'.route('media.show', ['path' => $logo->path]).'" alt="Final Fantasy IX" class="h-auto w-28 shrink-0" />'
+        '<img src="'.route('media.show', ['path' => $logo->path]).'" alt="Final Fantasy IX" class="block h-auto max-h-20 w-auto max-w-full" />'
     );
 
     // The strip itself lives behind the Artwork tab, which the URL names, so
@@ -464,16 +467,13 @@ it('saves which media types to fetch', function () {
         ->assertSet('enabled.box-2D', true)
         ->assertSet('enabled.video', false)
         ->assertSet('autoQueue', true)
-        ->assertSet('scanlines', true)
         ->set('enabled.video', true)
         ->set('enabled.box-2D', false)
         ->set('autoQueue', false)
-        ->set('scanlines', false)
         ->call('save');
 
     expect(MediaTypes::enabled())->toBe(['video'])
-        ->and(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse()
-        ->and(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeFalse();
+        ->and(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse();
 });
 
 it('filters by genre, splitting the comma-separated list the provider sends', function () {
@@ -1006,7 +1006,7 @@ it('says nothing about the rating of a game that has none', function () {
     $this->get(route('games.show', $game))
         ->assertOk()
         ->assertDontSee('/ 100')
-        // Nothing stands in for an absent rating: no dash, no empty chip.
+        // The grid cell holds a dash, never a zero or a band colour.
         ->assertDontSee('out of 100 by ScreenScraper');
 });
 
@@ -1015,15 +1015,38 @@ it('states the rating once on the game page, not twice', function () {
         'title' => 'Super Mario World', 'slug' => 'smw',
     ]);
 
-    // It used to be a chip beside the title and a row in the metadata grid
-    // below, which left the reader working out which of the two was the
-    // other one. The chip is the one that stayed.
+    // A page that says the same number twice leaves the reader working out
+    // which of the two is the other one. The details grid is the one place.
     $page = $this->get(route('games.show', $game))->assertOk();
 
     expect(substr_count($page->getContent(), '84 / 100'))->toBe(1);
 
-    expect(Livewire::test('games.show', ['game' => $game])->instance()->detailRows)
-        ->each->not->toHaveKey('key', 'Rating');
+    $details = Livewire::test('games.show', ['game' => $game])->instance()->details;
+
+    expect(array_count_values(array_column($details, 'key')))->toHaveKey('rating', 1);
+});
+
+it('lays the game\'s facts out in the details grid, dashing what is missing', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+        'developer' => 'Nintendo EAD', 'publisher' => 'Nintendo', 'genre' => 'Platform', 'players' => null,
+    ]);
+
+    $details = Livewire::test('games.show', ['game' => $game])->instance()->details;
+
+    expect(array_column($details, 'key'))
+        ->toBe(['region', 'console', 'released', 'rating', 'developer', 'publisher', 'genre', 'players'])
+        ->and(array_column($details, 'value', 'key'))->toMatchArray([
+            'developer' => 'Nintendo EAD',
+            'publisher' => 'Nintendo',
+            'genre' => 'Platform',
+            'players' => '—',
+            'rating' => '—',
+        ]);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSeeInOrder(['Developer', 'Nintendo EAD', 'Publisher', 'Nintendo', 'Genre', 'Platform']);
 });
 
 it('does not add a query per row to show ratings', function () {

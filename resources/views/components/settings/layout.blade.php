@@ -9,12 +9,31 @@
 ])
 
 @php
+    // Not request()->routeIs(): a Save re-renders this over Livewire's own
+    // update route, which none of the tabs match, and the underline vanished.
+    // The page's URL rides in the component snapshot, so the route is matched
+    // from that instead.
+    $route = request()->route();
+
+    if (Livewire\Livewire::isLivewireRequest()) {
+        try {
+            $route = app('router')->getRoutes()->match(Illuminate\Http\Request::create(Livewire\Livewire::originalUrl()));
+        } catch (Symfony\Component\HttpKernel\Exception\HttpException) {
+            $route = null;
+        }
+    }
+
+    $routeIs = function (string $pattern) use ($route): bool {
+        return $route?->named($pattern) ?? false;
+    };
+
     $tabs = [
-        ['label' => __('User'), 'route' => 'user.edit', 'active' => request()->routeIs('user.*')],
-        ['label' => __('Media'), 'route' => 'media.edit', 'active' => request()->routeIs('media.edit')],
-        ['label' => __('Consoles'), 'route' => 'console-config.edit', 'active' => request()->routeIs('console-config.edit')],
-        ['label' => __('ScreenScraper'), 'route' => 'screenscraper.edit', 'active' => request()->routeIs('screenscraper.edit')],
-        ['label' => __('RetroAchievements'), 'route' => 'retroachievements.edit', 'active' => request()->routeIs('retroachievements.edit')],
+        ['label' => __('User'), 'route' => 'user.edit', 'active' => $routeIs('user.*')],
+        ['label' => __('UI'), 'route' => 'interface.edit', 'active' => $routeIs('interface.edit')],
+        ['label' => __('Media'), 'route' => 'media.edit', 'active' => $routeIs('media.edit')],
+        ['label' => __('Consoles'), 'route' => 'console-config.edit', 'active' => $routeIs('console-config.edit')],
+        ['label' => __('ScreenScraper'), 'route' => 'screenscraper.edit', 'active' => $routeIs('screenscraper.edit')],
+        ['label' => __('RetroAchievements'), 'route' => 'retroachievements.edit', 'active' => $routeIs('retroachievements.edit')],
     ];
 @endphp
 
