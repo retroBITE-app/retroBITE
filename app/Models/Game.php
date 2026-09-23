@@ -278,6 +278,18 @@ class Game extends Model
         return null;
     }
 
+    /** Why a hand-picked match cannot be offered; a matched or unhashable game still can, it is what the pick is for. */
+    public function blockedFromManualLookup(): ?string
+    {
+        $console = $this->console();
+
+        if ($console === null || $console->screenscraperId === null) {
+            return __('This console is not mapped to ScreenScraper.');
+        }
+
+        return null;
+    }
+
     public function canBeIdentified(): bool
     {
         return $this->blockedFromLookup() === null;

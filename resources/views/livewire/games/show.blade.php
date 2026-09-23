@@ -23,6 +23,7 @@ use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -324,9 +325,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
         if ($this->fingerprint() !== $this->awaiting) {
             $this->stopWaiting();
-            $this->loadRelations();
-            $this->forgetArtwork();
-            unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath);
+            $this->reloadGame();
 
             return;
         }
@@ -334,6 +333,28 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         if ($this->awaitingSince !== null && now()->timestamp - $this->awaitingSince >= self::WAIT_SECONDS) {
             $this->stopWaiting();
         }
+    }
+
+    /** Sent by the identify modal once a hand-picked match is applied. */
+    #[On('game-identified')]
+    public function identified(): void
+    {
+        $this->game->refresh();
+        $this->reloadGame();
+
+        // The modal queued the artwork, so wait for it the way a fetch from here does.
+        if (AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE)) {
+            $this->fetchingFrom = $this->mediaFingerprint();
+            $this->fetchingSince = now()->timestamp;
+        }
+    }
+
+    /** Drop everything read off the game before it changed underneath the page. */
+    private function reloadGame(): void
+    {
+        $this->loadRelations();
+        $this->forgetArtwork();
+        unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath);
     }
 
     private function stopWaiting(): void
@@ -1150,6 +1171,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             @php($identifyBlocked = $game->blockedFromLookup())
             @php($mediaBlocked = $game->blockedFromMediaScrape())
             @php($ratingBlocked = $game->blockedFromRating())
+            @php($manualBlocked = $game->blockedFromManualLookup())
 
             {{-- Hand-written rather than flux:dropdown: the panel's ground,
                  border, radius, padding and shadow all differ from flux:menu's,
@@ -1204,6 +1226,23 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         {{-- A game the provider could not name is exactly where a
                              rename or a fresh dump makes another try worth it. --}}
                         {{ $game->status === App\Enums\GameStatus::Unmatched ? __('Try identifying again') : __('Identify game') }}
+                    </button>
+
+                    {{-- Offered on a matched game too: a wrong match is exactly
+                         what a hand-picked one is for. --}}
+                    <button
+                        type="button"
+                        role="menuitem"
+                        @disabled($manualBlocked !== null)
+                        @if ($manualBlocked !== null) title="{{ $manualBlocked }}" @else x-on:click="open = false; $dispatch('identify-game')" @endif
+                        @class([
+                            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+                            'cursor-pointer hover:bg-raised' => $manualBlocked === null,
+                            'cursor-not-allowed opacity-45' => $manualBlocked !== null,
+                        ])
+                    >
+                        <flux:icon.magnifying-glass class="size-[15px] text-fg-muted" />
+                        {{ __('Identify manually') }}
                     </button>
 
                     <div class="my-1.25 mx-2 h-px bg-line"></div>
@@ -1743,4 +1782,5 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             </div>
         </section>
     @endif
+    <livewire:games.identify-modal :game-id="$game->id" wire:key="identify-modal" />
 </x-lightbox>
