@@ -164,7 +164,7 @@ new class extends Component
 
         // This game's row is gone: its files now belong to the one already in the library.
         if ($result->outcome === MatchOutcome::Merged) {
-            $this->redirectRoute('games.show', ['game' => $result->game], navigate: true);
+            $this->redirectRoute('games.show', $result->game->routeParameters(), navigate: true);
 
             return;
         }

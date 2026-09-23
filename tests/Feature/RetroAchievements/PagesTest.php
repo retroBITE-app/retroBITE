@@ -149,7 +149,7 @@ it('shows the achievement panel on a game page', function () {
 
     RaUnlock::factory()->forAchievement($achievement)->create(['user_id' => $this->user->id]);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('Give Me Liberty')
         ->assertSee('Errand Boy')
@@ -220,7 +220,7 @@ it('narrows the list by kind, on its own axis', function () {
         ->assertDontSee('Already Spotted It');
 
     // Both axes are linkable, and they combine in the URL.
-    $this->get(route('games.show', $game).'?achievements=locked&kind=missable')
+    $this->get(route('games.show', $game->routeParameters()).'?achievements=locked&kind=missable')
         ->assertOk()
         ->assertSee('Blink And Its Gone')
         ->assertDontSee('Already Spotted It')
@@ -236,7 +236,7 @@ it('offers a kind only to a set that marks one', function () {
 
     // No button, and a link into one narrows nothing rather than emptying
     // the panel on a filter the page cannot show as being on.
-    $this->get(route('games.show', $game).'?kind=missable')
+    $this->get(route('games.show', $game->routeParameters()).'?kind=missable')
         ->assertOk()
         ->assertDontSee('Missable')
         ->assertSee('Nothing Special');
@@ -267,7 +267,7 @@ it('renders the whole way with the network down', function () {
     // Http::preventStrayRequests() is already on for every test, so any call
     // out from a render would fail this rather than quietly succeed. The pages
     // have to be correct from the database alone.
-    $this->get(route('games.show', $game))->assertOk()->assertSee('31 / 49');
+    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('31 / 49');
     $this->get(route('games.index'))->assertOk();
     $this->get(route('dashboard'))->assertOk();
 });

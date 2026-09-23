@@ -35,7 +35,7 @@
             'path' => $game->console()?->libraryPath() ?? $game->console,
             'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
             'added' => $game->created_at?->diffForHumans() ?? '',
-            'id' => $game->id,
+            'url' => route('games.show', $game->routeParameters()),
             'cover' => ($cover = $game->artwork(MediaKind::Cover)) ? route('media.show', ['path' => $cover->path]) : null,
             'backdrop' => ($backdrop = $game->artwork(MediaKind::Backdrop)) ? route('media.show', ['path' => $backdrop->path]) : null,
             'achievements' => ($p = $recentProgress->get($game->retroachievements_id)) !== null && $p->achievements_possible > 0
@@ -140,7 +140,7 @@
             'console' => $game->console,
             'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
             'added' => $game->created_at?->diffForHumans() ?? '',
-            'id' => $game->id,
+            'url' => route('games.show', $game->routeParameters()),
         ])
         ->all();
 
@@ -215,7 +215,7 @@
                              nothing scanned yet there is none to go to, and the
                              only useful next step is adding a console. --}}
                         <a
-                            href="{{ $hero === null ? route('consoles.index') : route('games.show', $hero['id']) }}"
+                            href="{{ $hero === null ? route('consoles.index') : $hero['url'] }}"
                             wire:navigate
                             class="inline-flex items-center gap-1.5 rounded-lg border border-accent-tint/60 px-3.5 py-2 text-sm text-accent transition-colors hover:bg-accent-tint/14 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         >
@@ -229,7 +229,7 @@
             <div class="flex min-w-0 flex-col gap-2.5">
                 @foreach ($others as $game)
                     <a
-                        href="{{ route('games.show', $game['id']) }}"
+                        href="{{ $game['url'] }}"
                         wire:navigate
                         class="relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border border-line bg-surface p-2.5 transition-colors hover:border-line-input hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                     >
@@ -335,7 +335,7 @@
                         </span>
 
                         <a
-                            href="{{ route('games.show', $game['id']) }}"
+                            href="{{ $game['url'] }}"
                             wire:navigate
                             class="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-tint/50 px-2.5 py-1.5 text-sm text-accent transition-colors hover:bg-accent-tint/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         >

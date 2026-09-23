@@ -5,6 +5,7 @@ use App\Http\Controllers\Docs\ArchiveDocController;
 use App\Http\Controllers\Docs\DownloadDocController;
 use App\Http\Controllers\Docs\ServeMediaController as ServeDocMediaController;
 use App\Http\Controllers\Library\ServeMediaController;
+use App\Models\Game;
 use Illuminate\Support\Facades\Route;
 
 // Public on purpose, and the only artwork outside the authed route: the
@@ -16,9 +17,31 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');
 
     // Library
+    // Addressed downward, the way the library is walked: the consoles, one
+    // console's shelf, one game on it. A game is named by its slug within its
+    // console — unique there and nowhere else, so two consoles may each hold
+    // an "aladdin" — which is why {game} is bound below against the {console}
+    // beside it rather than by slug alone.
     Route::livewire('consoles', 'consoles.index')->name('consoles.index');
+    Route::livewire('consoles/{console}', 'games.index')
+        ->where('console', '[a-z0-9\-]+')
+        ->name('consoles.games');
+    Route::livewire('consoles/{console}/{game}', 'games.show')
+        ->where(['console' => '[a-z0-9\-]+', 'game' => '[a-z0-9\-]+'])
+        ->name('games.show');
+    Route::bind('game', fn (string $slug, Illuminate\Routing\Route $route): Game => Game::query()
+        ->where('console', $route->parameter('console'))
+        ->where('slug', $slug)
+        ->firstOrFail());
+
+    // Every game, across consoles. Not in the hierarchy: it is a view of the
+    // library rather than a place in it.
     Route::livewire('games', 'games.index')->name('games.index');
-    Route::livewire('games/{game}', 'games.show')->name('games.show');
+
+    // The addresses these used to have, kept so a bookmark still lands. A game
+    // was once reached by its id, which says nothing about where it lives.
+    Route::get('games/{id}', fn (int $id) => redirect()->route('games.show', Game::findOrFail($id)->routeParameters(), 301))
+        ->whereNumber('id');
     // The media disk sits outside public/, so this authed route is the only
     // way to a downloaded image.
     Route::get('media/{path}', ServeMediaController::class)->where('path', '.*')->name('media.show');
@@ -33,13 +56,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('docs/download/{path}', DownloadDocController::class)->where('path', '.*')->name('docs.download');
     Route::get('docs/archive/{path}', ArchiveDocController::class)->where('path', '.*')->name('docs.archive');
 
-    // Last in the group on purpose: it claims a top-level segment, so any new
-    // fixed route has to be declared above it. The component 404s on a key
-    // config does not carry, so /nonsense/games is a miss rather than an empty
-    // shelf.
-    Route::livewire('{console}/games', 'games.index')
-        ->where('console', '[a-z0-9\-]+')
-        ->name('consoles.games');
+    // The shelf's old address. Last in the group on purpose: it claims a
+    // top-level segment, so any new fixed route has to be declared above it.
+    Route::get('{console}/games', fn (string $console) => redirect()->route('consoles.games', ['console' => $console], 301))
+        ->where('console', '[a-z0-9\-]+');
 });
 
 require __DIR__.'/settings.php';

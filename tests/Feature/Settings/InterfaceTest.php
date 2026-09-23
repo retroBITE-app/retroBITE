@@ -70,7 +70,7 @@ it('falls back to the title for a game with no logo', function () {
 
     expect(Livewire::test('games.show', ['game' => $game])->instance()->showLogo)->toBeFalse();
 
-    $this->get(route('games.show', $game))->assertOk()->assertSee('Final Fantasy IX');
+    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('Final Fantasy IX');
 });
 
 it('keeps the settings tab underlined after a save re-renders the page', function () {

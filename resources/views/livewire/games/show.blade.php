@@ -339,8 +339,18 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[On('game-identified')]
     public function identified(): void
     {
+        $slug = $this->game->slug;
+
         $this->game->refresh();
         $this->reloadGame();
+
+        // Identifying renames the game, and the slug with it, so the address
+        // the browser holds would 404 on a reload. Replaced rather than
+        // navigated to: the page is already the right one, and navigating
+        // would drop the artwork watch set just below.
+        if ($this->game->slug !== $slug) {
+            $this->js('history.replaceState(history.state, "", '.json_encode(route('games.show', $this->game->routeParameters())).')');
+        }
 
         // The modal queued the artwork, so wait for it the way a fetch from here does.
         if (AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE)) {
@@ -1151,14 +1161,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
         {{-- pl-14 clears the floating hamburger, which sits at top-4 left-4. --}}
         <div class="absolute top-4 right-4 left-4 flex items-center gap-3.5 pl-14 lg:top-5.5 lg:inset-x-7.5 lg:pl-0">
-            <a
-                href="{{ $console !== null ? route('consoles.games', ['console' => $console->key]) : route('games.index') }}"
-                wire:navigate
-                class="flex items-center gap-1.5 rounded-lg border border-line-input bg-scrim/60 px-2.75 py-1.5 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-            >
-                <flux:icon.arrow-left class="size-3.5" />
-                {{ $console?->name ?? __('Library') }}
-            </a>
+            {{-- A console config no longer carries has no shelf to link to,
+                 so such a game hangs off the all-games list instead. --}}
+            <x-breadcrumbs :items="$console !== null
+                ? [[__('Consoles'), route('consoles.index')], [$console->name, route('consoles.games', ['console' => $console->key])], [$game->title, null]]
+                : [[__('Games'), route('games.index')], [$game->title, null]]" />
 
             @php($identifyBlocked = $game->blockedFromLookup())
             @php($mediaBlocked = $game->blockedFromMediaScrape())
@@ -1358,12 +1365,19 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </div>
     </div>
 
-    {{-- The facts, out of the hero and into the dashboard's grid: a 1px gap
-         over the border colour separates the cells. --}}
+    {{-- The facts, out of the hero and into a grid of their own, in the same
+         glass as the breadcrumbs and Actions above: the backdrop runs on under
+         it, so an opaque panel read as a slab laid over the art.
+
+         Rules drawn by each cell rather than as a 1px gap over a filled grid,
+         which only works when the cells hide what is behind them. Every cell
+         draws its top and start edge and is pulled back over them by a pixel,
+         so the ones on the outside fall under the grid's own border and are
+         clipped by overflow-hidden. --}}
     <section class="relative z-1 px-4 pt-6.5 lg:px-8 lg:pt-10">
-        <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
+        <dl class="grid grid-cols-2 overflow-hidden rounded-xl border border-line-input bg-scrim/60 backdrop-blur-sm sm:grid-cols-4">
             @foreach ($this->details as ['key' => $key, 'label' => $label, 'value' => $value])
-                <div wire:key="detail-{{ $key }}" class="min-w-0 bg-sunken px-4.5 py-4">
+                <div wire:key="detail-{{ $key }}" class="-ms-px -mt-px min-w-0 border-s border-t border-line-input px-4.5 py-4">
                     <dt class="kicker text-fg-faint">{{ $label }}</dt>
 
                     @if ($key === 'region' && $this->regionIcon)

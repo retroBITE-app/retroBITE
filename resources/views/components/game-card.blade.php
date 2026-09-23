@@ -57,7 +57,7 @@
      somewhere to go. --}}
 <div class="group relative flex w-fit max-w-full flex-col gap-2 rounded-2xl border border-transparent p-2 transition-colors hover:border-accent-tint focus-within:border-accent-tint">
     <a
-        href="{{ route('games.show', $game) }}"
+        href="{{ route('games.show', $game->routeParameters()) }}"
         wire:navigate
         aria-label="{{ $game->title }}"
         class="absolute inset-0 z-10 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-deep"

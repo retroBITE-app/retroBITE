@@ -14,6 +14,7 @@ use App\Models\Media;
 use App\Support\Console;
 use App\Support\Layouts\Layouts;
 use App\Support\MediaTypes;
+use App\Support\Scanning\FolderCounts;
 use App\Tools\ConsoleTools;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -220,9 +221,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
         $hardcore = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
 
+        // Games are the identified ones, as on the console cards and the
+        // dashboard: a file the provider could not name is a file, not yet a
+        // game. Files are read off the disk by the same count the cards use.
         return [
-            'games' => (int) ($totals->games ?? 0),
+            'games' => (int) ($totals->identified ?? 0),
             'identified' => (int) ($totals->identified ?? 0),
+            'files' => FolderCounts::gamesIn($console),
             'size' => Number::fileSize((int) ($totals->bytes ?? 0), 1),
             'unlocked' => (int) (($hardcore ? $progress?->unlocked_hardcore : $progress?->unlocked) ?? 0),
             'possible' => (int) ($progress->possible ?? 0),
@@ -653,15 +658,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                      left-4. The same offsets as the game page's bar, so the
                      Actions button does not move between the two. --}}
                 <div class="relative flex items-center gap-2.5 pt-4 pr-4 pl-18 sm:gap-3.5 lg:px-7.5 lg:pt-5.5">
-                    <a
-                        href="{{ route('consoles.index') }}"
-                        wire:navigate
-                        class="flex items-center gap-1.5 rounded-lg border border-line-input bg-scrim/60 px-2.75 py-1.5 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                    >
-                        <flux:icon.arrow-left class="size-3.5" />
-                        {{-- Icon only on a phone, so the search keeps its room. --}}
-                        <span class="max-sm:sr-only">{{ __('Consoles') }}</span>
-                    </a>
+                    {{-- The way back up, where the back button used to be. It
+                         gives way before the search does on a phone: the last
+                         step truncates, and the hero below names the console
+                         in full anyway. --}}
+                    <x-breadcrumbs :items="[
+                        [__('Consoles'), route('consoles.index')],
+                        [$this->lockedTo->name, null],
+                    ]" />
 
                     {{-- Up here rather than in the filter row, which it used to
                          fill half of. It pushes Actions to the right edge, and
@@ -810,14 +814,12 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
                             <div>
                                 <dt class="kicker text-fg-faint">{{ __('Games') }}</dt>
-                                <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ $this->consoleStats['games'] }}</dd>
+                                <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ Number::format($this->consoleStats['games']) }}</dd>
                             </div>
 
                             <div>
-                                <dt class="kicker text-fg-faint">{{ __('Identified') }}</dt>
-                                <dd class="font-mono text-lg text-fg-bright tabular-nums">
-                                    {{ $this->consoleStats['identified'] }} / {{ $this->consoleStats['games'] }}
-                                </dd>
+                                <dt class="kicker text-fg-faint">{{ __('Files') }}</dt>
+                                <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ Number::format($this->consoleStats['files']) }}</dd>
                             </div>
 
                             <div>
@@ -1093,7 +1095,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 </td>
 
                                 <td class="px-4 py-2">
-                                    <a href="{{ route('games.show', $game) }}" wire:navigate class="block truncate font-medium text-fg-bright hover:text-accent">
+                                    <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="block truncate font-medium text-fg-bright hover:text-accent">
                                         {{ $game->title }}
                                     </a>
 
@@ -1184,7 +1186,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                             <flux:menu.separator />
 
                                             <flux:menu.item icon="arrow-top-right-on-square"
-                                                            href="{{ route('games.show', $game) }}"
+                                                            href="{{ route('games.show', $game->routeParameters()) }}"
                                                             wire:navigate>
                                                 {{ __('Open game') }}
                                             </flux:menu.item>

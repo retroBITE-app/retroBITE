@@ -102,6 +102,20 @@ class Game extends Model
         return $this->hasMany(Media::class);
     }
 
+    /**
+     * What games.show needs to address this game: its console and its slug.
+     *
+     * The game's own route key is still its id, so this is spelled out rather
+     * than left to route() — handed a bare model, route() would put the id in
+     * the {console} segment.
+     *
+     * @return array{console: string, game: string}
+     */
+    public function routeParameters(): array
+    {
+        return ['console' => $this->console, 'game' => $this->slug];
+    }
+
     /** @return HasOne<MediaList, $this> */
     public function mediaList(): HasOne
     {

@@ -191,7 +191,7 @@ it('moves to the surviving game when the pick is one already in the library', fu
     Livewire::test('games.identify-modal', ['gameId' => $game->id])
         ->call('open')
         ->call('assign', 19256)
-        ->assertRedirect(route('games.show', $existing));
+        ->assertRedirect(route('games.show', $existing->routeParameters()));
 
     expect(Game::find($game->id))->toBeNull()
         ->and($existing->files()->count())->toBe(1);
@@ -210,11 +210,11 @@ it('shows a fixed message when the provider cannot be reached', function () {
 it('offers a hand-picked match on a matched game, and says why not on an unmapped console', function () {
     $game = Game::factory()->forConsole('psx')->matched(19256)->create(['title' => 'Final Fantasy IX', 'slug' => 'final-fantasy-ix']);
 
-    $this->get(route('games.show', $game))->assertOk()->assertSee('Identify manually');
+    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('Identify manually');
 
     config()->set('consoles.psx.screenscraper_id', null);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('This console is not mapped to ScreenScraper.');
 });

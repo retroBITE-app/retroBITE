@@ -219,7 +219,7 @@ it('shows a game with its files, marking the missing ones', function () {
     GameFile::factory()->for($game)->create(['path' => 'psx/d1.bin', 'filename' => 'd1.bin', 'role' => FileRole::Track, 'disc_number' => 1]);
     GameFile::factory()->for($game)->missing()->create(['path' => 'psx/d2.bin', 'filename' => 'd2.bin', 'role' => FileRole::Track, 'disc_number' => 2]);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('Final Fantasy IX')
         ->assertSee('d1.bin')
@@ -241,7 +241,7 @@ it('shows the serial a disc carries next to its filename', function () {
         'license_id' => 'SLES_503.86',
     ]);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('SLES_503.86');
 });
@@ -254,7 +254,7 @@ it('says nothing where a file carries no serial', function () {
 
     // An empty chip would read as a serial nobody could make out, rather than
     // as a cartridge that never had one.
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertDontSeeHtml('rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted');
 });
@@ -269,7 +269,7 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
     // The hero shows the title as text unless Settings → UI asks for the logo.
     AppSetting::put(AppSetting::UI_HERO_TITLE, 'logo');
 
-    $page = $this->get(route('games.show', $game))->assertOk();
+    $page = $this->get(route('games.show', $game->routeParameters()))->assertOk();
 
     // One set, passed whole, so the strip and the hero cover agree on it.
     $page->assertSeeHtml('data-lightbox-images');
@@ -288,7 +288,7 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
 
     // The strip itself lives behind the Artwork tab, which the URL names, so
     // a link into it opens on the pictures rather than on the file table.
-    $strip = $this->get(route('games.show', $game).'?tab=artwork')->assertOk();
+    $strip = $this->get(route('games.show', $game->routeParameters()).'?tab=artwork')->assertOk();
 
     $strip->assertSee('Cover · Europe');
 
@@ -322,7 +322,7 @@ it('puts the panels behind tabs, offering only the ones the game has', function 
 
     // A tab this game does not have falls back to the first one rather than
     // leaving the page empty under the row.
-    $this->get(route('games.show', $game).'?tab=achievements')->assertOk()->assertSee($table);
+    $this->get(route('games.show', $game->routeParameters()).'?tab=achievements')->assertOk()->assertSee($table);
 });
 
 it('holds the artwork in one order, whichever request asks', function () {
@@ -559,7 +559,7 @@ it('says why a game cannot be identified instead of offering a dead button', fun
     $game = Game::factory()->forConsole('psx')->create(['title' => 'Orphan', 'slug' => 'orphan']);
     GameFile::factory()->for($game)->role(FileRole::Playlist)->create(['path' => 'psx/o.m3u', 'filename' => 'o.m3u']);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('No file here is one the provider can identify.');
 
@@ -618,7 +618,7 @@ it('offers a retry on a game the provider could not name', function () {
 
     // Worth offering: a rename or a fresh dump is exactly when spending the
     // scarce failed-lookup allowance again is the user's call to make.
-    $this->get(route('games.show', $game))->assertOk()->assertSee('Try identifying again');
+    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('Try identifying again');
 });
 
 it('fetches artwork for an identified game from the list', function () {
@@ -659,7 +659,7 @@ it('says so when no media type is switched on rather than queueing nothing', fun
 
     // The job would run, find nothing switched on and return having done
     // nothing at all.
-    $this->get(route('games.show', $game))->assertOk()->assertSee('No media types are switched on');
+    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('No media types are switched on');
 });
 
 it('waits for artwork to arrive, then stops', function () {
@@ -746,10 +746,83 @@ it('lists one console on its own shelf, and 404s on a key config does not carry'
     $this->get(route('consoles.games', ['console' => 'snes']))->assertDontSee('All consoles');
 
     // Livewire fills any public property named after a route parameter, so a
-    // filter called $console would come back as /snes/games?console=snes.
+    // filter called $console would come back as /consoles/snes?console=snes.
     Livewire::test('games.index', ['console' => 'snes'])->assertSet('consoleFilter', '');
 
-    $this->get('/notaconsole/games')->assertNotFound();
+    $this->get('/consoles/notaconsole')->assertNotFound();
+});
+
+it('addresses a game under its console, by slug', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aladdin', 'slug' => 'aladdin']);
+
+    expect(route('games.show', $game->routeParameters()))->toEndWith('/consoles/snes/aladdin');
+
+    $this->get('/consoles/snes/aladdin')->assertOk()->assertSee('Aladdin');
+});
+
+it('tells apart two consoles that each hold a game of the same name', function () {
+    // Slugs are unique per console and nowhere else, which is the whole reason
+    // the console is in the address.
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aladdin (SNES)', 'slug' => 'aladdin']);
+    Game::factory()->forConsole('megadrive')->matched()->create(['title' => 'Aladdin (Mega Drive)', 'slug' => 'aladdin']);
+
+    $this->get('/consoles/megadrive/aladdin')->assertOk()->assertSee('Aladdin (Mega Drive)')->assertDontSee('Aladdin (SNES)');
+    $this->get('/consoles/snes/aladdin')->assertOk()->assertSee('Aladdin (SNES)');
+});
+
+it('does not find a game under a console it is not on', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aladdin', 'slug' => 'aladdin']);
+
+    $this->get('/consoles/nes/aladdin')->assertNotFound();
+});
+
+it('sends the old addresses to the new ones', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aladdin', 'slug' => 'aladdin']);
+
+    $this->get('/games/'.$game->id)->assertMovedPermanently()->assertRedirect('/consoles/snes/aladdin');
+    $this->get('/snes/games')->assertMovedPermanently()->assertRedirect('/consoles/snes');
+});
+
+it('counts identified games beside each console in the sidebar', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'One', 'slug' => 'one']);
+    Game::factory()->forConsole('snes')->create(['title' => 'Unknown', 'slug' => 'unknown']);
+
+    $html = $this->get(route('consoles.index'))->assertOk()->getContent();
+
+    expect($html)->toMatch('/href="'.preg_quote(route('consoles.games', ['console' => 'snes']), '/').'".*?Super Nintendo<\/span>\s*<span[^>]*>1<\/span>/s');
+});
+
+it('lights the game\'s console in the sidebar, and not Games', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+    ConsoleSourceFolder::add(new Console('nes'));
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aladdin', 'slug' => 'aladdin']);
+
+    $html = $this->get(route('games.show', $game->routeParameters()))->assertOk()->getContent();
+
+    // The console's link carries the rail; its neighbour does not.
+    expect($html)->toMatch('/href="'.preg_quote(route('consoles.games', ['console' => 'snes']), '/').'"[^>]*shadow-rail/s')
+        ->and($html)->not->toMatch('/href="'.preg_quote(route('consoles.games', ['console' => 'nes']), '/').'"[^>]*shadow-rail/s')
+        // The attribute, not the class: Flux spells data-current:… into every
+        // item's classes whether it is current or not.
+        ->and($html)->not->toMatch('/href="'.preg_quote(route('games.index'), '/').'" data-current="data-current"/');
+
+    // And on the all-games list, Games is the one that is lit.
+    expect($this->get(route('games.index'))->getContent())
+        ->toMatch('/href="'.preg_quote(route('games.index'), '/').'" data-current="data-current"/');
+});
+
+it('shows the way back up the library over a game', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aladdin', 'slug' => 'aladdin']);
+
+    $this->get(route('games.show', $game->routeParameters()))
+        ->assertOk()
+        ->assertSeeInOrder([
+            'aria-label="Breadcrumb"',
+            'href="'.route('consoles.index').'"', 'Consoles',
+            'href="'.route('consoles.games', ['console' => 'snes']).'"', 'Super Nintendo',
+            'aria-current="page"', 'Aladdin',
+        ], escape: false);
 });
 
 it('remembers whether the library is drawn as covers or as a list', function () {
@@ -995,7 +1068,7 @@ it('shows the rating on the shelf and on the game', function () {
 
     Livewire::test('games.index')->assertSee('84');
 
-    $this->get(route('games.show', $game))->assertOk()->assertSee('84 / 100');
+    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('84 / 100');
 });
 
 it('says nothing about the rating of a game that has none', function () {
@@ -1003,7 +1076,7 @@ it('says nothing about the rating of a game that has none', function () {
         'title' => 'Super Mario World', 'slug' => 'smw',
     ]);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertDontSee('/ 100')
         // The grid cell holds a dash, never a zero or a band colour.
@@ -1017,7 +1090,7 @@ it('states the rating once on the game page, not twice', function () {
 
     // A page that says the same number twice leaves the reader working out
     // which of the two is the other one. The details grid is the one place.
-    $page = $this->get(route('games.show', $game))->assertOk();
+    $page = $this->get(route('games.show', $game->routeParameters()))->assertOk();
 
     expect(substr_count($page->getContent(), '84 / 100'))->toBe(1);
 
@@ -1044,7 +1117,7 @@ it('lays the game\'s facts out in the details grid, dashing what is missing', fu
             'rating' => '—',
         ]);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSeeInOrder(['Developer', 'Nintendo EAD', 'Publisher', 'Nintendo', 'Genre', 'Platform']);
 });
@@ -1098,7 +1171,7 @@ it('gives the game page the same band as the shelf', function () {
     ]);
 
     // A game must not change verdict on the way from the shelf to its page.
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('var(--color-warn)', escape: false);
 });
@@ -1191,7 +1264,7 @@ it('refuses a rating for a game nobody has identified', function () {
 
     $game = Game::factory()->forConsole('psx')->create(['title' => 'Mystery', 'slug' => 'mystery']);
 
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('Fetch rating')
         ->assertSee('Identify the game first — the rating comes back by provider id.');
@@ -1511,11 +1584,11 @@ it('counts the console in the shelf header', function () {
     // Another console's games are not this shelf's business.
     Game::factory()->forConsole('psx')->matched()->create(['title' => 'Elsewhere', 'slug' => 'elsewhere']);
 
+    // One game, because the placeholder is not one yet; its file still counts
+    // towards the size. No folder on disk in this test, so no files either.
     Livewire::test('games.index', ['console' => 'snes'])
         ->assertSee('Nintendo')
-        ->assertSee('On disk')
-        ->assertSee('1 / 2')
-        ->assertSee('4.0 MB');
+        ->assertSeeInOrder(['Games', '>1<', 'Files', '>0<', 'On disk', '4.0 MB'], escape: false);
 });
 
 it('counts a multi-disc game once in the shelf header', function () {
@@ -1530,7 +1603,9 @@ it('counts a multi-disc game once in the shelf header', function () {
 
     // The files join multiplies a game by its tracks, so a four-disc game
     // would read as four games without count(distinct).
-    Livewire::test('games.index', ['console' => 'psx'])->assertSee('1 / 1');
+    Livewire::test('games.index', ['console' => 'psx'])
+        ->assertSeeInOrder(['Games', '>1<', 'Files'], escape: false)
+        ->assertSee('4.0 MB');
 });
 
 it('says nothing about achievements on a console with no sets', function () {
@@ -1866,7 +1941,7 @@ it('softens the menu open rather than snapping it', function () {
 
     // The game page's menu is hand-rolled, so it carries Alpine's transition
     // rather than the popover one the Flux menus get from the stylesheet.
-    $this->get(route('games.show', $game))
+    $this->get(route('games.show', $game->routeParameters()))
         ->assertOk()
         ->assertSee('x-transition:enter', escape: false)
         ->assertSee('origin-top-right', escape: false);
@@ -1981,7 +2056,7 @@ it('names the layout among the shelf figures, only where there was a choice', fu
 
     $this->get(route('consoles.games', ['console' => 'ps2']))
         ->assertOk()
-        ->assertSeeInOrder(['Layout', 'Open PS2 Loader', 'Identified', 'On disk']);
+        ->assertSeeInOrder(['Layout', 'Open PS2 Loader', 'Files', 'On disk']);
 
     Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
 

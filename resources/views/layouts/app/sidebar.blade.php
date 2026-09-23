@@ -1,7 +1,9 @@
 @php
     // One grouped query rather than a count per console: the list below runs
-    // on every page of the app.
+    // on every page of the app. Identified games only, the same figure the
+    // console cards and the shelf call Games.
     $gameCounts = App\Models\Game::query()
+        ->where('status', App\Enums\GameStatus::Matched)
         ->selectRaw('console, count(*) as games')
         ->groupBy('console')
         ->pluck('games', 'console');
@@ -45,7 +47,8 @@
 
                         <div class="flex flex-col gap-px">
                             @foreach ($installed as $console)
-                                @php($isCurrent = request()->routeIs('consoles.games') && request()->route('console') === $console->key)
+                                {{-- A game is inside its console now, so its page lights the console too. --}}
+                                @php($isCurrent = request()->routeIs('consoles.games', 'games.show') && request()->route('console') === $console->key)
 
                                 <a
                                     href="{{ route('consoles.games', ['console' => $console->key]) }}"
@@ -65,7 +68,10 @@
                     </div>
                 @endif
 
-                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.*')" wire:navigate>
+                {{-- The all-games list only. A game's own page lives under its
+                     console and lights that console instead, whichever list it
+                     was opened from. --}}
+                <flux:sidebar.item icon="rectangle-stack" :href="route('games.index')" :current="request()->routeIs('games.index')" wire:navigate>
                     {{ __('Games') }}
                 </flux:sidebar.item>
 

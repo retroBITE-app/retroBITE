@@ -18,6 +18,11 @@
         </include>
     </source>
     <php>
+        <!-- The whole suite runs in one process, and past seven hundred tests
+             it outgrows the container's 128M default — it dies as a fatal
+             partway through, looking like a crash in whichever view it was
+             rendering at the time. -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing" force="true"/>
         <!-- Fixed, throwaway key. The suite needs one to boot the encrypter and
              the repository ships no .env, so without this every test that
