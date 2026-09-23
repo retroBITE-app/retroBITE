@@ -602,6 +602,34 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
      full width, exactly as the game page's does. --}}
 <section class="w-full pb-14">
     <div class="flex flex-col">
+        {{-- The shelf's art runs behind the hero and the filter row both,
+             and fades into the ground just under the filters, so the page
+             below starts clean. Its layers hang off this wrapper rather than
+             the hero for that reason. --}}
+        <div class="relative">
+        @if ($this->lockedTo !== null)
+            @if ($this->heroArt !== null)
+                {{-- Off centre vertically, as on the game page: key art
+                     puts its subject above the middle far more often than
+                     not, and dead centre cuts heads off. --}}
+                <div aria-hidden="true" class="absolute inset-0 bg-cover bg-[position:50%_28%]"
+                     style="background-image: url('{{ route('media.show', ['path' => $this->heroArt]) }}')"></div>
+            @else
+                {{-- A shelf with no artwork yet is most of a new library.
+                     The band keeps its height and its ground rather than
+                     collapsing to the plain heading it used to be. --}}
+                <div aria-hidden="true" class="absolute inset-0 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]"></div>
+            @endif
+
+            <div aria-hidden="true" class="absolute inset-0 hero-fade-y"></div>
+
+            @if ($this->heroArt !== null)
+                @scanlines
+                    <div aria-hidden="true" class="scanlines absolute inset-0"></div>
+                @endscanlines
+            @endif
+        @endif
+
         @if ($this->lockedTo !== null)
             {{-- The shelf's hero, the game page's own: key art to the window
                  edges, a fade taking it down into the page's ground, scanlines
@@ -614,52 +642,40 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                  a title and a row of chips. The content sits inside the band
                  rather than being pulled up over it for the same reason.
 
-                 The height is the 80px console plus its bottom gutter plus the
-                 bar of controls above it, and nothing else — it cannot go
-                 lower without the machine sitting on the Actions button. --}}
-            <div class="relative h-[170px] lg:h-[190px]">
-                @if ($this->heroArt !== null)
-                    {{-- Off centre vertically, as on the game page: key art
-                         puts its subject above the middle far more often than
-                         not, and dead centre cuts heads off. --}}
-                    <div aria-hidden="true" class="absolute inset-0 bg-cover bg-[position:50%_28%]"
-                         style="background-image: url('{{ route('media.show', ['path' => $this->heroArt]) }}')"></div>
-                @else
-                    {{-- A shelf with no artwork yet is most of a new library.
-                         The band keeps its height and its ground rather than
-                         collapsing to the plain heading it used to be. --}}
-                    <div aria-hidden="true" class="absolute inset-0 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]"></div>
-                @endif
-
-                <div aria-hidden="true" class="absolute inset-0 hero-fade-y"></div>
-
-                @if ($this->heroArt !== null)
-                    @scanlines
-                        <div aria-hidden="true" class="scanlines absolute inset-0"></div>
-                    @endscanlines
-                @endif
-
+                 The bar and the content are in the flow rather than pinned to
+                 the band's edges, so below lg, where the name and the figures
+                 stack, the band grows to hold them instead of the figures
+                 climbing into the bar. min-h gives the desktop band the 80px
+                 console, its gutter and the bar, with a tenth again of room
+                 for the art. --}}
+            <div class="relative flex min-h-[187px] flex-col justify-between lg:min-h-[209px]">
                 {{-- pl-14 clears the floating hamburger, which sits at top-4
                      left-4. The same offsets as the game page's bar, so the
                      Actions button does not move between the two. --}}
-                <div class="absolute top-4 right-4 left-4 flex items-center gap-3.5 pl-14 lg:top-5.5 lg:inset-x-7.5 lg:pl-0">
+                <div class="relative flex items-center gap-2.5 pt-4 pr-4 pl-18 sm:gap-3.5 lg:px-7.5 lg:pt-5.5">
                     <a
                         href="{{ route('consoles.index') }}"
                         wire:navigate
                         class="flex items-center gap-1.5 rounded-lg border border-line-input bg-scrim/60 px-2.75 py-1.5 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                     >
                         <flux:icon.arrow-left class="size-3.5" />
-                        {{ __('Consoles') }}
+                        {{-- Icon only on a phone, so the search keeps its room. --}}
+                        <span class="max-sm:sr-only">{{ __('Consoles') }}</span>
                     </a>
 
-                    <flux:dropdown position="bottom" align="end" class="ml-auto">
+                    {{-- Up here rather than in the filter row, which it used to
+                         fill half of. It pushes Actions to the right edge, and
+                         shrinks before anything else does on a phone. --}}
+                    <x-search-field wire:model.live.debounce.300ms="query" class="ml-auto w-full max-w-64 flex-1" />
+
+                    <flux:dropdown position="bottom" align="end">
                         <button
                             type="button"
                             class="flex cursor-pointer items-center gap-1.75 rounded-lg border border-line-input bg-scrim/60 px-3 py-1.75 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         >
                             <flux:icon.ellipsis-horizontal class="size-3.5" />
-                            {{ __('Actions') }}
-                            <flux:icon.chevron-down class="size-[11px] text-fg-dim" />
+                            <span class="max-sm:sr-only">{{ __('Actions') }}</span>
+                            <flux:icon.chevron-down class="size-[11px] text-fg-dim max-sm:hidden" />
                         </button>
 
                         <flux:menu>
@@ -740,28 +756,16 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                      justify-between rather than ms-auto on the figures, so the
                      two blocks wrap onto separate lines on a narrow screen
                      instead of the numbers being pushed off the edge. --}}
-                <div class="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-between gap-x-8 gap-y-3 px-4 pb-5 lg:px-8 lg:pb-6">
+                <div class="relative flex flex-col gap-4 px-4 pt-8 pb-11 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-8 lg:pt-6 lg:pb-6">
                     <div class="flex min-w-0 items-center gap-4">
                         {{-- The machine itself, at the size it can actually be
                              read at. Everything else in this block is text, so
                              it is the one thing that says which shelf this is
                              before a word is read. --}}
-                        <img src="{{ $this->lockedTo->icon }}" alt="" class="size-20 shrink-0 object-contain" />
+                        <img src="{{ $this->lockedTo->icon }}" alt="" class="size-14 shrink-0 object-contain lg:size-20" />
 
                         <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                                <h1 class="text-display font-medium tracking-display text-fg-bright">{{ $this->lockedTo->name }}</h1>
-
-                                {{-- Only where the console offers more than one
-                                     arrangement: the folders on the share are
-                                     read that way, and getting it wrong is what
-                                     an empty shelf usually means. --}}
-                                @if ($this->layoutLabel !== null)
-                                    <span class="rounded-md border border-accent-tint/55 bg-accent-tint/10 px-2 py-1 font-mono text-xs text-accent">
-                                        {{ $this->layoutLabel }}
-                                    </span>
-                                @endif
-                            </div>
+                            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ $this->lockedTo->name }}</h1>
 
                             {{-- Who made it and when, under the name. Joined by
                                  a middot rather than laid out in two slots, so
@@ -787,10 +791,23 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                              under itself: a header is read at a glance and a
                              number with its name beneath it survives that.
 
-                             text-end so the column of numbers hangs off the
-                             right edge rather than off its own label, which is
-                             what makes them read as a set. --}}
-                        <dl class="flex flex-wrap items-end gap-x-8 gap-y-3 text-end">
+                             At lg, text-end so the column of numbers hangs off
+                             the right edge rather than off its own label, which
+                             is what makes them read as a set. Below it they sit
+                             under the name, left-aligned, two by two on a phone. --}}
+                        <dl class="grid grid-cols-2 gap-x-8 gap-y-3 sm:flex sm:flex-wrap sm:items-end lg:text-end">
+                            {{-- Only where the console offers more than one
+                                 arrangement: the folders on the share are read
+                                 that way, and getting it wrong is what an empty
+                                 shelf usually means. First, so the numbers stay
+                                 together at the right edge. --}}
+                            @if ($this->layoutLabel !== null)
+                                <div class="min-w-0">
+                                    <dt class="kicker text-fg-faint">{{ __('Layout') }}</dt>
+                                    <dd class="font-mono text-lg text-fg-bright max-sm:text-base">{{ $this->layoutLabel }}</dd>
+                                </div>
+                            @endif
+
                             <div>
                                 <dt class="kicker text-fg-faint">{{ __('Games') }}</dt>
                                 <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ $this->consoleStats['games'] }}</dd>
@@ -829,25 +846,27 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                  padding the layout used to supply is this band's own now, and
                  max-lg:pt-16 is what clears the floating hamburger that a
                  bleeding page has to get out of the way of itself. --}}
-            <div class="min-w-0 px-4 pt-6 max-lg:pt-16 lg:px-8 lg:pt-8">
-                <p class="kicker mb-1.5 text-fg-faint">{{ __('Library') }}</p>
-                <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Games') }}</h1>
+            <div class="flex min-w-0 flex-wrap items-end justify-between gap-3 px-4 pt-6 max-lg:pt-16 lg:px-8 lg:pt-8">
+                <div class="min-w-0">
+                    <p class="kicker mb-1.5 text-fg-faint">{{ __('Library') }}</p>
+                    <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Games') }}</h1>
+                </div>
+
+                {{-- Beside the heading, where the console shelf has it in its
+                     bar: out of the filter row on both pages alike. --}}
+                <x-search-field wire:model.live.debounce.300ms="query" class="w-full sm:max-w-64" />
             </div>
         @endif
 
-        <div class="flex flex-col gap-6 px-4 pt-6 lg:px-8 lg:pt-7">
-        {{-- Four jobs in one row, ruled off from each other: what you are
-             looking for, which part of the library to look in, how to order
-             what comes back, and how to draw it.
+        <div class="relative px-4 pt-6 pb-6 lg:px-8 lg:pt-7">
+        {{-- Three jobs in one row, ruled off from each other: which part of
+             the library to look in, how to order what comes back, and how to
+             draw it. Search lives up in the hero bar, beside Actions.
 
              The rules are hidden below lg. The row wraps onto two or three
              lines there, and a vertical rule at the end of a wrapped line
              points at nothing. --}}
         <div class="flex flex-wrap items-end gap-3">
-            <flux:input wire:model.live.debounce.300ms="query" :placeholder="__('Search titles')" class="min-w-56 flex-1" size="sm" />
-
-            <div aria-hidden="true" class="mb-1.5 hidden h-6 w-px shrink-0 bg-line lg:block"></div>
-
             @if ($this->lockedTo === null)
                 <flux:select wire:model.live="consoleFilter" size="sm" class="w-44">
                     <flux:select.option value="">{{ __('All consoles') }}</flux:select.option>
@@ -902,26 +921,31 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                  between two selects. The rule travels with it. --}}
             <div aria-hidden="true" class="mb-1.5 ms-auto hidden h-6 w-px shrink-0 bg-line lg:block"></div>
 
-            <flux:button.group class="max-lg:ms-auto">
-                <flux:button
-                    size="sm"
-                    icon="squares-2x2"
-                    :variant="$this->viewMode === 'cards' ? 'filled' : 'ghost'"
-                    :aria-pressed="$this->viewMode === 'cards' ? 'true' : 'false'"
-                    :aria-label="__('Show covers')"
-                    wire:click="setView('cards')"
-                />
-                <flux:button
-                    size="sm"
-                    icon="list-bullet"
-                    :variant="$this->viewMode === 'table' ? 'filled' : 'ghost'"
-                    :aria-pressed="$this->viewMode === 'table' ? 'true' : 'false'"
-                    :aria-label="__('Show a list')"
-                    wire:click="setView('table')"
-                />
-            </flux:button.group>
+            {{-- The docs viewer's Preview / Markdown pill, with icons: amber
+                 for the view in force, and one border round the pair. --}}
+            <div class="flex items-center gap-0.5 rounded-lg border border-line-input p-0.5 max-lg:ms-auto">
+                @foreach (['cards' => ['icon' => 'squares-2x2', 'label' => __('Show covers')], 'table' => ['icon' => 'list-bullet', 'label' => __('Show a list')]] as $mode => ['icon' => $icon, 'label' => $label])
+                    <button
+                        type="button"
+                        wire:click="setView('{{ $mode }}')"
+                        aria-pressed="{{ $this->viewMode === $mode ? 'true' : 'false' }}"
+                        aria-label="{{ $label }}"
+                        title="{{ $label }}"
+                        @class([
+                            'grid cursor-pointer place-items-center rounded-md px-2 py-1.25 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+                            'bg-accent-tint/15 text-accent' => $this->viewMode === $mode,
+                            'text-fg-dim hover:bg-hover hover:text-fg' => $this->viewMode !== $mode,
+                        ])
+                    >
+                        <flux:icon :name="$icon" class="size-4" />
+                    </button>
+                @endforeach
+            </div>
+        </div>
+        </div>
         </div>
 
+        <div class="flex flex-col gap-6 px-4 lg:px-8">
         @if ($this->games->isEmpty())
             <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
                 <p class="text-sm text-fg-soft">{{ __('Nothing matches that.') }}</p>
