@@ -97,13 +97,15 @@ new #[Title('Consoles')] class extends Component
 
             return [
                 'console' => $console,
-                'games' => FolderCounts::gamesIn($console),
+                'files' => FolderCounts::gamesIn($console),
                 'identified' => (int) $identified->get($console->key, 0),
                 'folder' => ConsoleSourceFolder::pathFor($console),
                 'achievements' => $possible > 0
                     ? [
-                        'unlocked' => (int) ($hardcore ? $progress->unlocked_hardcore : $progress->unlocked),
+                        'unlocked' => $unlocked = (int) ($hardcore ? $progress->unlocked_hardcore : $progress->unlocked),
                         'possible' => $possible,
+                        'percent' => (int) round($unlocked / $possible * 100),
+                        'hardcore' => $hardcore,
                     ]
                     : null,
                 // Only where there was a choice to make. For the 134 consoles
@@ -631,11 +633,12 @@ new #[Title('Consoles')] class extends Component
         @else
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 @foreach ($this->added as $row)
+                    {{-- The same hover as a game card: the border takes the
+                         accent and the name brightens, and nothing moves. --}}
                     <div wire:key="added-{{ $row['console']->key }}"
-                         class="group relative flex items-center gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-line-input hover:bg-hover">
+                         class="group relative flex flex-col gap-4 rounded-xl border border-line bg-surface p-4 transition-colors hover:border-accent-tint focus-within:border-accent-tint">
                         {{-- Stretched over the card rather than wrapping it, so
-                             Scan and the menu sit above the link instead of
-                             inside it. --}}
+                             the menu sits above the link instead of inside it. --}}
                         <a
                             href="{{ route('consoles.games', ['console' => $row['console']->key]) }}"
                             wire:navigate
@@ -643,25 +646,142 @@ new #[Title('Consoles')] class extends Component
                             class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         ></a>
 
-                        <img src="{{ $row['console']->icon }}" alt="" class="size-12 shrink-0 object-contain" />
+                        <div class="flex items-start gap-4">
+                            <img src="{{ $row['console']->icon }}" alt="" class="size-12 shrink-0 object-contain" />
 
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate font-medium text-fg-bright">{{ $row['console']->name }}</p>
-                            <p class="mt-0.5 truncate text-sm text-fg-faint">
-                                {{ $row['games'] }} {{ __('games') }}
-                                {{-- Gated on the identified count, not the file count: the
-                                     files are read off the disk and go to zero when a drive
-                                     is unmounted, which is no reason to hide what the
-                                     provider already told us. --}}
-                                @if ($row['identified'] > 0)
-                                    · {{ $row['identified'] }} {{ __('identified') }}
-                                @endif
-                                @if ($row['achievements'] !== null)
-                                    · <span class="text-accent">{{ $row['achievements']['unlocked'] }} / {{ $row['achievements']['possible'] }} {{ __('achievements') }}</span>
-                                @endif
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate font-medium text-fg transition-colors group-hover:text-fg-bright">{{ $row['console']->name }}</p>
+                                <p class="mt-0.5 truncate text-sm text-fg-faint">
+                                    {{-- Joined here rather than with an @if between them,
+                                         which Livewire would mark with a comment mid-line. --}}
+                                    {{ collect([$row['console']->brand, $row['console']->released])->filter()->join(' · ') }}
+                                </p>
+                            </div>
+
+                            <div class="relative z-20 -me-1.5 -mt-1 shrink-0">
+                                <flux:dropdown position="bottom" align="end">
+                                    <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
+                                    <flux:menu>
+                                        @php
+                                            // The group under Scan is two optional
+                                            // items: most consoles know one
+                                            // arrangement and only a couple have a
+                                            // loader to write for. Without this the
+                                            // menu would draw two rules in a row.
+                                            $rowLayouts = count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1;
+                                            $rowExports = $this->exportsFor($row['console']);
+                                        @endphp
+
+                                        {{-- In here rather than on the card, where
+                                             a click meant for the console landed
+                                             on it and walked the whole folder. --}}
+                                        <flux:menu.item icon="magnifying-glass"
+                                                        wire:click="scan('{{ $row['console']->key }}')">
+                                            {{ __('Scan folder') }}
+                                        </flux:menu.item>
+
+                                        <flux:menu.separator />
+
+                                        @if ($rowLayouts)
+                                            <flux:menu.item icon="folder-open"
+                                                            wire:click="changeLayout('{{ $row['console']->key }}')">
+                                                {{ __('Change layout') }}
+                                            </flux:menu.item>
+                                        @endif
+
+                                        {{-- The only actions in the app that write into the
+                                             library, so each says where it writes before it
+                                             does it. Offered only where the loader that reads
+                                             those folders is the one in use. --}}
+                                        @foreach ($rowExports as $export)
+                                            <flux:menu.item icon="arrow-down-tray"
+                                                            wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
+                                                            wire:confirm="{{ __('Write OPL :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
+                                                                'export' => Str::upper($export),
+                                                                'folder' => $row['folder'].'/'.Str::upper($export),
+                                                            ]) }}">
+                                                {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
+                                            </flux:menu.item>
+                                        @endforeach
+
+                                        @if ($rowLayouts || $rowExports !== [])
+                                            <flux:menu.separator />
+                                        @endif
+
+                                        <flux:menu.item icon="photo"
+                                                        wire:click="fetchMedia('{{ $row['console']->key }}')">
+                                            {{ __('Fetch missing artwork') }}
+                                        </flux:menu.item>
+
+                                        {{-- Confirmed, and the scraper's own count
+                                             is in the question: this is one
+                                             provider lookup per identified game,
+                                             and on a large console that is a
+                                             visible bite out of the day. --}}
+                                        <flux:menu.item icon="arrow-path"
+                                                        wire:click="fetchMedia('{{ $row['console']->key }}', true)"
+                                                        wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
+                                            {{ __('Re-fetch all artwork') }}
+                                        </flux:menu.item>
+
+                                        <flux:menu.separator />
+
+                                        <flux:menu.item icon="star"
+                                                        wire:click="fetchRatings('{{ $row['console']->key }}')">
+                                            {{ __('Fetch missing ratings') }}
+                                        </flux:menu.item>
+
+                                        {{-- Confirmed for the same reason as the
+                                             artwork above it: one provider lookup
+                                             per identified game, spent against the
+                                             same daily allowance. --}}
+                                        <flux:menu.item icon="arrow-path"
+                                                        wire:click="fetchRatings('{{ $row['console']->key }}', true)"
+                                                        wire:confirm="{{ __('Re-fetch ratings for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
+                                            {{ __('Re-fetch all ratings') }}
+                                        </flux:menu.item>
+
+                                        <flux:menu.separator />
+
+                                        {{-- The same destination the console's own
+                                             shelf offers, so there is one place a
+                                             console is configured and one way in
+                                             from either list. --}}
+                                        <flux:menu.item icon="cog-6-tooth"
+                                                        href="{{ route('console-config.edit', ['console' => $row['console']->key]) }}"
+                                                        wire:navigate>
+                                            {{ __('Manage console') }}
+                                        </flux:menu.item>
+
+                                        <flux:menu.separator />
+
+                                        <flux:menu.item icon="trash" variant="danger"
+                                                        wire:click="remove('{{ $row['console']->key }}')"
+                                                        wire:confirm="{{ __('Remove :console from your library? Its games stay and nothing on disk is touched.', ['console' => $row['console']->name]) }}">
+                                            {{ __('Remove') }}
+                                        </flux:menu.item>
+                                    </flux:menu>
+                                </flux:dropdown>
+                            </div>
+                        </div>
+
+                        {{--
+                            Games first and large, files after and small. The
+                            identified count is how many games there are; the
+                            file count is what is on the disk, and a four-disc
+                            set is four of those and one of these. The file count
+                            is read off the drive, so it is right before a scan
+                            has run and goes to zero when the drive is unmounted.
+                        --}}
+                        <div>
+                            <p class="flex items-baseline gap-1.5">
+                                <span class="text-2xl font-medium tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['identified']) }}</span>
+                                <span class="text-sm text-fg-soft">{{ trans_choice('{1} game|[0,*] games', $row['identified']) }}</span>
                             </p>
-                            <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-fg-faint">
-                                <span class="font-mono">{{ $row['folder'] }}</span>
+                            <p class="mt-1 flex items-center gap-1.5 truncate text-xs text-fg-faint">
+                                <span>{{ trans_choice('{1} :count file|[0,*] :count files', $row['files'], ['count' => Illuminate\Support\Number::format($row['files'])]) }}</span>
+                                <span aria-hidden="true">·</span>
+                                <span class="truncate font-mono">{{ $row['folder'] }}</span>
                                 @if ($row['layout'] !== null)
                                     <span aria-hidden="true">·</span>
                                     <span class="truncate">{{ $row['layout'] }}</span>
@@ -669,105 +789,20 @@ new #[Title('Consoles')] class extends Component
                             </p>
                         </div>
 
-                        <div class="relative z-20 flex shrink-0 items-center gap-1">
-                            <flux:button size="sm" variant="ghost" wire:click="scan('{{ $row['console']->key }}')">
-                                {{ __('Scan') }}
-                            </flux:button>
-
-                            <flux:dropdown position="bottom" align="end">
-                                <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" />
-                                <flux:menu>
-                                    @php
-                                        // The first group is two optional items:
-                                        // most consoles know one arrangement and
-                                        // only a couple have a loader to write
-                                        // for. Without this the menu would open
-                                        // on a rule with nothing above it.
-                                        $rowLayouts = count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1;
-                                        $rowExports = $this->exportsFor($row['console']);
-                                    @endphp
-
-                                    @if ($rowLayouts)
-                                        <flux:menu.item icon="folder-open"
-                                                        wire:click="changeLayout('{{ $row['console']->key }}')">
-                                            {{ __('Change layout') }}
-                                        </flux:menu.item>
-                                    @endif
-
-                                    {{-- The only actions in the app that write into the
-                                         library, so each says where it writes before it
-                                         does it. Offered only where the loader that reads
-                                         those folders is the one in use. --}}
-                                    @foreach ($rowExports as $export)
-                                        <flux:menu.item icon="arrow-down-tray"
-                                                        wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
-                                                        wire:confirm="{{ __('Write OPL :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
-                                                            'export' => Str::upper($export),
-                                                            'folder' => $row['folder'].'/'.Str::upper($export),
-                                                        ]) }}">
-                                            {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
-                                        </flux:menu.item>
-                                    @endforeach
-
-                                    @if ($rowLayouts || $rowExports !== [])
-                                        <flux:menu.separator />
-                                    @endif
-
-                                    <flux:menu.item icon="photo"
-                                                    wire:click="fetchMedia('{{ $row['console']->key }}')">
-                                        {{ __('Fetch missing artwork') }}
-                                    </flux:menu.item>
-
-                                    {{-- Confirmed, and the scraper's own count
-                                         is in the question: this is one
-                                         provider lookup per identified game,
-                                         and on a large console that is a
-                                         visible bite out of the day. --}}
-                                    <flux:menu.item icon="arrow-path"
-                                                    wire:click="fetchMedia('{{ $row['console']->key }}', true)"
-                                                    wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
-                                        {{ __('Re-fetch all artwork') }}
-                                    </flux:menu.item>
-
-                                    <flux:menu.separator />
-
-                                    <flux:menu.item icon="star"
-                                                    wire:click="fetchRatings('{{ $row['console']->key }}')">
-                                        {{ __('Fetch missing ratings') }}
-                                    </flux:menu.item>
-
-                                    {{-- Confirmed for the same reason as the
-                                         artwork above it: one provider lookup
-                                         per identified game, spent against the
-                                         same daily allowance. --}}
-                                    <flux:menu.item icon="arrow-path"
-                                                    wire:click="fetchRatings('{{ $row['console']->key }}', true)"
-                                                    wire:confirm="{{ __('Re-fetch ratings for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
-                                        {{ __('Re-fetch all ratings') }}
-                                    </flux:menu.item>
-
-                                    <flux:menu.separator />
-
-                                    {{-- The same destination the console's own
-                                         shelf offers, so there is one place a
-                                         console is configured and one way in
-                                         from either list. --}}
-                                    <flux:menu.item icon="cog-6-tooth"
-                                                    href="{{ route('console-config.edit', ['console' => $row['console']->key]) }}"
-                                                    wire:navigate>
-                                        {{ __('Manage console') }}
-                                    </flux:menu.item>
-
-                                    <flux:menu.separator />
-
-                                    <flux:menu.item icon="trash" variant="danger"
-                                                    wire:click="remove('{{ $row['console']->key }}')"
-                                                    wire:confirm="{{ __('Remove :console from your library? Its games stay and nothing on disk is touched.', ['console' => $row['console']->name]) }}">
-                                        {{ __('Remove') }}
-                                    </flux:menu.item>
-                                </flux:menu>
-                            </flux:dropdown>
-                        </div>
+                        @if ($row['achievements'] !== null)
+                            {{-- The same bar and counts as a game card, summed
+                                 over the console. mt-auto so it keeps to the
+                                 bottom when a neighbour in the row is taller. --}}
+                            <div class="mt-auto flex items-center gap-2">
+                                <div class="h-1 flex-1 overflow-hidden rounded-sm bg-raised">
+                                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" style="width: {{ $row['achievements']['percent'] }}%"></div>
+                                </div>
+                                <span
+                                    class="shrink-0 font-mono text-xs text-fg-dim"
+                                    title="{{ $row['achievements']['hardcore'] ? __('Hardcore achievements') : __('Achievements') }}"
+                                >{{ $row['achievements']['unlocked'] }} / {{ $row['achievements']['possible'] }}</span>
+                            </div>
+                        @endif
                     </div>
                 @endforeach
             </div>

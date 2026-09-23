@@ -827,7 +827,7 @@ it('counts the files on disk rather than the rows in the database', function () 
     // disk's answer, so it says three either way.
     Game::factory()->create(['console' => 'ps2', 'title' => 'Not on this drive']);
 
-    Livewire::test('consoles.index')->assertSee('3 games');
+    Livewire::test('consoles.index')->assertSee('3 files');
 });
 
 it('counts the same files the scanner would', function () {
@@ -844,7 +844,7 @@ it('counts the same files the scanner would', function () {
 
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
 
-    Livewire::test('consoles.index')->assertSee('1 games');
+    Livewire::test('consoles.index')->assertSee('1 file');
 });
 
 it('does not count a bios dump as a game', function () {
@@ -857,7 +857,7 @@ it('does not count a bios dump as a game', function () {
 
     ConsoleSourceFolder::add(new Console('ps2'));
 
-    Livewire::test('consoles.index')->assertSee('2 games');
+    Livewire::test('consoles.index')->assertSee('2 files');
 });
 
 it('does not walk the drive again on every poll', function () {
@@ -866,18 +866,18 @@ it('does not walk the drive again on every poll', function () {
 
     ConsoleSourceFolder::add(new Console('ps2'));
 
-    Livewire::test('consoles.index')->assertSee('1 games');
+    Livewire::test('consoles.index')->assertSee('1 file');
 
     File::put($this->root.'/ps2/Two.iso', 'x');
 
     // Still the cached answer: the page polls itself every two seconds, and
     // re-walking a five-thousand-file drive each time is the whole reason the
     // count is cached at all.
-    Livewire::test('consoles.index')->assertSee('1 games');
+    Livewire::test('consoles.index')->assertSee('1 file');
 
     FolderCounts::forget(new Console('ps2'));
 
-    Livewire::test('consoles.index')->assertSee('2 games');
+    Livewire::test('consoles.index')->assertSee('2 files');
 });
 
 it('forgets the count once a scan has walked the folder', function () {
@@ -886,7 +886,7 @@ it('forgets the count once a scan has walked the folder', function () {
 
     ConsoleSourceFolder::add(new Console('ps2'));
 
-    Livewire::test('consoles.index')->assertSee('1 games');
+    Livewire::test('consoles.index')->assertSee('1 file');
 
     File::put($this->root.'/ps2/Two.iso', 'x');
 
@@ -896,7 +896,7 @@ it('forgets the count once a scan has walked the folder', function () {
 
     (new ScanConsoleFolder('ps2'))->handle(app(LibraryScanner::class));
 
-    Livewire::test('consoles.index')->assertSee('2 games');
+    Livewire::test('consoles.index')->assertSee('2 files');
 });
 
 it('says nothing rather than throwing when the drive is not mounted', function () {
@@ -906,7 +906,7 @@ it('says nothing rather than throwing when the drive is not mounted', function (
 
     // A card that renders is worth more than a page that does not. Finding out
     // the mount has gone is the scan's job, not the list's.
-    Livewire::test('consoles.index')->assertSee('0 games');
+    Livewire::test('consoles.index')->assertSee('0 files');
 
     it('caps a cover by its console rather than stretching it to the column', function () {
         $game = Game::factory()->forConsole('gba')->matched()->create(['title' => 'Metroid Fusion', 'slug' => 'fusion']);
@@ -1771,15 +1771,45 @@ it('rules artwork off from ratings in the console list menu', function () {
         ], escape: false);
 });
 
-it('does not open a console menu on a rule', function () {
+it('draws one rule between scan and artwork when the group between is empty', function () {
     // The SNES knows one arrangement and has no loader to write for, so the
-    // first group is empty and its rule would have nothing above it.
+    // group under Scan is empty and its own rule would sit on top of Scan's.
     ConsoleSourceFolder::add(new Console('snes'));
 
     $html = Livewire::test('consoles.index')->html();
-    $beforeArtwork = substr($html, 0, strpos($html, 'Fetch missing artwork'));
+    $scan = strpos($html, 'Scan folder');
+    $between = substr($html, $scan, strpos($html, 'Fetch missing artwork') - $scan);
 
-    expect($beforeArtwork)->not->toContain('data-flux-menu-separator');
+    expect(substr_count($between, 'data-flux-menu-separator'))->toBe(1);
+});
+
+it('offers scan in the menu rather than on the card', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    Queue::fake();
+
+    Livewire::test('consoles.index')
+        ->assertSeeInOrder(['data-flux-menu', 'Scan folder'], escape: false)
+        ->call('scan', 'snes');
+
+    Queue::assertPushed(ScanConsoleFolder::class, fn (ScanConsoleFolder $job): bool => $job->console === 'snes');
+});
+
+it('leads the card with the games and puts the files under them', function () {
+    File::ensureDirectoryExists($this->root.'/snes');
+
+    foreach (['A.sfc', 'B.sfc', 'C.sfc'] as $filename) {
+        File::put($this->root.'/snes/'.$filename, 'x');
+    }
+
+    ConsoleSourceFolder::add(new Console('snes'));
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'One', 'slug' => 'one']);
+
+    // Games identified, then the files that make them, then the maker and year
+    // out of the console's config.
+    Livewire::test('consoles.index')
+        ->assertSee('Nintendo · 1990')
+        ->assertSeeInOrder(['>1<', 'game', '3 files'], escape: false);
 });
 
 it('keeps the rule where the first group has something in it', function () {
