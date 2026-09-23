@@ -1006,7 +1006,7 @@ it('says nothing about the rating of a game that has none', function () {
     $this->get(route('games.show', $game))
         ->assertOk()
         ->assertDontSee('/ 100')
-        // Nothing stands in for an absent rating: no dash, no empty chip.
+        // The grid cell holds a dash, never a zero or a band colour.
         ->assertDontSee('out of 100 by ScreenScraper');
 });
 
@@ -1015,15 +1015,38 @@ it('states the rating once on the game page, not twice', function () {
         'title' => 'Super Mario World', 'slug' => 'smw',
     ]);
 
-    // It used to be a chip beside the title and a row in the metadata grid
-    // below, which left the reader working out which of the two was the
-    // other one. The chip is the one that stayed.
+    // A page that says the same number twice leaves the reader working out
+    // which of the two is the other one. The details grid is the one place.
     $page = $this->get(route('games.show', $game))->assertOk();
 
     expect(substr_count($page->getContent(), '84 / 100'))->toBe(1);
 
-    expect(Livewire::test('games.show', ['game' => $game])->instance()->detailRows)
-        ->each->not->toHaveKey('key', 'Rating');
+    $details = Livewire::test('games.show', ['game' => $game])->instance()->details;
+
+    expect(array_count_values(array_column($details, 'key')))->toHaveKey('rating', 1);
+});
+
+it('lays the game\'s facts out in the details grid, dashing what is missing', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create([
+        'title' => 'Super Mario World', 'slug' => 'smw',
+        'developer' => 'Nintendo EAD', 'publisher' => 'Nintendo', 'genre' => 'Platform', 'players' => null,
+    ]);
+
+    $details = Livewire::test('games.show', ['game' => $game])->instance()->details;
+
+    expect(array_column($details, 'key'))
+        ->toBe(['region', 'console', 'released', 'rating', 'developer', 'publisher', 'genre', 'players'])
+        ->and(array_column($details, 'value', 'key'))->toMatchArray([
+            'developer' => 'Nintendo EAD',
+            'publisher' => 'Nintendo',
+            'genre' => 'Platform',
+            'players' => '—',
+            'rating' => '—',
+        ]);
+
+    $this->get(route('games.show', $game))
+        ->assertOk()
+        ->assertSeeInOrder(['Developer', 'Nintendo EAD', 'Publisher', 'Nintendo', 'Genre', 'Platform']);
 });
 
 it('does not add a query per row to show ratings', function () {

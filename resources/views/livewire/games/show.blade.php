@@ -657,54 +657,38 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         return basename((string) config('settings.games_path')).'/'.$file->path;
     }
 
-    /** The amber eyebrow: the console, then the year when one is known. */
-    #[Computed]
-    public function kicker(): string
-    {
-        return Collection::make([
-            $this->game->console()?->name,
-            Str::substr((string) $this->game->release_date, 0, 4) ?: null,
-        ])->filter()->implode(' · ');
-    }
-
     /**
-     * The badges beside the region flag.
+     * The facts grid under the hero, eight cells in a fixed order.
      *
-     * @return array<int, string>
+     * Missing values are dashed rather than dropped: the grid is a 1px gap
+     * over the border colour, and a dropped cell leaves a hole in its last row.
+     *
+     * @return array<int, array{key: string, label: string, value: string}>
      */
     #[Computed]
-    public function chips(): array
+    public function details(): array
     {
-        return Collection::make([$this->game->console()?->name, $this->game->release_date])
-            ->filter()
-            ->map(fn (mixed $chip) => (string) $chip)
-            ->values()
-            ->all();
-    }
+        $rating = $this->game->rating;
 
-    /**
-     * The four-up metadata grid. Empty values are dropped rather than dashed,
-     * so the grid is narrower when the provider held less, not gappy.
-     *
-     * @return array<int, array{key: string, value: string}>
-     */
-    #[Computed]
-    public function detailRows(): array
-    {
         return Collection::make([
-            ['key' => __('Developer'), 'value' => $this->game->developer],
-            ['key' => __('Publisher'), 'value' => $this->game->publisher],
-            ['key' => __('Genre'), 'value' => $this->game->genre],
-            ['key' => __('Players'), 'value' => $this->game->players],
-            // No rating here. It is on the chip row above, and a page cannot
-            // say the same number twice without the reader wondering which
-            // of the two is the other one.
+            ['key' => 'region', 'label' => __('Region'), 'value' => $this->regionLabel ?? $this->game->region],
+            ['key' => 'console', 'label' => __('Console'), 'value' => $this->game->console()?->name],
+            ['key' => 'released', 'label' => __('Released'), 'value' => $this->game->release_date],
+            ['key' => 'rating', 'label' => __('Rating'), 'value' => $rating !== null ? $rating.' / 100' : null],
+            ['key' => 'developer', 'label' => __('Developer'), 'value' => $this->game->developer],
+            ['key' => 'publisher', 'label' => __('Publisher'), 'value' => $this->game->publisher],
+            ['key' => 'genre', 'label' => __('Genre'), 'value' => $this->game->genre],
+            ['key' => 'players', 'label' => __('Players'), 'value' => $this->game->players],
         ])
-            ->filter(fn (array $row) => filled(Arr::get($row, 'value')))
-            ->map(fn (array $row) => [
-                'key' => (string) Arr::get($row, 'key'),
-                'value' => (string) Arr::get($row, 'value'),
-            ])
+            ->map(function (array $cell): array {
+                $value = Arr::get($cell, 'value');
+
+                return [
+                    'key' => (string) Arr::get($cell, 'key'),
+                    'label' => (string) Arr::get($cell, 'label'),
+                    'value' => filled($value) ? (string) $value : '—',
+                ];
+            })
             ->values()
             ->all();
     }
@@ -1141,9 +1125,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {{-- Hero: the backdrop runs to the edges and the detail block is pulled up
          over its lower half, so the poster and title sit on the art.
          These two heights are load-bearing: the detail block below pulls up by
-         -mt-[190px] / lg:-mt-[450px], which is each of these minus the intended
+         -mt-[250px] / lg:-mt-[570px], which is each of these minus the intended
          overlap. Change one and change the other. --}}
-    <div class="relative h-[300px] lg:h-[560px]">
+    <div class="relative h-[360px] lg:h-[680px]">
         @if ($this->backdrop)
             <div class="absolute inset-0 bg-cover bg-[position:50%_28%]"
                  style="background-image: url('{{ route('media.show', ['path' => $this->backdrop]) }}')"></div>
@@ -1317,7 +1301,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </div>
     </div>
 
-    <div class="relative -mt-[190px] grid items-start gap-4.5 px-4 lg:-mt-[450px] lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-6.5 lg:px-8">
+    <div class="relative -mt-[250px] grid items-start gap-4.5 px-4 lg:-mt-[570px] lg:grid-cols-[auto_minmax(0,1fr)] lg:gap-6.5 lg:px-8">
         {{-- Height comes from the console's own config and the width follows the
              art, so a shelf of SNES boxes lines up without any of them being
              stretched. A placeholder has no art to take a width from, so the
@@ -1348,9 +1332,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </div>
 
         <div class="min-w-0">
-            <p class="kicker text-accent">{{ $this->kicker }}</p>
-
-            <div class="mt-2 flex flex-wrap items-end gap-x-3.5 gap-y-1">
+            <div class="flex flex-wrap items-end gap-x-3.5 gap-y-1">
                 @if ($this->logo)
                     <img src="{{ route('media.show', ['path' => $this->logo]) }}" alt="{{ $game->title }}" class="h-auto w-28 shrink-0" />
                 @endif
@@ -1359,62 +1341,44 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
             {{-- No filename here: the Files table below names every one of them,
                  and a multi-disc game has no single one to show. --}}
-            <div class="mt-4 flex flex-wrap items-center gap-1.75">
-                {{-- 26px is exactly the badges' height beside it: text-xs's 16px
-                     line box, their 8px of padding and 2px of border. Stated
-                     outright because no spacing step lands on it. The width
-                     follows, since region flags are not all one shape. --}}
-                @if ($this->regionIcon)
-                    <img
-                        src="{{ $this->regionIcon }}"
-                        alt="{{ $this->regionLabel ?? $game->region }}"
-                        title="{{ $this->regionLabel ?? $game->region }}"
-                        class="h-6.5 w-auto shrink-0 border-2 border-line-input"
-                    />
-                @elseif ($this->regionLabel)
-                    <span class="rounded-md border border-line-strong bg-surface px-2 py-1 font-mono text-xs text-fg-muted">
-                        {{ $this->regionLabel }}
-                    </span>
-                @endif
-
-                @foreach ($this->chips as $chip)
-                    <span class="rounded-md border border-line-strong bg-surface px-2 py-1 font-mono text-xs text-fg-muted">{{ $chip }}</span>
-                @endforeach
-
-                @if ($game->rating !== null)
-                    {{-- The same band colour and the same corners as the
-                         shelf badge, so a game does not change verdict — or
-                         shape — on the way here. Tinted rather than filled
-                         though: this one stands in a row of chips, and a
-                         solid block among them would read as a control. --}}
-                    <span
-                        title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
-                        @style([
-                            'border-color: color-mix(in srgb, '.App\Support\RatingBand::color($game->rating).' 55%, transparent)',
-                            'background-color: color-mix(in srgb, '.App\Support\RatingBand::color($game->rating).' 14%, transparent)',
-                            'color: '.App\Support\RatingBand::color($game->rating),
-                        ])
-                        class="rounded-md border px-2 py-1 font-mono text-xs font-semibold tabular-nums"
-                    >{{ $game->rating }} / 100</span>
-                @endif
-            </div>
-
-            @if ($this->detailRows !== [])
-                <dl class="mt-5 grid w-fit max-w-full grid-cols-[repeat(2,max-content)] gap-x-8.5 gap-y-2 lg:grid-cols-[repeat(4,max-content)]">
-                    @foreach ($this->detailRows as ['key' => $key, 'value' => $value])
-                        <div>
-                            <dt class="kicker text-fg-dim">{{ $key }}</dt>
-                            <dd class="mt-1.25 text-sm text-fg-bright">{{ $value }}</dd>
-                        </div>
-                    @endforeach
-                </dl>
-            @endif
-
-            <p class="mt-5 max-w-[100ch] text-sm leading-relaxed text-fg-muted text-pretty">
+            <p class="mt-4 max-w-[100ch] text-sm leading-relaxed text-fg-muted text-pretty">
                 {{ $game->description ?? __('No metadata yet — use Identify to fetch it.') }}
             </p>
         </div>
     </div>
+
+    {{-- The facts, out of the hero and into the dashboard's grid: a 1px gap
+         over the border colour separates the cells. --}}
+    <section class="relative z-1 px-4 pt-6.5 lg:px-8 lg:pt-10">
+        <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
+            @foreach ($this->details as ['key' => $key, 'label' => $label, 'value' => $value])
+                <div wire:key="detail-{{ $key }}" class="min-w-0 bg-sunken px-4.5 py-4">
+                    <dt class="kicker text-fg-faint">{{ $label }}</dt>
+
+                    @if ($key === 'region' && $this->regionIcon)
+                        {{-- The width follows, since region flags are not all one shape. --}}
+                        <dd class="mt-2 flex items-center gap-2 text-[15px] text-fg-bright">
+                            <img src="{{ $this->regionIcon }}" alt="" class="h-4 w-auto shrink-0 border border-line-input" />
+                            <span class="truncate">{{ $value }}</span>
+                        </dd>
+                    @elseif ($key === 'rating' && $game->rating !== null)
+                        {{-- The same band colour as the shelf badge, so a game
+                             does not change verdict on the way here. --}}
+                        <dd
+                            title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
+                            style="color: {{ App\Support\RatingBand::color($game->rating) }}"
+                            class="mt-2 font-mono text-[15px] font-semibold tabular-nums"
+                        >{{ $value }}</dd>
+                    @else
+                        <dd @class([
+                            'mt-2 truncate text-[15px] text-fg-bright',
+                            'font-mono tabular-nums' => $key === 'released',
+                        ]) title="{{ $value }}">{{ $value }}</dd>
+                    @endif
+                </div>
+            @endforeach
+        </dl>
+    </section>
 
     @if ($awaiting !== null || $fetchingFrom !== null || $ratingFrom !== null)
         <section class="relative z-1 flex flex-col gap-3 px-4 pt-6.5 lg:px-8 lg:pt-10">
@@ -1447,7 +1411,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {{-- One heading row for everything below it. Each panel drops the title
          it used to carry, since the tab now says it, and keeps only what is
          its own: the filter, the folder, the source. --}}
-    <section class="relative z-1 px-4 pt-6.5 lg:px-8 lg:pt-10">
+    <section class="relative z-1 px-4 pt-6.5 lg:px-8">
         <div class="flex gap-5.5 overflow-x-auto border-b border-raised">
             @foreach ($this->contentTabs as $contentTab)
                 <button
