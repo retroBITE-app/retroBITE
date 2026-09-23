@@ -20,6 +20,22 @@ test('authenticated users can visit the dashboard', function () {
     $response->assertOk();
 });
 
+test('the newest game is the hero and is not repeated in the cards beside it', function () {
+    foreach (['Oldest', 'Second', 'Third', 'Fourth', 'Newest'] as $title) {
+        Game::factory()->forConsole('snes')->create(['title' => $title, 'slug' => Str::slug($title)]);
+    }
+
+    $this->actingAs(User::factory()->create());
+
+    $content = $this->get(route('dashboard'))
+        ->assertOk()
+        ->assertSeeInOrder(['Newest', 'Fourth', 'Third', 'Second'])
+        ->assertDontSee('Oldest')
+        ->getContent();
+
+    expect(substr_count($content, 'Newest'))->toBe(1);
+});
+
 test('it counts identified games and the files on disk, in that order', function () {
     $root = sys_get_temp_dir().'/retrobite-dashboard-'.Str::random(8);
     File::ensureDirectoryExists($root.'/snes');

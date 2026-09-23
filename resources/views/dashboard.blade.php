@@ -13,14 +13,15 @@
     use Illuminate\Support\Number;
 
     // Media rides along because both the hero and the cards behind it are key
-    // art when there is any: one query for the lot rather than six.
+    // art when there is any: one query for the lot rather than eight. Four,
+    // because the newest is the hero and the three behind it are the cards.
     $recent = Game::query()
         ->with(['files', 'media'])
         ->latest('id')
-        ->take(3)
+        ->take(4)
         ->get();
 
-    // One query for the three, rather than a progress lookup inside the map.
+    // One query for the four, rather than a progress lookup inside the map.
     $recentProgress = RaProgress::query()
         ->where('user_id', auth()->id())
         ->whereIn('ra_game_id', $recent->pluck('retroachievements_id')->filter())
@@ -44,7 +45,9 @@
         ])
         ->all();
 
+    // The hero is left out of the cards, or the newest game shows up twice.
     $hero = $recent[0] ?? null;
+    $others = array_slice($recent, 1);
 
     // The consoles somebody put in their library, not every directory that
     // happens to exist under the ROM root.
@@ -224,7 +227,7 @@
             </div>
 
             <div class="flex min-w-0 flex-col gap-2.5">
-                @foreach ($recent as $game)
+                @foreach ($others as $game)
                     <a
                         href="{{ route('games.show', $game['id']) }}"
                         wire:navigate
