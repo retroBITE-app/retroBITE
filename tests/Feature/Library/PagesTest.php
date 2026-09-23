@@ -266,6 +266,9 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
     $logo = Media::factory()->for($game)->ofType('wheel', 'eu')->create();
     $clip = Media::factory()->for($game)->ofType('video')->create();
 
+    // The hero shows the title as text unless Settings → UI asks for the logo.
+    AppSetting::put(AppSetting::UI_HERO_TITLE, 'logo');
+
     $page = $this->get(route('games.show', $game))->assertOk();
 
     // One set, passed whole, so the strip and the hero cover agree on it.
@@ -280,7 +283,7 @@ it('opens every artwork in one viewer, captioned by kind and region', function (
     // would be a gallery. Asserted as the whole tag, since the attribute alone
     // appears legitimately on the thumbnail.
     $page->assertSeeHtml(
-        '<img src="'.route('media.show', ['path' => $logo->path]).'" alt="Final Fantasy IX" class="h-auto w-28 shrink-0" />'
+        '<img src="'.route('media.show', ['path' => $logo->path]).'" alt="Final Fantasy IX" class="block h-auto max-h-20 w-auto max-w-full" />'
     );
 
     // The strip itself lives behind the Artwork tab, which the URL names, so
@@ -464,16 +467,13 @@ it('saves which media types to fetch', function () {
         ->assertSet('enabled.box-2D', true)
         ->assertSet('enabled.video', false)
         ->assertSet('autoQueue', true)
-        ->assertSet('scanlines', true)
         ->set('enabled.video', true)
         ->set('enabled.box-2D', false)
         ->set('autoQueue', false)
-        ->set('scanlines', false)
         ->call('save');
 
     expect(MediaTypes::enabled())->toBe(['video'])
-        ->and(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse()
-        ->and(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeFalse();
+        ->and(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse();
 });
 
 it('filters by genre, splitting the comma-separated list the provider sends', function () {

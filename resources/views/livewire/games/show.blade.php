@@ -374,6 +374,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         unset(
             $this->cover,
             $this->logo,
+            $this->showLogo,
             $this->backdrop,
             $this->gallery,
             $this->galleryByRegion,
@@ -494,6 +495,13 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     public function logo(): ?string
     {
         return $this->game->artwork(MediaKind::Logo)?->path;
+    }
+
+    /** Whether the hero is headed by the logo, falling back to text when there is none. */
+    #[Computed]
+    public function showLogo(): bool
+    {
+        return $this->logo !== null && AppSetting::get(AppSetting::UI_HERO_TITLE) === 'logo';
     }
 
     /** The key art behind the hero. Its absence is the design's second state. */
@@ -1332,12 +1340,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </div>
 
         <div class="min-w-0">
-            <div class="flex flex-wrap items-end gap-x-3.5 gap-y-1">
-                @if ($this->logo)
-                    <img src="{{ route('media.show', ['path' => $this->logo]) }}" alt="{{ $game->title }}" class="h-auto w-28 shrink-0" />
+            {{-- One or the other, per Settings → UI. The logo stays inside the
+                 h1 with the title as its alt, so the heading still names the game. --}}
+            <h1 class="text-2xl font-medium tracking-display text-fg-bright lg:text-[34px]">
+                @if ($this->showLogo)
+                    <img src="{{ route('media.show', ['path' => $this->logo]) }}" alt="{{ $game->title }}" class="block h-auto max-h-20 w-auto max-w-full" />
+                @else
+                    {{ $game->title }}
                 @endif
-                <h1 class="text-2xl font-medium tracking-display text-fg-bright lg:text-[34px]">{{ $game->title }}</h1>
-            </div>
+            </h1>
 
             {{-- No filename here: the Files table below names every one of them,
                  and a multi-disc game has no single one to show. --}}
