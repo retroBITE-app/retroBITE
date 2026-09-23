@@ -9,6 +9,7 @@
     use App\Services\NetworkService;
     use App\Support\Console;
     use App\Support\LibraryStorage;
+    use App\Support\Scanning\FolderCounts;
     use Illuminate\Support\Number;
 
     // Media rides along because both the hero and the cards behind it are key
@@ -49,8 +50,13 @@
     // happens to exist under the ROM root.
     $consoles = ConsoleSourceFolder::consoles();
 
-    $games = Game::count();
-    $identified = Game::where('status', GameStatus::Matched)->count();
+    // Games are what the provider identified; files are what is on the disk.
+    // The same two figures, in the same order, as the console cards — a
+    // four-disc set is four files and one game, and a placeholder the
+    // provider has not answered for yet is neither a game nor worth hiding.
+    $games = Game::where('status', GameStatus::Matched)->count();
+    $unmatched = Game::count() - $games;
+    $files = $consoles->sum(fn (Console $console): int => FolderCounts::gamesIn($console));
 
     // Measured off the disk rather than summed from game_files: the database
     // knows only what a scan has imported, which leaves out the artwork and
@@ -73,8 +79,8 @@
         ->first();
 
     $cells = [
-        ['label' => 'Games', 'value' => (string) $games, 'sub' => trans_choice('across :count console|across :count consoles', $consoles->count(), ['count' => $consoles->count()])],
-        ['label' => 'Identified', 'value' => (string) $identified, 'sub' => __(':count still unmatched', ['count' => $games - $identified])],
+        ['label' => 'Games', 'value' => Number::format($games), 'sub' => __(':count still unmatched', ['count' => Number::format($unmatched)])],
+        ['label' => 'Files', 'value' => Number::format($files), 'sub' => trans_choice('across :count console|across :count consoles', $consoles->count(), ['count' => $consoles->count()])],
         ['label' => 'Consoles', 'value' => (string) $consoles->count(), 'sub' => __('in your library')],
         ['label' => 'Achievements', 'value' => Number::format((int) $ra->unlocked), 'sub' => __('of :count tracked', ['count' => Number::format((int) $ra->possible)])],
         ['label' => 'Points', 'value' => Number::format((int) $ra->points), 'sub' => __('hardcore :count', ['count' => Number::format((int) $ra->points_hardcore)])],
