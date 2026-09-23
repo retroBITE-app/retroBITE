@@ -1467,7 +1467,7 @@ it('keeps the header band when the shelf has no artwork at all', function () {
     // than collapsing back to the plain heading it used to be.
     Livewire::test('games.index', ['console' => 'snes'])
         ->assertSee('Super Nintendo')
-        ->assertSee('h-[170px]', escape: false)
+        ->assertSee('min-h-[187px]', escape: false)
         ->assertSee('var(--color-raised)', escape: false);
 });
 
@@ -1481,7 +1481,7 @@ it('runs the shelf hero to the page edges', function () {
     // own, which is what keeps them lined up with the console's name.
     $html = Livewire::test('games.index', ['console' => 'snes'])->html();
 
-    expect($html)->toContain('lg:inset-x-7.5')   // the bar, at the game page's offsets
+    expect($html)->toContain('lg:px-7.5')       // the bar, at the game page's offsets
         ->and($html)->toContain('lg:px-8');      // the bands below, carrying their own gutters
 });
 
@@ -1946,12 +1946,60 @@ it('clears the player filter along with the rest', function () {
         ->assertSet('sort', 'year');
 });
 
-it('rules the filter row into its four jobs', function () {
+it('rules the filter row into its three jobs', function () {
     Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
 
-    // Search | filters | sort | view. Three rules, and they are hidden below
-    // lg where the row wraps and a rule would point at nothing.
+    // Filters | sort | view — search lives in the hero bar now. Two rules,
+    // and they are hidden below lg where the row wraps and a rule would
+    // point at nothing.
     $html = Livewire::test('games.index')->html();
 
-    expect(substr_count($html, 'h-6 w-px shrink-0 bg-line'))->toBe(3);
+    expect(substr_count($html, 'h-6 w-px shrink-0 bg-line'))->toBe(2);
+});
+
+it('searches from the hero bar, left of Actions, on a console shelf', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    $page = $this->get(route('consoles.games', ['console' => 'snes']))->assertOk();
+
+    expect(substr_count($page->getContent(), 'wire:model.live.debounce.300ms="query"'))->toBe(1);
+
+    $page->assertSeeInOrder(['Search titles', 'Actions', 'Any genre']);
+});
+
+it('searches from beside the heading on the whole library', function () {
+    $page = $this->get(route('games.index'))->assertOk();
+
+    expect(substr_count($page->getContent(), 'wire:model.live.debounce.300ms="query"'))->toBe(1);
+
+    $page->assertSeeInOrder(['Games', 'Search titles', 'All consoles']);
+});
+
+it('names the layout among the shelf figures, only where there was a choice', function () {
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+    Game::factory()->forConsole('ps2')->matched()->create(['title' => 'Okami', 'slug' => 'okami']);
+
+    $this->get(route('consoles.games', ['console' => 'ps2']))
+        ->assertOk()
+        ->assertSeeInOrder(['Layout', 'Open PS2 Loader', 'Identified', 'On disk']);
+
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    $this->get(route('consoles.games', ['console' => 'snes']))
+        ->assertOk()
+        ->assertDontSee('>Layout<', false);
+});
+
+it('focuses the search on Ctrl+K and marks the view in force', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+
+    $this->get(route('consoles.games', ['console' => 'snes']))
+        ->assertOk()
+        ->assertSee('x-on:keydown.ctrl.k.window.prevent', false)
+        ->assertSee('x-on:keydown.meta.k.window.prevent', false);
+
+    $html = Livewire::test('games.index')->call('setView', 'table')->html();
+
+    expect($html)->toMatch('~aria-pressed="true"\s+aria-label="Show a list"~')
+        ->and($html)->toMatch('~aria-pressed="false"\s+aria-label="Show covers"~');
 });
