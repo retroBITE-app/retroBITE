@@ -25,13 +25,26 @@ return [
     'legacy_env_user' => env('SCREENSCRAPER_USER', ''),
     'legacy_env_password' => env('SCREENSCRAPER_PASSWORD', ''),
     'endpoint' => env('SCREENSCRAPER_ENDPOINT', 'https://api.screenscraper.fr/api2'),
-    'connect_timeout' => (int) env('SCREENSCRAPER_CONNECT_TIMEOUT', 15),
-    'timeout' => (int) env('SCREENSCRAPER_TIMEOUT', 45),
 
     /*
-     * Seconds to leave between two API calls. ScreenScraper asks scraper
-     * authors for at least one; 1.2 is what the established clients use. Set to
-     * 0 to disable, which the test suite does so it is not paced by a sleep.
+     * `?:` rather than env()'s default, because .env.example lists these keys
+     * with no value, and a key present but empty comes back as '' — which
+     * (int) turns into 0, and 0 is Guzzle for "wait forever".
+     */
+    'connect_timeout' => (int) (env('SCREENSCRAPER_CONNECT_TIMEOUT') ?: 15),
+
+    /*
+     * A jeuInfos answer for a game with a lot of media runs past a megabyte,
+     * and on a slow day that has taken over a minute. Kept, with the connect
+     * timeout and the pacing, under MatchGame's 120.
+     */
+    'timeout' => (int) (env('SCREENSCRAPER_TIMEOUT') ?: 90),
+
+    /*
+     * Seconds to leave between two API calls. Not a guess: ScreenScraper asked
+     * scraper authors for at least one, and Skyscraper has shipped 1.2 with a
+     * "don't change this" comment ever since. Set to 0 to disable, which the
+     * test suite does so it is not paced by a sleep.
      */
     'min_interval' => (float) env('SCREENSCRAPER_MIN_INTERVAL', 1.2),
 ];

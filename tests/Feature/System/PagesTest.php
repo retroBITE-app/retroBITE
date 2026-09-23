@@ -66,11 +66,3 @@ it('rides along on every page', function () {
     // in the suite would notice the component being dropped from the sidebar.
     $this->get(route('dashboard'))->assertOk()->assertSee('Activity');
 });
-
-it('reads the same figures on the consoles page as in the sidebar', function () {
-    // The hand-written count this replaced knew three queue names and ignored
-    // this one, so a library busy with achievements looked idle here.
-    queueRow('ra');
-
-    Livewire::test('consoles.index')->assertSee('Achievements');
-});

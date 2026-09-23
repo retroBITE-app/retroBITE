@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ExportProgress;
 use App\Support\SystemActivity;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -29,7 +30,36 @@ new class extends Component
      */
     public function with(): array
     {
-        return ['activity' => SystemActivity::current()];
+        return [
+            'activity' => SystemActivity::current(),
+            'exports' => $this->exports(),
+        ];
+    }
+
+    /**
+     * Loader exports being written, counted in files rather than jobs.
+     *
+     * Its own row rather than one of the queues': one job writes a whole
+     * console, so the media queue can only say "1" while nineteen files go
+     * past. The worker leaves its count in ExportProgress, and that is the
+     * figure worth showing. One not yet picked up has no count and is already
+     * in the artwork depth, so it is left to that row. Two at once are added
+     * together, the way the queues are in the bar above.
+     *
+     * @return array{busy: bool, done: int, total: int, percent: int}
+     */
+    private function exports(): array
+    {
+        $running = ExportProgress::all();
+        $done = array_sum(array_map(fn (array $export): int => min($export['done'], $export['total']), $running));
+        $total = array_sum(array_column($running, 'total'));
+
+        return [
+            'busy' => $running !== [],
+            'done' => $done,
+            'total' => $total,
+            'percent' => $total > 0 ? (int) round(100 * $done / $total) : 0,
+        ];
     }
 
     /**
@@ -45,10 +75,9 @@ new class extends Component
 
 {{--
     Three seconds while there is work, fifteen while there is none, rather than
-    dropping the attribute when idle the way the consoles page does. That page
-    can afford to: it starts the work itself, so it knows when to begin
-    watching. This one does not — a scan started from the command line, or by
-    the nightly schedule, would never appear — so idle costs one grouped count
+    dropping the attribute when idle. This block does not start the work it
+    shows — a scan started from the command line, or by the nightly schedule,
+    would never appear — so idle costs one grouped count
     of a small table every fifteen seconds, and Livewire stops even that while
     the tab is in the background.
 --}}
@@ -139,6 +168,30 @@ new class extends Component
                     </div>
                 </div>
             @endforeach
+
+            {{-- Files written out of files to write, where the rows above
+                 count jobs left. Zero when nothing is being written, like
+                 any other quiet row. --}}
+            <div wire:key="activity-exports">
+                <div class="flex items-baseline justify-between gap-2 text-xs">
+                    <span class="truncate text-fg-faint">{{ __('Exporting') }}</span>
+
+                    <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $exports['busy'], 'text-fg-faint' => ! $exports['busy']])>
+                        @if ($exports['busy'])
+                            {{ $exports['done'] }}<span class="text-fg-faint">/{{ $exports['total'] }}</span>
+                        @else
+                            0
+                        @endif
+                    </span>
+                </div>
+
+                <div class="mt-1 h-1 overflow-hidden rounded-sm bg-raised">
+                    <div
+                        class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
+                        style="width: {{ $exports['percent'] }}%"
+                    ></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>

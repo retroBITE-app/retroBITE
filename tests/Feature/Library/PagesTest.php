@@ -794,17 +794,17 @@ it('sizes an empty slot from the console it belongs to', function () {
 });
 
 it('says how many files an export has written, not how many jobs it queued', function () {
-    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
-
     ExportProgress::advance('ps2', 'cfg', 12, 19);
 
-    Livewire::test('consoles.index')
-        ->assertSee('Writing files')
-        ->assertSeeInOrder(['12', '/19']);
+    Livewire::test('system-activity')
+        ->assertSeeInOrder(['Exporting', '12', '/19']);
 
     ExportProgress::finish('ps2', 'cfg');
 
-    Livewire::test('consoles.index')->assertDontSee('Writing files');
+    // The row stays, as every quiet one does; only the count goes.
+    Livewire::test('system-activity')
+        ->assertSee('Exporting')
+        ->assertDontSee('/19');
 });
 
 /**

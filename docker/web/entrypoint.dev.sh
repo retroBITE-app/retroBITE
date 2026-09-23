@@ -80,8 +80,11 @@ chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 #
 # One for scraping, because ScreenScraper allows a plain account a single
 # thread; a few for media and hashing, which are disk-bound instead.
+#
+# --timeout because listen kills its child after 60 seconds whatever the job
+# says, and MatchGame allows itself 120 for a slow provider.
 su-exec "$WEB_USER" php /app/artisan queue:listen \
-    --queue=scraper --sleep=3 --tries=3 &
+    --queue=scraper --sleep=3 --tries=3 --timeout=150 &
 
 for _ in 1 2 3; do
     su-exec "$WEB_USER" php /app/artisan queue:listen \

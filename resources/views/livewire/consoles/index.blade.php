@@ -9,18 +9,14 @@ use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Support\Console;
-use App\Support\ExportProgress;
 use App\Support\Layouts\Layouts;
 use App\Support\LibraryPath;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
 use App\Support\Scanning\LibraryFolders;
-use App\Support\SystemActivity;
 use App\Tools\ConsoleTools;
 use Flux\Flux;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -158,66 +154,6 @@ new #[Title('Consoles')] class extends Component
                 ->filter()
                 ->all()
         );
-    }
-
-    /**
-     * Work still queued, so the page can say something is happening.
-     *
-     * The same reading the sidebar draws, rather than a second count written
-     * here: the hand-made one this replaces named three queues and ignored the
-     * four that hashing and RetroAchievements run on, so a library busy for
-     * ten minutes could look idle from this page.
-     *
-     * A running export is reported separately, by exporting(): its queue depth
-     * is the wrong number for it — one job writes a whole console, so "1"
-     * would sit there while nineteen files went past.
-     */
-    #[Computed]
-    public function activity(): SystemActivity
-    {
-        return SystemActivity::current();
-    }
-
-    /**
-     * Loader exports going past, which a queue depth cannot describe.
-     *
-     * One job writes a whole console, so the jobs table can only ever say an
-     * export is waiting. The running one reports its own file count, and the
-     * queue is asked only about those not started yet. Exports ride the media
-     * queue with the artwork — both are disk work, and neither belongs behind
-     * the scraper's single paced worker — so one still waiting is also in the
-     * artwork depth SystemActivity reports. Worth knowing when reading the
-     * strip: the two rows overlap by the number of exports not yet started.
-     *
-     * @return array<int, array{count: ?int, total: ?int}>
-     */
-    #[Computed]
-    public function exporting(): array
-    {
-        // The class name is in the serialised payload; the jobs table carries
-        // no column for it. Matched rather than given a queue of its own,
-        // which would mean another worker in both entrypoints.
-        $queued = DB::table('jobs')
-            ->where('queue', 'media')
-            ->where('payload', 'like', '%WriteConsoleExports%')
-            ->count();
-
-        $running = Collection::make(ExportProgress::all())
-            ->map(function (array $export): array {
-                return [
-                    'count' => (int) Arr::get($export, 'done', 0),
-                    'total' => (int) Arr::get($export, 'total', 0),
-                ];
-            });
-
-        return $running
-            // Queued and not picked up yet: the count is meaningless, so it is
-            // left off and the row says only that an export is waiting.
-            ->when($queued > $running->count(), function (Collection $rows): Collection {
-                return $rows->push(['count' => null, 'total' => null]);
-            })
-            ->values()
-            ->all();
     }
 
     public function openAdd(): void
@@ -558,8 +494,6 @@ new #[Title('Consoles')] class extends Component
 
         $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
 
-        unset($this->activity);
-
         $this->dispatch('system-activity-changed');
 
         Flux::toast(text: $queued === 0
@@ -593,8 +527,6 @@ new #[Title('Consoles')] class extends Component
 
         $queued = RateGame::queueForConsole($console->key, held: $held);
 
-        unset($this->activity);
-
         $this->dispatch('system-activity-changed');
 
         Flux::toast(text: $queued === 0
@@ -627,8 +559,6 @@ new #[Title('Consoles')] class extends Component
         }
 
         WriteConsoleExports::dispatch($console->key, $export);
-
-        unset($this->exporting);
 
         $this->dispatch('system-activity-changed');
 
@@ -666,7 +596,7 @@ new #[Title('Consoles')] class extends Component
 
         ScanConsoleFolder::dispatch($console->key);
 
-        unset($this->activity, $this->added);
+        unset($this->added);
 
         // The sidebar polls slowly while it believes nothing is happening.
         $this->dispatch('system-activity-changed');
@@ -687,42 +617,6 @@ new #[Title('Consoles')] class extends Component
                 {{ __('Add console') }}
             </flux:button>
         </div>
-
-        {{-- Only polls while there is something to watch, so an idle page is
-             not asking the database every two seconds. --}}
-        @if ($this->activity->busy() || $this->exporting !== [])
-            <div wire:poll.2s
-                 role="status"
-                 aria-live="polite"
-                 class="relative overflow-hidden rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-4">
-                <div class="flex flex-wrap items-center gap-x-6 gap-y-1.5">
-                    <flux:icon.arrow-path class="size-4 shrink-0 animate-spin text-accent" />
-                    @foreach ($this->activity->active() as $queue)
-                        <p class="text-sm text-accent">
-                            <span class="font-medium text-accent-bright">{{ $queue->remaining() }}</span>
-                            {{ __($queue->label) }}
-                        </p>
-                    @endforeach
-
-                    {{-- Apart from the queues: an export counts files, not
-                         jobs, so it has a denominator none of them do. --}}
-                    @foreach ($this->exporting as ['count' => $count, 'total' => $total])
-                        <p class="text-sm text-accent">
-                            @if ($count !== null)
-                                <span class="font-medium text-accent-bright">
-                                    {{ $count }}@if ($total !== null)<span class="text-accent">/{{ $total }}</span>@endif
-                                </span>
-                            @endif
-                            {{ __('Writing files') }}
-                        </p>
-                    @endforeach
-                </div>
-
-                {{-- Indeterminate on purpose: the queue knows how much is left,
-                     never how far through the current job it is. --}}
-                <span class="work-rail" aria-hidden="true"></span>
-            </div>
-        @endif
 
         @if ($this->added->isEmpty())
             <div class="rounded-xl border border-dashed border-line-input px-6 py-12 text-center">

@@ -70,22 +70,6 @@ class ScreenScraperService
      */
     private const BODY_BAD_USER = ['identifiants utilisateur'];
 
-    /** Connect timeout, in seconds. ScreenScraper is regularly slow to answer. */
-    private const CONNECT_TIMEOUT = 15;
-
-    /** Total request timeout, in seconds. */
-    private const TIMEOUT = 45;
-
-    /**
-     * Minimum seconds between two requests.
-     *
-     * Not a guess: ScreenScraper asked scraper authors for at least a second
-     * between calls, and Skyscraper has shipped 1.2 with a "don't change this"
-     * comment ever since. Enforced here rather than in the job, so nothing that
-     * reaches the API can skip it.
-     */
-    private const MIN_INTERVAL = 1.2;
-
     /** Tracks the last request so the interval survives between queued jobs. */
     private const THROTTLE_KEY = 'screenscraper.last_request_at';
 
@@ -558,7 +542,7 @@ class ScreenScraperService
      */
     private function throttle(): void
     {
-        $interval = (float) config('screenscraper.min_interval', self::MIN_INTERVAL);
+        $interval = (float) config('screenscraper.min_interval');
 
         if ($interval <= 0) {
             return;
@@ -676,8 +660,8 @@ class ScreenScraperService
     {
         try {
             return Http::withUserAgent(self::SOFTNAME)
-                ->connectTimeout((int) config('screenscraper.connect_timeout', self::CONNECT_TIMEOUT))
-                ->timeout((int) config('screenscraper.timeout', self::TIMEOUT))
+                ->connectTimeout((int) config('screenscraper.connect_timeout'))
+                ->timeout((int) config('screenscraper.timeout'))
                 ->get($url, $query);
         } catch (ConnectionException $e) {
             // Guzzle appends the whole request URL to its connection errors,
