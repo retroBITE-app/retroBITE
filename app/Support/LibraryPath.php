@@ -15,7 +15,8 @@ use Illuminate\Support\Str;
  * Almost nothing here writes: the scanner reads, the matcher writes to the
  * database, and artwork lives on a disk of its own. The exceptions are the
  * loader exports — Open PS2 Loader's CFG/ and ART/ — which put files back
- * beside somebody's ROMs, and those are worth one gate rather than a `mkdir`
+ * beside somebody's ROMs, and ROM uploads, which put the ROMs themselves
+ * there. Those are worth one gate rather than a `mkdir`
  * and an `unlink` scattered across components. The previous build funnelled
  * this through a single check for the same reason.
  *
@@ -29,6 +30,16 @@ use Illuminate\Support\Str;
  */
 final class LibraryPath
 {
+    /**
+     * Where uploads are assembled before they move into a console's folder.
+     *
+     * Under the library root rather than storage/, so the final move is a
+     * rename on one filesystem instead of a copy of a multi-gigabyte image
+     * across two. The leading dot keeps it off the share: Samba hides dot
+     * files by default.
+     */
+    public const STAGING = '.retrobite-uploads';
+
     private readonly string $root;
 
     public function __construct(?string $root = null)
@@ -162,6 +173,77 @@ final class LibraryPath
     public function absolute(Console $console, string $relative): string
     {
         return $this->root.'/'.$this->within($console, $relative);
+    }
+
+    /**
+     * The staging directory, made if it is missing. Absolute.
+     *
+     * @throws LibraryPathException
+     */
+    public function stagingDirectory(): string
+    {
+        if (! is_dir($this->root)) {
+            throw LibraryPathException::rootMissing($this->root);
+        }
+
+        $staging = $this->root.'/'.self::STAGING;
+
+        if (is_link($staging)) {
+            throw LibraryPathException::symlink(self::STAGING);
+        }
+
+        File::ensureDirectoryExists($staging);
+
+        if (! is_dir($staging)) {
+            throw LibraryPathException::notCreated(self::STAGING);
+        }
+
+        return $staging;
+    }
+
+    /**
+     * Move a staged upload into a console's folder, never over anything.
+     *
+     * The source has to be a plain file directly inside the staging
+     * directory, so this cannot be turned into a way to move arbitrary files
+     * around the library. Returns the new path relative to the library root.
+     *
+     * @param  string  $relative  relative to the CONSOLE's folder, e.g. "DVD/Game.iso"
+     * @param  string  $source  absolute path of the staged file
+     *
+     * @throws LibraryPathException
+     */
+    public function moveInto(Console $console, string $relative, string $source): string
+    {
+        $staging = realpath($this->stagingDirectory());
+        $real = realpath($source);
+
+        if ($staging === false || $real === false || is_link($source) || ! is_file($real) || dirname($real) !== $staging) {
+            throw LibraryPathException::outsideRoot(basename($source));
+        }
+
+        $path = $this->within($console, $relative);
+        $target = $this->root.'/'.$path;
+
+        if (file_exists($target) || is_link($target)) {
+            throw LibraryPathException::exists($path);
+        }
+
+        $parent = dirname($relative);
+
+        if ($parent !== '.') {
+            $this->ensureDirectory($console, $parent);
+        }
+
+        // Once more now the parent exists: a link planted while it was being
+        // made is refused here rather than followed by the rename.
+        $this->within($console, $relative);
+
+        if (! File::move($real, $target)) {
+            throw LibraryPathException::notMoved($path);
+        }
+
+        return $path;
     }
 
     /**

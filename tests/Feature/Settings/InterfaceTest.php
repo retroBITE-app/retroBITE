@@ -36,6 +36,20 @@ it('saves the UI settings', function () {
         ->and(AppSetting::get(AppSetting::UI_HERO_TITLE))->toBe('logo');
 });
 
+it('keeps ROM uploads off until they are switched on', function () {
+    $this->actingAs(User::factory()->create());
+
+    $this->get(route('interface.edit'))->assertOk()->assertSee('ROM uploads');
+
+    Livewire::test('settings.interface')
+        ->assertSet('uploads', false)
+        ->set('uploads', true)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(AppSetting::enabled(AppSetting::UI_UPLOADS))->toBeTrue();
+});
+
 it('refuses a hero title it does not know', function () {
     $this->actingAs(User::factory()->create());
 

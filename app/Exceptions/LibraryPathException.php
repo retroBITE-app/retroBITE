@@ -34,6 +34,12 @@ final class LibraryPathException extends RuntimeException
     /** Neither the path nor any ancestor of it could be resolved on disk. */
     public const UNRESOLVABLE = 'library_path_unresolvable';
 
+    /** Something is already at the target. Moves into the library never overwrite. */
+    public const EXISTS = 'library_path_exists';
+
+    /** The rename into place failed. A read-only mount, or the wrong owner. */
+    public const NOT_MOVED = 'library_path_not_moved';
+
     private function __construct(
         public readonly string $path,
         public readonly string $reason,
@@ -83,5 +89,15 @@ final class LibraryPathException extends RuntimeException
     public static function notCreated(string $path): self
     {
         return new self($path, self::NOT_CREATED, "Could not create: {$path}");
+    }
+
+    public static function exists(string $path): self
+    {
+        return new self($path, self::EXISTS, "Something is already at: {$path}");
+    }
+
+    public static function notMoved(string $path): self
+    {
+        return new self($path, self::NOT_MOVED, "Could not move into: {$path}");
     }
 }
