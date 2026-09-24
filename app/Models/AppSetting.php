@@ -58,6 +58,15 @@ class AppSetting extends Model
     public const UI_HERO_TITLE = 'ui_hero_title';
 
     /**
+     * Whether a console's shelf offers ROM uploads.
+     *
+     * Off by default: most libraries are filled over the share, and an upload
+     * button nobody uses is one more thing on the Actions menu. Hides the
+     * interface only; the upload route keeps working either way.
+     */
+    public const UI_UPLOADS = 'ui_uploads';
+
+    /**
      * Runtime edits to the shipped console config, keyed by console then by
      * config key. Absent means every console is as its file declares it.
      */
@@ -109,6 +118,7 @@ class AppSetting extends Model
         self::UI_SCANLINES => true,
         self::UI_GAMES_VIEW => 'cards',
         self::UI_HERO_TITLE => 'text',
+        self::UI_UPLOADS => false,
         self::RA_HARDCORE_PRIMARY => true,
     ];
 

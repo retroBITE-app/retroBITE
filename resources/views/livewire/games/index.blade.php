@@ -473,6 +473,22 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
      */
 
     /**
+     * Whether the shelf offers ROM uploads.
+     *
+     * Behind the UI setting, and only for a console that is in the library:
+     * one that is not has no folder for an upload to land in.
+     */
+    #[Computed]
+    public function canUpload(): bool
+    {
+        $console = $this->lockedTo;
+
+        return $console !== null
+            && AppSetting::enabled(AppSetting::UI_UPLOADS)
+            && ConsoleSourceFolder::has($console);
+    }
+
+    /**
      * The loader files this console's toolbox can write, if any.
      *
      * @return string[]
@@ -686,6 +702,12 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                             <flux:menu.item icon="arrow-path" wire:click="scanConsole">
                                 {{ __('Scan folder') }}
                             </flux:menu.item>
+
+                            @if ($this->canUpload)
+                                <flux:menu.item icon="arrow-up-tray" x-on:click="$dispatch('upload-roms')">
+                                    {{ __('Upload files') }}
+                                </flux:menu.item>
+                            @endif
 
                             {{-- The only actions here that write into somebody's
                                  library, so each says where it writes before it
@@ -1211,4 +1233,10 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             @endif
         </div>
     </div>
+
+    {{-- Mounted only while the setting is on, so the uploader is not on the
+         page at all otherwise. The chunk route stays up regardless. --}}
+    @if ($this->canUpload)
+        <livewire:games.upload-modal :console="$this->lockedTo->key" wire:key="upload-modal-{{ $this->lockedTo->key }}" />
+    @endif
 </section>

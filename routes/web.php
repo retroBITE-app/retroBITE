@@ -5,6 +5,7 @@ use App\Http\Controllers\Docs\ArchiveDocController;
 use App\Http\Controllers\Docs\DownloadDocController;
 use App\Http\Controllers\Docs\ServeMediaController as ServeDocMediaController;
 use App\Http\Controllers\Library\ServeMediaController;
+use App\Http\Controllers\Library\UploadChunkController;
 use App\Models\Game;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +46,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // The media disk sits outside public/, so this authed route is the only
     // way to a downloaded image.
     Route::get('media/{path}', ServeMediaController::class)->where('path', '.*')->name('media.show');
+    // One chunk of a ROM upload, begun and finished by the shelf's upload
+    // modal. Raw bytes in the body, which is why it is a route and not a
+    // Livewire call. Not behind the UI toggle: that hides the modal, not this.
+    Route::post('uploads/{upload}', UploadChunkController::class)->whereUuid('upload')->name('uploads.chunk');
 
     // Static landing page for the section that has no behaviour yet. Routed so
     // the sidebar link resolves rather than 404.

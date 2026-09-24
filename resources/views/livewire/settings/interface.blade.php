@@ -12,10 +12,14 @@ new #[Title('UI settings')] class extends Component
     /** 'logo' or 'text': what heads the game page's hero. */
     public string $heroTitle = 'text';
 
+    /** Whether each console's shelf offers ROM uploads. */
+    public bool $uploads = false;
+
     public function mount(): void
     {
         $this->scanlines = AppSetting::enabled(AppSetting::UI_SCANLINES);
         $this->heroTitle = (string) AppSetting::get(AppSetting::UI_HERO_TITLE);
+        $this->uploads = AppSetting::enabled(AppSetting::UI_UPLOADS);
     }
 
     public function save(): void
@@ -26,6 +30,7 @@ new #[Title('UI settings')] class extends Component
 
         AppSetting::put(AppSetting::UI_SCANLINES, $this->scanlines);
         AppSetting::put(AppSetting::UI_HERO_TITLE, $this->heroTitle);
+        AppSetting::put(AppSetting::UI_UPLOADS, $this->uploads);
 
         Flux::toast(variant: 'success', text: __('UI settings saved.'));
     }
@@ -72,6 +77,12 @@ new #[Title('UI settings')] class extends Component
                 <flux:switch wire:model="scanlines"
                              :label="__('CRT scanlines')"
                              :description="__('Lays the faint horizontal banding of a tube over key art and the sign-in backdrop. Part of the look rather than decoration you can ignore — turn it off for a flat presentation.')" />
+            </div>
+
+            <div class="rounded-xl border border-line bg-surface p-5">
+                <flux:switch wire:model="uploads"
+                             :label="__('ROM uploads')"
+                             :description="__('Adds Upload files to each console\'s Actions menu. Files land in the folders that console\'s layout reads games from.')" />
             </div>
         </form>
     </x-settings.layout>
