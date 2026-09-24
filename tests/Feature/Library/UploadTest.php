@@ -74,26 +74,26 @@ describe('destinations', function () {
     it('offers the OPL game directories', function () {
         ConsoleSourceFolder::add($this->ps2, null, 'opl');
 
-        expect(uploads()->destinations($this->ps2))->toBe(['DVD' => 'ps2/DVD/', 'CD' => 'ps2/CD/']);
+        expect(ConsoleSourceFolder::destinationsFor($this->ps2))->toBe(['DVD' => 'ps2/DVD/', 'CD' => 'ps2/CD/']);
     });
 
     it('offers only the console root under a custom layout', function () {
         ConsoleSourceFolder::add($this->ps2, null, 'custom');
 
-        expect(uploads()->destinations($this->ps2))->toBe(['' => 'ps2/']);
+        expect(ConsoleSourceFolder::destinationsFor($this->ps2))->toBe(['' => 'ps2/']);
     });
 
     it('falls back to the default layout when the stored one is not offered', function () {
         ConsoleSourceFolder::add($this->snes, null, 'opl');
 
-        expect(uploads()->destinations($this->snes))->toBe(['' => 'snes/']);
+        expect(ConsoleSourceFolder::destinationsFor($this->snes))->toBe(['' => 'snes/']);
     });
 
     it('labels the folder the console was pointed at', function () {
         File::ensureDirectoryExists($this->root.'/roms/super');
         ConsoleSourceFolder::add($this->snes, 'roms/super');
 
-        expect(uploads()->destinations($this->snes))->toBe(['' => 'roms/super/']);
+        expect(ConsoleSourceFolder::destinationsFor($this->snes))->toBe(['' => 'roms/super/']);
     });
 });
 

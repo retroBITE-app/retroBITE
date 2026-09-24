@@ -40,6 +40,12 @@ final class LibraryPathException extends RuntimeException
     /** The rename into place failed. A read-only mount, or the wrong owner. */
     public const NOT_MOVED = 'library_path_not_moved';
 
+    /** The path is there but is not a plain file: a directory, or a link. */
+    public const NOT_A_FILE = 'library_path_not_a_file';
+
+    /** The delete ran and the file is still there. A read-only mount, or the wrong owner. */
+    public const NOT_DELETED = 'library_path_not_deleted';
+
     private function __construct(
         public readonly string $path,
         public readonly string $reason,
@@ -99,5 +105,15 @@ final class LibraryPathException extends RuntimeException
     public static function notMoved(string $path): self
     {
         return new self($path, self::NOT_MOVED, "Could not move into: {$path}");
+    }
+
+    public static function notAFile(string $path): self
+    {
+        return new self($path, self::NOT_A_FILE, "Not a plain file: {$path}");
+    }
+
+    public static function notDeleted(string $path): self
+    {
+        return new self($path, self::NOT_DELETED, "Could not delete: {$path}");
     }
 }

@@ -12,7 +12,6 @@ use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\Scanning\FolderCounts;
 use App\Support\Uploads\PendingUpload;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -47,32 +46,10 @@ final class RomUploads
     public function __construct(private readonly LibraryPath $paths) {}
 
     /**
-     * Where an upload for this console may go, as destination => label.
-     *
-     * Read off the active layout, which already falls back to the console's
-     * default where the stored one is missing or unsupported. '' is the
-     * console's own folder.
-     *
-     * @return array<string, string>
-     */
-    public function destinations(Console $console): array
-    {
-        $root = ConsoleSourceFolder::pathFor($console) ?? $console->folder;
-
-        return Collection::make(ConsoleSourceFolder::layoutFor($console)->gameDirectories())
-            ->mapWithKeys(function (string $directory) use ($root): array {
-                $directory = trim($directory, '/');
-
-                return [$directory => $directory === '' ? $root.'/' : $root.'/'.$directory.'/'];
-            })
-            ->all();
-    }
-
-    /**
      * Accept an upload before a byte of it is written, and open its staging file.
      *
      * @param  int  $size  bytes the browser says the file holds
-     * @param  string  $destination  one of destinations()' keys
+     * @param  string  $destination  one of ConsoleSourceFolder::destinationsFor()' keys
      *
      * @throws UploadRejected
      */
@@ -214,7 +191,7 @@ final class RomUploads
             throw UploadRejected::because(UploadRejection::Unconfigured);
         }
 
-        if (! in_array($destination, array_keys($this->destinations($console)), true)) {
+        if (! in_array($destination, array_keys(ConsoleSourceFolder::destinationsFor($console)), true)) {
             throw UploadRejected::because(UploadRejection::Destination);
         }
 
@@ -382,7 +359,7 @@ final class RomUploads
     {
         $cutoff = now()->subHours(self::TTL_HOURS)->getTimestamp();
 
-        Collection::make(File::files($this->paths->stagingDirectory()))
+        collect(File::files($this->paths->stagingDirectory()))
             ->filter(function (SplFileInfo $file) use ($cutoff): bool {
                 return $file->getExtension() === 'part' && $file->getMTime() < $cutoff;
             })

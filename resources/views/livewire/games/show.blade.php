@@ -2,17 +2,20 @@
 
 use App\Enums\AchievementKind;
 use App\Enums\MediaKind;
+use App\Exceptions\LibraryFileRejected;
 use App\Jobs\MatchGame;
 use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\AppSetting;
+use App\Models\ConsoleSourceFolder;
 use App\Models\Media;
 use App\Models\RaAchievement;
 use App\Models\RaGame;
 use App\Models\RaProgress;
 use App\Models\RaUnlock;
+use App\Services\LibraryFiles;
 use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
 use Carbon\CarbonInterface;
@@ -335,6 +338,83 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }
     }
 
+    /**
+     * The folders this game could move to, as folder => label.
+     *
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function moveTargets(): array
+    {
+        return app(LibraryFiles::class)->moveTargets($this->game);
+    }
+
+    /** Why the game cannot be moved, shown on the disabled menu item, or null when it can. */
+    #[Computed]
+    public function moveBlocked(): ?string
+    {
+        $console = $this->game->console();
+
+        if ($console === null || ! ConsoleSourceFolder::has($console)) {
+            return __('This console is not in the library.');
+        }
+
+        if ($this->files->isEmpty()) {
+            return __('This game has no files to move.');
+        }
+
+        $missing = $this->files->contains(function (GameFile $file): bool {
+            return ! $file->isPresent();
+        });
+
+        if ($missing) {
+            return __('Some of this game\'s files are missing from disk.');
+        }
+
+        return $this->moveTargets === [] ? __('Already in the only folder this console\'s layout reads.') : null;
+    }
+
+    /** Move every file of the game into another of its layout's folders. */
+    public function moveTo(string $destination, LibraryFiles $library): void
+    {
+        $label = (string) Arr::get($this->moveTargets, $destination, $destination);
+
+        try {
+            $library->moveGame($this->game, $destination);
+        } catch (LibraryFileRejected $e) {
+            Flux::toast(variant: 'warning', text: $e->reason->label());
+
+            return;
+        }
+
+        $this->reloadGame();
+
+        Flux::toast(variant: 'success', text: __('Moved to :folder.', ['folder' => $label]));
+    }
+
+    /**
+     * Delete one file from disk, and from the list.
+     *
+     * The game, its details and its artwork stay, even when this was its last
+     * file: a copy put back later picks all of that up again on the next scan.
+     */
+    public function deleteFile(int $fileId, LibraryFiles $library): void
+    {
+        $filename = $this->files->firstWhere('id', $fileId)?->filename;
+
+        try {
+            $library->deleteFile($this->game, $fileId);
+        } catch (LibraryFileRejected $e) {
+            Flux::toast(variant: 'warning', text: $e->reason->label());
+
+            return;
+        }
+
+        $this->reloadGame();
+
+        Flux::toast(variant: 'success', text: __('Deleted :file.', ['file' => (string) $filename]));
+    }
+
     /** Sent by the identify modal once a hand-picked match is applied. */
     #[On('game-identified')]
     public function identified(): void
@@ -364,7 +444,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {
         $this->loadRelations();
         $this->forgetArtwork();
-        unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath);
+        unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath, $this->moveTargets, $this->moveBlocked);
     }
 
     private function stopWaiting(): void
@@ -1283,34 +1363,40 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
                     <div class="my-1.25 mx-2 h-px bg-line"></div>
 
-                    {{-- Present because the design has it. Moving a file needs a
-                         containment gate the rewrite has not built yet, so it
-                         carries no handler at all rather than a half of one. --}}
-                    <button
-                        type="button"
-                        role="menuitem"
-                        disabled
-                        title="{{ __('Not available yet.') }}"
-                        class="flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft opacity-45 transition-colors"
-                    >
-                        <flux:icon.folder-open class="size-[15px] text-fg-muted" />
-                        {{ __('Move to folder') }}
-                    </button>
+                    {{-- The whole game at once: a cuesheet and its tracks, or a
+                         playlist and its discs, name each other by filename and
+                         only work kept together. Only the layout's own folders,
+                         the same ones an upload may land in. --}}
+                    @if ($this->moveBlocked === null)
+                        @foreach ($this->moveTargets as $folder => $label)
+                            <button
+                                type="button"
+                                role="menuitem"
+                                wire:click="moveTo(@js((string) $folder))"
+                                wire:confirm="{{ __('Move every file of :title to :folder?', ['title' => $game->title, 'folder' => $label]) }}"
+                                x-on:click="open = false"
+                                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                            >
+                                <flux:icon.folder-open class="size-[15px] text-fg-muted" />
+                                <span class="min-w-0 truncate">{{ __('Move to') }} <span class="font-mono text-xs">{{ $label }}</span></span>
+                            </button>
+                        @endforeach
+                    @else
+                        <button
+                            type="button"
+                            role="menuitem"
+                            disabled
+                            title="{{ $this->moveBlocked }}"
+                            class="flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft opacity-45 transition-colors"
+                        >
+                            <flux:icon.folder-open class="size-[15px] text-fg-muted" />
+                            {{ __('Move to folder') }}
+                        </button>
+                    @endif
 
                     <x-copy-button variant="menu" role="menuitem" :text="$this->libraryPath" :label="__('Copy path')">
                         <flux:icon.document-duplicate class="size-[15px] text-fg-muted" />
                     </x-copy-button>
-
-                    <button
-                        type="button"
-                        role="menuitem"
-                        disabled
-                        title="{{ __('Not available yet.') }}"
-                        class="flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-danger opacity-45 transition-colors"
-                    >
-                        <flux:icon.trash class="size-[15px]" />
-                        {{ __('Delete file') }}
-                    </button>
                 </div>
             </div>
         </div>
@@ -1618,6 +1704,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Added') }}</th>
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Last seen') }}</th>
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('MD5') }}</th>
+                                <th class="px-4.5 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1683,6 +1770,22 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                         @else
                                             <span class="font-mono text-xs text-fg-faint">{{ __('Not hashed yet') }}</span>
                                         @endif
+                                    </td>
+                                    {{-- One file, not the game: the game, its details and its
+                                         artwork stay even when this is the last one. --}}
+                                    <td class="px-4.5 py-3 text-right">
+                                        <button
+                                            type="button"
+                                            wire:click="deleteFile({{ $id }})"
+                                            wire:confirm="{{ $missing
+                                                ? __('Remove :file from the list? It is already gone from disk.', ['file' => $filename])
+                                                : __('Delete :file from disk? The game, its details and artwork stay.', ['file' => $filename]) }}"
+                                            aria-label="{{ __('Delete :file', ['file' => $filename]) }}"
+                                            title="{{ __('Delete file') }}"
+                                            class="cursor-pointer rounded-md p-1 text-fg-faint transition-colors hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                                        >
+                                            <flux:icon.trash class="size-3.5" />
+                                        </button>
                                     </td>
                                 </tr>
                             @endforeach

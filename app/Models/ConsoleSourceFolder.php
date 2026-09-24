@@ -137,6 +137,28 @@ class ConsoleSourceFolder extends Model
     }
 
     /**
+     * Where this console's layout reads games from, as folder => label.
+     *
+     * The folders a file may be put in by hand, by an upload or a move. Read
+     * off layoutFor(), so it already falls back to the console's default
+     * layout. '' is the console's own folder.
+     *
+     * @return array<string, string>
+     */
+    public static function destinationsFor(Console $console): array
+    {
+        $root = static::pathFor($console) ?? $console->folder;
+
+        return collect(static::layoutFor($console)->gameDirectories())
+            ->mapWithKeys(function (string $directory) use ($root): array {
+                $directory = trim($directory, '/');
+
+                return [$directory => $directory === '' ? $root.'/' : $root.'/'.$directory.'/'];
+            })
+            ->all();
+    }
+
+    /**
      * Change how an already-added console is read.
      *
      * Silently ignores a layout the console does not offer: the picker only

@@ -1,11 +1,11 @@
 <?php
 
 use App\Exceptions\UploadRejected;
+use App\Models\ConsoleSourceFolder;
 use App\Services\RomUploads;
 use App\Support\Console;
 use Flux\Flux;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -48,7 +48,7 @@ new class extends Component
     #[Computed]
     public function destinations(): array
     {
-        return app(RomUploads::class)->destinations($this->target);
+        return ConsoleSourceFolder::destinationsFor($this->target);
     }
 
     /**
@@ -60,7 +60,7 @@ new class extends Component
     #[Computed]
     public function extensions(): array
     {
-        return Collection::make($this->target->fileExtensions)
+        return collect($this->target->fileExtensions)
             ->map(function (string $extension): string {
                 return strtolower($extension);
             })
@@ -74,7 +74,7 @@ new class extends Component
     #[Computed]
     public function accept(): string
     {
-        return Collection::make($this->extensions)
+        return collect($this->extensions)
             ->map(function (string $extension): string {
                 return '.'.$extension;
             })

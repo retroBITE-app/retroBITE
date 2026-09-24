@@ -222,6 +222,77 @@ final class LibraryPath
             throw LibraryPathException::outsideRoot(basename($source));
         }
 
+        return $this->place($console, $real, $relative);
+    }
+
+    /**
+     * Move a file from one place in a console's folder to another.
+     *
+     * Both ends go through the gate, the source has to be a plain file, and
+     * nothing is ever overwritten. Returns the new path relative to the
+     * library root.
+     *
+     * @param  string  $from  relative to the CONSOLE's folder
+     * @param  string  $to  relative to the CONSOLE's folder
+     *
+     * @throws LibraryPathException
+     */
+    public function relocate(Console $console, string $from, string $to): string
+    {
+        $source = $this->plainFile($console, $from);
+
+        return $this->place($console, $source, $to);
+    }
+
+    /**
+     * Delete one file inside a console's folder. Never a directory, never a link.
+     *
+     * @param  string  $relative  relative to the CONSOLE's folder
+     *
+     * @throws LibraryPathException
+     */
+    public function delete(Console $console, string $relative): void
+    {
+        $path = $this->plainFile($console, $relative);
+
+        File::delete($path);
+
+        clearstatcache(true, $path);
+
+        if (file_exists($path)) {
+            throw LibraryPathException::notDeleted($this->within($console, $relative));
+        }
+    }
+
+    /**
+     * The absolute path of a plain file inside a console's folder.
+     *
+     * @throws LibraryPathException
+     */
+    private function plainFile(Console $console, string $relative): string
+    {
+        $path = $this->absolute($console, $relative);
+
+        if (is_link($path) || ! is_file($path)) {
+            throw LibraryPathException::notAFile($this->within($console, $relative));
+        }
+
+        return $path;
+    }
+
+    /**
+     * Put a file at a path inside a console's folder, never over anything.
+     *
+     * The tail every move shares. Returns the new path relative to the library
+     * root.
+     *
+     * @param  string  $source  absolute path, already vetted by the caller
+     * @param  string  $relative  relative to the CONSOLE's folder
+     *
+     * @throws LibraryPathException
+     */
+    private function place(Console $console, string $source, string $relative): string
+    {
         $path = $this->within($console, $relative);
         $target = $this->root.'/'.$path;
 
@@ -239,7 +310,7 @@ final class LibraryPath
         // made is refused here rather than followed by the rename.
         $this->within($console, $relative);
 
-        if (! File::move($real, $target)) {
+        if (! File::move($source, $target)) {
             throw LibraryPathException::notMoved($path);
         }
 
