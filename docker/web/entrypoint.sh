@@ -55,8 +55,14 @@ chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 # recycles a worker hourly, which is the ordinary guard against a long-lived
 # PHP process accumulating memory.
 #
-# Backgrounded rather than run under a supervisor: nginx is PID 1 and the
-# container is restarted as a unit, so a dead worker is a restarted container.
+# Backgrounded rather than run under a supervisor, each in the restart loop
+# queue-workers.sh wraps it in: nginx is PID 1 and outlives every worker, so
+# the hourly --max-time exit and a job killed at its timeout would otherwise
+# end that worker for the life of the container.
+#
+# No --timeout here: queue:work takes each job's own $timeout, and every job
+# declares one. What has to follow them is the connection's retry_after — see
+# config/queue.php.
 . /usr/local/bin/queue-workers.sh
 
 workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:work \

@@ -89,7 +89,7 @@ it('puts hashing on the long connection and lookups on the scraper queue', funct
     // It was on `media` until the connection split. The jobs table has no
     // connection column, so a job is re-reserved after the retry_after of
     // whichever connection's worker popped it — and the media workers run on
-    // the 90-second one while this job has an hour-long timeout. Isolation is
+    // the half-hour one while this job has an hour-long timeout. Isolation is
     // by queue name, which is why the name had to change too.
     expect((new HashFile(1))->queue)->toBe('hash')
         ->and((new HashFile(1))->connection)->toBe('database-long')

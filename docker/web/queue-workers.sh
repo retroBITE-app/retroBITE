@@ -10,6 +10,13 @@
 # real answer and starts none — a queue nobody wants worked, or one worked by
 # another machine. Anything that is not a whole number is refused and the
 # default used instead, loudly, rather than starting no workers in silence.
+#
+# Each one runs in a loop that starts it again whenever it exits. Nothing else
+# would: nginx is PID 1, so the container outlives any worker, and workers do
+# exit — queue:work on --max-time and whenever a job overruns its timeout,
+# queue:listen when a child it is waiting on overruns --timeout. Without the
+# loop, each of those left its queue undrained until somebody restarted the
+# container by hand. The pause keeps a worker that dies on boot from spinning.
 
 workers() {
     _name="$1"
@@ -27,7 +34,17 @@ workers() {
 
     _i=0
     while [ "$_i" -lt "$_count" ]; do
-        su-exec "$WEB_USER" "$@" &
+        (
+            # The entrypoints run under set -e, which a subshell inherits: the
+            # first non-zero exit would end the loop instead of the worker.
+            set +e
+
+            while :; do
+                su-exec "$WEB_USER" "$@"
+                echo "$_name worker exited with status $?; starting it again." >&2
+                sleep 3
+            done
+        ) &
         _i=$((_i + 1))
     done
 

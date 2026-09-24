@@ -35,12 +35,24 @@ return [
             'driver' => 'sync',
         ],
 
+        /*
+         * retry_after is how long a reserved job may run before another worker
+         * takes it as abandoned and runs it again, so it has to outlast the
+         * longest $timeout on these queues: ScanConsoleFolder and
+         * WriteConsoleExports allow themselves 1800 seconds. At the stock 90,
+         * a second media worker (QUEUE_WORKERS_MEDIA=2) would pick up a scan
+         * still in progress and run it twice, racing the first to create the
+         * same games.
+         *
+         * The cost is a job whose worker was killed outright — a container
+         * stopped mid-job — waits out the same half hour before it runs again.
+         */
         'database' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 1860),
             'after_commit' => false,
         ],
 
@@ -52,8 +64,7 @@ return [
          * pops it, and the jobs table has no connection column — isolation is
          * by queue name alone. Hashing a CHD takes minutes, so it runs here,
          * on its own queues, served only by a worker started as
-         * `queue:work database-long`. The short queues keep their 90 seconds,
-         * which is the right number for them.
+         * `queue:work database-long`. The others keep the half hour above.
          */
         'database-long' => [
             'driver' => 'database',

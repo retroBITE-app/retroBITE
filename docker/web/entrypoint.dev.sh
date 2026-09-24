@@ -81,28 +81,34 @@ chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 # How many of each comes from the same variables as the production
 # entrypoint — see there, and .env.example, for why each has its default.
 #
-# --timeout on the scraper because listen kills its child after 60 seconds
-# whatever the job says, and MatchGame allows itself 120 for a slow provider.
+# Every listener carries --timeout, a little over the longest job on its
+# queues, because listen kills its child after 60 seconds whatever the job's
+# own $timeout says — and a killed child takes the listener down with it. The
+# restart loop in queue-workers.sh brings it back, but the job still never
+# finishes. The longest on each: MatchGame 120 (scraper), ScanConsoleFolder
+# and WriteConsoleExports 1800 (media, default), SyncHashIndex 900 (ra),
+# ReconcileProgress 300 (ra-progress), HashFile 3600 (hash). Raise the number
+# here when one of those grows.
 . /usr/local/bin/queue-workers.sh
 
 workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:listen \
     --queue=scraper --sleep=3 --tries=3 --timeout=150
 
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:listen \
-    --queue=media,default --sleep=3 --tries=3
+    --queue=media,default --sleep=3 --tries=3 --timeout=1860
 
 # RetroAchievements. Note that queue:listen ignores retry_after entirely — it
 # reboots per job and goes by --timeout — so the long-connection split that
 # matters in production is invisible here. Worth knowing before concluding from
 # a working dev container that the production one is fine.
 workers QUEUE_WORKERS_RA 1 php /app/artisan queue:listen \
-    --queue=ra --sleep=3 --tries=3
+    --queue=ra --sleep=3 --tries=3 --timeout=960
 
 workers QUEUE_WORKERS_RA_PROGRESS 1 php /app/artisan queue:listen \
-    --queue=ra-progress --sleep=3 --tries=3
+    --queue=ra-progress --sleep=3 --tries=3 --timeout=360
 
 workers QUEUE_WORKERS_HASH 1 php /app/artisan queue:listen database-long \
-    --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3600
+    --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3660
 
 su-exec "$WEB_USER" php /app/artisan schedule:work &
 

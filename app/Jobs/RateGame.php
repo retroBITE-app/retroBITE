@@ -34,7 +34,7 @@ class RateGame implements ShouldQueue
 {
     use Queueable;
 
-    /** Under the scraper queue's retry_after of 90, which is why it is here. */
+    /** Well under the default connection's retry_after, so a slow answer is never asked for twice. */
     public int $timeout = 60;
 
     public int $tries = 3;
