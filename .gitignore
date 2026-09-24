@@ -39,3 +39,5 @@ yarn-error.log
 /opencode.jsonc
 C*E.md
 avatar.png
+# Laravel Debugbar request captures (dev only)
+/storage/debugbar

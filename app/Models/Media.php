@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MediaKind;
+use App\Enums\ThumbnailSize;
 use Database\Factories\MediaFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $region
  * @property string $md5
  * @property string $path
+ * @property string|null $thumbnail_list_path the 128 px copy for the list view, see MakeThumbnails
+ * @property string|null $thumbnail_grid_path the 560 px copy for the shelf and the game page
  * @property string $extension
  * @property int|null $size_bytes
  * @property string|null $source_url credentials stripped
@@ -33,7 +36,7 @@ use Illuminate\Support\Carbon;
  * @property-read Game $game
  */
 #[Fillable([
-    'game_id', 'screenscraper_type', 'region', 'md5', 'path', 'extension',
+    'game_id', 'screenscraper_type', 'region', 'md5', 'path', 'thumbnail_list_path', 'thumbnail_grid_path', 'extension',
     'size_bytes', 'source_url', 'downloaded_at',
 ])]
 class Media extends Model
@@ -59,6 +62,30 @@ class Media extends Model
     public function game(): BelongsTo
     {
         return $this->belongsTo(Game::class);
+    }
+
+    /**
+     * Where the interface fetches this artwork from, at a size or in full.
+     *
+     * The thumbnail when one has been made, the original until then — so a
+     * cover downloaded a moment ago shows at once, in full, and the lighter
+     * copy takes over on the next render.
+     */
+    public function url(?ThumbnailSize $size = null): string
+    {
+        $path = $size !== null ? ($this->{$size->column()} ?? null) : null;
+
+        return route('media.show', ['path' => $path ?? $this->path]);
+    }
+
+    /**
+     * Every file on the media disk this row accounts for: the original and its thumbnails.
+     *
+     * @return list<string>
+     */
+    public function files(): array
+    {
+        return array_values(array_filter([$this->path, $this->thumbnail_list_path, $this->thumbnail_grid_path]));
     }
 
     /** Below this an image is a thumbnail, whatever the provider filed it as. */

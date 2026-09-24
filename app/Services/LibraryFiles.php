@@ -131,7 +131,7 @@ final class LibraryFiles
             throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
         }
 
-        FolderCounts::forget($console);
+        FolderCounts::recount($console);
     }
 
     /**
@@ -160,7 +160,7 @@ final class LibraryFiles
         $file->delete();
 
         if ($console !== null) {
-            FolderCounts::forget($console);
+            FolderCounts::recount($console);
         }
     }
 

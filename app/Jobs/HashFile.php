@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Events\GameUpdated;
 use App\Models\GameFile;
+use App\Support\LiveUpdates;
 use App\Support\Scanning\Checksums;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -74,5 +76,21 @@ class HashFile implements ShouldQueue
             'size_bytes' => $sums->size,
             'hashed_at' => now(),
         ]);
+
+        // The manual identify form waits on these to ask by checksum.
+        LiveUpdates::game($file->game_id, GameUpdated::HASHED);
+    }
+
+    /**
+     * The last try has gone, so the form waiting on the checksums hears it
+     * now rather than when its timer runs out.
+     */
+    public function failed(?Throwable $e): void
+    {
+        $gameId = GameFile::query()->whereKey($this->fileId)->value('game_id');
+
+        if ($gameId !== null) {
+            LiveUpdates::game((int) $gameId, GameUpdated::FAILED);
+        }
     }
 }

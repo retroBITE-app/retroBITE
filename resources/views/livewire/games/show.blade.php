@@ -2,6 +2,7 @@
 
 use App\Enums\AchievementKind;
 use App\Enums\MediaKind;
+use App\Enums\ThumbnailSize;
 use App\Exceptions\LibraryFileRejected;
 use App\Jobs\MatchGame;
 use App\Jobs\RateGame;
@@ -113,8 +114,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     /**
      * What the game looked like when a lookup was queued, or null when idle.
      *
-     * The poll is tied to this so the page stops asking as soon as an answer
-     * lands. Deliberately not updated_at on its own: that column holds seconds,
+     * The wait banner is tied to this, so the page stops waiting as soon as an
+     * answer lands. Deliberately not updated_at on its own: that column holds seconds,
      * so two changes inside one second are indistinguishable.
      */
     public ?string $awaiting = null;
@@ -128,7 +129,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      * A retry on a game the provider still cannot name changes nothing at all,
      * so there is no answer to wait for — only a queue that has got to it.
      */
-    private const WAIT_SECONDS = 120;
+    public const WAIT_SECONDS = 120;
 
     public function identify(): void
     {
@@ -206,12 +207,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      * A string rather than the int, so an unrated game reads as '' and not as
      * a null that also means "not waiting" — the same reason fetchingFrom is
      * one. Held on the component because Livewire hydrates $game out of the
-     * database on every request: a before-and-after taken inside one poll is
-     * two reads of the same row and can never differ.
+     * database on every request: a before-and-after taken inside one request
+     * is two reads of the same row and can never differ.
      */
     public ?string $ratingFrom = null;
 
-    /** When the fetch was queued, for the poll to give up on. */
+    /** When the fetch was queued, for the wait to give up on. */
     public ?int $ratingSince = null;
 
     /**
@@ -239,11 +240,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
-     * Called by the poll while a rating fetch is outstanding.
+     * Called by the wait banner while a rating fetch is outstanding: on the
+     * game's rating signal, and once at the timeout (see x-live-wait).
      *
      * An answer that comes back the same number is indistinguishable from no
      * answer at all, and a game nobody has voted on gets nothing written for it
-     * either. Both are what the timeout is for — the same one the artwork poll
+     * either. Both are what the timeout is for — the same one the artwork wait
      * gives up on.
      */
     public function checkRating(): void
@@ -289,7 +291,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
-     * What the game's artwork looks like, for the poll to watch.
+     * What the game's artwork looks like, for the wait to compare against.
      *
      * Not a count: a scrape after a region change replaces a cover rather
      * than adding one, and the count comes back the same while the picture
@@ -301,7 +303,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         return $this->game->media()->count().':'.(int) $this->game->media()->max('id');
     }
 
-    /** Called by the poll while a fetch is outstanding. */
+    /** Called by the wait banner while a fetch is outstanding: on the artwork signal, and at the timeout. */
     public function checkMedia(): void
     {
         if ($this->mediaFingerprint() !== $this->fetchingFrom) {
@@ -321,7 +323,28 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }
     }
 
-    /** Called by the poll while a lookup is outstanding. */
+    /**
+     * Artwork for this game changed somewhere else: downloaded after an
+     * identification, fetched from another tab or the console's menu, or its
+     * thumbnails made. Heard on the game's channel whether or not this page
+     * asked for it, so a game page left open fills in by itself.
+     *
+     * While this page is waiting on a fetch of its own, the wait's check does
+     * the reading, so the banner ends too.
+     */
+    public function artworkChanged(): void
+    {
+        if ($this->fetchingFrom !== null) {
+            $this->checkMedia();
+
+            return;
+        }
+
+        $this->loadRelations();
+        $this->forgetArtwork();
+    }
+
+    /** Called by the wait banner while a lookup is outstanding: on the identified signal, and at the timeout. */
     public function checkAnswer(): void
     {
         $this->game->refresh();
@@ -463,6 +486,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {
         unset(
             $this->cover,
+            $this->coverUrl,
             $this->logo,
             $this->showLogo,
             $this->backdrop,
@@ -578,6 +602,16 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     public function cover(): ?string
     {
         return $this->game->artwork(MediaKind::Cover)?->path;
+    }
+
+    /**
+     * Where to load that cover from: the grid-sized copy, drawn at the page's
+     * cover height. The viewer it opens still shows the original in full.
+     */
+    #[Computed]
+    public function coverUrl(): ?string
+    {
+        return $this->game->artwork(MediaKind::Cover)?->url(ThumbnailSize::Grid);
     }
 
     /** The title treatment, shown beside the heading when the provider had one. */
@@ -1220,6 +1254,17 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      same set, far apart in the markup as they are. Only images carrying
      data-lightbox open it — the hero logo is artwork too, and is not one. --}}
 <x-lightbox :images="$this->gallery" selector="[data-lightbox]" class="pb-14">
+    {{-- The game's artwork arriving, from wherever it was asked for. Inside the
+         viewer rather than on it, which keeps Alpine state of its own. --}}
+    <div
+        hidden
+        x-data="{
+            stop: null,
+            init() { this.stop = live.game(@js($game->id), (what) => ['artwork', 'reconnect'].includes(what) && this.$wire.artworkChanged()) },
+            destroy() { this.stop?.() },
+        }"
+    ></div>
+
     {{-- Hero: the backdrop runs to the edges and the detail block is pulled up
          over its lower half, so the poster and title sit on the art.
          These two heights are load-bearing: the detail block below pulls up by
@@ -1413,7 +1458,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                      here; the viewer captions it from the gallery instead. --}}
                 <img
                     data-lightbox="{{ $this->cover }}"
-                    src="{{ route('media.show', ['path' => $this->cover]) }}"
+                    src="{{ $this->coverUrl }}"
                     alt="{{ $game->title }}"
                     style="height: {{ $this->coverHeight }}px"
                     class="block w-auto max-w-full rounded-xl border border-line-input object-contain shadow-lift"
@@ -1494,27 +1539,27 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     @if ($awaiting !== null || $fetchingFrom !== null || $ratingFrom !== null)
         <section class="relative z-1 flex flex-col gap-3 px-4 pt-6.5 lg:px-8 lg:pt-10">
             @if ($awaiting !== null)
-                <div wire:poll.3s="checkAnswer"
-                     class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
+                <x-live-wait :game="$game->id" on="identified" check="checkAnswer" :since="$awaitingSince" :timeout="$this::WAIT_SECONDS"
+                             class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
                     <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
                     <p class="text-sm text-accent">{{ __('Waiting for ScreenScraper…') }}</p>
-                </div>
+                </x-live-wait>
             @endif
 
             @if ($fetchingFrom !== null)
-                <div wire:poll.3s="checkMedia"
-                     class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
+                <x-live-wait :game="$game->id" on="artwork" check="checkMedia" :since="$fetchingSince" :timeout="$this::WAIT_SECONDS"
+                             class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
                     <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
                     <p class="text-sm text-accent">{{ __('Fetching artwork…') }}</p>
-                </div>
+                </x-live-wait>
             @endif
 
             @if ($ratingFrom !== null)
-                <div wire:poll.3s="checkRating"
-                     class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
+                <x-live-wait :game="$game->id" on="rating" check="checkRating" :since="$ratingSince" :timeout="$this::WAIT_SECONDS"
+                             class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
                     <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
                     <p class="text-sm text-accent">{{ __('Fetching the rating…') }}</p>
-                </div>
+                </x-live-wait>
             @endif
         </section>
     @endif

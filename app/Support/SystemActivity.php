@@ -51,6 +51,7 @@ final class SystemActivity
         'identifying' => ['label' => 'Identifying', 'queues' => ['scraper']],
         'hashing' => ['label' => 'Hashing', 'queues' => ['hash', 'ra-hash']],
         'artwork' => ['label' => 'Artwork', 'queues' => ['media']],
+        'thumbnails' => ['label' => 'Thumbnails', 'queues' => ['thumbnails']],
         'achievements' => ['label' => 'Achievements', 'queues' => ['ra']],
         'progress' => ['label' => 'Progress', 'queues' => ['ra-progress']],
     ];

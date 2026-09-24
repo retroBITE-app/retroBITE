@@ -24,17 +24,16 @@ use Livewire\Component;
  * — but a footer that shows everything at once shows nothing, so the scarce
  * one is a fold away rather than always on screen.
  *
- * A component rather than a partial only so that it can poll: the layout is
- * plain Blade and would otherwise freeze at whatever the last page load said,
- * which during a scan is exactly when the figures matter. Sixty seconds
- * because that is what the number underneath is worth — the snapshot changes
- * only when a response arrives, so a shorter interval would re-render an
- * identical figure at the cost of a request per open tab.
+ * A component rather than a partial so that it can re-render on its own: the
+ * layout is plain Blade and would otherwise freeze at whatever the last page
+ * load said, which during a scan is exactly when the figures matter. It
+ * re-renders when ScreenScraperQuota records a new snapshot — the only thing
+ * that moves the figure — rather than on a timer.
  */
 new class extends Component
 {
     /**
-     * Everything the panel draws, refreshed on every poll.
+     * Everything the panel draws, read again on every signal.
      *
      * In `with()` rather than in computed properties because all of it is read
      * once per render and none of it is shared with an action — a computed
@@ -79,8 +78,12 @@ new class extends Component
     section title spending a row of its own on the word "APIs".
 --}}
 <div
-    wire:poll.60s
-    x-data="{ open: $persist(false).as('sidebar.scraper') }"
+    x-data="{
+        open: $persist(false).as('sidebar.scraper'),
+        stop: null,
+        init() { this.stop = live.system('quota', () => this.$wire.$refresh()) },
+        destroy() { this.stop?.() },
+    }"
     class="mb-3 border-b border-line pb-3"
 >
     <button

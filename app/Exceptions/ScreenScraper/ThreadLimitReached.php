@@ -7,9 +7,11 @@ namespace App\Exceptions\ScreenScraper;
 /**
  * HTTP 429 — too many concurrent requests, or too many within a minute.
  *
- * A plain registered account gets maxthreads = 1, so this should never fire
- * when the scraper queue runs a single worker. If it does, something else is
- * using the same credentials.
+ * Also thrown before any request is made, when every one of the account's
+ * thread slots stayed busy for `screenscraper.slot_wait` seconds (see
+ * ScreenScraperService::paced()): more workers than threads, all at once.
+ * From the provider itself it should not happen while the slots hold; if it
+ * does, something else is using the same credentials.
  */
 final class ThreadLimitReached extends ScreenScraperException
 {

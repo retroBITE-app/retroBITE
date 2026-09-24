@@ -34,7 +34,7 @@
             'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
             'added' => $game->created_at?->diffForHumans() ?? '',
             'url' => route('games.show', $game->routeParameters()),
-            'cover' => ($cover = $game->artwork(MediaKind::Cover)) ? route('media.show', ['path' => $cover->path]) : null,
+            'cover' => $game->artwork(MediaKind::Cover)?->url(App\Enums\ThumbnailSize::Grid),
             'backdrop' => ($backdrop = $game->artwork(MediaKind::Backdrop)) ? route('media.show', ['path' => $backdrop->path]) : null,
             'achievements' => ($p = $recentProgress->get($game->retroachievements_id)) !== null && $p->achievements_possible > 0
                 ? ['unlocked' => $p->unlocked_count, 'possible' => $p->achievements_possible,
@@ -59,10 +59,9 @@
     $unmatched = Game::count() - $games;
     $files = $consoles->sum(fn (Console $console): int => FolderCounts::gamesIn($console));
 
-    // Measured off the disk rather than summed from game_files: the database
-    // knows only what a scan has imported, which leaves out the artwork and
-    // configs the exports write, a BIOS, and anything copied in over the share
-    // since. Against what is free, so the figure says what room is left.
+    // What the identified games take, against what is free, so the figure says
+    // what room is left. Both are stored readings (see LibraryStorage): the
+    // dashboard reads no disk.
     $storage = LibraryStorage::current();
 
     // One grouped row for the whole library. The counters are denormalised

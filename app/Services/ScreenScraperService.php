@@ -70,8 +70,11 @@ class ScreenScraperService
      */
     private const BODY_BAD_USER = ['identifiants utilisateur'];
 
-    /** Tracks the last request so the interval survives between queued jobs. */
-    private const THROTTLE_KEY = 'screenscraper.last_request_at';
+    /** One lock and one timestamp per thread slot: {prefix}.{slot} and {prefix}.{slot}.last. */
+    private const SLOT_KEY = 'screenscraper.thread';
+
+    /** Longer than any one request can take — connect, timeout and the pause before it. */
+    private const SLOT_HOLD_SECONDS = 150;
 
     /**
      * Identify a game from whatever we know about the file.
@@ -234,10 +237,6 @@ class ScreenScraperService
     {
         $credentials = $this->credentials();
 
-        // Media shares the account's thread and per-minute allowance with the
-        // metadata calls, so it is paced the same way.
-        $this->throttle();
-
         $query = array_filter([
             'devid' => Arr::get($credentials, 'dev_id'),
             'devpassword' => Arr::get($credentials, 'dev_password'),
@@ -251,7 +250,9 @@ class ScreenScraperService
         // an existing query string when given a separate array, which would
         // strip the jeuid and media parameters that say what to fetch and
         // leave every request asking for nothing.
-        $response = $this->send($this->withQuery($url, $query));
+        // Media shares the account's threads and per-minute allowance with the
+        // metadata calls, so it takes a slot the same way.
+        $response = $this->paced(fn (): Response => $this->send($this->withQuery($url, $query)));
         $body = $response->body();
 
         if ($error = $this->classify($response->status(), $this->readableBody($body))) {
@@ -516,17 +517,15 @@ class ScreenScraperService
     {
         $credentials = $this->credentials();
 
-        $this->throttle();
-
-        $response = $this->send(
+        $response = $this->paced(fn (): Response => $this->send(
             $this->endpointUrl($credentials, $endpoint),
             $this->query($credentials, $params),
-        );
+        ));
 
         $decoded = $this->decode($response);
 
         // Recorded here rather than by each caller: the allowance changes with
-        // every single request, and a caller that forgets leaves the throttle
+        // every single request, and a caller that forgets leaves the thread slots
         // working from stale numbers.
         ScreenScraperQuota::remember(Arr::get($decoded, 'response', []));
 
@@ -534,31 +533,77 @@ class ScreenScraperService
     }
 
     /**
-     * Wait out the remainder of the minimum interval since the last request.
+     * Send one request in a thread slot of its own, paced within that slot.
      *
-     * Kept in the cache rather than a property because consecutive calls are
-     * consecutive queue jobs in separate processes, and an instance property
-     * would reset to nothing between them.
+     * ScreenScraper grants an account a number of threads — one for a plain
+     * account, six for this project's Gold one — and asks each client to leave
+     * min_interval between requests. So there are as many slots as the account
+     * has threads, each a cache lock held for the whole request, and the pause
+     * is kept per slot. One worker gets the old pace; six workers get six
+     * times it, and never a seventh connection, because a slot is held until
+     * its answer arrives — a slow reply of a minute keeps its slot for the
+     * minute.
+     *
+     * The slot count comes from the account's own last answer
+     * (ScreenScraperQuota), so it follows an upgrade without a setting; one
+     * until the first answer has been seen. The locks and the timestamps are
+     * in the cache because the requests come from separate worker processes.
+     *
+     * A request that finds every slot busy for `screenscraper.slot_wait`
+     * seconds gives up with ThreadLimitReached, which the jobs already treat
+     * as "try again shortly".
+     *
+     * @template T
+     *
+     * @param  callable(): T  $request
+     * @return T
+     *
+     * @throws ThreadLimitReached
      */
-    private function throttle(): void
+    private function paced(callable $request): mixed
     {
         $interval = (float) config('screenscraper.min_interval');
 
         if ($interval <= 0) {
-            return;
+            return $request();
         }
 
-        $last = Cache::get(self::THROTTLE_KEY);
+        $slots = max(1, (int) (ScreenScraperQuota::current()['max_threads'] ?? 1));
+        $giveUpAt = microtime(true) + (float) config('screenscraper.slot_wait');
 
-        if (is_numeric($last)) {
-            $wait = $interval - (microtime(true) - (float) $last);
+        while (true) {
+            for ($slot = 0; $slot < $slots; $slot++) {
+                $lock = Cache::lock(self::SLOT_KEY.'.'.$slot, self::SLOT_HOLD_SECONDS);
 
-            if ($wait > 0) {
-                usleep((int) round($wait * 1_000_000));
+                if (! $lock->get()) {
+                    continue;
+                }
+
+                try {
+                    $last = Cache::get(self::SLOT_KEY.'.'.$slot.'.last');
+
+                    if (is_numeric($last)) {
+                        $wait = $interval - (microtime(true) - (float) $last);
+
+                        if ($wait > 0) {
+                            usleep((int) round($wait * 1_000_000));
+                        }
+                    }
+
+                    Cache::put(self::SLOT_KEY.'.'.$slot.'.last', microtime(true), 60);
+
+                    return $request();
+                } finally {
+                    $lock->release();
+                }
             }
-        }
 
-        Cache::put(self::THROTTLE_KEY, microtime(true), 60);
+            if (microtime(true) >= $giveUpAt) {
+                throw new ThreadLimitReached("Every one of the account's {$slots} ScreenScraper threads stayed busy.");
+            }
+
+            usleep(200_000);
+        }
     }
 
     /**

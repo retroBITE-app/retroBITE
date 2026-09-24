@@ -13,17 +13,14 @@ use Livewire\Component;
  * as its neighbours: the layout is plain Blade and would otherwise freeze at
  * whatever the last navigation said.
  *
- * No #[On('system-activity-changed')], unlike system-activity next door. That
- * event says work was queued, not that bytes landed — a scan that has just
- * started has written nothing — so handling it would re-render an identical
- * figure. The jobs that do move this number finish minutes later, and the one
- * that moves it fastest, a console copying a disc image in over SMB, never
- * reaches the application at all.
+ * Nothing here reads the disk: the used figure is a query over the identified
+ * games, and the free space is what MeasureLibrary last measured. It listens
+ * for SystemUpdated(storage), which that job and scans and exports send.
  */
 new class extends Component
 {
     /**
-     * The one reading this block draws, refreshed on every poll.
+     * The one reading this block draws, read again on every signal and poll.
      *
      * In `with()` rather than a computed property, as next door: read once per
      * render and shared with no action, so memoisation would buy nothing and
@@ -38,11 +35,19 @@ new class extends Component
 }; ?>
 
 {{--
-    Sixty seconds, as the panel above. The reading behind it is cached for the
-    same minute, so a shorter interval would redraw an identical figure — and a
-    library fills at a speed nobody watches by the second.
+    Re-rendered on the storage signal, and polled every five minutes as well:
+    the used figure moves as games are identified, which sends no system
+    signal, and the poll is a single cheap query. It is the one poll left. See
+    docs/adr/0002-live-updates-over-reverb.md.
 --}}
-<div wire:poll.60s>
+<div
+    wire:poll.300s
+    x-data="{
+        stop: null,
+        init() { this.stop = live.system('storage', () => this.$wire.$refresh()) },
+        destroy() { this.stop?.() },
+    }"
+>
     {{--
         `kicker` goes on the label only. On the flex parent its 0.14em tracking
         also stretched the figure, which then wrapped.

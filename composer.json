@@ -11,9 +11,11 @@
     "require": {
         "php": "^8.3",
         "ext-intl": "*",
+        "intervention/image": "^4.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
         "laravel/framework": "^13.17",
+        "laravel/reverb": "^1.12",
         "laravel/tinker": "^3.0",
         "league/commonmark": "^2.10",
         "livewire/blaze": "^1.0",
@@ -23,6 +25,7 @@
         "symfony/yaml": "^8.1"
     },
     "require-dev": {
+        "barryvdh/laravel-debugbar": "^4.4",
         "fakerphp/faker": "^1.24",
         "larastan/larastan": "^3.9",
         "laravel/pail": "^1.2.5",

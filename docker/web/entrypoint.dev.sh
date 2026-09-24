@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Reverb's keys, before any artisan command: the broadcast channels are built
+# when the app boots, so every PHP process from here on must see the same keys.
+. /usr/local/bin/reverb.sh
+
 # Ensure storage subdirs exist
 mkdir -p /app/storage/app/games \
          /app/storage/app/docs \
@@ -71,6 +75,11 @@ php /app/artisan db:seed --class=DefaultUserSeeder --force
 # After migrate, which runs as root and would otherwise leave root-owned files.
 chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 
+# Live updates, as in production (keys were set at the top, before anything
+# ran PHP). --debug prints each connection and message, which is the whole
+# point of running it here.
+start_reverb --debug
+
 # queue:listen rather than queue:work, which is the whole difference here.
 # work keeps one booted application in memory for its whole life, so a job runs
 # whatever the code was when the worker started — edit a job class and the
@@ -96,6 +105,11 @@ workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:listen \
 
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:listen \
     --queue=media,default --sleep=3 --tries=3 --timeout=1860
+
+# Cover thumbnails: CPU work, on a queue of its own so a library's backfill
+# runs beside the downloads instead of in front of them.
+workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:listen \
+    --queue=thumbnails --sleep=3 --tries=3
 
 # RetroAchievements. Note that queue:listen ignores retry_after entirely — it
 # reboots per job and goes by --timeout — so the long-connection split that

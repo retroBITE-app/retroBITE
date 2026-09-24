@@ -23,7 +23,7 @@ new class extends Component
     public const MODAL = 'identify-game';
 
     /** As long as HashFile itself is allowed to run, so a slow disc is never given up on early. */
-    private const HASH_WAIT_SECONDS = 3600;
+    public const HASH_WAIT_SECONDS = 3600;
 
     /** The fields a row shows. Media URLs carry the provider credentials and must never reach the browser. */
     private const CANDIDATE_FIELDS = ['provider_id', 'title', 'year', 'region', 'rom_name'];
@@ -57,7 +57,7 @@ new class extends Component
     #[Locked]
     public ?int $hashingSince = null;
 
-    /** Whether the modal is showing, so the hash poll stops while it is closed. */
+    /** Whether the modal is showing, so the hash wait stops while it is closed. */
     #[Locked]
     public bool $watching = false;
 
@@ -111,7 +111,7 @@ new class extends Component
         $this->searched = true;
     }
 
-    /** Called by the poll while a hash is outstanding. */
+    /** Called by the wait while a hash is outstanding: on the hashed signal, and at the timeout. */
     public function checkHash(): void
     {
         $file = $this->hashingFileId !== null ? GameFile::find($this->hashingFileId) : null;
@@ -128,7 +128,7 @@ new class extends Component
         }
     }
 
-    /** Wired to the modal's close, so nothing polls behind a hidden dialog. */
+    /** Wired to the modal's close, so nothing waits behind a hidden dialog. */
     public function closed(): void
     {
         $this->watching = false;
@@ -244,7 +244,7 @@ new class extends Component
         $this->hashingSince = now()->timestamp;
     }
 
-    /** Stop the hash poll. */
+    /** Stop waiting for the hash. */
     private function stopHashing(): void
     {
         $this->hashingFileId = null;
@@ -294,10 +294,11 @@ new class extends Component
 
             <div wire:loading.remove wire:target="open, lookup" class="flex flex-col gap-5">
                 @if ($hashingFileId !== null && $watching)
-                    <div wire:poll.3s="checkHash" class="flex items-center gap-2 rounded-lg border border-line-input bg-sunken px-3 py-2 text-sm text-fg-soft">
+                    <x-live-wait :game="$gameId" on="hashed" check="checkHash" :since="$hashingSince" :timeout="$this::HASH_WAIT_SECONDS"
+                                 class="flex items-center gap-2 rounded-lg border border-line-input bg-sunken px-3 py-2 text-sm text-fg-soft">
                         <flux:icon.loading class="size-3.5 text-fg-muted" />
                         {{ __('Hashing file for an exact match…') }}
-                    </div>
+                    </x-live-wait>
                 @endif
 
                 @if ($md5Match !== null)

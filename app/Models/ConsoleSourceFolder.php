@@ -32,18 +32,64 @@ use Illuminate\Support\Collection;
  * @property string $console
  * @property string $path relative to the library root
  * @property string|null $layout null means the console's declared default
+ * @property int|null $file_count playable files at the last count, null before the first
+ * @property Carbon|null $counted_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['console', 'path', 'layout'])]
+#[Fillable(['console', 'path', 'layout', 'file_count', 'counted_at'])]
 class ConsoleSourceFolder extends Model
 {
+    protected function casts(): array
+    {
+        return [
+            'file_count' => 'integer',
+            'counted_at' => 'datetime',
+        ];
+    }
+
+    /** The container key the rows are held under for one request or one job. */
+    private const ROWS = 'console-source-folders.rows';
+
     /**
-     * The scan root for a console: the override if one is set, else convention.
+     * Every row, keyed by console, read once per request.
      *
-     * Returns a path relative to the library root, which is what files.path is
-     * stored against.
+     * The table holds one row per console in the library — a couple of dozen —
+     * and the consoles page used to ask it about each console separately from
+     * half a dozen helpers: two hundred queries a page load to read twenty
+     * rows. A scoped binding rather than a static: the container flushes it
+     * between queue jobs, so a long-lived worker never holds an old copy, and
+     * each test starts with a new application. The writes below drop it.
+     *
+     * @return Collection<string, self>
      */
+    private static function rows(): Collection
+    {
+        if (! app()->bound(self::ROWS)) {
+            app()->scoped(self::ROWS, fn (): Collection => static::query()->get()->keyBy('console'));
+        }
+
+        /** @var Collection<string, self> */
+        return app(self::ROWS);
+    }
+
+    /** Drop the rows read so far, after anything that writes to the table. */
+    private static function flushRows(): void
+    {
+        app()->forgetInstance(self::ROWS);
+    }
+
+    /**
+     * Any row saved or deleted as a model drops them too, so a plain create()
+     * cannot leave the rest of the request reading the table as it was. Mass
+     * updates fire no events, which is why setLayout() flushes by hand.
+     */
+    protected static function booted(): void
+    {
+        static::saved(fn () => self::flushRows());
+        static::deleted(fn () => self::flushRows());
+    }
+
     /**
      * The consoles in the library, in the config's own order.
      *
@@ -51,16 +97,16 @@ class ConsoleSourceFolder extends Model
      */
     public static function consoles(): Collection
     {
-        $keys = static::query()->pluck('path', 'console');
+        $rows = self::rows();
 
         return Console::all()
-            ->filter(fn (Console $console) => $keys->has($console->key))
+            ->filter(fn (Console $console) => $rows->has($console->key))
             ->values();
     }
 
     public static function has(Console $console): bool
     {
-        return static::query()->where('console', $console->key)->exists();
+        return self::rows()->has($console->key);
     }
 
     /**
@@ -79,9 +125,11 @@ class ConsoleSourceFolder extends Model
             ],
         );
 
-        // The path and the layout both decide which files count, so any cached
-        // number taken before this was written is about a different folder.
-        FolderCounts::forget($console);
+        self::flushRows();
+
+        // The path and the layout both decide which files count, so a count
+        // taken before this was written is about a different folder.
+        FolderCounts::recount($console);
 
         return $row;
     }
@@ -96,12 +144,34 @@ class ConsoleSourceFolder extends Model
     {
         static::query()->where('console', $console->key)->delete();
 
-        FolderCounts::forget($console);
+        self::flushRows();
     }
 
+    /** The count MeasureLibrary last took for this console, or null before the first. */
+    public static function fileCountFor(Console $console): ?int
+    {
+        return self::rows()->get($console->key)?->file_count;
+    }
+
+    /** Store a count MeasureLibrary has just taken. */
+    public static function recordCount(Console $console, int $count): void
+    {
+        static::query()
+            ->where('console', $console->key)
+            ->update(['file_count' => $count, 'counted_at' => now()]);
+
+        self::flushRows();
+    }
+
+    /**
+     * The scan root for a console: the override if one is set, else convention.
+     *
+     * Returns a path relative to the library root, which is what files.path is
+     * stored against.
+     */
     public static function pathFor(Console $console): ?string
     {
-        $override = static::query()->where('console', $console->key)->value('path');
+        $override = self::rows()->get($console->key)?->path;
 
         if (is_string($override) && $override !== '') {
             return trim($override, '/');
@@ -113,7 +183,7 @@ class ConsoleSourceFolder extends Model
     /**
      * The layout key stored for this console, or its declared default.
      *
-     * The cheap lookup: one indexed read, no filesystem and no config walk. A
+     * The cheap lookup: no query of its own, no filesystem and no config walk. A
      * stored key config no longer carries falls back rather than throwing, so
      * an install that outlives a layout keeps working.
      */
@@ -127,7 +197,7 @@ class ConsoleSourceFolder extends Model
      */
     public static function layoutFor(Console $console): ConsoleLayout
     {
-        $stored = static::query()->where('console', $console->key)->value('layout');
+        $stored = self::rows()->get($console->key)?->layout;
 
         $layout = is_string($stored) && Layouts::supports($console, $stored)
             ? Layouts::make($stored)
@@ -172,8 +242,9 @@ class ConsoleSourceFolder extends Model
 
         static::query()->where('console', $console->key)->update(['layout' => $layout]);
 
-        // A mass update fires no model events, which is why every one of these
-        // clears the count by hand rather than through a saved() hook.
-        FolderCounts::forget($console);
+        self::flushRows();
+
+        // A different layout counts different files.
+        FolderCounts::recount($console);
     }
 }

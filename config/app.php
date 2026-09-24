@@ -55,6 +55,21 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
+     * Whose X-Forwarded-* headers to believe: comma-separated addresses, or *
+     * for any. Behind a TLS-terminating proxy — OrbStack's https://*.orb.local
+     * in development, or a reverse proxy in front of an install — the request
+     * reaches PHP as plain http, and without this every absolute URL the app
+     * writes is http:// on an https page. The browser blocks those as mixed
+     * content, which is how the debug bar went missing without an error.
+     *
+     * Any in local development, where the only thing in front is the
+     * developer's own machine. Elsewhere none unless named, because the
+     * production container is usually reached directly, and a header anyone
+     * can send must not decide the host the app writes into its links.
+     */
+    'trusted_proxies' => env('TRUSTED_PROXIES') ?: (env('APP_ENV') === 'local' ? '*' : null),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

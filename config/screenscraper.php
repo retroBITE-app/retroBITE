@@ -47,4 +47,12 @@ return [
      * test suite does so it is not paced by a sleep.
      */
     'min_interval' => (float) env('SCREENSCRAPER_MIN_INTERVAL', 1.2),
+
+    /*
+     * Kept per thread, not across the account: there are as many slots as the
+     * account has threads (six on Gold), each paced by min_interval on its
+     * own. This is how long a request waits for a free slot before its job
+     * goes back to the queue to try again. See ScreenScraperService::paced().
+     */
+    'slot_wait' => (float) (env('SCREENSCRAPER_SLOT_WAIT') ?: 30),
 ];

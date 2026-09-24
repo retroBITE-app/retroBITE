@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Events\GameUpdated;
 use App\Exceptions\ScreenScraper\ApiUnavailable;
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Exceptions\ScreenScraper\ScreenScraperException;
@@ -13,6 +14,7 @@ use App\Models\Game;
 use App\Models\MediaList;
 use App\Services\MediaLibrary;
 use App\Services\ScreenScraperService;
+use App\Support\LiveUpdates;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -230,6 +232,17 @@ class ScrapeGameMedia implements ShouldQueue
             ->log('media scrape');
 
         Log::info('Media scrape finished.', ['game' => $game->id, 'stored' => $stored, 'skipped' => $skipped]);
+
+        LiveUpdates::game($game->id, GameUpdated::ARTWORK);
+    }
+
+    /**
+     * The last try has gone. A page waiting on this game hears it now rather
+     * than when its timer runs out.
+     */
+    public function failed(?Throwable $e): void
+    {
+        LiveUpdates::game($this->gameId, GameUpdated::FAILED);
     }
 
     /**

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Support\Scanning;
 
+use App\Jobs\MeasureLibrary;
 use App\Models\ConsoleSourceFolder;
 use App\Support\Console;
 use FilesystemIterator;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
@@ -16,8 +16,9 @@ use SplFileInfo;
 use Throwable;
 
 /**
- * How many games are in a console's folder, asked of the disk rather than the
- * database.
+ * How many games are in a console's folder, counted off the disk rather than
+ * the database — by MeasureLibrary in the background, and stored, so the pages
+ * only ever read the number.
  *
  * The console cards used to count rows, which is fast and wrong: a drive
  * somebody filled over SMB says nothing to the database until a scan runs, and
@@ -31,57 +32,36 @@ use Throwable;
  */
 final class FolderCounts
 {
-    /** How long one console's count is good for. Short: an upload moves it. */
-    private const TTL = 60;
-
-    /** How long a stale count may still be served while a fresh one is taken. */
-    private const STALE = 300;
-
     /**
-     * How many playable files are in this console's folder right now.
+     * How many playable files were in this console's folder at the last count.
      *
-     * Cache::flexible() rather than remember(): a remember() that has just
-     * expired makes one unlucky visitor pay for walking five thousand files
-     * inside their own request, and the page polls itself every two seconds.
-     * This hands back the stale count immediately and refreshes after the
-     * response, under a lock, so the poll cannot stampede a spinning disk.
+     * Read from the database, never from the disk: no page walks a folder.
+     * The count is taken by MeasureLibrary in the background — every fifteen
+     * minutes, after a scan, when a console is added or changes layout, and
+     * when somebody asks from the consoles page — so what arrives over the
+     * share shows at the next of those. Zero before the first count.
      */
     public static function gamesIn(Console $console): int
     {
-        return Cache::flexible(
-            self::key($console),
-            [self::TTL, self::STALE],
-            function () use ($console): int {
-                return self::count($console);
-            },
-        );
+        return ConsoleSourceFolder::fileCountFor($console) ?? 0;
     }
 
-    /**
-     * Forget one console's count, after anything that changes the answer.
-     *
-     * Called explicitly rather than from a model event: setLayout() is a mass
-     * update, which fires no events, so half the invalidation would silently
-     * not happen.
-     */
-    public static function forget(Console $console): void
+    /** Count one console again, in the background, after something changed its folder. */
+    public static function recount(Console $console): void
     {
-        Cache::forget(self::key($console));
-    }
-
-    private static function key(Console $console): string
-    {
-        return 'library.count.'.$console->key;
+        MeasureLibrary::dispatch($console->key);
     }
 
     /**
      * Walk the console's folder the way the scanner would, and count.
      *
+     * Disk work: for MeasureLibrary, never for a page.
+     *
      * Zero rather than an exception for a drive that is not mounted: a card
      * that renders is worth more than a page that does not, and the scan is
      * where somebody finds out the mount is gone.
      */
-    private static function count(Console $console): int
+    public static function measure(Console $console): int
     {
         $folder = ConsoleSourceFolder::pathFor($console);
 

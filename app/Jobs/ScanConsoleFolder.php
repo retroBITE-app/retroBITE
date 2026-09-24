@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Exceptions\ScanAborted;
 use App\Services\LibraryScanner;
 use App\Support\Console;
+use App\Support\LibraryStorage;
 use App\Support\Scanning\FolderCounts;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -54,10 +55,10 @@ class ScanConsoleFolder implements ShouldQueue
             return;
         } finally {
             // Whatever the scan found, it has just walked the folder, so the
-            // cards' cached count is the older answer. Cleared even on an
+            // cards' count is the older answer. Counted again even on an
             // abort: a drive that has gone away should stop reporting the
             // number it had before it did.
-            FolderCounts::forget($console);
+            FolderCounts::recount($console);
         }
 
         // Recording what is on disk is only half of it. Without this the
@@ -73,5 +74,9 @@ class ScanConsoleFolder implements ShouldQueue
             'queued_for_lookup' => $queued,
             'queued_for_inspection' => $inspecting,
         ]);
+
+        // A scan is the moment the app learns what arrived over the share,
+        // which is what the disk figure has no other way of hearing about.
+        LibraryStorage::changed();
     }
 }
