@@ -3,6 +3,7 @@
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\User;
+use App\Services\NetworkService;
 use App\Support\Console;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -60,4 +61,15 @@ test('it counts identified games and the files on disk, in that order', function
     } finally {
         File::deleteDirectory($root);
     }
+});
+
+test('the page does not wait on the share probe', function () {
+    $this->mock(NetworkService::class)->shouldNotReceive('status');
+
+    $this->actingAs(User::factory()->create());
+
+    $this->get(route('dashboard'))
+        ->assertOk()
+        ->assertSee('Network shares')
+        ->assertSee('Checking…');
 });

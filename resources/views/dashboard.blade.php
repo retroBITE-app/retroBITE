@@ -1,12 +1,10 @@
 @php
     use App\Enums\GameStatus;
     use App\Enums\MediaKind;
-    use App\Enums\ShareProtocol;
     use App\Models\Game;
     use App\Models\ConsoleSourceFolder;
     use App\Models\RaProgress;
     use App\Models\RaUnlock;
-    use App\Services\NetworkService;
     use App\Support\Console;
     use App\Support\LibraryStorage;
     use App\Support\Scanning\FolderCounts;
@@ -143,12 +141,6 @@
             'url' => route('games.show', $game->routeParameters()),
         ])
         ->all();
-
-    // Real, not dummy: probes the share container over TCP.
-    $status = app(NetworkService::class)->status();
-    $hostIp = config('settings.network.host_ip');
-    $shareUser = config('settings.network.username');
-    $shares = $consoles;
 
     $hour = (int) now()->format('G');
     $greeting = $hour >= 17 ? __('Good evening') : ($hour >= 12 ? __('Good afternoon') : __('Good morning'));
@@ -347,70 +339,6 @@
             </ul>
         </section>
 
-        <section class="space-y-4">
-            <h2 class="text-lg font-medium text-fg-bright">{{ __('Network shares') }}</h2>
-
-            <div class="grid gap-4 lg:grid-cols-2">
-                @foreach (ShareProtocol::cases() as $protocol)
-                    @php($online = $status[$protocol->value] ?? null)
-
-                    <div class="flex flex-col overflow-hidden rounded-xl border border-line bg-sunken">
-                        <div class="flex items-center justify-between border-b border-line/70 px-3.5 py-3">
-                            <h3 class="text-sm text-fg-bright">{{ $protocol->label() }}</h3>
-
-                            <span class="flex items-center gap-2">
-                                <span @class([
-                                    'h-2 w-2 shrink-0 rounded-full',
-                                    'bg-accent shadow-glow' => $online,
-                                    'bg-danger' => ! $online,
-                                ])></span>
-                                <span @class([
-                                    'text-sm',
-                                    'text-accent' => $online,
-                                    'text-danger' => ! $online,
-                                ])>{{ $online ? __('Online') : __('Offline') }}</span>
-                            </span>
-                        </div>
-
-                        <div class="space-y-4 px-3.5 py-3.5">
-                            <dl class="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                    <dt class="text-fg-faint">{{ __('Host') }}</dt>
-                                    <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ $hostIp }}</dd>
-                                </div>
-                                <div>
-                                    <dt class="text-fg-faint">{{ __('Ports') }}</dt>
-                                    <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ $protocol->displayPorts() }}</dd>
-                                </div>
-                                <div>
-                                    <dt class="text-fg-faint">{{ __('Credentials') }}</dt>
-                                    <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ $shareUser }} / ******</dd>
-                                </div>
-                            </dl>
-
-                            <div>
-                                <p class="kicker mb-2 text-fg-faint">{{ __('Shares') }}</p>
-
-                                @if ($shares->isEmpty())
-                                    <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
-                                        <p class="text-sm text-fg-soft">{{ __('No consoles installed yet.') }}</p>
-                                    </div>
-                                @else
-                                    <ul class="space-y-1">
-                                        @foreach ($shares as $share)
-                                            <li class="flex items-center gap-2 rounded-md border border-line/70 bg-surface px-3 py-2">
-                                                <img src="{{ $share->icon }}" alt="" class="h-4 w-4 shrink-0 object-contain" />
-                                                <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ $share->name }}</span>
-                                                <span class="min-w-0 shrink truncate font-mono text-xs text-fg-dim">{{ $protocol->connectionString($hostIp, $share->folder) }}</span>
-                                            </li>
-                                        @endforeach
-                                    </ul>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        </section>
+        <livewire:network-shares />
     </div>
 </x-layouts::app>
