@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tools\ConsoleTool;
 
+use App\Enums\FileRole;
 use App\Enums\GameStatus;
+use App\Enums\ImageFormat;
 use App\Enums\MediaKind;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
@@ -26,8 +28,8 @@ use Throwable;
  *
  * Every PS2 disc carries a serial — SLES_503.86 and its kin — declared by BOOT2
  * in SYSTEM.CNF. ScreenScraper does not return it, and Open PS2 Loader keys
- * everything on it: ART/SLES_503.86_COV.jpg, CFG/SLES_503.86.cfg, and the
- * filename prefix that tells OPL which disc it is looking at.
+ * everything on it: ART/SLES_503.86_COV.png and _ICO.png, CFG/SLES_503.86.cfg,
+ * and the filename prefix that tells OPL which disc it is looking at.
  *
  * That prefix is the reason this class, rather than OplLayout, understands the
  * serial format. The shape is PlayStation 2's and the convention of putting it
@@ -36,8 +38,24 @@ use Throwable;
  */
 final class PS2 extends ConsoleTools
 {
-    /** The shape OPL reads a cover in. Every file on a working drive is this. */
+    /**
+     * The shape OPL reads a cover in: 256x368 and opaque. PNG, because the
+     * loader has no JPEG decoder — a _COV.jpg is never drawn.
+     */
     public readonly CoverArt $cover;
+
+    /**
+     * The shape OPL's info page draws both screenshots in, _SCR and _SCR2:
+     * 173x148 in both default themes, cropped to fit rather than stretched.
+     */
+    public readonly CoverArt $screen;
+
+    /**
+     * The shape OPL reads a disc icon in: 128 square with its corners clear,
+     * which is exactly its own built-in "disc" image. The default themes draw
+     * it beside the cover as ItemIcon, the ART/<serial>_ICO slot.
+     */
+    public readonly CoverArt $disc;
 
     /** The shape OPL reads words in: one ASCII line, cut to what it will show. */
     public readonly OplText $text;
@@ -69,12 +87,17 @@ final class PS2 extends ConsoleTools
         public readonly string $configDir = 'CFG',
         public readonly string $artDir = 'ART',
         public readonly string $coverSuffix = '_COV',
+        public readonly string $discSuffix = '_ICO',
+        public readonly string $screenshotSuffix = '_SCR',
+        public readonly string $titleScreenSuffix = '_SCR2',
     ) {
         // Built here rather than promoted: PHP allows no `new` in a parameter
         // default. The sizes live with the encoders that apply them, not in
         // config, because "every file on a working drive is this size" is not
         // something to invite somebody to tune.
-        $this->cover = new CoverArt(256, 368);
+        $this->cover = new CoverArt(256, 368, ImageFormat::Png);
+        $this->screen = new CoverArt(173, 148, ImageFormat::Png);
+        $this->disc = new CoverArt(128, 128, ImageFormat::Png, transparent: true);
         $this->text = new OplText;
     }
 
@@ -115,15 +138,65 @@ final class PS2 extends ConsoleTools
             return null;
         }
 
-        $stripped = trim((string) preg_replace(
-            '/^('.$this->serialPrefixes.')[-_][0-9]{3}\.?[0-9]{2}[.\s_-]+/i',
-            '',
-            $layout->titleFor($relative),
-        ));
+        $stripped = $this->withoutLicenseId($layout->titleFor($relative));
 
         // A disc named after nothing but its serial keeps that name: an empty
         // title would slug to "game" and lose the only thing it said.
         return $stripped !== '' ? $stripped : null;
+    }
+
+    /** Renaming is to or from OPL's own filename convention, so only on its drive. */
+    public function canRename(): bool
+    {
+        return $this->arrangedForOpl();
+    }
+
+    /**
+     * The file's name with its license ID put in front, OPL's old
+     * "SLES_503.86.Title.iso" form, or taken off again; null when there is
+     * nothing to do.
+     *
+     * Single-file games only: a cue names its tracks and a playlist its discs,
+     * so renaming one file of a set would break the sheet that points at it.
+     * The rest of the name is the file's own either way, so adding and then
+     * removing the license ID comes back to exactly the name it started with.
+     */
+    public function renamedFilename(GameFile $file, bool $withLicenseId): ?string
+    {
+        // Loaded by a caller asking about a whole shelf, which would otherwise
+        // be a query per file.
+        $hasChildren = $file->relationLoaded('children')
+            ? $file->children->isNotEmpty()
+            : $file->children()->exists();
+
+        if ($file->role !== FileRole::Rom || $file->parent_id !== null || $hasChildren) {
+            return null;
+        }
+
+        $carries = $this->serialFrom($file->filename) !== null;
+
+        if ($withLicenseId) {
+            // Already there, or not read off the disc yet — the name cannot
+            // be made up from anything else.
+            return $carries || $file->license_id === null ? null : $file->license_id.'.'.$file->filename;
+        }
+
+        if (! $carries) {
+            return null;
+        }
+
+        $extension = pathinfo($file->filename, PATHINFO_EXTENSION);
+        $stem = pathinfo($file->filename, PATHINFO_FILENAME);
+        $stripped = $this->withoutLicenseId($stem);
+
+        // A file named for its license ID and nothing else has no other name
+        // to go back to — the prefix pattern wants a separator after the ID,
+        // so it leaves such a name exactly as it was.
+        if ($stripped === '' || $stripped === $stem) {
+            return null;
+        }
+
+        return $stripped.($extension !== '' ? '.'.$extension : '');
     }
 
     /**
@@ -258,19 +331,13 @@ final class PS2 extends ConsoleTools
     }
 
     /**
-     * Re-encode the current game's cached cover into the shape OPL reads.
+     * Re-encode the current game's cached artwork into the files OPL reads:
+     * the cover (_COV), the disc icon (_ICO) and the info page's in-game and
+     * title screenshots (_SCR, _SCR2), whichever of them it has.
      *
-     * Nothing is downloaded: a game whose cover was never scraped is skipped
+     * Nothing is downloaded: a game whose artwork was never scraped is skipped
      * rather than fetched, because a provider request hidden behind a file
-     * export is a quota spend nobody asked for.
-     *
-     * The file is written as JPEG, and the skip check therefore only ever asks
-     * about the JPEG. A drive written by an older build carries _COV.png for
-     * every game; those are left where they are — OPL reads them and deleting
-     * somebody's artwork is not this method's business — so the first run
-     * after the format changed re-encodes the whole library and leaves two
-     * files per game behind. Widening the check to the .png sibling would
-     * spare that at the cost of never migrating an old drive at all.
+     * export is a quota spend nobody asked for. True when either was written.
      */
     private function writeArt(): bool
     {
@@ -282,14 +349,45 @@ final class PS2 extends ConsoleTools
         }
 
         $game->loadMissing('media');
-        $artwork = $game->artwork(MediaKind::Cover);
+
+        $pieces = [
+            [MediaKind::Cover, $this->coverSuffix, $this->cover],
+            [MediaKind::Disc, $this->discSuffix, $this->disc],
+            [MediaKind::Screenshot, $this->screenshotSuffix, $this->screen],
+            [MediaKind::TitleScreen, $this->titleScreenSuffix, $this->screen],
+        ];
+
+        $written = false;
+
+        // Every piece tried, not stopped at the first: each is its own file
+        // with its own skip check.
+        foreach ($pieces as [$kind, $suffix, $art]) {
+            $written = $this->writeArtPiece($game, $serial, $kind, $suffix, $art) || $written;
+        }
+
+        return $written;
+    }
+
+    /**
+     * Write one piece of a game's art, or decline to — no artwork of that
+     * kind cached, or the file is already there.
+     *
+     * The skip check asks only about the format this build writes. A drive
+     * written while covers went out as JPEG carries a _COV.jpg per game, which
+     * OPL never drew; those are left where they are — deleting files from
+     * somebody's drive is not this method's business — and the first run
+     * after writes the .png beside each.
+     */
+    private function writeArtPiece(Game $game, string $serial, MediaKind $kind, string $suffix, CoverArt $art): bool
+    {
+        $artwork = $game->artwork($kind);
 
         if ($artwork === null) {
             return false;
         }
 
         $gate = app(LibraryPath::class);
-        $path = $this->artDir.'/'.$serial.$this->coverSuffix.'.'.$this->cover->format->value;
+        $path = $this->artDir.'/'.$serial.$suffix.'.'.$art->format->value;
 
         if (! $this->force && $gate->exists($this->console, $path)) {
             return false;
@@ -302,7 +400,7 @@ final class PS2 extends ConsoleTools
         }
 
         $gate->ensureDirectory($this->console, $this->artDir);
-        $gate->put($this->console, $path, $this->cover->encode($source));
+        $gate->put($this->console, $path, $art->encode($source));
 
         return true;
     }
@@ -326,6 +424,16 @@ final class PS2 extends ConsoleTools
         }
 
         return $this->game->licenseId();
+    }
+
+    /** A name with its leading OPL license ID prefix taken off, or as it was. */
+    private function withoutLicenseId(string $name): string
+    {
+        return trim((string) preg_replace(
+            '/^('.$this->serialPrefixes.')[-_][0-9]{3}\.?[0-9]{2}[.\s_-]+/i',
+            '',
+            $name,
+        ));
     }
 
     /** Whether this console's folder is arranged the way OPL expects. */
@@ -355,6 +463,7 @@ final class PS2 extends ConsoleTools
             // Provider dates arrive as a date or a full timestamp.
             'Release' => Str::before((string) $game->release_date, 'T'),
             'Developer' => (string) $game->developer,
+            'Rating' => $this->starsFor($game->rating),
             'Description' => $this->text->summarise((string) $game->description),
         ];
 
@@ -383,6 +492,22 @@ final class PS2 extends ConsoleTools
         }
 
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * The provider's 0–100 score as the whole stars OPL draws, or '' for none.
+     *
+     * OPL shows a rating as one of six images, Rating_0 to Rating_5, named for
+     * the value — so anything but a whole number in that range, our own score
+     * included, falls back to the empty Rating_0.
+     */
+    private function starsFor(?int $rating): string
+    {
+        if ($rating === null) {
+            return '';
+        }
+
+        return (string) max(0, min(5, (int) round($rating / 20)));
     }
 
     /**

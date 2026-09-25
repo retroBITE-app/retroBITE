@@ -15,6 +15,8 @@ it('maps every provider type back to the slot it fills', function (string $type,
     ['wheel', MediaKind::Logo],
     ['wheel-carbon', MediaKind::Logo],
     ['fanart', MediaKind::Backdrop],
+    ['support-2D', MediaKind::Disc],
+    ['sstitle', MediaKind::Backdrop],
     ['screenmarquee', MediaKind::Backdrop],
 ]);
 

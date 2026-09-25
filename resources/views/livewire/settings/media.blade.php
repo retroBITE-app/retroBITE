@@ -123,10 +123,18 @@ new #[Title('Media settings')] class extends Component
                         @foreach ($types as $type)
                             <label wire:key="type-{{ $type }}" class="flex cursor-pointer items-center gap-3">
                                 <flux:checkbox wire:model="enabled.{{ $type }}" />
+                                {{-- The provider's name, what it is in words, and — for
+                                     the types that fill one — the slot it stands in for,
+                                     outlined so the two do not read as one phrase. --}}
                                 <span class="min-w-0 flex-1">
-                                    <span class="font-mono text-sm text-fg-bright">{{ $type }}</span>
-                                    @if ($this->roles->has($type))
-                                        <span class="ml-2 text-xs text-fg-faint">{{ $this->roles[$type] }}</span>
+                                    <span class="flex items-center gap-2">
+                                        <span class="font-mono text-sm text-fg-bright">{{ $type }}</span>
+                                        @if ($this->roles->has($type))
+                                            <span class="rounded border border-line-bright px-1.5 py-px text-[10px] leading-tight text-fg-muted">{{ $this->roles[$type] }}</span>
+                                        @endif
+                                    </span>
+                                    @if (($description = App\Support\MediaTypes::label($type)) !== null)
+                                        <span class="block truncate text-xs text-fg-faint">{{ $description }}</span>
                                     @endif
                                 </span>
                             </label>

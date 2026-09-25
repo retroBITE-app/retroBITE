@@ -20,6 +20,7 @@ storage/framework/views/*
 storage/framework/testing/*
 storage/app/games/*
 storage/app/docs/*
+localtest/
 
 # Not needed at runtime
 tests/

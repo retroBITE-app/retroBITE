@@ -13,6 +13,7 @@ use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\Scanning\FolderCounts;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -165,6 +166,52 @@ final class LibraryFiles
     }
 
     /**
+     * Rename files in place, each within the folder it is in, and record the
+     * new names.
+     *
+     * Unlike a move, one clash does not stop the rest: a batch spans a whole
+     * console, and a single name already taken must not hold back hundreds of
+     * others. A file whose new name is taken, whose file is gone, or which is
+     * outside the console's folder is left as it is and not counted. A
+     * failure while renaming undoes every rename made.
+     *
+     * @param  array<int, array{file: GameFile, to: string}>  $renames  the new filename, not a path
+     * @return int how many were renamed
+     *
+     * @throws LibraryFileRejected
+     */
+    public function renameFiles(Console $console, array $renames): int
+    {
+        if (! ConsoleSourceFolder::has($console)) {
+            throw LibraryFileRejected::because(LibraryFileRejection::Unconfigured);
+        }
+
+        $plan = $this->planRename($console, $renames);
+
+        if ($plan === []) {
+            return 0;
+        }
+
+        $moved = $this->relocateAll($console, $plan);
+
+        try {
+            DB::transaction(function () use ($plan): void {
+                foreach ($plan as ['file' => $file, 'to' => $to, 'path' => $path]) {
+                    $file->update(['path' => $path, 'filename' => basename($to)]);
+                }
+            });
+        } catch (Throwable $e) {
+            Log::error('Renamed files could not be recorded.', ['console' => $console->key, 'exception' => $e::class]);
+
+            $this->rollBack($console, $moved);
+
+            throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
+        }
+
+        return count($plan);
+    }
+
+    /**
      * Where each file goes, checked against the disk and the database first.
      *
      * @return array<int, array{file: GameFile, from: string, to: string, path: string}>
@@ -209,6 +256,51 @@ final class LibraryFiles
         }
 
         return $plan;
+    }
+
+    /**
+     * The renames that can be made, each checked against the disk and the
+     * database; any that cannot are left out rather than refused.
+     *
+     * @param  array<int, array{file: GameFile, to: string}>  $renames
+     * @return array<int, array{file: GameFile, from: string, to: string, path: string}>
+     */
+    private function planRename(Console $console, array $renames): array
+    {
+        $root = (string) ConsoleSourceFolder::pathFor($console);
+        $plan = [];
+        $taken = [];
+
+        foreach ($renames as ['file' => $file, 'to' => $name]) {
+            $from = $this->consoleRelative($console, $file);
+
+            // A new name, not a path: anything carrying a separator is refused
+            // here, so a rename can never be a move out of the folder.
+            if ($from === null || $name === '' || $name !== basename($name)) {
+                continue;
+            }
+
+            $folder = dirname($from);
+            $to = $folder === '.' ? $name : $folder.'/'.$name;
+
+            if ($to === $from || ! $file->isPresent() || ! $this->onDisk($console, $from)) {
+                continue;
+            }
+
+            if (array_key_exists($to, $taken) || $this->onDisk($console, $to)) {
+                continue;
+            }
+
+            $taken[$to] = true;
+            $plan[] = ['file' => $file, 'from' => $from, 'to' => $to, 'path' => $root.'/'.$to];
+        }
+
+        // A row for a file that has gone missing can still hold the name.
+        $held = GameFile::query()->whereIn('path', array_column($plan, 'path'))->pluck('path')->all();
+
+        return array_values(array_filter($plan, function (array $entry) use ($held): bool {
+            return ! in_array(Arr::get($entry, 'path'), $held, true);
+        }));
     }
 
     /**

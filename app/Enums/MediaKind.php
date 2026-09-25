@@ -7,7 +7,7 @@ namespace App\Enums;
 use Illuminate\Support\Collection;
 
 /**
- * The three artwork slots retroBITE caches for a game.
+ * The artwork slots retroBITE caches for a game.
  *
  * Owns the mapping to both sides of the boundary: the `*_url` keys used in the
  * metadata payload and the ScreenScraper media-type names, each of which was
@@ -18,6 +18,15 @@ enum MediaKind: string
     case Cover = 'cover';
     case Logo = 'logo';
     case Backdrop = 'backdrop';
+
+    /** The disc's own label scan — what OPL draws as a game's icon. */
+    case Disc = 'disc';
+
+    /** A frame from play, for OPL's info page (ART/<serial>_SCR). */
+    case Screenshot = 'screenshot';
+
+    /** The game's title screen, OPL's second info-page shot (_SCR2). */
+    case TitleScreen = 'title_screen';
 
     /**
      * The slot a provider media type fills, or null when it fills none.
@@ -41,6 +50,9 @@ enum MediaKind: string
             self::Cover => 'Cover',
             self::Logo => 'Logo',
             self::Backdrop => 'Backdrop',
+            self::Disc => 'Disc',
+            self::Screenshot => 'Screenshot',
+            self::TitleScreen => 'Title screen',
         };
     }
 
@@ -81,6 +93,9 @@ enum MediaKind: string
             self::Cover => ['box-2D', 'box-3D'],
             self::Logo => ['wheel', 'wheel-hd', 'wheel-carbon', 'wheel-steel'],
             self::Backdrop => ['fanart', 'background', 'sstitle', 'ss', 'screenmarquee'],
+            self::Disc => ['support-2D'],
+            self::Screenshot => ['ss'],
+            self::TitleScreen => ['sstitle'],
         };
     }
 }
