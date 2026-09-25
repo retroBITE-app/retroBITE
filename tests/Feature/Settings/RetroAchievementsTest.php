@@ -1,8 +1,10 @@
 <?php
 
 use App\Jobs\RetroAchievements\ReconcileProgress;
+use App\Jobs\RetroAchievements\SyncHashIndex;
 use App\Jobs\RetroAchievements\SyncRecentUnlocks;
 use App\Models\AppSetting;
+use App\Models\Game;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -163,4 +165,27 @@ it('refuses to sync without a username', function () {
     Livewire::test('settings.retroachievements')->call('syncProgress', false);
 
     Queue::assertNothingPushed();
+});
+
+it('queues the nightly index download on demand, one per console in the library', function () {
+    Queue::fake();
+
+    AppSetting::putSecret(AppSetting::RA_API_KEY, 'abcdefghijklmnopqrstuvwxyz123456');
+    Game::factory()->forConsole('psx')->create();
+
+    $this->get(route('retroachievements.edit'))->assertSee('Refresh indexes now');
+
+    Livewire::test('settings.retroachievements')->call('syncIndex');
+
+    Queue::assertPushed(SyncHashIndex::class, 1);
+});
+
+it('refuses to refresh the indexes without a key', function () {
+    Queue::fake();
+
+    Game::factory()->forConsole('psx')->create();
+
+    Livewire::test('settings.retroachievements')->call('syncIndex');
+
+    Queue::assertNotPushed(SyncHashIndex::class);
 });

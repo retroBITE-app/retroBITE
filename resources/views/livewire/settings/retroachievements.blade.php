@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\RetroAchievements\ReconcileProgress;
+use App\Jobs\RetroAchievements\SyncHashIndex;
 use App\Jobs\RetroAchievements\SyncRecentUnlocks;
 use App\Models\AppSetting;
 use App\Models\RaConsoleSync;
@@ -173,6 +174,31 @@ new #[Title('RetroAchievements')] class extends Component
 
         Flux::toast(variant: 'success', text: __('Queued. Progress will update as the worker gets to it.'));
     }
+
+    /**
+     * Queue the nightly hash-index download now, for every console in the
+     * library — for somebody who has just added games or a key and does not
+     * want to wait for three in the morning.
+     */
+    public function syncIndex(): void
+    {
+        if (! $this->hasKey) {
+            Flux::toast(variant: 'warning', text: __('Add an API key first.'));
+
+            return;
+        }
+
+        // Queued, never run here: an index is megabytes per console.
+        $queued = SyncHashIndex::queueForLibrary();
+
+        if ($queued === 0) {
+            Flux::toast(variant: 'warning', text: __('No console in the library is on RetroAchievements.'));
+
+            return;
+        }
+
+        Flux::toast(variant: 'success', text: trans_choice('Queued the index for :count console.|Queued the indexes for :count consoles.', $queued, ['count' => $queued]));
+    }
 }; ?>
 
 <section class="w-full">
@@ -269,6 +295,15 @@ new #[Title('RetroAchievements')] class extends Component
                                 </div>
                             @endforeach
                         </dl>
+
+                        <div class="mt-4">
+                            <flux:button size="sm" variant="filled" type="button" wire:click="syncIndex">
+                                {{ __('Refresh indexes now') }}
+                            </flux:button>
+                            <p class="mt-1.5 text-xs text-fg-faint">
+                                {{ __('Queues the nightly download for every console listed. Games that had no match are checked again once it lands.') }}
+                            </p>
+                        </div>
                     @endif
                 </div>
 
