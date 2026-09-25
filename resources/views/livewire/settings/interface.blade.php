@@ -4,11 +4,19 @@ use App\Enums\ColorScheme;
 use App\Models\AppSetting;
 use Flux\Flux;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('UI settings')] class extends Component
 {
+    /**
+     * Embedded in onboarding rather than on its own page: no tabs, and Save
+     * moves setup on instead of toasting.
+     */
+    #[Locked]
+    public bool $onboarding = false;
+
     public bool $scanlines = true;
 
     /** 'logo' or 'text': what heads the game page's hero. */
@@ -44,17 +52,25 @@ new #[Title('UI settings')] class extends Component
         // puts the old scheme back.
         $this->dispatch('color-scheme-saved', scheme: $this->colorScheme);
 
+        if ($this->onboarding) {
+            $this->redirectRoute('onboarding.step', ['step' => 'scraping'], navigate: true);
+
+            return;
+        }
+
         Flux::toast(variant: 'success', text: __('UI settings saved.'));
     }
 }; ?>
 
 <section class="w-full">
-    @include('partials.settings-heading')
+    @unless ($onboarding)
+        @include('partials.settings-heading')
+    @endunless
 
-    <x-settings.layout :heading="__('UI')" :subheading="__('How retroBITE looks, independent of what it fetches')">
+    <x-settings.layout :show-tabs="! $onboarding" :heading="__('UI')" :subheading="__('How retroBITE looks, independent of what it fetches')">
         {{-- Outside the form, bound back to it by id, as on the Media screen. --}}
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="interface-settings">{{ __('Save') }}</flux:button>
+            <flux:button variant="primary" type="submit" form="interface-settings">{{ $onboarding ? __('Continue') : __('Save') }}</flux:button>
         </x-slot>
 
         <form id="interface-settings" wire:submit="save" class="flex flex-col gap-6">

@@ -6,6 +6,9 @@
     // Drop the reading-width cap. For a screen laid out as a grid of cards
     // rather than a column of fields, where the cap only wastes the page.
     'wide' => false,
+    // The tab strip across the top. Off where a screen is embedded outside
+    // Settings — onboarding, which walks through three of them in turn.
+    'showTabs' => true,
 ])
 
 @php
@@ -32,11 +35,12 @@
         ['label' => __('UI'), 'route' => 'interface.edit', 'active' => $routeIs('interface.edit')],
         ['label' => __('Media'), 'route' => 'media.edit', 'active' => $routeIs('media.edit')],
         ['label' => __('Consoles'), 'route' => 'console-config.edit', 'active' => $routeIs('console-config.edit')],
-        ['label' => __('ScreenScraper'), 'route' => 'screenscraper.edit', 'active' => $routeIs('screenscraper.edit')],
-        ['label' => __('RetroAchievements'), 'route' => 'retroachievements.edit', 'active' => $routeIs('retroachievements.edit')],
+        ['label' => __('Scraping'), 'route' => 'screenscraper.edit', 'active' => $routeIs('screenscraper.edit')],
+        ['label' => __('Achievements'), 'route' => 'retroachievements.edit', 'active' => $routeIs('retroachievements.edit')],
     ];
 @endphp
 
+@if ($showTabs)
 <div class="mb-6 flex gap-5.5 overflow-x-auto border-b border-raised">
     @foreach ($tabs as $tab)
         <a
@@ -52,6 +56,7 @@
         </a>
     @endforeach
 </div>
+@endif
 
 @if (filled($heading) || filled($subheading) || filled($actions))
     {{-- The screen's action sits on the title's own line, hard right, rather
@@ -69,7 +74,7 @@
         </div>
 
         @if (filled($actions))
-            <div class="shrink-0">{{ $actions }}</div>
+            <div class="flex shrink-0 items-center gap-2">{{ $actions }}</div>
         @endif
     </div>
 @endif

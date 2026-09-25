@@ -67,6 +67,18 @@ class AppSetting extends Model
     public const UI_UPLOADS = 'ui_uploads';
 
     /**
+     * Whether first-run onboarding has been finished.
+     *
+     * App-wide, because it is the install that gets set up, not an account:
+     * the wizard's second step is Settings → UI, which every account shares.
+     * An empty users table sends a visitor to onboarding whatever this says;
+     * this is what keeps somebody who has made the account but closed the tab
+     * inside the wizard. Installs that predate onboarding were marked done by
+     * the migration that introduced it.
+     */
+    public const IS_ONBOARDED = 'is_onboarded';
+
+    /**
      * The colour scheme, an App\Enums\ColorScheme value.
      *
      * App-wide rather than per account, like the rest of Settings → UI, so the
@@ -128,6 +140,7 @@ class AppSetting extends Model
         self::UI_HERO_TITLE => 'text',
         self::UI_UPLOADS => false,
         self::UI_COLOR_SCHEME => 'default',
+        self::IS_ONBOARDED => false,
         self::RA_HARDCORE_PRIMARY => true,
     ];
 

@@ -1,9 +1,13 @@
 @props([
     'title' => null,
-    // A cached artwork URL, or null on a host with nothing scraped yet.
+    // A cached artwork URL, or null on a host with nothing scraped yet — which
+    // gets the shipped scene instead.
     'backdrop' => null,
     // `[['value' => …, 'label' => …], …]`, or empty to show nothing.
     'stats' => [],
+    // A column wide enough for onboarding, whose later steps are settings
+    // screens laid out as cards rather than a sign-in form.
+    'wide' => false,
 ])
 
 <!DOCTYPE html>
@@ -13,9 +17,10 @@
     </head>
     <body class="min-h-screen antialiased">
 
-        @if (! empty($backdrop))
-            <div class="fixed inset-0 bg-cover bg-[position:50%_22%]" style="background-image: url('{{ $backdrop }}')"></div>
-        @endif
+        {{-- Scraped key art once the library has some. Until then the scene
+             that ships in public/images, so a fresh install's sign-in and
+             onboarding are not a bare ground. --}}
+        <div class="fixed inset-0 bg-cover bg-[position:50%_22%]" style="background-image: url('{{ filled($backdrop) ? $backdrop : asset('images/default-backdrop.jpg') }}')"></div>
 
         <div
             class="fixed inset-0"
@@ -47,7 +52,7 @@
 
         <div class="relative flex min-h-screen flex-col px-5 py-12">
             <div class="relative z-10 flex flex-1 items-center justify-center">
-                <div class="flex w-full max-w-[372px] flex-col">
+                <div @class(['flex w-full flex-col', 'max-w-[880px]' => $wide, 'max-w-[372px]' => ! $wide])>
                     <a href="{{ route('login') }}" wire:navigate>
                         <x-logo variant="logo-stacked" :label="config('app.name')" class="mx-auto block h-auto w-[220px]" />
                     </a>

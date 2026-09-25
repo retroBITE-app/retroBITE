@@ -179,12 +179,16 @@ it('stores runtime settings as json and reads them back typed', function () {
 
     AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, false);
 
+    $rows = function (): int {
+        return AppSetting::query()->where('key', AppSetting::AUTO_QUEUE_MEDIA_SCRAPE)->count();
+    };
+
     expect(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeFalse()
-        ->and(AppSetting::count())->toBe(1);
+        ->and($rows())->toBe(1);
 
     AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, true);
 
-    expect(AppSetting::count())->toBe(1);
+    expect($rows())->toBe(1);
 });
 
 it('lists only the media types switched on', function () {

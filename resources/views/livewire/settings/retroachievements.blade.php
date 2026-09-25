@@ -9,11 +9,19 @@ use App\Support\RetroAchievements\LibraryConsoles;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('RetroAchievements')] class extends Component
 {
+    /**
+     * Embedded in onboarding rather than on its own page: no tabs, and Save
+     * moves setup on instead of toasting.
+     */
+    #[Locked]
+    public bool $onboarding = false;
+
     public string $username = '';
 
     /**
@@ -114,7 +122,30 @@ new #[Title('RetroAchievements')] class extends Component
 
         unset($this->hasKey, $this->linked);
 
+        if ($this->onboarding) {
+            $this->finishOnboarding();
+
+            return;
+        }
+
         Flux::toast(variant: 'success', text: __('Settings saved.'));
+    }
+
+    /**
+     * The last onboarding step, and the one that may be skipped: achievements
+     * are an extra, and this screen takes an account any time.
+     */
+    public function finishOnboarding(): void
+    {
+        if (! $this->onboarding) {
+            return;
+        }
+
+        AppSetting::put(AppSetting::IS_ONBOARDED, true);
+
+        Flux::toast(variant: 'success', text: __('Welcome to retroBITE.'));
+
+        $this->redirectRoute('dashboard', navigate: true);
     }
 
     public function forgetKey(): void
@@ -145,15 +176,20 @@ new #[Title('RetroAchievements')] class extends Component
 }; ?>
 
 <section class="w-full">
-    @include('partials.settings-heading')
+    @unless ($onboarding)
+        @include('partials.settings-heading')
+    @endunless
 
-    <x-settings.layout :heading="__('RetroAchievements')" :subheading="__('Achievements, the hash index and your progress')">
+    <x-settings.layout :show-tabs="! $onboarding" :heading="__('RetroAchievements')" :subheading="__('Achievements, the hash index and your progress')">
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="retroachievements-settings">{{ __('Save') }}</flux:button>
+            @if ($onboarding)
+                <flux:button variant="ghost" type="button" wire:click="finishOnboarding">{{ __('Skip for now') }}</flux:button>
+            @endif
+            <flux:button variant="primary" type="submit" form="retroachievements-settings">{{ $onboarding ? __('Finish setup') : __('Save') }}</flux:button>
         </x-slot>
 
         <form id="retroachievements-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div class="flex flex-col gap-6 lg:col-span-6">
+            <div @class(['flex flex-col gap-6', 'lg:col-span-6' => ! $onboarding, 'lg:col-span-12' => $onboarding])>
                 <div class="rounded-xl border border-line bg-surface p-5">
                     <div class="mb-4 flex items-center gap-2.5">
                         <flux:icon.trophy class="size-[17px] text-accent" />
@@ -208,6 +244,8 @@ new #[Title('RetroAchievements')] class extends Component
                 </div>
             </div>
 
+            {{-- Nothing to read back on an install being set up. --}}
+            @unless ($onboarding)
             <div class="flex flex-col gap-6 lg:col-span-6">
                 <div class="rounded-xl border border-line bg-surface p-5">
                     <p class="kicker mb-1 text-fg-faint">{{ __('Hash index') }}</p>
@@ -264,6 +302,7 @@ new #[Title('RetroAchievements')] class extends Component
                     </div>
                 </div>
             </div>
+            @endunless
         </form>
     </x-settings.layout>
 </section>

@@ -84,9 +84,6 @@ done
 
 php /app/artisan migrate --force
 
-# Guarantee a login exists on a fresh install. No-ops once any user exists.
-php /app/artisan db:seed --class=DefaultUserSeeder --force
-
 # After migrate, which runs as root and would otherwise leave root-owned files.
 #
 # Never the games tree: ROM files are read and never written, ownership

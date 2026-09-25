@@ -171,6 +171,9 @@ it('keeps the dashboard cell when the mount cannot be read', function () {
 });
 
 it('shows the login page the library rather than the catalogue', function () {
+    // An install with no account answers every page with onboarding.
+    User::factory()->create();
+
     gameOfSize(4096);
     LibraryStorage::measureFree();
     config()->set('settings.login_show_stats', true);
@@ -185,6 +188,9 @@ it('shows the login page the library rather than the catalogue', function () {
 });
 
 it('drops the login tile rather than dashing it when the mount is gone', function () {
+    // An install with no account answers every page with onboarding.
+    User::factory()->create();
+
     config()->set('settings.login_show_stats', true);
     config()->set('settings.games_path', $this->root.'/not-mounted');
     LibraryStorage::measureFree();

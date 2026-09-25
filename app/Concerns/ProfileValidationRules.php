@@ -32,6 +32,17 @@ trait ProfileValidationRules
     }
 
     /**
+     * The rules for a new account's username, shared by onboarding and
+     * `user:create` so an account made either way meets the same bar.
+     *
+     * @return array<int, ValidationRule|array<mixed>|string>
+     */
+    protected function usernameRules(): array
+    {
+        return ['required', 'string', 'max:255', Rule::unique(User::class, 'username')];
+    }
+
+    /**
      * Get the validation rules used to validate user emails.
      *
      * @return array<int, ValidationRule|array<mixed>|string>
