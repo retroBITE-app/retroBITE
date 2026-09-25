@@ -88,7 +88,16 @@ php /app/artisan migrate --force
 php /app/artisan db:seed --class=DefaultUserSeeder --force
 
 # After migrate, which runs as root and would otherwise leave root-owned files.
-chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
+#
+# Never the games tree: ROM files are read and never written, ownership
+# included, and it is a bind mount that can be tens of thousands of files on a
+# slow or external disk — walking it on every boot is what made a start hang
+# here for minutes. Everything else only where the owner is wrong, so after the
+# first boot this is a quick walk that writes nothing, rather than a chown of
+# every downloaded image and thumbnail.
+find /app/storage /app/bootstrap/cache \
+    -path /app/storage/app/games -prune -o \
+    \( ! -user "$WEB_USER" -o ! -group "$WEB_GROUP" \) -exec chown -h "$WEB_USER:$WEB_GROUP" {} +
 
 # Live updates, as in production (keys were set at the top, before anything
 # ran PHP). --debug prints each connection and message, which is the whole
