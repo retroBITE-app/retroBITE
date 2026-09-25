@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\UploadRejection;
+use App\Jobs\ScanConsoleFolder;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\User;
@@ -95,5 +96,6 @@ it('queues no scan when a batch is done', function () {
 
     Livewire::test('games.upload-modal', ['console' => 'snes'])->call('uploaded', 3);
 
-    Bus::assertNothingDispatched();
+    // A file count, yes — the folder has new files — but never a scan.
+    Bus::assertNotDispatched(ScanConsoleFolder::class);
 });

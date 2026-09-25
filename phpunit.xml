@@ -31,6 +31,10 @@
         <env name="APP_KEY" value="base64:Gm5YB2nVQ0xM8kTsZ1pJdLrWvXaCeHfNoPqRtUiOyE0=" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <!-- Off, whatever .env says: the bar injects its markup and a script
+             tag into every HTML response, which is noise in a test that reads
+             the page and cost in one that does not. -->
+        <env name="DEBUGBAR_ENABLED" value="false" force="true"/>
         <env name="BROADCAST_CONNECTION" value="null" force="true"/>
         <env name="CACHE_STORE" value="array" force="true"/>
         <!-- MariaDB rather than sqlite :memory:, so a migration or a query that

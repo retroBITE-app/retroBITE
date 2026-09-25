@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\GameStatus;
+use App\Jobs\MeasureLibrary;
 use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
@@ -55,10 +56,12 @@ new #[Title('Consoles')] class extends Component
      * leaves a hundred folders behind, and listing all of them buries the four
      * that hold games.
      *
-     * The count comes off the disk, not out of the database. Somebody who has
-     * just dropped forty ISOs on the share should see forty, and the row count
-     * says nothing until a scan has run. Identified has no on-disk answer —
-     * it is what the provider knew — so that half stays a query.
+     * The file count is what is on the disk, not what the database has rows
+     * for — somebody who has dropped forty ISOs on the share should see forty
+     * before any scan — but it is counted by MeasureLibrary in the background
+     * and read back here, so rendering this page never touches the disk.
+     * Identified has no on-disk answer — it is what the provider knew — so
+     * that half is a query.
      *
      * @return Collection<int, array<string, mixed>>
      */
@@ -496,8 +499,6 @@ new #[Title('Consoles')] class extends Component
 
         $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
 
-        $this->dispatch('system-activity-changed');
-
         Flux::toast(text: $queued === 0
             ? __('Nothing to fetch — every identified game on :console already has artwork.', ['console' => $console->name])
             : trans_choice(
@@ -528,8 +529,6 @@ new #[Title('Consoles')] class extends Component
         }
 
         $queued = RateGame::queueForConsole($console->key, held: $held);
-
-        $this->dispatch('system-activity-changed');
 
         Flux::toast(text: $queued === 0
             ? __('Nothing to fetch — every identified game on :console already has a rating.', ['console' => $console->name])
@@ -562,8 +561,6 @@ new #[Title('Consoles')] class extends Component
 
         WriteConsoleExports::dispatch($console->key, $export);
 
-        $this->dispatch('system-activity-changed');
-
         Flux::toast(text: __('Writing :console\'s :export files. Nothing else in the folder is touched.', [
             'console' => $console->name,
             'export' => Str::upper($export),
@@ -587,6 +584,22 @@ new #[Title('Consoles')] class extends Component
         return $tools !== null && $tools->canExport() ? $tools->exports() : [];
     }
 
+    /**
+     * Count every console's files again, now, in the background.
+     *
+     * The page itself never reads the disk: the cards show the count the last
+     * MeasureLibrary run left, and the schedule takes one every fifteen
+     * minutes. This is for somebody who has just copied games in over the
+     * share and does not want to wait for it. The page re-renders when the
+     * counts land, on the storage signal.
+     */
+    public function measureLibrary(): void
+    {
+        MeasureLibrary::dispatch();
+
+        Flux::toast(text: __('Counting files. The cards update as each console is done.'));
+    }
+
     /** Queue a scan. Never runs here: a large library takes minutes to walk. */
     public function scan(string $key): void
     {
@@ -600,14 +613,20 @@ new #[Title('Consoles')] class extends Component
 
         unset($this->added);
 
-        // The sidebar polls slowly while it believes nothing is happening.
-        $this->dispatch('system-activity-changed');
-
         Flux::toast(text: __('Scanning :console. The library fills in as it goes.', ['console' => $console->name]));
     }
 }; ?>
 
-<section class="w-full">
+{{-- Re-rendered when MeasureLibrary lands a count: the cards read the stored
+     figures and nothing here touches the disk. --}}
+<section
+    class="w-full"
+    x-data="{
+        stop: null,
+        init() { this.stop = live.system('storage', () => this.$wire.$refresh()) },
+        destroy() { this.stop?.() },
+    }"
+>
     <div class="flex flex-col gap-6">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div class="min-w-0">
@@ -615,9 +634,15 @@ new #[Title('Consoles')] class extends Component
                 <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Consoles') }}</h1>
             </div>
 
-            <flux:button size="sm" variant="primary" icon="plus" wire:click="openAdd">
-                {{ __('Add console') }}
-            </flux:button>
+            <div class="flex items-center gap-2">
+                <flux:button size="sm" variant="subtle" icon="arrow-path" wire:click="measureLibrary">
+                    {{ __('Count files') }}
+                </flux:button>
+
+                <flux:button size="sm" variant="primary" icon="plus" wire:click="openAdd">
+                    {{ __('Add console') }}
+                </flux:button>
+            </div>
         </div>
 
         @if ($this->added->isEmpty())

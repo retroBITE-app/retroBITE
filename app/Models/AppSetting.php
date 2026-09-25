@@ -123,15 +123,17 @@ class AppSetting extends Model
     ];
 
     /**
-     * Values already read this request.
+     * Every setting, read in one query the first time any is asked for.
      *
-     * A settings table is read far more often than written — the scanline
-     * overlay alone is asked about four times a page — and every read was a
-     * fresh query.
+     * A settings table is read far more often than written, and a page asks
+     * for eight or nine different keys — the scanline overlay, the games view,
+     * the media types, the hardcore preference. Reading them one key at a
+     * time was a query each; the table holds a few dozen small rows, so the
+     * whole of it costs one. Null until then.
      *
-     * @var array<string, mixed>
+     * @var array<string, mixed>|null
      */
-    protected static array $memo = [];
+    protected static ?array $memo = null;
 
     /**
      * @return array<string, string>
@@ -145,11 +147,11 @@ class AppSetting extends Model
     {
         $default ??= Arr::get(self::DEFAULTS, $key);
 
-        if (! array_key_exists($key, static::$memo)) {
-            // ->first()?->value rather than ->value('value'): the latter skips
-            // the json cast and would memoise the raw string.
-            static::$memo[$key] = static::query()->where('key', $key)->first()?->value;
-        }
+        // Models rather than a pluck: pluck() skips the json cast and would
+        // memoise the raw strings.
+        static::$memo ??= static::query()->get()
+            ->mapWithKeys(fn (self $setting): array => [$setting->key => $setting->value])
+            ->all();
 
         return static::$memo[$key] ?? $default;
     }
@@ -160,7 +162,10 @@ class AppSetting extends Model
 
         // Written through rather than invalidated: a screen that saves and then
         // reads back in the same request must not be handed the old answer.
-        static::$memo[$key] = $value;
+        // Only when the table has been read; otherwise the first read gets it.
+        if (static::$memo !== null) {
+            static::$memo[$key] = $value;
+        }
     }
 
     public static function enabled(string $key, ?bool $default = null): bool
@@ -205,6 +210,6 @@ class AppSetting extends Model
      */
     public static function flush(): void
     {
-        static::$memo = [];
+        static::$memo = null;
     }
 }

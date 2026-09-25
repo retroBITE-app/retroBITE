@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Events\GameUpdated;
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Models\Game;
 use App\Services\ScreenScraperService;
+use App\Support\LiveUpdates;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Fetch the provider's rating for one game.
@@ -144,6 +147,7 @@ class RateGame implements ShouldQueue
             // up by the next run. That is right: a rating is votes, and a game
             // nobody had voted on in March can have a rating in June.
             Log::info('No rating offered for game.', ['game' => $this->gameId]);
+            LiveUpdates::game($this->gameId, GameUpdated::RATING);
 
             return;
         }
@@ -152,6 +156,17 @@ class RateGame implements ShouldQueue
         // the row and overwriting it here would make a backfill a
         // re-identification.
         $game->update(['rating' => $rating]);
+
+        LiveUpdates::game($this->gameId, GameUpdated::RATING);
+    }
+
+    /**
+     * The last try has gone. A page waiting on this game hears it now rather
+     * than when its timer runs out.
+     */
+    public function failed(?Throwable $e): void
+    {
+        LiveUpdates::game($this->gameId, GameUpdated::FAILED);
     }
 
     /**

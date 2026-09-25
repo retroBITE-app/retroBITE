@@ -24,7 +24,8 @@
     // Null for a console key config no longer carries — the card still renders,
     // it simply has no icons and falls back to the default geometry.
     $console = $game->console();
-    $cover = $game->artwork(App\Enums\MediaKind::Cover)?->path;
+    $coverMedia = $game->artwork(App\Enums\MediaKind::Cover);
+    $cover = $coverMedia?->path;
     $regionIcon = App\Support\MediaRegions::icon($game->region);
     $regionLabel = App\Support\MediaRegions::label($game->region);
 
@@ -72,7 +73,9 @@
     >
         @if ($cover !== null)
             <img
-                src="{{ route('media.show', ['path' => $cover]) }}"
+                {{-- The shelf-sized copy (see MakeThumbnails), or the original
+                     until it has been made. --}}
+                src="{{ $coverMedia->url(App\Enums\ThumbnailSize::Grid) }}"
                 alt="{{ $game->title }}"
                 loading="lazy"
                 style="max-height: {{ $coverHeight }}px"

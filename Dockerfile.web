@@ -140,8 +140,9 @@ COPY docker/web/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
 COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
+COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
 COPY docker/web/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh
 
 EXPOSE 80
 

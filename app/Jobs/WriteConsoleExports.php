@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Support\Console;
 use App\Support\ExportProgress;
+use App\Support\LibraryStorage;
 use App\Tools\ConsoleTools;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -77,6 +78,10 @@ class WriteConsoleExports implements ShouldQueue
             'console' => $console->key,
             'export' => $this->export,
         ]);
+
+        // The one job that writes into the library, so the one that moves the
+        // disk figure.
+        LibraryStorage::changed();
     }
 
     /**

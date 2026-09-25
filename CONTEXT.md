@@ -96,6 +96,12 @@ backdrops. The opposite of a game file in every way that matters — it did not
 exist until the platform fetched it, and it can be deleted and fetched again
 without anything being lost.
 
+**Thumbnail** — a smaller copy of a cover, made from the downloaded original
+for the interface to show instead of it: one for the list view, one for the
+shelf. Not media in its own right — it has no row, belongs to the cover it was
+made from, and goes when that does. The original is kept; the game page's
+viewer shows it in full.
+
 **Media list** — the artwork the provider *offers* for a game, as its last
 answer listed it. Not media: nothing in it has been downloaded. Every jeuInfos
 answer carries it, so identifying a game, reading its rating and learning its

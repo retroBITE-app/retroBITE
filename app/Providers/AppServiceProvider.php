@@ -2,11 +2,18 @@
 
 namespace App\Providers;
 
+use App\Events\SystemUpdated;
 use App\Models\AppSetting;
 use App\Support\ConsoleOverrides;
 use App\Support\DocPath;
+use App\Support\LiveUpdates;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobQueued;
+use Illuminate\Queue\Events\JobReleasedAfterException;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +41,23 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureRuntimeSettings();
+        $this->configureProxies();
+    }
+
+    /**
+     * Believe the proxies config/app.php names, so an https request behind one
+     * writes https links. See `app.trusted_proxies` for why the default is
+     * everyone in local development and nobody elsewhere.
+     */
+    protected function configureProxies(): void
+    {
+        $proxies = config('app.trusted_proxies');
+
+        if (! is_string($proxies) || $proxies === '') {
+            return;
+        }
+
+        TrustProxies::at($proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
     }
 
     /**
@@ -58,6 +82,25 @@ class AppServiceProvider extends ServiceProvider
             AppSetting::flush();
             ConsoleOverrides::apply();
         });
+
+        $this->configureLiveUpdates();
+    }
+
+    /**
+     * Tell the sidebar the queues moved, for every job there is.
+     *
+     * One listener here rather than a call at each dispatch: it hears jobs
+     * queued from the command line and the scheduler as well as from the
+     * interface, which the page-side nudges it replaces never could. Every
+     * edge the sidebar counts — waiting, running, done, failed, back in the
+     * queue — sends one; the browser folds a burst into one re-render a second.
+     */
+    protected function configureLiveUpdates(): void
+    {
+        Event::listen(
+            [JobQueued::class, JobProcessing::class, JobProcessed::class, JobFailed::class, JobReleasedAfterException::class],
+            fn (): null => LiveUpdates::system(SystemUpdated::ACTIVITY),
+        );
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Events\SystemUpdated;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 
@@ -37,10 +38,21 @@ final class ExportProgress
     public static function advance(string $console, string $export, int $done, int $total): void
     {
         self::write($console, $export, $done, $total);
+
+        LiveUpdates::system(SystemUpdated::ACTIVITY);
     }
 
     /** Take an export off the page. Called however the job ends. */
     public static function finish(string $console, string $export): void
+    {
+        try {
+            self::forgetEntry($console, $export);
+        } finally {
+            LiveUpdates::system(SystemUpdated::ACTIVITY);
+        }
+    }
+
+    private static function forgetEntry(string $console, string $export): void
     {
         $entries = self::entries();
 

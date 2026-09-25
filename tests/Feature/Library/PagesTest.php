@@ -4,6 +4,7 @@ use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
+use App\Jobs\MeasureLibrary;
 use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
@@ -152,8 +153,10 @@ it('re-fetches every identified game when asked to start over', function () {
 });
 
 it('says so rather than queueing nothing when no media types are switched on', function () {
-    Queue::fake();
+    // Added before the fake: adding a console queues a file count, which is
+    // not the queueing this test is about.
     ConsoleSourceFolder::add(new Console('snes'));
+    Queue::fake();
     Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
 
     AppSetting::put(AppSetting::MEDIA_TYPES, []);
@@ -933,7 +936,7 @@ it('does not count a bios dump as a game', function () {
     Livewire::test('consoles.index')->assertSee('2 files');
 });
 
-it('does not walk the drive again on every poll', function () {
+it('never reads the disk to draw the page', function () {
     File::ensureDirectoryExists($this->root.'/ps2');
     File::put($this->root.'/ps2/One.iso', 'x');
 
@@ -943,17 +946,16 @@ it('does not walk the drive again on every poll', function () {
 
     File::put($this->root.'/ps2/Two.iso', 'x');
 
-    // Still the cached answer: the page polls itself every two seconds, and
-    // re-walking a five-thousand-file drive each time is the whole reason the
-    // count is cached at all.
+    // Still the stored count: the page reads what MeasureLibrary left and
+    // never walks a folder itself, however often it renders.
     Livewire::test('consoles.index')->assertSee('1 file');
 
-    FolderCounts::forget(new Console('ps2'));
+    FolderCounts::recount(new Console('ps2'));
 
     Livewire::test('consoles.index')->assertSee('2 files');
 });
 
-it('forgets the count once a scan has walked the folder', function () {
+it('counts the folder again once a scan has walked it', function () {
     File::ensureDirectoryExists($this->root.'/ps2');
     File::put($this->root.'/ps2/One.iso', 'x');
 
@@ -964,8 +966,9 @@ it('forgets the count once a scan has walked the folder', function () {
     File::put($this->root.'/ps2/Two.iso', 'x');
 
     // Faked so the scan's follow-up work — a provider lookup per new game —
-    // stays out of a test that is only about the cached count.
-    Queue::fake();
+    // stays out of a test that is only about the count. The recount itself
+    // runs, since it is the thing under test.
+    Queue::fake()->except(MeasureLibrary::class);
 
     (new ScanConsoleFolder('ps2'))->handle(app(LibraryScanner::class));
 
@@ -1219,8 +1222,10 @@ it('re-fetches every rating on a console when asked to start over', function () 
 });
 
 it('says so rather than queueing nothing when a console has every rating already', function () {
-    Queue::fake();
+    // Added before the fake: adding a console queues a file count, which is
+    // not the queueing this test is about.
     ConsoleSourceFolder::add(new Console('snes'));
+    Queue::fake();
     Game::factory()->forConsole('snes')->matched(101)->rated(80)->create();
 
     Livewire::test('consoles.index')
@@ -2077,4 +2082,57 @@ it('focuses the search on Ctrl+K and marks the view in force', function () {
 
     expect($html)->toMatch('~aria-pressed="true"\s+aria-label="Show a list"~')
         ->and($html)->toMatch('~aria-pressed="false"\s+aria-label="Show covers"~');
+});
+
+it('reads the library\'s consoles once for the whole consoles page', function () {
+    // It used to ask about each console on its own from half a dozen helpers,
+    // and about all 135 for the add dialog: two hundred queries to read a
+    // handful of rows.
+    foreach (['snes', 'nes', 'megadrive', 'psx'] as $key) {
+        ConsoleSourceFolder::add(new Console($key));
+    }
+
+    DB::enableQueryLog();
+
+    Livewire::test('consoles.index')->assertSee('Super Nintendo');
+
+    $reads = collect(DB::getQueryLog())
+        ->filter(fn (array $query): bool => str_contains($query['query'], 'console_source_folders'))
+        ->count();
+
+    expect($reads)->toBe(1);
+});
+
+it('asks the same number of queries for a shelf of five games as for twenty', function () {
+    // One query for the page's games, one for all their artwork: nothing is
+    // fetched per card, so the count does not grow with the shelf.
+    $queriesFor = function (int $games): int {
+        Game::query()->delete();
+
+        foreach (range(1, $games) as $i) {
+            $game = Game::factory()->forConsole('snes')->matched()->create(['title' => "Game {$i}", 'slug' => "game-{$i}"]);
+            Media::factory()->for($game)->ofType('box-2D', 'eu')->create();
+        }
+
+        // Each render as a fresh request would see it: nothing read by the
+        // previous one.
+        AppSetting::flush();
+        app()->forgetScopedInstances();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        Livewire::test('games.index', ['console' => 'snes']);
+
+        $log = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        // And the settings table and the filter lists once each, whatever the
+        // page asks of them.
+        expect(collect($log)->filter(fn (array $q): bool => str_contains($q['query'], 'app_settings'))->count())->toBeLessThanOrEqual(1)
+            ->and(collect($log)->filter(fn (array $q): bool => str_contains($q['query'], 'distinct `genre`'))->count())->toBe(1);
+
+        return count($log);
+    };
+
+    expect($queriesFor(20))->toBe($queriesFor(5));
 });

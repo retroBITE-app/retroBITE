@@ -19,6 +19,7 @@ use App\Tools\ConsoleTools;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -180,8 +181,8 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     /**
      * What the hero says about the console, beside its name.
      *
-     * Two queries for a header, which is why they are aggregates rather than
-     * rows: the shelf below already pages through the games themselves.
+     * One query for a header, of aggregates rather than rows: the shelf below
+     * already pages through the games themselves.
      *
      * @return array{games: int, identified: int, size: string, unlocked: int, possible: int}|null
      */
@@ -194,43 +195,35 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             return null;
         }
 
-        // count(distinct) because the join multiplies a game by its files, and
-        // a multi-disc game would otherwise be counted once per track.
-        $totals = Game::query()
-            ->forConsole($console->key)
-            ->leftJoin('game_files', 'game_files.game_id', '=', 'games.id')
-            ->selectRaw(
-                'count(distinct games.id) as games,'
-                .' count(distinct case when games.status = ? then games.id end) as identified,'
-                .' coalesce(sum(game_files.size_bytes), 0) as bytes',
-                [GameStatus::Matched->value],
-            )
-            ->first();
-
-        $progress = Game::query()
-            ->forConsole($console->key)
-            ->join('ra_progress', fn ($join) => $join
-                ->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
-                ->where('ra_progress.user_id', '=', auth()->id() ?? 0))
-            ->selectRaw(
-                'coalesce(sum(ra_progress.unlocked_count), 0) as unlocked,'
-                .' coalesce(sum(ra_progress.unlocked_hardcore_count), 0) as unlocked_hardcore,'
-                .' coalesce(sum(ra_progress.achievements_possible), 0) as possible'
-            )
-            ->first();
+        // Two derived tables in one round trip, rather than one join: the files
+        // and the progress rows would multiply each other and inflate both
+        // sums. count(distinct) inside the first because the file join still
+        // multiplies a game by its tracks.
+        $totals = DB::selectOne(
+            'select files.identified, files.bytes, progress.unlocked, progress.unlocked_hardcore, progress.possible'
+            .' from (select count(distinct case when games.status = ? then games.id end) as identified,'
+            .'   coalesce(sum(game_files.size_bytes), 0) as bytes'
+            .'   from games left join game_files on game_files.game_id = games.id where games.console = ?) as files'
+            .' cross join (select coalesce(sum(ra_progress.unlocked_count), 0) as unlocked,'
+            .'   coalesce(sum(ra_progress.unlocked_hardcore_count), 0) as unlocked_hardcore,'
+            .'   coalesce(sum(ra_progress.achievements_possible), 0) as possible'
+            .'   from games join ra_progress on ra_progress.ra_game_id = games.retroachievements_id and ra_progress.user_id = ?'
+            .'   where games.console = ?) as progress',
+            [GameStatus::Matched->value, $console->key, auth()->id() ?? 0, $console->key],
+        );
 
         $hardcore = AppSetting::enabled(AppSetting::RA_HARDCORE_PRIMARY);
 
         // Games are the identified ones, as on the console cards and the
         // dashboard: a file the provider could not name is a file, not yet a
-        // game. Files are read off the disk by the same count the cards use.
+        // game. Files are the stored count the cards use (MeasureLibrary).
         return [
             'games' => (int) ($totals->identified ?? 0),
             'identified' => (int) ($totals->identified ?? 0),
             'files' => FolderCounts::gamesIn($console),
             'size' => Number::fileSize((int) ($totals->bytes ?? 0), 1),
-            'unlocked' => (int) (($hardcore ? $progress?->unlocked_hardcore : $progress?->unlocked) ?? 0),
-            'possible' => (int) ($progress->possible ?? 0),
+            'unlocked' => (int) (($hardcore ? $totals?->unlocked_hardcore : $totals?->unlocked) ?? 0),
+            'possible' => (int) ($totals->possible ?? 0),
         ];
     }
 
@@ -339,6 +332,27 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     }
 
     /**
+     * Every distinct genre and player count on the shelf, in one query.
+     *
+     * Both filter lists come from here rather than a distinct query each.
+     * Scoped to the console being listed, or a shelf would offer values
+     * nothing on it has.
+     *
+     * @return Collection<int, Game>
+     */
+    #[Computed]
+    public function filterValues(): Collection
+    {
+        return Game::query()
+            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
+            ->where(fn ($q) => $q
+                ->where(fn ($q) => $q->whereNotNull('genre')->where('genre', '<>', ''))
+                ->orWhere(fn ($q) => $q->whereNotNull('players')->where('players', '<>', '')))
+            ->distinct()
+            ->get(['genre', 'players']);
+    }
+
+    /**
      * Every player count on the shelf, as the provider spells them.
      *
      * Sorted naturally rather than alphabetically, so 2 comes before 10 and
@@ -349,14 +363,9 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     #[Computed]
     public function playerCounts(): Collection
     {
-        return Game::query()
-            // Scoped to the console being listed, as the genres are: a shelf
-            // should not offer a count nothing on it has.
-            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
-            ->whereNotNull('players')
-            ->where('players', '<>', '')
-            ->distinct()
+        return $this->filterValues
             ->pluck('players')
+            ->filter(fn (mixed $players): bool => is_string($players) && $players !== '')
             ->map(fn (string $players) => trim($players))
             ->filter()
             ->unique()
@@ -376,14 +385,9 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     #[Computed]
     public function genres(): Collection
     {
-        return Game::query()
-            // Scoped to the console being listed, or a console's shelf would
-            // offer genres nothing on it has.
-            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
-            ->whereNotNull('genre')
-            ->where('genre', '<>', '')
-            ->distinct()
+        return $this->filterValues
             ->pluck('genre')
+            ->filter(fn (mixed $genre): bool => is_string($genre) && $genre !== '')
             ->flatMap(fn (string $genre) => explode(',', $genre))
             ->map(fn (string $genre) => trim($genre))
             ->filter()
@@ -518,8 +522,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
         ScanConsoleFolder::dispatch($console->key);
 
-        $this->dispatch('system-activity-changed');
-
         Flux::toast(text: __('Scanning :console. The library fills in as it goes.', ['console' => $console->name]));
     }
 
@@ -548,8 +550,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
         $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
 
-        $this->dispatch('system-activity-changed');
-
         Flux::toast(text: $queued === 0
             ? __('Nothing to fetch — every identified game on :console already has artwork.', ['console' => $console->name])
             : trans_choice(
@@ -569,8 +569,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         }
 
         $queued = RateGame::queueForConsole($console->key, held: $held);
-
-        $this->dispatch('system-activity-changed');
 
         Flux::toast(text: $queued === 0
             ? __('Nothing to fetch — every identified game on :console already has a rating.', ['console' => $console->name])
@@ -600,8 +598,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         }
 
         WriteConsoleExports::dispatch($console->key, $export);
-
-        $this->dispatch('system-activity-changed');
 
         Flux::toast(text: __('Writing :console\'s :export files. Nothing else in the folder is touched.', [
             'console' => $console->name,
@@ -1069,7 +1065,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                         @foreach ($this->games as $game)
                             @php
                                 $rowConsole = $game->console();
-                                $rowCover = $game->artwork(MediaKind::Cover)?->path;
+                                $rowCover = $game->artwork(MediaKind::Cover);
 
                                 // Selected off the joined progress row by the
                                 // query above, and null for a game with no set.
@@ -1103,7 +1099,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                     <div class="flex size-12 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-sunken">
                                         @if ($rowCover !== null)
                                             <img
-                                                src="{{ route('media.show', ['path' => $rowCover]) }}"
+                                                src="{{ $rowCover->url(App\Enums\ThumbnailSize::List) }}"
                                                 alt="{{ $game->title }}"
                                                 loading="lazy"
                                                 class="size-full object-contain"

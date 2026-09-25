@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Events\SystemUpdated;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 
@@ -54,6 +55,10 @@ final class ScreenScraperQuota
             'closed_for_leechers' => (bool) (int) Arr::get($response, 'serveurs.closeforleecher', 0),
             'recorded_at' => now()->toIso8601String(),
         ], self::TTL);
+
+        // The allowance moves with every request, and nothing else moves it:
+        // this is the only moment the sidebar's figure goes stale.
+        LiveUpdates::system(SystemUpdated::QUOTA);
     }
 
     /**

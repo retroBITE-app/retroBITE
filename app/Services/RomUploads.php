@@ -159,9 +159,8 @@ final class RomUploads
 
         Cache::forget(self::cacheKey($upload->id));
 
-        // The folder has a file it did not have, so the cards' cached count
-        // is the older answer.
-        FolderCounts::forget($console);
+        // The folder has a file it did not have, so count it again.
+        FolderCounts::recount($console);
 
         return $path;
     }

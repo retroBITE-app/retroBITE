@@ -18,26 +18,31 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * way in and it is behind auth. The path is checked against the media table
  * rather than sanitised: only a file some row actually points at can be
  * served, which makes traversal a question of what exists in the database
- * instead of a string-matching exercise.
+ * instead of a string-matching exercise. A cover's thumbnails are served the
+ * same way, found by their own columns on the row they belong to.
  */
 class ServeMediaController extends Controller
 {
     public function __invoke(Request $request, string $path): Response
     {
-        $media = Media::query()->where('path', $path)->first();
+        $known = Media::query()
+            ->where('path', $path)
+            ->orWhere('thumbnail_list_path', $path)
+            ->orWhere('thumbnail_grid_path', $path)
+            ->exists();
 
-        abort_if($media === null, 404);
+        abort_unless($known, 404);
 
         $disk = Storage::disk('media');
 
-        abort_unless($disk->exists($media->path), 404);
+        abort_unless($disk->exists($path), 404);
 
         return new StreamedResponse(
-            fn () => fpassthru($disk->readStream($media->path)),
+            fn () => fpassthru($disk->readStream($path)),
             200,
             [
-                'Content-Type' => $disk->mimeType($media->path) ?: 'application/octet-stream',
-                'Content-Length' => (string) $disk->size($media->path),
+                'Content-Type' => $disk->mimeType($path) ?: 'application/octet-stream',
+                'Content-Length' => (string) $disk->size($path),
                 // Content-addressed: the filename is the checksum, so a URL
                 // can never point at different bytes than it did before.
                 'Cache-Control' => 'private, max-age=31536000, immutable',

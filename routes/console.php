@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\MeasureLibrary;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -28,3 +29,9 @@ Schedule::command('retrobite:ra:sync-progress')->everyFifteenMinutes()->withoutO
 // The full reconciliation, which catches what the pulse cannot see: revoked
 // unlocks, re-scored sets, and any window the pulse missed.
 Schedule::command('retrobite:ra:sync-progress --full')->dailyAt('04:00');
+
+// What the consoles page, the shelf, the dashboard and the sidebar show about
+// the library disk: files per console and the free space. Measured here so no
+// page ever reads the disk; this is how files copied in over the share show up
+// without a scan. Unique, so it cannot pile up behind a slow disk.
+Schedule::job(new MeasureLibrary)->everyFifteenMinutes();

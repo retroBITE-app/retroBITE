@@ -47,6 +47,9 @@ it('carries the switched-on types over and drops the table', function () {
     ]);
 
     migration()->up();
+    // A migration runs in its own process, which reads settings afresh; this
+    // one has already read them all while booting.
+    AppSetting::flush();
 
     expect(MediaTypes::enabled())->toBe(['box-2D', 'fanart'])
         ->and(Schema::hasTable('media_type_preferences'))->toBeFalse();
@@ -60,6 +63,9 @@ it('keeps an empty choice empty rather than handing back the defaults', function
     ]);
 
     migration()->up();
+    // A migration runs in its own process, which reads settings afresh; this
+    // one has already read them all while booting.
+    AppSetting::flush();
 
     // Somebody switched everything off. That is an answer, not an absence.
     expect(MediaTypes::enabled())->toBe([]);
@@ -69,6 +75,9 @@ it('leaves a never-seeded install on the shipped selection', function () {
     oldTable();
 
     migration()->up();
+    // A migration runs in its own process, which reads settings afresh; this
+    // one has already read them all while booting.
+    AppSetting::flush();
 
     expect(AppSetting::get(AppSetting::MEDIA_TYPES))->toBeNull()
         ->and(MediaTypes::enabled())->toBe(config('media_types.default_enabled'));
@@ -78,6 +87,9 @@ it('does nothing when the table has already gone', function () {
     AppSetting::put(AppSetting::MEDIA_TYPES, ['ss']);
 
     migration()->up();
+    // A migration runs in its own process, which reads settings afresh; this
+    // one has already read them all while booting.
+    AppSetting::flush();
 
     expect(MediaTypes::enabled())->toBe(['ss']);
 });

@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Reverb's keys, before any artisan command: the broadcast channels are built
+# when the app boots, so every PHP process from here on must see the same keys.
+. /usr/local/bin/reverb.sh
+
 GAMES_DIR=/app/storage/app/games
 
 # Ensure storage subdirs exist. The framework dirs are in .dockerignore, so the
@@ -43,13 +47,17 @@ php /app/artisan db:seed --class=DefaultUserSeeder --force
 # "must be present and writable".
 chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
 
+# Live updates (keys were set at the top, before anything ran PHP).
+start_reverb
+
 # Queue workers, split by what actually limits them. One per queue unless
 # .env says otherwise (see .env.example): the smallest footprint that still
 # works every queue, on hardware nobody here has measured.
 #
-# The scraper queue must stay at one on a plain ScreenScraper account, which is
-# allowed one thread: a second worker earns HTTP 429, not speed. Raise it only
-# as far as the max_threads your account shows under Settings → ScreenScraper.
+# More scraper workers add speed up to the threads the ScreenScraper account
+# has (1 on a plain account, 6 on Gold; Settings → ScreenScraper shows it).
+# ScreenScraperService::paced() holds one slot per thread, so workers past
+# that wait for a free one rather than earning HTTP 429.
 # Media downloads and checksumming are bound by disk and bandwidth instead, and
 # are the ones worth raising on a machine that has the room. --max-time
 # recycles a worker hourly, which is the ordinary guard against a long-lived
@@ -70,6 +78,11 @@ workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:work \
 
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:work \
     --queue=media,default --sleep=3 --tries=3 --max-time=3600
+
+# Cover thumbnails: CPU work, on a queue of its own so a library's backfill
+# runs beside the downloads instead of in front of them.
+workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:work \
+    --queue=thumbnails --sleep=3 --tries=3 --max-time=3600
 
 # RetroAchievements: identification and set downloads are HTTP and quick, so
 # one worker keeps up; progress gets its own so a library-wide backfill of the

@@ -2,7 +2,6 @@
 
 use App\Support\ExportProgress;
 use App\Support\SystemActivity;
-use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
@@ -62,28 +61,21 @@ new class extends Component
         ];
     }
 
-    /**
-     * Nudged by whatever just queued something — a dispatch without `to()`
-     * reaches every component on the page — so starting a scan lights this up
-     * at once instead of waiting out the idle tick. Nothing to do in the body:
-     * handling the event is itself a re-render, and the figures are read fresh
-     * in `with()` every time.
-     */
-    #[On('system-activity-changed')]
-    public function recheck(): void {}
 }; ?>
 
 {{--
-    Three seconds while there is work, fifteen while there is none, rather than
-    dropping the attribute when idle. This block does not start the work it
-    shows — a scan started from the command line, or by the nightly schedule,
-    would never appear — so idle costs one grouped count
-    of a small table every fifteen seconds, and Livewire stops even that while
-    the tab is in the background.
+    Re-rendered when the server says the queues moved, rather than polled. The
+    signal comes from a listener on the queue itself (AppServiceProvider), so a
+    scan started from the command line or the nightly schedule shows up too,
+    and an idle page asks the database nothing at all.
 --}}
 <div
-    wire:poll.{{ $activity->busy() ? '3s' : '15s' }}
-    x-data="{ open: $persist(false).as('sidebar.activity') }"
+    x-data="{
+        open: $persist(false).as('sidebar.activity'),
+        stop: null,
+        init() { this.stop = live.system('activity', () => this.$wire.$refresh()) },
+        destroy() { this.stop?.() },
+    }"
     class="mb-3 border-b border-line pb-3"
 >
     @php($total = $activity->total())

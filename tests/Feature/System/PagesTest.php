@@ -9,20 +9,20 @@ beforeEach(function () {
     $this->actingAs(User::factory()->create());
 });
 
-it('says the system is idle, and polls slowly, when nothing is queued', function () {
+it('says the system is idle when nothing is queued, and does not poll', function () {
+    // It waits for the queues' own signal instead of asking on a timer.
     Livewire::test('system-activity')
         ->assertSee('idle')
-        // assertSeeHtml, not assertSee: the attribute would be escaped.
-        ->assertSeeHtml('wire:poll.15s');
+        ->assertDontSeeHtml('wire:poll')
+        ->assertSeeHtml("live.system('activity'");
 });
 
-it('names the work and polls quickly while there is any', function () {
+it('names the work while there is any', function () {
     queueRow('default');
 
     Livewire::test('system-activity')
         ->assertSee('Scanning')
-        ->assertDontSee('idle')
-        ->assertSeeHtml('wire:poll.3s');
+        ->assertDontSee('idle');
 });
 
 it('draws every queue as one bar, and each on its own only once unfolded', function () {
@@ -65,4 +65,10 @@ it('rides along on every page', function () {
     // The assertion that catches the layout wiring being wrong. Nothing else
     // in the suite would notice the component being dropped from the sidebar.
     $this->get(route('dashboard'))->assertOk()->assertSee('Activity');
+});
+
+it('gives thumbnails a row of their own', function () {
+    queueRow('thumbnails');
+
+    Livewire::test('system-activity')->assertSee('Thumbnails');
 });

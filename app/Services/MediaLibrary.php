@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Jobs\MakeThumbnails;
 use App\Models\Game;
 use App\Models\Media;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -67,6 +68,12 @@ final class MediaLibrary
 
         $this->keepOne($game, $type, $entry['region'] ?? null, $md5);
 
+        // The interface shows covers at a fraction of their size, from copies
+        // made in the background; until they exist it shows this original.
+        if (MakeThumbnails::covers($media)) {
+            MakeThumbnails::dispatch($media->id);
+        }
+
         return $media;
     }
 
@@ -115,11 +122,12 @@ final class MediaLibrary
      * Remove a media row and the file behind it, together.
      *
      * Always together: a row deleted on its own leaks the file, and a file
-     * deleted on its own leaves a row pointing at nothing.
+     * deleted on its own leaves a row pointing at nothing. The thumbnails go
+     * with it, being nothing but smaller copies of the same file.
      */
     public function forget(Media $media): void
     {
-        $this->disk()->delete($media->path);
+        $this->disk()->delete($media->files());
         $media->delete();
     }
 

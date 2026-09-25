@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Events\GameUpdated;
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Jobs\RetroAchievements\IdentifyGame;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Services\GameMatcher;
+use App\Support\LiveUpdates;
 use App\Support\Matching\MatchOutcome;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Ask the provider what one game is.
@@ -122,6 +125,24 @@ class MatchGame implements ShouldQueue
             'outcome' => $result->outcome->value,
             'reason' => $result->reason,
         ]);
+
+        // Whatever the answer: a page waiting on the lookup wants to know it
+        // is over. A merge moves the files to another game, and the page open
+        // on the placeholder is the one that needs telling.
+        LiveUpdates::game($this->gameId, GameUpdated::IDENTIFIED);
+
+        if ($result->game !== null && $result->game->id !== $this->gameId) {
+            LiveUpdates::game($result->game->id, GameUpdated::IDENTIFIED);
+        }
+    }
+
+    /**
+     * The last try has gone. A page waiting on this game hears it now rather
+     * than when its timer runs out.
+     */
+    public function failed(?Throwable $e): void
+    {
+        LiveUpdates::game($this->gameId, GameUpdated::FAILED);
     }
 
     /**
