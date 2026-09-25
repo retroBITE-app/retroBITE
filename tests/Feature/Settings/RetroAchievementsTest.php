@@ -3,6 +3,7 @@
 use App\Jobs\RetroAchievements\ReconcileProgress;
 use App\Jobs\RetroAchievements\SyncHashIndex;
 use App\Jobs\RetroAchievements\SyncRecentUnlocks;
+use App\Jobs\RetroAchievements\SyncSet;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Models\User;
@@ -188,4 +189,29 @@ it('refuses to refresh the indexes without a key', function () {
     Livewire::test('settings.retroachievements')->call('syncIndex');
 
     Queue::assertNotPushed(SyncHashIndex::class);
+});
+
+it('queues the sets of identified games that were never fetched', function () {
+    Queue::fake();
+
+    AppSetting::putSecret(AppSetting::RA_API_KEY, 'abcdefghijklmnopqrstuvwxyz123456');
+    Game::factory()->forConsole('psx')->create(['retroachievements_id' => 20721]);
+
+    $this->get(route('retroachievements.edit'))->assertSee('Fetch missing sets');
+
+    Livewire::test('settings.retroachievements')->call('syncMissingSets');
+
+    Queue::assertPushed(SyncSet::class, function (SyncSet $job): bool {
+        return $job->raGameId === 20721;
+    });
+});
+
+it('refuses to fetch sets without a key', function () {
+    Queue::fake();
+
+    Game::factory()->forConsole('psx')->create(['retroachievements_id' => 20721]);
+
+    Livewire::test('settings.retroachievements')->call('syncMissingSets');
+
+    Queue::assertNotPushed(SyncSet::class);
 });

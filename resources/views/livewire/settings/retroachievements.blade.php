@@ -9,6 +9,7 @@ use App\Services\RetroAchievementsService;
 use App\Support\RetroAchievements\LibraryConsoles;
 use Flux\Flux;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Artisan;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -199,6 +200,24 @@ new #[Title('RetroAchievements')] class extends Component
 
         Flux::toast(variant: 'success', text: trans_choice('Queued the index for :count console.|Queued the indexes for :count consoles.', $queued, ['count' => $queued]));
     }
+
+    /**
+     * Queue the 03:30 job now: download the set of every game identified but
+     * never fetched. Through the command itself, so the button and the
+     * schedule cannot disagree about which sets those are.
+     */
+    public function syncMissingSets(): void
+    {
+        if (! $this->hasKey) {
+            Flux::toast(variant: 'warning', text: __('Add an API key first.'));
+
+            return;
+        }
+
+        Artisan::call('retrobite:ra:sync-sets', ['--missing' => true, '--queue' => true]);
+
+        Flux::toast(variant: 'success', text: __('Queued. Achievements will appear as the worker gets to them.'));
+    }
 }; ?>
 
 <section class="w-full">
@@ -302,6 +321,15 @@ new #[Title('RetroAchievements')] class extends Component
                             </flux:button>
                             <p class="mt-1.5 text-xs text-fg-faint">
                                 {{ __('Queues the nightly download for every console listed. Games that had no match are checked again once it lands.') }}
+                            </p>
+                        </div>
+
+                        <div class="mt-3">
+                            <flux:button size="sm" variant="ghost" type="button" wire:click="syncMissingSets">
+                                {{ __('Fetch missing sets') }}
+                            </flux:button>
+                            <p class="mt-1.5 text-xs text-fg-faint">
+                                {{ __('Downloads the achievements for every game identified but not fetched yet — run it after refreshing the indexes. The same job runs nightly, half an hour after them.') }}
                             </p>
                         </div>
                     @endif
