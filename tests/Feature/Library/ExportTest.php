@@ -87,6 +87,34 @@ function pngOf(int $width, int $height): string
     return (string) ob_get_clean();
 }
 
+function disc(Game $game, string $contents): Media
+{
+    $path = 'ps2/game/support-2D/'.md5($contents).'.png';
+    Storage::disk('media')->put($path, $contents);
+
+    return Media::factory()->for($game)->create([
+        'screenscraper_type' => 'support-2D',
+        'path' => $path,
+        'extension' => 'png',
+        'md5' => md5($contents),
+    ]);
+}
+
+/** A disc scan: an opaque circle on a clear square, as ScreenScraper sends one. */
+function discScan(int $size = 600): string
+{
+    $image = imagecreatetruecolor($size, $size);
+    imagealphablending($image, false);
+    imagesavealpha($image, true);
+    imagefill($image, 0, 0, (int) imagecolorallocatealpha($image, 0, 0, 0, 127));
+    imagefilledellipse($image, intdiv($size, 2), intdiv($size, 2), $size, $size, (int) imagecolorallocate($image, 40, 80, 200));
+
+    ob_start();
+    imagepng($image);
+
+    return (string) ob_get_clean();
+}
+
 function cover(Game $game, string $contents): Media
 {
     $path = 'ps2/game/box-2D/'.md5($contents).'.png';
@@ -234,6 +262,52 @@ it('re-encodes a cached cover to the size OPL reads', function () {
     expect($size[0])->toBe(256)
         ->and($size[1])->toBe(368)
         ->and($size['mime'])->toBe('image/jpeg');
+});
+
+it('writes the disc scan as the icon OPL draws beside the cover, its corners clear', function () {
+    $game = exportGame();
+    cover($game, pngOf(1000, 1400));
+    disc($game, discScan());
+
+    expect(runExport('art'))
+        ->toBe(['written' => 1, 'skipped' => 0, 'failed' => 0]);
+
+    $path = $this->root.'/ps2/ART/SLES_503.86_ICO.png';
+    $size = getimagesize($path);
+
+    expect($size[0])->toBe(128)
+        ->and($size[1])->toBe(128)
+        ->and($size['mime'])->toBe('image/png')
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue();
+
+    $written = imagecreatefrompng($path);
+    $corner = imagecolorsforindex($written, (int) imagecolorat($written, 0, 0));
+    $middle = imagecolorsforindex($written, (int) imagecolorat($written, 64, 64));
+
+    // Round like OPL's own default disc, which is a 128-square with clear
+    // corners: a flattened square would draw a black box round every disc.
+    expect($corner['alpha'])->toBe(127)
+        ->and($middle['alpha'])->toBe(0)
+        ->and($middle['blue'])->toBeGreaterThan(150);
+});
+
+it('writes the cover alone for a game with no disc scan', function () {
+    $game = exportGame();
+    cover($game, pngOf(1000, 1400));
+
+    runExport('art');
+
+    expect(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue()
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_ICO.png'))->toBeFalse();
+});
+
+it('writes the disc alone for a game with no cover', function () {
+    $game = exportGame();
+    disc($game, discScan());
+
+    expect(runExport('art'))
+        ->toBe(['written' => 1, 'skipped' => 0, 'failed' => 0])
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_ICO.png'))->toBeTrue();
 });
 
 it('flattens a transparent cover onto something opaque', function () {

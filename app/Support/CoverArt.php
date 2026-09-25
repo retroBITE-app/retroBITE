@@ -32,6 +32,9 @@ final class CoverArt
         public readonly int $height,
         public readonly ImageFormat $format = ImageFormat::Jpeg,
         public readonly int $quality = 90,
+        // Keep the source's transparency instead of flattening it: for a shape
+        // that is not a rectangle, like the round disc OPL draws as an icon.
+        public readonly bool $transparent = false,
     ) {
         if ($width < 1 || $height < 1) {
             throw new RuntimeException('A cover has to have a size.');
@@ -41,6 +44,10 @@ final class CoverArt
         // out-of-range quality as its own default and gives no sign of it.
         if ($quality < 0 || $quality > 100) {
             throw new RuntimeException('A quality has to be between 0 and 100.');
+        }
+
+        if ($transparent && $format !== ImageFormat::Png) {
+            throw new RuntimeException('Only a PNG can keep transparency.');
         }
     }
 
@@ -118,14 +125,18 @@ final class CoverArt
         $target = imagecreatetruecolor($width, $height);
 
         try {
-            // Composited onto opaque black: OPL renders no alpha channel, and
-            // a transparent source arrives on the console full of whatever was
-            // in that memory. JPEG has no alpha at all, so this matters more
-            // under the default format rather than less.
-            imagealphablending($target, true);
+            // Composited onto opaque black for a cover: OPL draws no alpha on
+            // one, and a transparent source arrives on the console full of
+            // whatever was in that memory. JPEG has no alpha at all, so this
+            // matters more under the default format rather than less. A
+            // transparent frame starts clear and is copied into without
+            // blending, so the source's own alpha is what lands.
+            imagealphablending($target, ! $this->transparent);
             imagefilledrectangle(
                 $target, 0, 0, $width - 1, $height - 1,
-                (int) imagecolorallocate($target, 0, 0, 0),
+                $this->transparent
+                    ? (int) imagecolorallocatealpha($target, 0, 0, 0, 127)
+                    : (int) imagecolorallocate($target, 0, 0, 0),
             );
 
             $crop = $this->cropFor((int) imagesx($source), (int) imagesy($source));
@@ -140,7 +151,7 @@ final class CoverArt
                 $crop['width'], $crop['height'],
             );
 
-            imagesavealpha($target, false);
+            imagesavealpha($target, $this->transparent);
 
             ob_start();
 

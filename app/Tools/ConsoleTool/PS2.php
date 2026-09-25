@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tools\ConsoleTool;
 
 use App\Enums\GameStatus;
+use App\Enums\ImageFormat;
 use App\Enums\MediaKind;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
@@ -26,8 +27,8 @@ use Throwable;
  *
  * Every PS2 disc carries a serial — SLES_503.86 and its kin — declared by BOOT2
  * in SYSTEM.CNF. ScreenScraper does not return it, and Open PS2 Loader keys
- * everything on it: ART/SLES_503.86_COV.jpg, CFG/SLES_503.86.cfg, and the
- * filename prefix that tells OPL which disc it is looking at.
+ * everything on it: ART/SLES_503.86_COV.jpg and _ICO.png, CFG/SLES_503.86.cfg,
+ * and the filename prefix that tells OPL which disc it is looking at.
  *
  * That prefix is the reason this class, rather than OplLayout, understands the
  * serial format. The shape is PlayStation 2's and the convention of putting it
@@ -38,6 +39,13 @@ final class PS2 extends ConsoleTools
 {
     /** The shape OPL reads a cover in. Every file on a working drive is this. */
     public readonly CoverArt $cover;
+
+    /**
+     * The shape OPL reads a disc icon in: 128 square with its corners clear,
+     * which is exactly its own built-in "disc" image. The default themes draw
+     * it beside the cover as ItemIcon, the ART/<serial>_ICO slot.
+     */
+    public readonly CoverArt $disc;
 
     /** The shape OPL reads words in: one ASCII line, cut to what it will show. */
     public readonly OplText $text;
@@ -69,12 +77,14 @@ final class PS2 extends ConsoleTools
         public readonly string $configDir = 'CFG',
         public readonly string $artDir = 'ART',
         public readonly string $coverSuffix = '_COV',
+        public readonly string $discSuffix = '_ICO',
     ) {
         // Built here rather than promoted: PHP allows no `new` in a parameter
         // default. The sizes live with the encoders that apply them, not in
         // config, because "every file on a working drive is this size" is not
         // something to invite somebody to tune.
         $this->cover = new CoverArt(256, 368);
+        $this->disc = new CoverArt(128, 128, ImageFormat::Png, transparent: true);
         $this->text = new OplText;
     }
 
@@ -258,19 +268,12 @@ final class PS2 extends ConsoleTools
     }
 
     /**
-     * Re-encode the current game's cached cover into the shape OPL reads.
+     * Re-encode the current game's cached artwork into the files OPL reads:
+     * the cover (_COV) and the disc icon (_ICO), whichever of them it has.
      *
-     * Nothing is downloaded: a game whose cover was never scraped is skipped
+     * Nothing is downloaded: a game whose artwork was never scraped is skipped
      * rather than fetched, because a provider request hidden behind a file
-     * export is a quota spend nobody asked for.
-     *
-     * The file is written as JPEG, and the skip check therefore only ever asks
-     * about the JPEG. A drive written by an older build carries _COV.png for
-     * every game; those are left where they are — OPL reads them and deleting
-     * somebody's artwork is not this method's business — so the first run
-     * after the format changed re-encodes the whole library and leaves two
-     * files per game behind. Widening the check to the .png sibling would
-     * spare that at the cost of never migrating an old drive at all.
+     * export is a quota spend nobody asked for. True when either was written.
      */
     private function writeArt(): bool
     {
@@ -282,14 +285,35 @@ final class PS2 extends ConsoleTools
         }
 
         $game->loadMissing('media');
-        $artwork = $game->artwork(MediaKind::Cover);
+
+        $cover = $this->writeArtPiece($game, $serial, MediaKind::Cover, $this->coverSuffix, $this->cover);
+        $disc = $this->writeArtPiece($game, $serial, MediaKind::Disc, $this->discSuffix, $this->disc);
+
+        return $cover || $disc;
+    }
+
+    /**
+     * Write one piece of a game's art, or decline to — no artwork of that
+     * kind cached, or the file is already there.
+     *
+     * The skip check asks only about the format this build writes. A drive
+     * written by an older build carries _COV.png for every game; those are
+     * left where they are — OPL reads them and deleting somebody's artwork is
+     * not this method's business — so the first run after the format changed
+     * re-encodes the whole library and leaves two files per game behind.
+     * Widening the check to the .png sibling would spare that at the cost of
+     * never migrating an old drive at all.
+     */
+    private function writeArtPiece(Game $game, string $serial, MediaKind $kind, string $suffix, CoverArt $art): bool
+    {
+        $artwork = $game->artwork($kind);
 
         if ($artwork === null) {
             return false;
         }
 
         $gate = app(LibraryPath::class);
-        $path = $this->artDir.'/'.$serial.$this->coverSuffix.'.'.$this->cover->format->value;
+        $path = $this->artDir.'/'.$serial.$suffix.'.'.$art->format->value;
 
         if (! $this->force && $gate->exists($this->console, $path)) {
             return false;
@@ -302,7 +326,7 @@ final class PS2 extends ConsoleTools
         }
 
         $gate->ensureDirectory($this->console, $this->artDir);
-        $gate->put($this->console, $path, $this->cover->encode($source));
+        $gate->put($this->console, $path, $art->encode($source));
 
         return true;
     }
