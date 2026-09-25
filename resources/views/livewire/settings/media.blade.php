@@ -82,7 +82,7 @@ new #[Title('Media settings')] class extends Component
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout :heading="__('Media')" :subheading="__('What artwork retroBite fetches, and when')">
+    <x-settings.layout :heading="__('Media')" :subheading="__('What artwork retroBITE fetches, and when')">
         {{-- Outside the form, bound back to it by id: the header row is where
              the control belongs, and the whole pane sits between them. --}}
         <x-slot name="actions">

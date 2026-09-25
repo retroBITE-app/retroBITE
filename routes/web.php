@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LoginBackdropController;
 use App\Http\Controllers\Docs\ArchiveDocController;
 use App\Http\Controllers\Docs\DownloadDocController;
 use App\Http\Controllers\Docs\ServeMediaController as ServeDocMediaController;
+use App\Http\Controllers\FaviconController;
 use App\Http\Controllers\Library\ServeMediaController;
 use App\Http\Controllers\Library\UploadChunkController;
 use App\Models\Game;
@@ -13,6 +14,10 @@ use Illuminate\Support\Facades\Route;
 // sign-in page cannot be behind auth. It takes no path, so it serves a
 // backdrop of its own choosing and nothing else.
 Route::get('login/backdrop', LoginBackdropController::class)->name('login.backdrop');
+
+// Public for the same reason: the sign-in page's tab needs its icon too. An
+// unknown scheme is a 404 through the enum binding.
+Route::get('favicon/{scheme}.svg', FaviconController::class)->name('favicon');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');

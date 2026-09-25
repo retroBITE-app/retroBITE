@@ -214,7 +214,7 @@ new #[Title('Console settings')] class extends Component
 <section class="w-full">
     @include('partials.settings-heading')
 
-    <x-settings.layout wide :heading="__('Consoles')" :subheading="__('Change what retroBite ships for a console')">
+    <x-settings.layout wide :heading="__('Consoles')" :subheading="__('Change what retroBITE ships for a console')">
         <x-slot name="actions">
             <div class="flex items-center gap-2">
                 @if ($this->editedCount > 0)

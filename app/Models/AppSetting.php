@@ -67,6 +67,14 @@ class AppSetting extends Model
     public const UI_UPLOADS = 'ui_uploads';
 
     /**
+     * The colour scheme, an App\Enums\ColorScheme value.
+     *
+     * App-wide rather than per account, like the rest of Settings → UI, so the
+     * sign-in page wears it before anybody has signed in.
+     */
+    public const UI_COLOR_SCHEME = 'ui_color_scheme';
+
+    /**
      * Runtime edits to the shipped console config, keyed by console then by
      * config key. Absent means every console is as its file declares it.
      */
@@ -119,6 +127,7 @@ class AppSetting extends Model
         self::UI_GAMES_VIEW => 'cards',
         self::UI_HERO_TITLE => 'text',
         self::UI_UPLOADS => false,
+        self::UI_COLOR_SCHEME => 'default',
         self::RA_HARDCORE_PRIMARY => true,
     ];
 

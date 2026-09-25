@@ -168,7 +168,7 @@ new #[Title('RetroAchievements')] class extends Component
                     </div>
 
                     <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('RetroAchievements adds achievements to retro games. retroBite matches your library against its sets and follows what you have unlocked. It needs your account name and a web API key, both free.') }}
+                        {{ __('RetroAchievements adds achievements to retro games. retroBITE matches your library against its sets and follows what you have unlocked. It needs your account name and a web API key, both free.') }}
                     </p>
 
                     {{-- Straight to the tab the key is on. It is not on the

@@ -7,7 +7,7 @@
 ])
 
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark" data-scheme="{{ App\Enums\ColorScheme::current()->value }}">
     <head>
         @include('partials.head')
     </head>
@@ -49,7 +49,7 @@
             <div class="relative z-10 flex flex-1 items-center justify-center">
                 <div class="flex w-full max-w-[372px] flex-col">
                     <a href="{{ route('login') }}" wire:navigate>
-                        <img src="/images/logo-1.svg" alt="{{ config('app.name') }}" class="mx-auto block h-auto w-[220px]" />
+                        <x-logo variant="logo-stacked" :label="config('app.name')" class="mx-auto block h-auto w-[220px]" />
                     </a>
 
                     {{ $slot }}

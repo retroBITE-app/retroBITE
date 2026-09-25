@@ -56,7 +56,7 @@
      that twitches as the pointer crosses it is worse than no outline at all.
      The padding is likewise unconditional, which is what leaves the colour
      somewhere to go. --}}
-<div class="group relative flex w-fit max-w-full flex-col gap-2 rounded-2xl border border-transparent p-2 transition-colors hover:border-accent-tint focus-within:border-accent-tint">
+<div class="group relative flex w-fit max-w-full flex-col gap-2 rounded-2xl border-3 border-transparent p-2 transition-colors hover:border-accent-tint/55 focus-within:border-accent-tint/55">
     <a
         href="{{ route('games.show', $game->routeParameters()) }}"
         wire:navigate

@@ -10,7 +10,7 @@
 @endphp
 
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark" data-scheme="{{ App\Enums\ColorScheme::current()->value }}">
     <head>
         @include('partials.head')
     </head>
@@ -18,7 +18,7 @@
         <flux:sidebar sticky collapsible="mobile" class="border-e border-line bg-sunken">
             <flux:sidebar.header>
                 <a href="{{ route('dashboard') }}" wire:navigate class="flex flex-1 items-center justify-center py-1">
-                    <img src="/images/logo-2.svg" alt="{{ config('app.name') }}" class="block h-auto w-[132px]" />
+                    <x-logo variant="logo-wide" :label="config('app.name')" class="block h-auto w-[132px]" />
                 </a>
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
@@ -106,7 +106,7 @@
                 <livewire:library-storage />
 
                 <div class="flex items-center gap-2.5">
-                    <img src="/favicon.svg" alt="" class="block h-auto w-10 shrink-0" />
+                    <x-logo class="block h-auto w-10 shrink-0" />
 
                     <span class="min-w-0 flex-1 leading-tight">
                         <span class="block truncate text-sm text-fg-soft">{{ auth()->user()->username ?? auth()->user()->name }}</span>
