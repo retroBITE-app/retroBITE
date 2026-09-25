@@ -355,6 +355,7 @@ final class PS2 extends ConsoleTools
             // Provider dates arrive as a date or a full timestamp.
             'Release' => Str::before((string) $game->release_date, 'T'),
             'Developer' => (string) $game->developer,
+            'Rating' => $this->starsFor($game->rating),
             'Description' => $this->text->summarise((string) $game->description),
         ];
 
@@ -383,6 +384,22 @@ final class PS2 extends ConsoleTools
         }
 
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * The provider's 0–100 score as the whole stars OPL draws, or '' for none.
+     *
+     * OPL shows a rating as one of six images, Rating_0 to Rating_5, named for
+     * the value — so anything but a whole number in that range, our own score
+     * included, falls back to the empty Rating_0.
+     */
+    private function starsFor(?int $rating): string
+    {
+        if ($rating === null) {
+            return '';
+        }
+
+        return (string) max(0, min(5, (int) round($rating / 20)));
     }
 
     /**

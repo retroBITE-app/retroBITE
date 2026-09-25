@@ -116,6 +116,22 @@ it('writes a config in the shape a real drive carries', function () {
     ])."\n");
 });
 
+it('writes the rating as the whole stars OPL draws', function (?int $rating, ?string $line) {
+    exportGame(['rating' => $rating]);
+
+    runExport('cfg');
+
+    $line === null
+        ? expect(cfg())->not->toContain('Rating=')
+        : expect(cfg())->toContain("\nDeveloper=Traveller's Tales\n{$line}\nDescription=");
+})->with([
+    'the game page\'s 85' => [85, 'Rating=4'],
+    'half way rounds up' => [50, 'Rating=3'],
+    'the floor' => [0, 'Rating=0'],
+    'the ceiling' => [100, 'Rating=5'],
+    'nobody has rated it' => [null, null],
+]);
+
 it('cuts a long synopsis on a word boundary', function () {
     exportGame(['description' => str_repeat('word ', 200)]);
 
