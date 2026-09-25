@@ -169,7 +169,7 @@ new #[Title('ScreenScraper')] class extends Component
                     </div>
 
                     <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('retroBite identifies games against ScreenScraper and downloads its artwork. It works without an account, on a shared allowance that runs out quickly; a free account of your own raises it to 20 000 lookups a day.') }}
+                        {{ __('retroBITE identifies games against ScreenScraper and downloads its artwork. It works without an account, on a shared allowance that runs out quickly; a free account of your own raises it to 20 000 lookups a day.') }}
                     </p>
 
                     <div class="mb-4">

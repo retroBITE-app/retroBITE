@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ColorScheme;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Models\Media;
@@ -106,4 +107,47 @@ it('keeps the settings tab underlined after a save re-renders the page', functio
 
     expect($response->json('components.0.effects.html'))
         ->toMatch('~text-fg-bright shadow-underline"\s*>\s*UI\s*</a>~');
+});
+
+it('saves the color scheme and writes it onto every page', function () {
+    $this->actingAs(User::factory()->create());
+
+    $this->get(route('interface.edit'))->assertOk()->assertSee('data-scheme="default"', false);
+
+    Livewire::test('settings.interface')
+        ->assertSet('colorScheme', 'default')
+        ->set('colorScheme', 'cobalt')
+        ->call('save')
+        ->assertHasNoErrors()
+        ->assertDispatched('color-scheme-saved', scheme: 'cobalt');
+
+    expect(AppSetting::get(AppSetting::UI_COLOR_SCHEME))->toBe('cobalt');
+
+    $this->get(route('dashboard'))->assertOk()->assertSee('data-scheme="cobalt"', false);
+});
+
+it('wears the color scheme on the sign-in page too', function () {
+    AppSetting::put(AppSetting::UI_COLOR_SCHEME, 'famicom');
+
+    $this->get('/')
+        ->assertOk()
+        ->assertSee('data-scheme="famicom"', false)
+        ->assertSee(route('favicon', 'famicom'), false);
+});
+
+it('refuses a color scheme it does not ship', function () {
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test('settings.interface')
+        ->set('colorScheme', 'neon')
+        ->call('save')
+        ->assertHasErrors('colorScheme');
+
+    expect(AppSetting::get(AppSetting::UI_COLOR_SCHEME))->toBe('default');
+});
+
+it('falls back to the default for a stored scheme that no longer ships', function () {
+    AppSetting::put(AppSetting::UI_COLOR_SCHEME, 'retired');
+
+    expect(ColorScheme::current())->toBe(ColorScheme::Default);
 });

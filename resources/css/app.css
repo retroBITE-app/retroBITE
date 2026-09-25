@@ -130,19 +130,29 @@
     --shadow-underline: inset 0 -2px 0 var(--color-accent);
 
     /* Flux paints its components off the zinc ramp. Remapping it onto the
-       warm grounds above is what makes every flux: component inherit this
-       design without touching a single call site. */
-    --color-zinc-50: #f0e6d2;
-    --color-zinc-100: #e9e6dd;
-    --color-zinc-200: #cfcabd;
-    --color-zinc-300: #b8b3ab;
-    --color-zinc-400: #9d978e;
+       grounds and text above is what makes every flux: component inherit this
+       design without touching a single call site. Pointed at the tokens rather
+       than copied from them, so a colour scheme only restates the named ones —
+       500 is the one rung with no token of its own. */
+    --color-zinc-50: var(--color-fg-bright);
+    --color-zinc-100: var(--color-fg);
+    --color-zinc-200: var(--color-fg-soft);
+    --color-zinc-300: var(--color-fg-muted);
+    --color-zinc-400: var(--color-fg-faint);
     --color-zinc-500: #6d6a64;
-    --color-zinc-600: #3a3a40;
-    --color-zinc-700: #2c2c31;
-    --color-zinc-800: #202024;
-    --color-zinc-900: #17171a;
-    --color-zinc-950: #0c0c0d;
+    --color-zinc-600: var(--color-line-bright);
+    --color-zinc-700: var(--color-line-input);
+    --color-zinc-800: var(--color-raised);
+    --color-zinc-900: var(--color-surface);
+    --color-zinc-950: var(--color-ground);
+
+    /* The two red slots in the logo SVGs (.logo-bright, .logo-shade). The
+       default scheme keeps the logo's own reds; the others recolour them to
+       their accent. Hexes rather than var() so
+       App\Enums\ColorScheme::logoColors() can mirror them for the favicon,
+       which is a file and cannot read these. */
+    --color-logo: #d0202a;
+    --color-logo-shade: #8e1218;
 
     /* Flux's accent trio. accent-foreground is the ground colour so that the
        rare solid-amber surface reads as dark-on-amber. */
@@ -160,6 +170,238 @@
     --color-accent: #e8b44a;
     --color-accent-content: #e8b44a;
     --color-accent-foreground: #0c0c0d;
+}
+
+/*
+ * Colour schemes, picked in Settings → UI and written onto <html> as
+ * data-scheme. An unknown or absent scheme falls through to the @theme block
+ * above, which is Default.
+ *
+ * Each is a full theme — grounds, lines, text, accent, feedback — restating
+ * every named token. On <html> the zinc ramp and the shadows follow through
+ * var(), because :root recomputes them against these. Matched on any element
+ * rather than <html> alone so the settings previews can each wear their own
+ * scheme inside a page wearing another; that is also why Default has a block
+ * restating @theme (tests/Unit/ColorSchemeCssTest.php keeps the two equal).
+ * A nested preview gets the named tokens only — the zinc ramp and shadows
+ * there are still the page's, so the previews use neither.
+ *
+ * Later than `.dark` at equal specificity, so its accent restatement does not
+ * win. Keep --color-logo* in step with App\Enums\ColorScheme::logoColors(),
+ * which mirrors them for the favicon.
+ *
+ * Ratios on sunken, as for Default: faint ≥ 6.29, accent ≥ 5.2, deep ≥ 3.0.
+ */
+
+/* Default: amber on warm black, the logo in its own reds. */
+[data-scheme='default'] {
+    --color-ground: #0c0c0d;
+    --color-sunken: #141416;
+    --color-surface: #17171a;
+    --color-hover: #1c1c1f;
+    --color-raised: #202024;
+
+    --color-line: #232326;
+    --color-line-strong: #26262a;
+    --color-line-input: #2c2c31;
+    --color-line-bright: #3a3a40;
+
+    --color-fg-bright: #f0e6d2;
+    --color-fg: #e9e6dd;
+    --color-fg-soft: #cfcabd;
+    --color-fg-muted: #b8b3ab;
+    --color-fg-dim: #aca69d;
+    --color-fg-faint: #9d978e;
+    --color-fg-cool: #adadb4;
+
+    --color-accent-light: #f5d089;
+    --color-accent-bright: #f0c14b;
+    --color-accent: #e8b44a;
+    --color-accent-tint: #e0a83c;
+    --color-accent-deep: #c9902a;
+    --color-accent-muted: #a09879;
+
+    --color-danger: #c98b7f;
+    --color-warn: #cf8759;
+    --color-scrim: #080809;
+    --color-zinc-500: #6d6a64;
+
+    --color-logo: #d0202a;
+    --color-logo-shade: #8e1218;
+
+    --color-accent-content: #e8b44a;
+    --color-accent-foreground: #0c0c0d;
+}
+
+/* Phosphor: a green monochrome terminal. */
+[data-scheme='phosphor'] {
+    --color-ground: #0a0d0b;
+    --color-sunken: #101512;
+    --color-surface: #131915;
+    --color-hover: #171e1a;
+    --color-raised: #1b231e;
+
+    --color-line: #1f2822;
+    --color-line-strong: #222c26;
+    --color-line-input: #28332c;
+    --color-line-bright: #344238;
+
+    --color-fg-bright: #d8f5dc;
+    --color-fg: #d6e8d8;
+    --color-fg-soft: #b9cfbc;
+    --color-fg-muted: #a2b8a6;
+    --color-fg-dim: #97ad9b;
+    --color-fg-faint: #89a08d;
+    --color-fg-cool: #a6b4ae;
+
+    --color-accent-light: #a6f5b8;
+    --color-accent-bright: #6ee88a;
+    --color-accent: #4fdc72;
+    --color-accent-tint: #3fcf63;
+    --color-accent-deep: #2ea64d;
+    --color-accent-muted: #7d9a83;
+
+    --color-danger: #e0968a;
+    --color-warn: #d9b35a;
+    --color-scrim: #060807;
+    --color-zinc-500: #5f6b62;
+
+    --color-logo: #4fdc72;
+    --color-logo-shade: #34914b;
+
+    --color-accent-content: #4fdc72;
+    --color-accent-foreground: #0a0d0b;
+}
+
+/* Famicom: crimson on warm black. The logo keeps its own two reds, as in
+   Default. Danger moves to rose and warn to yellow, so neither reads as the
+   accent. */
+[data-scheme='famicom'] {
+    --color-ground: #0d0b0b;
+    --color-sunken: #151213;
+    --color-surface: #1a1617;
+    --color-hover: #1f1a1b;
+    --color-raised: #231d1f;
+
+    --color-line: #272022;
+    --color-line-strong: #2a2325;
+    --color-line-input: #31292b;
+    --color-line-bright: #40363a;
+
+    --color-fg-bright: #f3e4dc;
+    --color-fg: #ebe3de;
+    --color-fg-soft: #d2c7c0;
+    --color-fg-muted: #bcb0aa;
+    --color-fg-dim: #b0a49e;
+    --color-fg-faint: #a1958f;
+    --color-fg-cool: #b0abb0;
+
+    --color-accent-light: #f5a3a0;
+    --color-accent-bright: #f06a66;
+    --color-accent: #ec5157;
+    --color-accent-tint: #dc3a40;
+    --color-accent-deep: #b82a31;
+    --color-accent-muted: #a3807c;
+
+    --color-danger: #e58fb8;
+    --color-warn: #e0c050;
+    --color-scrim: #090707;
+    --color-zinc-500: #6f6664;
+
+    --color-logo: #d0202a;
+    --color-logo-shade: #8e1218;
+
+    --color-accent-content: #ec5157;
+    --color-accent-foreground: #0d0b0b;
+}
+
+/* DMG: the original Game Boy's pea-green LCD. */
+[data-scheme='dmg'] {
+    --color-ground: #0c0d09;
+    --color-sunken: #13150f;
+    --color-surface: #171912;
+    --color-hover: #1b1e16;
+    --color-raised: #20231a;
+
+    --color-line: #24281d;
+    --color-line-strong: #272b20;
+    --color-line-input: #2e3325;
+    --color-line-bright: #3b412f;
+
+    --color-fg-bright: #e3ebc4;
+    --color-fg: #dfe4cc;
+    --color-fg-soft: #c4cbad;
+    --color-fg-muted: #afb697;
+    --color-fg-dim: #a3aa8b;
+    --color-fg-faint: #959c7e;
+    --color-fg-cool: #aeb3a0;
+
+    --color-accent-light: #d4e88a;
+    --color-accent-bright: #b8d64a;
+    --color-accent: #9bbc0f;
+    --color-accent-tint: #8cad0d;
+    --color-accent-deep: #6f8a0b;
+    --color-accent-muted: #9a9f78;
+
+    --color-danger: #d99582;
+    --color-warn: #e0a458;
+    --color-scrim: #080906;
+    --color-zinc-500: #686c58;
+
+    --color-logo: #9bbc0f;
+    --color-logo-shade: #667c0a;
+
+    --color-accent-content: #9bbc0f;
+    --color-accent-foreground: #0c0d09;
+}
+
+/* Cobalt: electric blue on blue-slate. */
+[data-scheme='cobalt'] {
+    --color-ground: #0a0c10;
+    --color-sunken: #10131a;
+    --color-surface: #13171f;
+    --color-hover: #171c25;
+    --color-raised: #1b212b;
+
+    --color-line: #1f2530;
+    --color-line-strong: #222935;
+    --color-line-input: #28303d;
+    --color-line-bright: #343e4e;
+
+    --color-fg-bright: #dce6f5;
+    --color-fg: #dde3ec;
+    --color-fg-soft: #bec7d4;
+    --color-fg-muted: #a7b0be;
+    --color-fg-dim: #9ba5b3;
+    --color-fg-faint: #8d97a6;
+    --color-fg-cool: #a8b0bf;
+
+    --color-accent-light: #9ec5ff;
+    --color-accent-bright: #7ab0ff;
+    --color-accent: #5b9cf8;
+    --color-accent-tint: #3d82ea;
+    --color-accent-deep: #2c66c4;
+    --color-accent-muted: #7f8ca3;
+
+    --color-danger: #e39088;
+    --color-warn: #d9a25a;
+    --color-scrim: #07080b;
+    --color-zinc-500: #616978;
+
+    --color-logo: #5b9cf8;
+    --color-logo-shade: #3c67a4;
+
+    --color-accent-content: #5b9cf8;
+    --color-accent-foreground: #0a0c10;
+}
+
+/* The logo's two red slots; see --color-logo in @theme. */
+.logo-bright {
+    fill: var(--color-logo);
+}
+
+.logo-shade {
+    fill: var(--color-logo-shade);
 }
 
 @layer base {
