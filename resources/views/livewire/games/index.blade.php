@@ -77,6 +77,16 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     public string $minRating = '';
 
     /**
+     * 'needed' | 'identified', or '' for every game.
+     *
+     * Needed takes in both a game never looked up and one the provider had no
+     * match for: either way it is waiting on somebody, and the list of them is
+     * what the filter is for.
+     */
+    #[Url(as: 'identified', except: '')]
+    public string $identified = '';
+
+    /**
      * 'title' | 'rating' | 'year' | 'newest'.
      *
      * A view rather than a filter: Clear leaves it alone, because somebody who
@@ -109,7 +119,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     public function updated(string $property): void
     {
         // Any change to a filter invalidates the page you were on.
-        if (in_array($property, ['query', 'consoleFilter', 'genre', 'players', 'minRating', 'sort'], true)) {
+        if (in_array($property, ['query', 'consoleFilter', 'genre', 'players', 'minRating', 'identified', 'sort'], true)) {
             $this->resetPage();
         }
     }
@@ -291,6 +301,11 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             ))
             ->when($this->players !== '', fn ($q) => $q->where('games.players', $this->players))
             ->when($this->minRating !== '', fn ($q) => $q->where('games.rating', '>=', (int) $this->minRating))
+            ->when($this->identified !== '', function ($q) {
+                return $this->identified === 'identified'
+                    ? $q->where('games.status', GameStatus::Matched)
+                    : $q->where('games.status', '<>', GameStatus::Matched);
+            })
             // Both for the cards: the cover comes out of the media relation in
             // memory, and the size is a sum rather than every file loaded.
             ->with(['media' => fn ($q) => $q->ofKind(MediaKind::Cover)])
@@ -618,7 +633,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     {
         // Not $sort: it says how to read the library rather than which part of
         // it to show, and clearing a search should not undo that.
-        $this->reset('query', 'consoleFilter', 'genre', 'players', 'minRating');
+        $this->reset('query', 'consoleFilter', 'genre', 'players', 'minRating', 'identified');
         $this->resetPage();
     }
 }; ?>
@@ -939,7 +954,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                 <flux:select.option value="60">{{ __('60 and above') }}</flux:select.option>
             </flux:select>
 
-            @if ($query !== '' || $consoleFilter !== '' || $genre !== '' || $players !== '' || $minRating !== '')
+            <flux:select wire:model.live="identified" size="sm" class="w-44">
+                <flux:select.option value="">{{ __('Any status') }}</flux:select.option>
+                <flux:select.option value="needed">{{ __('Needs identifying') }}</flux:select.option>
+                <flux:select.option value="identified">{{ __('Identified') }}</flux:select.option>
+            </flux:select>
+
+            @if ($query !== '' || $consoleFilter !== '' || $genre !== '' || $players !== '' || $minRating !== '' || $identified !== '')
                 <flux:button size="sm" variant="ghost" wire:click="clear">{{ __('Clear') }}</flux:button>
             @endif
 

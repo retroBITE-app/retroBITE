@@ -1049,6 +1049,26 @@ it('filters out everything below the rating asked for', function () {
         ->assertDontSee('Unrated');
 });
 
+it('lists only the games still waiting to be identified, or only the identified', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Known Quantity', 'slug' => 'known']);
+    Game::factory()->forConsole('snes')->create(['title' => 'Fresh From Disk', 'slug' => 'fresh', 'status' => GameStatus::Placeholder]);
+    Game::factory()->forConsole('snes')->unmatched()->create(['title' => 'Nowhere To Be Found', 'slug' => 'nowhere']);
+
+    // Needed takes in both: never looked up, and looked up with no match.
+    Livewire::test('games.index', ['console' => 'snes'])
+        ->assertSee('Needs identifying')
+        ->set('identified', 'needed')
+        ->assertSee('Fresh From Disk')
+        ->assertSee('Nowhere To Be Found')
+        ->assertDontSee('Known Quantity')
+        ->set('identified', 'identified')
+        ->assertSee('Known Quantity')
+        ->assertDontSee('Fresh From Disk')
+        ->assertDontSee('Nowhere To Be Found')
+        ->call('clear')
+        ->assertSet('identified', '');
+});
+
 it('clears the rating filter but keeps the sort', function () {
     Game::factory()->forConsole('snes')->matched()->rated(95)->create();
 
@@ -1927,15 +1947,14 @@ it('keeps the rule where the first group has something in it', function () {
         ], escape: false);
 });
 
-it('no longer filters or lists by status', function () {
+it('does not list status as a column', function () {
     Game::factory()->forConsole('snes')->matched()->create(['title' => 'Identified One', 'slug' => 'one']);
     Game::factory()->forConsole('snes')->create(['title' => 'Unknown', 'slug' => 'unknown']);
 
-    // The column and its filter are gone. The menu still says what a game is
-    // by which identify item it offers, which is the only place the state
-    // changes what anybody can do about it.
+    // The column is gone: the menu says what a game is by which identify
+    // item it offers. Which games still need identifying is a filter again,
+    // for finding them, not a column on every row.
     Livewire::withQueryParams(['view' => 'table'])->test('games.index')
-        ->assertDontSee('Any status')
         ->assertDontSee('Not yet identified')
         ->assertSee('Identified One')
         ->assertSee('Unknown');
