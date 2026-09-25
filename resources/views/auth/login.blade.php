@@ -45,13 +45,7 @@
 @endphp
 
 <x-layouts::auth :title="__('Log in')" :backdrop="$backdrop" :stats="$stats">
-    <p class="kicker-sans mt-9 text-center text-fg-faint uppercase">{{ __('Sign in') }}</p>
-
-    <h1 class="mt-2 text-center text-display leading-tight font-medium tracking-display text-fg">
-        {{ __('Welcome back') }}
-    </h1>
-
-    <p class="mt-2 text-center text-sm leading-relaxed text-fg-dim">
+    <p class="mt-4 text-center text-sm leading-relaxed text-fg-dim">
         {{ __('Your library, achievements and console files are waiting.') }}
     </p>
 

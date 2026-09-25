@@ -18,7 +18,7 @@
         <flux:sidebar sticky collapsible="mobile" class="border-e border-line bg-sunken">
             <flux:sidebar.header>
                 <a href="{{ route('dashboard') }}" wire:navigate class="flex flex-1 items-center justify-center py-1">
-                    <img src="/images/logo.webp" alt="{{ config('app.name') }}" class="block h-auto w-[132px]" />
+                    <img src="/images/logo-2.svg" alt="{{ config('app.name') }}" class="block h-auto w-[132px]" />
                 </a>
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
@@ -106,9 +106,7 @@
                 <livewire:library-storage />
 
                 <div class="flex items-center gap-2.5">
-                    <span class="grid h-6.5 w-6.5 shrink-0 place-items-center rounded-md border border-line-input bg-raised font-mono text-xs text-fg-muted">
-                        {{ Str::lower(Str::substr(auth()->user()->username ?? auth()->user()->name, 0, 2)) }}
-                    </span>
+                    <img src="/favicon.svg" alt="" class="block h-auto w-10 shrink-0" />
 
                     <span class="min-w-0 flex-1 leading-tight">
                         <span class="block truncate text-sm text-fg-soft">{{ auth()->user()->username ?? auth()->user()->name }}</span>

@@ -49,7 +49,7 @@
             <div class="relative z-10 flex flex-1 items-center justify-center">
                 <div class="flex w-full max-w-[372px] flex-col">
                     <a href="{{ route('login') }}" wire:navigate>
-                        <img src="/images/logo.webp" alt="{{ config('app.name') }}" class="mx-auto block h-auto w-[148px]" />
+                        <img src="/images/logo-1.svg" alt="{{ config('app.name') }}" class="mx-auto block h-auto w-[220px]" />
                     </a>
 
                     {{ $slot }}
