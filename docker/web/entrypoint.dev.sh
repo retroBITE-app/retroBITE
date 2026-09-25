@@ -22,13 +22,23 @@ mkdir -p /app/storage/app/games \
 # ignoring the dev server entirely.
 rm -rf /app/public/build
 
-# Install PHP deps (volume-mounted, so not baked into the image)
-composer install --no-interaction --working-dir=/app
+# PHP deps live in the bind-mounted source, so they cannot be baked into the
+# image — anything installed at build time would sit under the mount, unseen.
+# Installed here instead, on start: when vendor/ is missing, and again whenever
+# composer.lock has changed since the last install (a pulled branch that adds a
+# package), marked by a hash in vendor/.retrobite-lock. Otherwise skipped, so a
+# plain restart does not spend a composer run on nothing.
+_composer_hash=$(sha1sum /app/composer.lock 2>/dev/null | cut -d' ' -f1)
+if [ ! -f /app/vendor/autoload.php ] || [ "$(cat /app/vendor/.retrobite-lock 2>/dev/null)" != "$_composer_hash" ]; then
+    echo "Installing PHP dependencies ..."
+    composer install --no-interaction --working-dir=/app
+    echo "$_composer_hash" > /app/vendor/.retrobite-lock
+fi
 
 # Node deps go into the container's own node_modules volume, not the host's:
 # package.json pins linux-x64-gnu binaries and this is musl, so the two trees
-# cannot be shared. This container is the one place node runs — build with
-# ./npm.sh, not npm on the host — so it keeps its tree in step with the lock
+# cannot be shared. This container is the one place node runs — use
+# ./retrobite npm, not npm on the host — so it keeps its tree in step with the lock
 # file: installed when empty, and again whenever package-lock.json has changed
 # since the last install (a pulled branch that adds a package). Otherwise
 # skipped, since npm ci would throw the whole thing away on every restart.
