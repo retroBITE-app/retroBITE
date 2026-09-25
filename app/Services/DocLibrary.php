@@ -53,6 +53,10 @@ class DocLibrary
             return $this->memo;
         }
 
+        // Not Cache::flexible(): the index is checked against a fingerprint of
+        // the files on every read and rebuilt only when one has changed, so it
+        // is never stale. Serving it stale-while-revalidating would show a
+        // document that was just edited or deleted outside the app.
         $files = $this->listing();
         $fingerprint = $this->fingerprint($files);
         $cached = Cache::get(self::CACHE_KEY);

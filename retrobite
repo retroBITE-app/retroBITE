@@ -1,0 +1,122 @@
+#!/bin/bash
+# retroBITE's one command for working with the containers, run on the host.
+#
+#   ./retrobite up            build and start the stack, and wait until it is ready
+#   ./retrobite down          stop it
+#   ./retrobite restart       restart the web container
+#   ./retrobite logs [-f]     the web container's log
+#   ./retrobite artisan ...   php artisan, e.g. ./retrobite artisan user:create
+#   ./retrobite composer ...  composer, e.g. ./retrobite composer require x/y
+#   ./retrobite npm ...       npm (dev only), e.g. ./retrobite npm install x
+#   ./retrobite test          pint --test, phpstan and the suite (dev only)
+#   ./retrobite shell         a shell in the web container
+#
+# The dev stack (docker-compose.dev.yml) when it is running, or with --dev;
+# otherwise the production stack. Nothing needs installing on the host: PHP,
+# Composer and node all run in the container, which installs its own
+# dependencies when it starts — the dev container whenever composer.lock or
+# package-lock.json has changed, the production image when it is built.
+#
+# Commands run as the web user, so what they write — caches, compiled views,
+# node_modules, vendor — is owned the way the application expects. As root they
+# would leave files the app cannot write, and every page would fail.
+
+set -euo pipefail
+cd "$(dirname "$0")"
+
+DEV=(docker compose -f docker-compose.dev.yml)
+PROD=(docker compose -f docker-compose.yml)
+SERVICE=retrobite-web
+
+running() {
+    "$@" ps --status running --services 2>/dev/null | grep -qx "$SERVICE"
+}
+
+# Pick the stack: an explicit flag wins, then whichever is running, then prod.
+stack=()
+case "${1:-}" in
+    --dev) stack=("${DEV[@]}"); shift ;;
+    --prod) stack=("${PROD[@]}"); shift ;;
+esac
+if [ ${#stack[@]} -eq 0 ]; then
+    if [ -e docker-compose.dev.yml ] && running "${DEV[@]}"; then
+        stack=("${DEV[@]}")
+    else
+        stack=("${PROD[@]}")
+    fi
+fi
+
+is_dev() {
+    [ "${stack[*]}" = "${DEV[*]}" ]
+}
+
+need_running() {
+    if ! running "${stack[@]}"; then
+        echo "The stack is not running. Start it with: ./retrobite up$(is_dev && echo ' --dev' || true)" >&2
+        exit 1
+    fi
+}
+
+in_web() {
+    need_running
+    # -T when there is no terminal, so it works from scripts and CI too.
+    local tty=()
+    [ -t 0 ] && [ -t 1 ] || tty=(-T)
+    # ${tty[@]+...}: an empty array is "unbound" to set -u in bash 3.2, which
+    # is what macOS ships, and tty is empty exactly when run from a terminal.
+    "${stack[@]}" exec ${tty[@]+"${tty[@]}"} -u www-data "$SERVICE" "$@"
+}
+
+command=${1:-help}
+[ $# -gt 0 ] && shift
+
+case "$command" in
+    up)
+        # up takes --dev/--prod after it too: ./retrobite up --dev
+        case "${1:-}" in
+            --dev) stack=("${DEV[@]}"); shift ;;
+            --prod) stack=("${PROD[@]}"); shift ;;
+        esac
+        "${stack[@]}" up -d --build "$@"
+        port=$(is_dev && echo 82 || echo 81)
+        echo -n "Waiting for retroBITE on http://localhost:$port (installing dependencies on a first start) "
+        for _ in $(seq 1 300); do
+            if curl -fs -o /dev/null --max-time 2 "http://localhost:$port/up"; then
+                echo " ready."
+                exit 0
+            fi
+            echo -n "."
+            sleep 2
+        done
+        echo " still not answering after ten minutes; see ./retrobite logs" >&2
+        exit 1
+        ;;
+    down) "${stack[@]}" down "$@" ;;
+    restart) "${stack[@]}" restart "$SERVICE" ;;
+    logs) "${stack[@]}" logs "$@" "$SERVICE" ;;
+    artisan) in_web php artisan "$@" ;;
+    composer) in_web composer "$@" ;;
+    npm)
+        if ! is_dev; then
+            echo "npm runs in the dev stack only; the production image builds its assets when it is built." >&2
+            exit 1
+        fi
+        in_web npm "$@"
+        ;;
+    test)
+        if ! is_dev; then
+            echo "The test suite runs in the dev stack: ./retrobite up --dev" >&2
+            exit 1
+        fi
+        in_web composer test "$@"
+        ;;
+    shell) in_web sh ;;
+    help | -h | --help)
+        sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+        ;;
+    *)
+        echo "Unknown command: $command" >&2
+        sed -n '4,12p' "$0" | sed 's/^# \{0,1\}//' >&2
+        exit 1
+        ;;
+esac
