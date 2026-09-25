@@ -1,4 +1,13 @@
-@import 'tailwindcss';
+/*
+ * source(none): no automatic scan of the project for class names, only the
+ * @source paths below. The automatic one starts at the project root, and in the
+ * dev container that root is a bind mount with the ROM library and the media
+ * disk mounted inside it; Tailwind's Vite plugin then hung the first request for
+ * this stylesheet after every start — a white page for minutes, with no error.
+ * Everything that carries a class the interface uses is listed here instead.
+ */
+@import 'tailwindcss' source(none);
+@source '../js';
 @import '../../vendor/livewire/flux/dist/flux.css';
 
 @source '../views';
