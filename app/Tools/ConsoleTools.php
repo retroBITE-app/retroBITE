@@ -233,6 +233,21 @@ abstract class ConsoleTools
         return null;
     }
 
+    /** Whether this console's files can be renamed to or from a loader's convention here. */
+    public function canRename(): bool
+    {
+        return false;
+    }
+
+    /**
+     * What a file would be called with the console's identifier added to its
+     * name, or taken out of it; null when there is nothing to do.
+     */
+    public function renamedFilename(GameFile $file, bool $withLicenseId): ?string
+    {
+        return null;
+    }
+
     /**
      * Tell whoever is watching how far the current run has got.
      *

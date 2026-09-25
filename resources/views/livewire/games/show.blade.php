@@ -19,6 +19,7 @@ use App\Models\RaUnlock;
 use App\Services\LibraryFiles;
 use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
+use App\Tools\ConsoleTools;
 use Carbon\CarbonInterface;
 use Flux\Flux;
 use Illuminate\Support\Arr;
@@ -460,6 +461,23 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             $this->fetchingFrom = $this->mediaFingerprint();
             $this->fetchingSince = now()->timestamp;
         }
+    }
+
+    /** Whether the console's toolbox can rename this game's file to or from its loader's form. */
+    #[Computed]
+    public function canRename(): bool
+    {
+        $console = $this->game->console();
+
+        return $console !== null && (ConsoleTools::for($console)?->canRename() ?? false);
+    }
+
+    /** Sent by the rename modal once the file has its new name. */
+    #[On('library-renamed')]
+    public function renamed(): void
+    {
+        $this->game->refresh();
+        $this->reloadGame();
     }
 
     /** Drop everything read off the game before it changed underneath the page. */
@@ -1439,6 +1457,19 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         </button>
                     @endif
 
+                    {{-- Opens a preview first, so it needs no confirm of its own. --}}
+                    @if ($this->canRename)
+                        <button
+                            type="button"
+                            role="menuitem"
+                            x-on:click="open = false; $dispatch('rename-files')"
+                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                        >
+                            <flux:icon.pencil-square class="size-[15px] text-fg-muted" />
+                            {{ __('Rename file') }}
+                        </button>
+                    @endif
+
                     <x-copy-button variant="menu" role="menuitem" :text="$this->libraryPath" :label="__('Copy path')">
                         <flux:icon.document-duplicate class="size-[15px] text-fg-muted" />
                     </x-copy-button>
@@ -1920,4 +1951,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </section>
     @endif
     <livewire:games.identify-modal :game-id="$game->id" wire:key="identify-modal" />
+
+    @if ($this->canRename)
+        <livewire:games.rename-modal :console="$game->console" :game-id="$game->id" wire:key="rename-modal" />
+    @endif
 </x-lightbox>

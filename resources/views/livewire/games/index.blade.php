@@ -492,6 +492,15 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             && ConsoleSourceFolder::has($console);
     }
 
+    /** Whether the toolbox can rename this console's files to or from its loader's form. */
+    #[Computed]
+    public function canRename(): bool
+    {
+        $console = $this->lockedTo;
+
+        return $console !== null && (ConsoleTools::for($console)?->canRename() ?? false);
+    }
+
     /**
      * The loader files this console's toolbox can write, if any.
      *
@@ -719,6 +728,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                     {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
                                 </flux:menu.item>
                             @endforeach
+
+                            {{-- Opens a preview first, so it needs no confirm of its own. --}}
+                            @if ($this->canRename)
+                                <flux:menu.item icon="pencil-square" x-on:click="$dispatch('rename-files')">
+                                    {{ __('Rename files') }}
+                                </flux:menu.item>
+                            @endif
 
                             <flux:menu.separator />
 
@@ -1232,6 +1248,10 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
     {{-- Mounted only while the setting is on, so the uploader is not on the
          page at all otherwise. The chunk route stays up regardless. --}}
+    @if ($this->canRename)
+        <livewire:games.rename-modal :console="$this->lockedTo->key" wire:key="rename-modal-{{ $this->lockedTo->key }}" />
+    @endif
+
     @if ($this->canUpload)
         <livewire:games.upload-modal :console="$this->lockedTo->key" wire:key="upload-modal-{{ $this->lockedTo->key }}" />
     @endif

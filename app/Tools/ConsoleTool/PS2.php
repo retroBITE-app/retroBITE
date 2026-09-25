@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tools\ConsoleTool;
 
+use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\ImageFormat;
 use App\Enums\MediaKind;
@@ -137,15 +138,65 @@ final class PS2 extends ConsoleTools
             return null;
         }
 
-        $stripped = trim((string) preg_replace(
-            '/^('.$this->serialPrefixes.')[-_][0-9]{3}\.?[0-9]{2}[.\s_-]+/i',
-            '',
-            $layout->titleFor($relative),
-        ));
+        $stripped = $this->withoutLicenseId($layout->titleFor($relative));
 
         // A disc named after nothing but its serial keeps that name: an empty
         // title would slug to "game" and lose the only thing it said.
         return $stripped !== '' ? $stripped : null;
+    }
+
+    /** Renaming is to or from OPL's own filename convention, so only on its drive. */
+    public function canRename(): bool
+    {
+        return $this->arrangedForOpl();
+    }
+
+    /**
+     * The file's name with its license ID put in front, OPL's old
+     * "SLES_503.86.Title.iso" form, or taken off again; null when there is
+     * nothing to do.
+     *
+     * Single-file games only: a cue names its tracks and a playlist its discs,
+     * so renaming one file of a set would break the sheet that points at it.
+     * The rest of the name is the file's own either way, so adding and then
+     * removing the license ID comes back to exactly the name it started with.
+     */
+    public function renamedFilename(GameFile $file, bool $withLicenseId): ?string
+    {
+        // Loaded by a caller asking about a whole shelf, which would otherwise
+        // be a query per file.
+        $hasChildren = $file->relationLoaded('children')
+            ? $file->children->isNotEmpty()
+            : $file->children()->exists();
+
+        if ($file->role !== FileRole::Rom || $file->parent_id !== null || $hasChildren) {
+            return null;
+        }
+
+        $carries = $this->serialFrom($file->filename) !== null;
+
+        if ($withLicenseId) {
+            // Already there, or not read off the disc yet — the name cannot
+            // be made up from anything else.
+            return $carries || $file->license_id === null ? null : $file->license_id.'.'.$file->filename;
+        }
+
+        if (! $carries) {
+            return null;
+        }
+
+        $extension = pathinfo($file->filename, PATHINFO_EXTENSION);
+        $stem = pathinfo($file->filename, PATHINFO_FILENAME);
+        $stripped = $this->withoutLicenseId($stem);
+
+        // A file named for its license ID and nothing else has no other name
+        // to go back to — the prefix pattern wants a separator after the ID,
+        // so it leaves such a name exactly as it was.
+        if ($stripped === '' || $stripped === $stem) {
+            return null;
+        }
+
+        return $stripped.($extension !== '' ? '.'.$extension : '');
     }
 
     /**
@@ -373,6 +424,16 @@ final class PS2 extends ConsoleTools
         }
 
         return $this->game->licenseId();
+    }
+
+    /** A name with its leading OPL license ID prefix taken off, or as it was. */
+    private function withoutLicenseId(string $name): string
+    {
+        return trim((string) preg_replace(
+            '/^('.$this->serialPrefixes.')[-_][0-9]{3}\.?[0-9]{2}[.\s_-]+/i',
+            '',
+            $name,
+        ));
     }
 
     /** Whether this console's folder is arranged the way OPL expects. */
