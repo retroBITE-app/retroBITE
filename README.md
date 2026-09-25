@@ -43,8 +43,16 @@ retroBITE is designed to run exclusively as a Docker container. To ensure stabil
 3. Start the stack.
 
 ```bash
-docker compose up -d --build
+./retrobite up
 ```
+
+   This builds the images, starts the stack and waits until retroBITE answers.
+   Nothing needs installing on your machine first: the image installs its PHP
+   and JavaScript dependencies and builds its assets while it is built.
+
+   `./retrobite` is the one command for the containers — `./retrobite help`
+   lists the rest: `down`, `restart`, `logs`, `artisan …`, `composer …`,
+   `shell`.
 
 4. Connect your retro console to the network share to load ROMs directly over your local network.
 
@@ -73,7 +81,7 @@ There is no reset-by-email flow — retroBITE is local-first and assumes no mail
 server. Reset from the machine running it instead:
 
 ```bash
-./artisan.sh user:password retrobite
+./retrobite artisan user:password retrobite
 ```
 
 The argument accepts a username or an email address, and falls back to a partial
@@ -85,8 +93,8 @@ for without echoing.
 There is no public sign-up page either. Create accounts from the box:
 
 ```bash
-./artisan.sh user:create retrogamer
-./artisan.sh user:create retrogamer --email=me@example.com --name="Player One"
+./retrobite artisan user:create retrogamer
+./retrobite artisan user:create retrogamer --email=me@example.com --name="Player One"
 ```
 
 The email defaults to `<username>@retrobite.local` and the display name to the
@@ -98,8 +106,13 @@ server to verify through.
 Bind-mounts the source, so PHP changes take effect without a rebuild:
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+./retrobite up --dev
 ```
+
+The dev container installs its own dependencies when it starts — Composer when
+`composer.lock` has changed since the last install, npm when `package-lock.json`
+has — so after pulling a branch, `./retrobite up --dev` (or a restart) is all it
+takes. `./retrobite test` runs Pint, PHPStan and the suite.
 
 The development stack runs everything in the web container — PHP-FPM, nginx,
 the queue workers and the Vite dev server — so nothing has to be installed on
@@ -111,8 +124,18 @@ clash fails loudly rather than drifting to another port). Starting it writes
 of the built bundle; stop the container and the built bundle takes over again.
 
 The container keeps its own `node_modules` in a volume rather than sharing the
-host's through the bind mount: `package.json` pins `linux-x64-gnu` binaries and
-the image is Alpine, which is musl.
+host's through the bind mount: the native build tools (Tailwind's oxide,
+lightningcss, Rolldown) are compiled per platform, and one tree cannot serve
+both macOS and the container's Alpine Linux. So node runs **only in the
+container** — use `./retrobite npm` instead of `npm` on the host:
+
+```bash
+./retrobite npm install some-pkg   # add a package
+./retrobite npm run build          # a production build of the assets
+```
+
+On start the container installs again whenever `package-lock.json` has changed
+since its last install, so pulling a branch that adds a package is enough.
 
 Queue workers run under `queue:listen` here, not `queue:work`. `work` keeps one
 booted application in memory for its whole life, so a job runs whatever the code

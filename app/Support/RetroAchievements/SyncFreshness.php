@@ -20,15 +20,22 @@ use Illuminate\Support\Facades\Cache;
  * freshness: whether every console the library needs has a hash index, how old
  * the stalest one is, and how much identified work is still waiting for a set.
  *
- * Cached for a minute because the sidebar renders on every page and this is
- * three queries. A minute of lag on a figure that moves nightly is invisible;
- * the queries are not.
+ * Cached because the sidebar renders on every page and this is three
+ * queries. Cache::flexible() rather than remember(): fresh for a minute, and
+ * for an hour after that an older answer is handed back at once while a fresh
+ * one is taken behind the response — so no page ever waits on the three
+ * queries, and a figure that moves nightly is never more than a minute behind
+ * a page that just rendered it stale.
  */
 final class SyncFreshness
 {
     private const KEY = 'retroachievements.freshness';
 
+    /** Fresh for this long… */
     private const TTL = 60;
+
+    /** …and served stale, while being refreshed, for this long after. */
+    private const STALE = 3600;
 
     /**
      * Index coverage and outstanding set work.
@@ -42,7 +49,7 @@ final class SyncFreshness
      */
     public static function current(): array
     {
-        $snapshot = Cache::remember(self::KEY, self::TTL, function (): array {
+        $snapshot = Cache::flexible(self::KEY, [self::TTL, self::STALE], function (): array {
             $needed = LibraryConsoles::mapped()->keys()->all();
 
             $synced = RaConsoleSync::query()

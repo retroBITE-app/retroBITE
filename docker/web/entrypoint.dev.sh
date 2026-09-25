@@ -22,17 +22,32 @@ mkdir -p /app/storage/app/games \
 # ignoring the dev server entirely.
 rm -rf /app/public/build
 
-# Install PHP deps (volume-mounted, so not baked into the image)
-composer install --no-interaction --working-dir=/app
+# PHP deps live in the bind-mounted source, so they cannot be baked into the
+# image — anything installed at build time would sit under the mount, unseen.
+# Installed here instead, on start: when vendor/ is missing, and again whenever
+# composer.lock has changed since the last install (a pulled branch that adds a
+# package), marked by a hash in vendor/.retrobite-lock. Otherwise skipped, so a
+# plain restart does not spend a composer run on nothing.
+_composer_hash=$(sha1sum /app/composer.lock 2>/dev/null | cut -d' ' -f1)
+if [ ! -f /app/vendor/autoload.php ] || [ "$(cat /app/vendor/.retrobite-lock 2>/dev/null)" != "$_composer_hash" ]; then
+    echo "Installing PHP dependencies ..."
+    composer install --no-interaction --working-dir=/app
+    echo "$_composer_hash" > /app/vendor/.retrobite-lock
+fi
 
 # Node deps go into the container's own node_modules volume, not the host's:
 # package.json pins linux-x64-gnu binaries and this is musl, so the two trees
-# cannot be shared. Skipped when it is already populated, since npm ci would
-# throw the whole thing away on every restart.
+# cannot be shared. This container is the one place node runs — use
+# ./retrobite npm, not npm on the host — so it keeps its tree in step with the lock
+# file: installed when empty, and again whenever package-lock.json has changed
+# since the last install (a pulled branch that adds a package). Otherwise
+# skipped, since npm ci would throw the whole thing away on every restart.
 _node_installed=
-if [ ! -d /app/node_modules/vite ]; then
+_lock_hash=$(sha1sum /app/package-lock.json 2>/dev/null | cut -d' ' -f1)
+if [ ! -d /app/node_modules/vite ] || [ "$(cat /app/node_modules/.retrobite-lock 2>/dev/null)" != "$_lock_hash" ]; then
     echo "Installing node dependencies ..."
     npm install --prefix /app --no-audit --no-fund
+    echo "$_lock_hash" > /app/node_modules/.retrobite-lock
     _node_installed=1
 fi
 
@@ -73,7 +88,16 @@ php /app/artisan migrate --force
 php /app/artisan db:seed --class=DefaultUserSeeder --force
 
 # After migrate, which runs as root and would otherwise leave root-owned files.
-chown -R "$WEB_USER:$WEB_GROUP" /app/storage /app/bootstrap/cache
+#
+# Never the games tree: ROM files are read and never written, ownership
+# included, and it is a bind mount that can be tens of thousands of files on a
+# slow or external disk — walking it on every boot is what made a start hang
+# here for minutes. Everything else only where the owner is wrong, so after the
+# first boot this is a quick walk that writes nothing, rather than a chown of
+# every downloaded image and thumbnail.
+find /app/storage /app/bootstrap/cache \
+    -path /app/storage/app/games -prune -o \
+    \( ! -user "$WEB_USER" -o ! -group "$WEB_GROUP" \) -exec chown -h "$WEB_USER:$WEB_GROUP" {} +
 
 # Live updates, as in production (keys were set at the top, before anything
 # ran PHP). --debug prints each connection and message, which is the whole
