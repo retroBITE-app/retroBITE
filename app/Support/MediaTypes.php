@@ -51,6 +51,14 @@ final class MediaTypes
             ->all();
     }
 
+    /** What a type is, in words, or null for one the catalogue does not describe. */
+    public static function label(string $type): ?string
+    {
+        $label = Arr::get((array) config('media_types.labels', []), $type);
+
+        return is_string($label) ? (string) __($label) : null;
+    }
+
     /**
      * The types to fetch, as a plain list.
      *
