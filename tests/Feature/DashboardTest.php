@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 test('guests are redirected to the login page', function () {
+    // An install with no account answers every page with onboarding.
+    User::factory()->create();
+
     $response = $this->get(route('dashboard'));
     $response->assertRedirect(route('login'));
 });

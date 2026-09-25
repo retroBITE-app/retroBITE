@@ -58,20 +58,20 @@ retroBITE is designed to run exclusively as a Docker container. To ensure stabil
 
 5. Access the web interface at http://localhost (or `WEB_PORT` from your `.env`)
 
-   Log in with the default account:
+   The first visit opens a four-step setup:
 
-   | | |
-   | --- | --- |
-   | Username | `retrobite` |
-   | Email | `retrobite@retrobite.local` |
-   | Password | `retrobite` |
+   1. Create the account you will sign in with.
+   2. Pick how retroBITE looks — color scheme, CRT scanlines, how a game's page
+      is headed and whether ROM uploads are offered.
+   3. Enter your ScreenScraper account, which identifies games and fetches
+      artwork ([free sign-up](https://www.screenscraper.fr/membreinscription.php)).
+   4. Optionally, your RetroAchievements username and web API key.
 
-   The login form accepts either the username or the email address.
+   All of it can be changed later under Settings.
 
-   **Change this password before putting retroBITE on a network you do not
-   control.** The account is seeded only while the users table is empty, so once
-   you have created your own it will not come back — but until then it is a
-   known login to a service that fronts your file library.
+   There is no default login. Until the account exists, whoever reaches the
+   page first creates it, so finish setup before putting retroBITE on a network
+   you do not control.
 
    The SMB and FTP account is separate, and set by `AUTH_USER` / `AUTH_PASS`.
 
@@ -81,7 +81,7 @@ There is no reset-by-email flow — retroBITE is local-first and assumes no mail
 server. Reset from the machine running it instead:
 
 ```bash
-./retrobite artisan user:password retrobite
+./retrobite artisan user:password <username>
 ```
 
 The argument accepts a username or an email address, and falls back to a partial
@@ -90,7 +90,7 @@ for without echoing.
 
 ### Adding users
 
-There is no public sign-up page either. Create accounts from the box:
+Beyond the first account made during setup, there is no sign-up page. Create more from the box:
 
 ```bash
 ./retrobite artisan user:create retrogamer

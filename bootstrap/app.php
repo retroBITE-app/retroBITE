@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureOnboarded;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,7 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->web(append: [EnsureOnboarded::class]);
+
+        // Ahead of auth, so a guest on an install with no account goes straight
+        // to onboarding instead of by way of a sign-in page nobody can use.
+        $middleware->prependToPriorityList(before: AuthenticatesRequests::class, prepend: EnsureOnboarded::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

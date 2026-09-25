@@ -8,11 +8,19 @@ use App\Support\ScreenScraperQuota;
 use Flux\Flux;
 use Illuminate\Support\Arr;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('ScreenScraper')] class extends Component
 {
+    /**
+     * Embedded in onboarding rather than on its own page: no tabs, and Save
+     * moves setup on instead of toasting.
+     */
+    #[Locked]
+    public bool $onboarding = false;
+
     public string $username = '';
 
     /**
@@ -61,9 +69,15 @@ new #[Title('ScreenScraper')] class extends Component
 
     public function save(): void
     {
+        // Required in onboarding although this screen allows it blank: without
+        // an account lookups ride the shared developer allowance, which a first
+        // scan of a library runs through almost at once. A stored password
+        // counts, so coming back to the step does not ask for it again.
+        $required = $this->onboarding ? 'required' : 'nullable';
+
         $this->validate([
-            'username' => ['nullable', 'string', 'max:255'],
-            'password' => ['nullable', 'string', 'max:255'],
+            'username' => [$required, 'string', 'max:255'],
+            'password' => [$this->hasPassword ? 'nullable' : $required, 'string', 'max:255'],
         ]);
 
         // An email address is the mistake worth catching: ScreenScraper's
@@ -84,6 +98,12 @@ new #[Title('ScreenScraper')] class extends Component
         }
 
         unset($this->hasPassword, $this->linked);
+
+        if ($this->onboarding) {
+            $this->redirectRoute('onboarding.step', ['step' => 'achievements'], navigate: true);
+
+            return;
+        }
 
         Flux::toast(variant: 'success', text: __('Settings saved.'));
     }
@@ -148,15 +168,17 @@ new #[Title('ScreenScraper')] class extends Component
 }; ?>
 
 <section class="w-full">
-    @include('partials.settings-heading')
+    @unless ($onboarding)
+        @include('partials.settings-heading')
+    @endunless
 
-    <x-settings.layout :heading="__('ScreenScraper')" :subheading="__('The account that identifies games and fetches artwork')">
+    <x-settings.layout :show-tabs="! $onboarding" :heading="__('ScreenScraper')" :subheading="__('The account that identifies games and fetches artwork')">
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="screenscraper-settings">{{ __('Save') }}</flux:button>
+            <flux:button variant="primary" type="submit" form="screenscraper-settings">{{ $onboarding ? __('Continue') : __('Save') }}</flux:button>
         </x-slot>
 
         <form id="screenscraper-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div class="flex flex-col gap-6 lg:col-span-6">
+            <div @class(['flex flex-col gap-6', 'lg:col-span-6' => ! $onboarding, 'lg:col-span-12' => $onboarding])>
                 <div class="rounded-xl border border-line bg-surface p-5">
                     <div class="mb-4 flex items-center gap-2.5">
                         <flux:icon.magnifying-glass class="size-[17px] text-accent" />
@@ -199,6 +221,8 @@ new #[Title('ScreenScraper')] class extends Component
                 </div>
             </div>
 
+            {{-- Nothing to read back on an install being set up. --}}
+            @unless ($onboarding)
             <div class="flex flex-col gap-6 lg:col-span-6">
                 <div class="rounded-xl border border-line bg-surface p-5">
                     <p class="kicker mb-1 text-fg-faint">{{ __('Check the login') }}</p>
@@ -248,6 +272,7 @@ new #[Title('ScreenScraper')] class extends Component
                     @endif
                 </div>
             </div>
+            @endunless
         </form>
     </x-settings.layout>
 </section>

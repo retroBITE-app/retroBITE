@@ -46,6 +46,11 @@ pest()->extend(TestCase::class)
         // the providers booted this test's config repository from the previous
         // test's answer before RefreshDatabase had emptied the table.
         ConsoleOverrides::apply();
+
+        // Every test but onboarding's own starts on an install that has been
+        // set up; otherwise each signed-in page would answer with a redirect
+        // into the wizard. OnboardingTest puts it back where it needs to.
+        AppSetting::put(AppSetting::IS_ONBOARDED, true);
     })
     ->in('Feature');
 

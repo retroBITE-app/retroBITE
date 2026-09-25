@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Concerns\ProfileValidationRules;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
@@ -13,6 +14,8 @@ use function Laravel\Prompts\text;
 
 class CreateUser extends Command
 {
+    use ProfileValidationRules;
+
     protected $signature = 'user:create
                             {username? : The username to log in with}
                             {--email= : Email address (defaults to <username>@retrobite.local)}
@@ -46,7 +49,7 @@ class CreateUser extends Command
             'name' => $name,
             'password' => $password,
         ], [
-            'username' => ['required', 'string', 'max:255', Rule::unique(User::class, 'username')],
+            'username' => $this->usernameRules(),
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique(User::class, 'email')],
             'name' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', Password::default()],

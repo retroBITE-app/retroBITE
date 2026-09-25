@@ -19,6 +19,15 @@ Route::get('login/backdrop', LoginBackdropController::class)->name('login.backdr
 // unknown scheme is a 404 through the enum binding.
 Route::get('favicon/{scheme}.svg', FaviconController::class)->name('favicon');
 
+// First run: one view, with a step per visit — the account, then three
+// settings screens embedded in turn. The account step is public because
+// nobody can sign in yet; EnsureOnboarded decides who may be on which step.
+Route::view('onboarding', 'onboarding', ['step' => 'account'])->name('onboarding.account');
+Route::view('onboarding/{step}', 'onboarding')
+    ->middleware('auth')
+    ->whereIn('step', ['interface', 'scraping', 'achievements'])
+    ->name('onboarding.step');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');
 

@@ -13,6 +13,9 @@ use Livewire\Livewire;
  * is the cheapest of the four to assert: it needs no login and no artwork.
  */
 it('draws the scanline overlay only while it is switched on', function () {
+    // An install with no account answers every page with onboarding.
+    User::factory()->create();
+
     $this->get('/')->assertOk()->assertSee('scanlines', false);
 
     AppSetting::put(AppSetting::UI_SCANLINES, false);
@@ -127,6 +130,9 @@ it('saves the color scheme and writes it onto every page', function () {
 });
 
 it('wears the color scheme on the sign-in page too', function () {
+    // An install with no account answers every page with onboarding.
+    User::factory()->create();
+
     AppSetting::put(AppSetting::UI_COLOR_SCHEME, 'famicom');
 
     $this->get('/')

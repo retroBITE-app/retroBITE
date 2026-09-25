@@ -38,9 +38,6 @@ done
 # migrate prompts for confirmation when APP_ENV=production.
 php /app/artisan migrate --force
 
-# Guarantee a login exists on a fresh install. No-ops once any user exists.
-php /app/artisan db:seed --class=DefaultUserSeeder --force
-
 # After migrate, which runs as root and would otherwise leave a root-owned
 # laravel.log behind. bootstrap/cache is where Laravel writes packages.php,
 # services.php and the config/route caches — root-owned it throws
