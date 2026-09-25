@@ -87,6 +87,19 @@ function pngOf(int $width, int $height): string
     return (string) ob_get_clean();
 }
 
+function screenshot(Game $game, string $type, string $contents): Media
+{
+    $path = 'ps2/game/'.$type.'/'.md5($contents).'.png';
+    Storage::disk('media')->put($path, $contents);
+
+    return Media::factory()->for($game)->create([
+        'screenscraper_type' => $type,
+        'path' => $path,
+        'extension' => 'png',
+        'md5' => md5($contents),
+    ]);
+}
+
 function disc(Game $game, string $contents): Media
 {
     $path = 'ps2/game/support-2D/'.md5($contents).'.png';
@@ -256,12 +269,12 @@ it('re-encodes a cached cover to the size OPL reads', function () {
     expect(runExport('art'))
         ->toBe(['written' => 1, 'skipped' => 0, 'failed' => 0]);
 
-    $path = $this->root.'/ps2/ART/SLES_503.86_COV.jpg';
+    $path = $this->root.'/ps2/ART/SLES_503.86_COV.png';
     $size = getimagesize($path);
 
     expect($size[0])->toBe(256)
         ->and($size[1])->toBe(368)
-        ->and($size['mime'])->toBe('image/jpeg');
+        ->and($size['mime'])->toBe('image/png');
 });
 
 it('writes the disc scan as the icon OPL draws beside the cover, its corners clear', function () {
@@ -278,7 +291,7 @@ it('writes the disc scan as the icon OPL draws beside the cover, its corners cle
     expect($size[0])->toBe(128)
         ->and($size[1])->toBe(128)
         ->and($size['mime'])->toBe('image/png')
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue();
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue();
 
     $written = imagecreatefrompng($path);
     $corner = imagecolorsforindex($written, (int) imagecolorat($written, 0, 0));
@@ -297,7 +310,7 @@ it('writes the cover alone for a game with no disc scan', function () {
 
     runExport('art');
 
-    expect(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue()
+    expect(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue()
         ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_ICO.png'))->toBeFalse();
 });
 
@@ -322,17 +335,55 @@ it('flattens a transparent cover onto something opaque', function () {
 
     runExport('art');
 
-    $written = imagecreatefromjpeg($this->root.'/ps2/ART/SLES_503.86_COV.jpg');
+    $written = imagecreatefrompng($this->root.'/ps2/ART/SLES_503.86_COV.png');
     $colour = imagecolorsforindex($written, (int) imagecolorat($written, 128, 184));
 
-    // OPL renders no alpha channel: whatever is transparent arrives on the
-    // console as whatever happened to be in that memory. Asserted as a colour
-    // rather than an alpha, because JPEG carries no alpha to read back — the
-    // source was uniformly transparent, so a flattened frame is flat black,
-    // and a flat field is the one thing JPEG reproduces near-exactly.
-    expect($colour['red'])->toBeLessThan(8)
-        ->and($colour['green'])->toBeLessThan(8)
-        ->and($colour['blue'])->toBeLessThan(8);
+    // A cover is drawn opaque: whatever is transparent arrives on the console
+    // as whatever happened to be in that memory. The source was uniformly
+    // transparent, so a flattened frame is flat, opaque black.
+    expect($colour['alpha'])->toBe(0)
+        ->and($colour['red'])->toBe(0)
+        ->and($colour['green'])->toBe(0)
+        ->and($colour['blue'])->toBe(0);
+});
+
+it('writes covers as PNG, the only format OPL decodes', function () {
+    $game = exportGame();
+    cover($game, pngOf(1000, 1400));
+
+    runExport('art');
+
+    // The 1.2 builds carry libpng and no JPEG decoder: a _COV.jpg is never
+    // drawn, which is how a whole drive's covers went missing once.
+    expect(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue()
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeFalse();
+});
+
+it('writes the in-game and title screenshots for the info page', function () {
+    $game = exportGame();
+    screenshot($game, 'ss', pngOf(640, 480));
+    screenshot($game, 'sstitle', pngOf(640, 448));
+
+    expect(runExport('art'))
+        ->toBe(['written' => 1, 'skipped' => 0, 'failed' => 0]);
+
+    foreach (['_SCR', '_SCR2'] as $suffix) {
+        $size = getimagesize($this->root.'/ps2/ART/SLES_503.86'.$suffix.'.png');
+
+        expect($size[0])->toBe(173)
+            ->and($size[1])->toBe(148)
+            ->and($size['mime'])->toBe('image/png');
+    }
+});
+
+it('writes only the screenshots a game has', function () {
+    $game = exportGame();
+    screenshot($game, 'ss', pngOf(640, 480));
+
+    runExport('art');
+
+    expect(File::exists($this->root.'/ps2/ART/SLES_503.86_SCR.png'))->toBeTrue()
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_SCR2.png'))->toBeFalse();
 });
 
 it('does not fetch artwork it was never given', function () {
@@ -350,11 +401,11 @@ it('does not re-encode art it has already written', function () {
     cover($game, pngOf(1000, 1400));
 
     runExport('art');
-    $first = (string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.jpg');
+    $first = (string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.png');
 
     expect(runExport('art'))
         ->toBe(['written' => 0, 'skipped' => 1, 'failed' => 0])
-        ->and((string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBe($first);
+        ->and((string) file_get_contents($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBe($first);
 });
 
 it('counts a broken cover as a failure and keeps going', function () {
@@ -368,7 +419,7 @@ it('counts a broken cover as a failure and keeps going', function () {
 
     expect($counts['written'])->toBe(1)
         ->and($counts['failed'])->toBe(1)
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue();
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue();
 });
 
 it('refuses a path that climbs out of the console folder', function () {
@@ -393,7 +444,7 @@ it('runs an export from the job only for a console that offers it', function () 
     (new WriteConsoleExports('snes', 'cfg'))->handle();
 
     expect(File::exists($this->root.'/ps2/CFG/SLES_503.86.cfg'))->toBeTrue()
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeTrue();
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue();
 });
 
 it('counts files rather than jobs while an export runs', function () {

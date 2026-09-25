@@ -22,6 +22,12 @@ enum MediaKind: string
     /** The disc's own label scan — what OPL draws as a game's icon. */
     case Disc = 'disc';
 
+    /** A frame from play, for OPL's info page (ART/<serial>_SCR). */
+    case Screenshot = 'screenshot';
+
+    /** The game's title screen, OPL's second info-page shot (_SCR2). */
+    case TitleScreen = 'title_screen';
+
     /**
      * The slot a provider media type fills, or null when it fills none.
      *
@@ -45,6 +51,8 @@ enum MediaKind: string
             self::Logo => 'Logo',
             self::Backdrop => 'Backdrop',
             self::Disc => 'Disc',
+            self::Screenshot => 'Screenshot',
+            self::TitleScreen => 'Title screen',
         };
     }
 
@@ -86,6 +94,8 @@ enum MediaKind: string
             self::Logo => ['wheel', 'wheel-hd', 'wheel-carbon', 'wheel-steel'],
             self::Backdrop => ['fanart', 'background', 'sstitle', 'ss', 'screenmarquee'],
             self::Disc => ['support-2D'],
+            self::Screenshot => ['ss'],
+            self::TitleScreen => ['sstitle'],
         };
     }
 }

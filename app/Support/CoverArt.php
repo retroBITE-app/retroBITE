@@ -16,10 +16,9 @@ use RuntimeException;
  * size it was scanned at, so something has to do this, and GD is in the runtime
  * image while ImageMagick is not.
  *
- * JPEG by default rather than PNG24: at this size and quality it is about a
- * fifth of the bytes, which is the difference between a few megabytes and tens
- * of them on a drive holding several hundred covers, and neither OPL nor any
- * frontend can tell the two apart at 256 pixels wide.
+ * JPEG by default, as the smaller file for a loader that reads it. OPL does
+ * not: the 1.2 builds carry libpng and no JPEG decoder at all, and a _COV.jpg
+ * is simply never drawn — so everything written for OPL asks for PNG.
  *
  * Scaling is cover-and-crop rather than fit-and-pad. Box art runs about 5:7
  * against OPL's 0.696, so the crop takes a few pixels off the sides; a padded
