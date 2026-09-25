@@ -62,7 +62,9 @@ in_web() {
     # -T when there is no terminal, so it works from scripts and CI too.
     local tty=()
     [ -t 0 ] && [ -t 1 ] || tty=(-T)
-    "${stack[@]}" exec "${tty[@]}" -u www-data "$SERVICE" "$@"
+    # ${tty[@]+...}: an empty array is "unbound" to set -u in bash 3.2, which
+    # is what macOS ships, and tty is empty exactly when run from a terminal.
+    "${stack[@]}" exec ${tty[@]+"${tty[@]}"} -u www-data "$SERVICE" "$@"
 }
 
 command=${1:-help}
