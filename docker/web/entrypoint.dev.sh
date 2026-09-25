@@ -27,12 +27,17 @@ composer install --no-interaction --working-dir=/app
 
 # Node deps go into the container's own node_modules volume, not the host's:
 # package.json pins linux-x64-gnu binaries and this is musl, so the two trees
-# cannot be shared. Skipped when it is already populated, since npm ci would
-# throw the whole thing away on every restart.
+# cannot be shared. This container is the one place node runs — build with
+# ./npm.sh, not npm on the host — so it keeps its tree in step with the lock
+# file: installed when empty, and again whenever package-lock.json has changed
+# since the last install (a pulled branch that adds a package). Otherwise
+# skipped, since npm ci would throw the whole thing away on every restart.
 _node_installed=
-if [ ! -d /app/node_modules/vite ]; then
+_lock_hash=$(sha1sum /app/package-lock.json 2>/dev/null | cut -d' ' -f1)
+if [ ! -d /app/node_modules/vite ] || [ "$(cat /app/node_modules/.retrobite-lock 2>/dev/null)" != "$_lock_hash" ]; then
     echo "Installing node dependencies ..."
     npm install --prefix /app --no-audit --no-fund
+    echo "$_lock_hash" > /app/node_modules/.retrobite-lock
     _node_installed=1
 fi
 

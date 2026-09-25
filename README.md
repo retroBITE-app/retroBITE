@@ -111,8 +111,18 @@ clash fails loudly rather than drifting to another port). Starting it writes
 of the built bundle; stop the container and the built bundle takes over again.
 
 The container keeps its own `node_modules` in a volume rather than sharing the
-host's through the bind mount: `package.json` pins `linux-x64-gnu` binaries and
-the image is Alpine, which is musl.
+host's through the bind mount: the native build tools (Tailwind's oxide,
+lightningcss, Rolldown) are compiled per platform, and one tree cannot serve
+both macOS and the container's Alpine Linux. So node runs **only in the
+container** — use `./npm.sh` instead of `npm` on the host:
+
+```bash
+./npm.sh run build          # build the assets
+./npm.sh install some-pkg   # add a package
+```
+
+On start the container installs again whenever `package-lock.json` has changed
+since its last install, so pulling a branch that adds a package is enough.
 
 Queue workers run under `queue:listen` here, not `queue:work`. `work` keeps one
 booted application in memory for its whole life, so a job runs whatever the code
