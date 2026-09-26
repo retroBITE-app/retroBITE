@@ -20,6 +20,7 @@ use App\Support\ExportProgress;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
@@ -1543,19 +1544,78 @@ it('will not blow up a screenshot or a thumbnail behind the header', function ()
         ->and($html)->not->toContain($tiny->path);
 });
 
-it('picks the same art for a shelf every time it is drawn', function () {
-    $best = Game::factory()->forConsole('snes')->matched()->rated(95)->create(['title' => 'Best', 'slug' => 'best']);
-    $worst = Game::factory()->forConsole('snes')->matched()->rated(20)->create(['title' => 'Worst', 'slug' => 'worst']);
-    $unrated = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Unrated', 'slug' => 'unrated']);
+/** A rated game on the SNES shelf with one wallpaper-sized piece of key art. */
+function shelfArt(int $rating, ?int $count = 1): array
+{
+    $game = Game::factory()->forConsole('snes')->matched()->rated($rating)->create(['title' => 'Rated '.$rating, 'slug' => 'rated-'.$rating]);
 
-    $bestArt = Media::factory()->for($best)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
-    Media::factory()->for($worst)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
-    Media::factory()->for($unrated)->ofType('fanart', 'us')->create(['size_bytes' => 400_000]);
+    return Media::factory()->for($game)->ofType('fanart', 'us')->count((int) $count)->create(['size_bytes' => 400_000])
+        ->pluck('path')
+        ->all();
+}
 
-    // Best rated first, and the unrated last rather than ahead of everything —
-    // the trap DESC alone falls into on MariaDB.
-    Livewire::test('games.index', ['console' => 'snes'])
-        ->assertSee(route('media.show', ['path' => $bestArt->path]), escape: false);
+it('rotates the backdrop through the six best-rated games\' art', function () {
+    $best = collect([95, 90, 85, 80, 75, 70])->flatMap(function (int $rating): array {
+        return shelfArt($rating);
+    })->all();
+    $worst = [...shelfArt(20), ...shelfArt(10)];
+
+    $seen = collect(range(1, 40))->map(function (): ?string {
+        return Livewire::test('games.index', ['console' => 'snes'])->get('heroArt');
+    })->unique();
+
+    // Always one of the six, never the two below them, and more than one of
+    // them over forty visits — the chance of a single one forty times running
+    // is a sixth to the thirty-ninth.
+    expect($seen->diff($best))->toBeEmpty()
+        ->and($seen->intersect($worst))->toBeEmpty()
+        ->and($seen->count())->toBeGreaterThan(1);
+});
+
+it('counts a game once, however many wallpapers it holds', function () {
+    $many = shelfArt(95, 7);
+    $other = shelfArt(50);
+
+    $seen = collect(range(1, 40))->map(function (): ?string {
+        return Livewire::test('games.index', ['console' => 'snes'])->get('heroArt');
+    })->unique();
+
+    // The best game's first wallpaper, and the other game — not seven shots
+    // of the same game crowding everything else out of the six.
+    expect($seen->values()->sort()->values()->all())->toBe(collect([$many[0], $other[0]])->sort()->values()->all());
+});
+
+it('keeps the same backdrop while the shelf is filtered', function () {
+    foreach ([95, 90, 85] as $rating) {
+        shelfArt($rating);
+    }
+
+    $shelf = Livewire::test('games.index', ['console' => 'snes']);
+    $picked = $shelf->get('heroArt');
+
+    // Picked when the page loads, not each time it redraws: a backdrop that
+    // jumped under a select would read as a page failing to load.
+    $shelf->set('minRating', '80')->assertSet('heroArt', $picked)
+        ->set('query', 'Rated')->assertSet('heroArt', $picked);
+});
+
+it('keeps the pool cached rather than asking again on each visit', function () {
+    $first = shelfArt(95);
+
+    Livewire::test('games.index', ['console' => 'snes'])->assertSet('heroArt', $first[0]);
+
+    // Scraped since: not in the rotation until the cached pool lapses.
+    shelfArt(99);
+
+    Livewire::test('games.index', ['console' => 'snes'])->assertSet('heroArt', $first[0]);
+
+    Cache::forget('shelf.backdrops.snes');
+
+    $seen = collect(range(1, 30))->map(function (): ?string {
+        return Livewire::test('games.index', ['console' => 'snes'])->get('heroArt');
+    })->unique();
+
+    expect($seen->count())->toBe(2);
 });
 
 it('keeps the header band when the shelf has no artwork at all', function () {
@@ -2134,8 +2194,9 @@ it('asks the same number of queries for a shelf of five games as for twenty', fu
         }
 
         // Each render as a fresh request would see it: nothing read by the
-        // previous one.
+        // previous one, and the backdrop pool cold for both.
         AppSetting::flush();
+        Cache::forget('shelf.backdrops.snes');
         app()->forgetScopedInstances();
         DB::flushQueryLog();
         DB::enableQueryLog();

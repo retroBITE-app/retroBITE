@@ -18,7 +18,9 @@ use App\Support\Scanning\FolderCounts;
 use App\Tools\ConsoleTools;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Number;
 use Illuminate\Support\Str;
@@ -36,6 +38,9 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
     /** The two ways the library lists games. */
     private const VIEWS = ['cards', 'table'];
+
+    /** How many games' key art a shelf's backdrop rotates through. */
+    private const BACKDROPS = 6;
 
     /**
      * The console this page is fixed to, or '' for the whole library.
@@ -104,6 +109,17 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     #[Url(as: 'view', except: '')]
     public string $view = '';
 
+    /**
+     * Key art behind the shelf's hero: one of the best-rated games' art on
+     * this console, picked afresh on each visit, or null for none yet.
+     *
+     * Picked in mount and kept rather than computed: a computed pick would be
+     * drawn again on every filter change, and a backdrop that jumps under the
+     * hand changing a select reads as a page failing to load the same one twice.
+     */
+    #[Locked]
+    public ?string $heroArt = null;
+
     /** The route's console, when this is one console's shelf rather than the library. */
     public function mount(?string $console = null): void
     {
@@ -114,6 +130,9 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         abort_unless(Console::exists($console), 404);
 
         $this->lockedConsole = $console;
+
+        $pool = $this->backdropPool($this->lockedTo);
+        $this->heroArt = $pool === [] ? null : Arr::random($pool);
     }
 
     public function updated(string $property): void
@@ -158,34 +177,42 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     }
 
     /**
-     * Key art for the shelf's hero, off this console's own games.
+     * The key art a shelf's backdrop rotates through: the best-rated games'
+     * wallpaper on this console, one each, best first.
      *
      * There is no artwork shipped per console — config carries a logo and a
      * cartridge icon and nothing else — so the background is borrowed from the
      * games on the shelf. The wallpaper scope is what keeps it from being a
-     * blown-up thumbnail or an in-game screenshot.
+     * blown-up thumbnail or an in-game screenshot. Cached for an hour so a
+     * visit costs no query, and newly scraped art joins without being told to;
+     * the images themselves the browser keeps for good.
      *
-     * Ordered rather than random: a shelf that changes its own backdrop every
-     * time it is drawn reads as a page that failed to load the same one twice.
-     * The best-rated game's art is the one most likely to be worth looking at,
-     * and the id breaks the ties so the answer never moves.
+     * @return array<int, string> media paths
      */
-    #[Computed]
-    public function heroArt(): ?string
+    private function backdropPool(Console $console): array
     {
-        if ($this->lockedTo === null) {
-            return null;
-        }
-
-        return Media::query()
-            ->join('games', 'games.id', '=', 'media.game_id')
-            ->where('games.console', $this->lockedTo->key)
-            ->wallpaper()
-            // NULL first, or the unrated would head the list on MariaDB — the
-            // same trap the rating sort works around.
-            ->orderByRaw('games.rating IS NULL, games.rating DESC')
-            ->orderBy('games.id')
-            ->value('media.path');
+        return Cache::remember('shelf.backdrops.'.$console->key, now()->addHour(), function () use ($console): array {
+            return Media::query()
+                ->join('games', 'games.id', '=', 'media.game_id')
+                ->where('games.console', $console->key)
+                ->wallpaper()
+                // NULL first, or the unrated would head the list on MariaDB —
+                // the same trap the rating sort works around.
+                ->orderByRaw('games.rating IS NULL, games.rating DESC')
+                ->orderBy('games.id')
+                // The game's first wallpaper stands for it, so which one is
+                // not left to whatever order the database returns.
+                ->orderBy('media.id')
+                // A game can hold several wallpapers; enough rows that the
+                // first of each still reaches six games.
+                ->limit(self::BACKDROPS * 5)
+                ->get(['media.game_id', 'media.path'])
+                ->unique('game_id')
+                ->take(self::BACKDROPS)
+                ->pluck('path')
+                ->values()
+                ->all();
+        });
     }
 
     /**
