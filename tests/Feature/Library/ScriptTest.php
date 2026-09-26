@@ -50,6 +50,90 @@ function facts(ProcessResult $result): array
     return $facts;
 }
 
+/**
+ * A minimal ISO9660 image: a volume descriptor, a root directory, and one
+ * file named $name at sector $sector holding $contents.
+ *
+ * Sparse — written by seeking — so a file placed past the 16 MiB mark costs a
+ * few kilobytes on disk rather than sixteen megabytes.
+ */
+function isoImage(string $filename, int $sector, string $contents, string $name = 'SYSTEM.CNF;1', string $front = ''): string
+{
+    $path = test()->dir.'/'.$filename;
+    $handle = fopen($path, 'w+b');
+
+    // One directory record: length, extent and size each stored both ways
+    // round, a date, flags, and the name's length at byte 32.
+    $record = function (int $lba, int $size, string $id): string {
+        $length = 33 + strlen($id);
+        $length += $length % 2;
+
+        return pack('CCVNVNx7CCCvnC', $length, 0, $lba, $lba, $size, $size, 0, 0, 0, 1, 1, strlen($id)).$id.str_repeat("\0", $length - 33 - strlen($id));
+    };
+
+    // Anything the search of the first 16 MiB would find before the directory does.
+    fwrite($handle, $front);
+
+    // Sector 16: the primary volume descriptor, root directory record at 156.
+    fseek($handle, 16 * 2048);
+    fwrite($handle, "\x01CD001\x01");
+    fseek($handle, 16 * 2048 + 156);
+    fwrite($handle, $record(20, 2048, "\0"));
+
+    // Sector 20: the root directory, "." and ".." first as on a real disc.
+    fseek($handle, 20 * 2048);
+    fwrite($handle, $record(20, 2048, "\0").$record(20, 2048, "\1").$record($sector, strlen($contents), $name));
+
+    fseek($handle, $sector * 2048);
+    fwrite($handle, $contents);
+    fclose($handle);
+
+    return $path;
+}
+
+function inspectImage(string $path): ProcessResult
+{
+    return Process::path(base_path('app/Scripts/PS2'))
+        ->timeout(30)
+        ->run(['bash', 'Inspect.sh', $path]);
+}
+
+it('finds SYSTEM.CNF through the disc\'s directory, however deep it sits', function () {
+    // Past the 16 MiB slice, where the old search had to walk the whole disc
+    // — four gigabytes over a network mount, and a job that timed out.
+    $path = isoImage('Buffy (Europe).iso', 16 * 512 + 900, "BOOT2 = cdrom0:\\SLES_518.90;1\r\nVER = 1.00\r\nVMODE = PAL\r\n");
+
+    $result = inspectImage($path);
+
+    expect($result->exitCode())->toBe(0)
+        ->and(facts($result))->toBe([
+            'license_id' => 'SLES_518.90',
+            'cover_id' => 'SLES-51890',
+            'region' => 'Europe',
+            'video_mode' => 'PAL',
+        ]);
+});
+
+it('believes the directory over a serial lying earlier on the disc', function () {
+    // A serial in the first sectors — a demo disc's list, a sequel's advert —
+    // is what the slice search would have taken. The directory says which
+    // file the console boots, and that is the answer.
+    $path = isoImage(
+        'Game (Europe).iso',
+        16 * 512 + 900,
+        "BOOT2 = cdrom0:\\SLES_527.09;1\r\nVMODE = PAL\r\n",
+        front: str_repeat("\0", 1024)."BOOT2 = cdrom0:\\SLUS_999.99;1\n",
+    );
+
+    expect(facts(inspectImage($path)))->toHaveKey('license_id', 'SLES_527.09');
+});
+
+it('reads the name however the disc spells its case', function () {
+    $path = isoImage('Game (Europe).iso', 40, "BOOT2 = cdrom0:\\SLES_535.01;1\r\n", name: 'system.cnf;1');
+
+    expect(facts(inspectImage($path)))->toHaveKey('license_id', 'SLES_535.01');
+});
+
 it('reads a serial out of the disc', function () {
     $result = inspect('Castlevania (Europe).iso', "....BOOT2 = cdrom0:\\SLES_503.86;1\nVMODE = PAL\n....");
 

@@ -48,6 +48,105 @@ read_header() {
     head -c "$PS2_HEADER_BYTES" "$1" 2>/dev/null | strings
 }
 
+# ISO9660's sector size, for every position the directory gives.
+ISO_SECTOR=2048
+
+# The unsigned bytes of a slice of the disc, one per array element, so the
+# directory can be walked in bash with nothing but coreutils.
+read_bytes() {
+    local file="$1" offset="$2" length="$3"
+
+    od -An -v -tu1 -j "$offset" -N "$length" "$file" 2>/dev/null | tr -s ' \n' ' '
+}
+
+# A little-endian 32-bit field out of a byte array, starting at an index.
+# ISO9660 stores each number twice, both ways round; this reads the first.
+le32() {
+    local -n bytes_ref="$1"
+    local at="$2"
+
+    echo $(( bytes_ref[at] + (bytes_ref[at + 1] << 8) + (bytes_ref[at + 2] << 16) + (bytes_ref[at + 3] << 24) ))
+}
+
+# SYSTEM.CNF itself, found the way the console and OPL find it: through the
+# disc's own directory rather than by searching for it.
+#
+# Sector 16 is the primary volume descriptor, which says where the root
+# directory is; the root directory says where SYSTEM.CNF is. A few kilobytes
+# read wherever the file happens to sit — which matters because some discs put
+# it far past the 16 MiB slice, and walking a whole image instead means four
+# gigabytes over whatever the library is mounted from. Fails quietly for
+# anything that is not plain ISO9660, and the caller falls back to searching.
+system_cnf() {
+    local file="$1" descriptor root_lba root_size dir_bytes pos length name_length i ok lba size
+    local -a pvd dir target
+
+    descriptor=$(dd if="$file" bs=1 skip=$(( 16 * ISO_SECTOR + 1 )) count=5 2>/dev/null)
+    [ "$descriptor" = "CD001" ] || return 1
+
+    read -r -a pvd <<<"$(read_bytes "$file" $(( 16 * ISO_SECTOR + 156 )) 34)"
+    [ "${#pvd[@]}" -eq 34 ] || return 1
+
+    root_lba=$(le32 pvd 2)
+    root_size=$(le32 pvd 10)
+
+    # A root directory is a sector or two; anything much larger is not one.
+    [ "$root_size" -gt 0 ] && [ "$root_size" -le $(( 64 * ISO_SECTOR )) ] || return 1
+
+    read -r -a dir <<<"$(read_bytes "$file" $(( root_lba * ISO_SECTOR )) "$root_size")"
+    dir_bytes=${#dir[@]}
+
+    # "SYSTEM.CNF", as the byte values the directory stores.
+    for (( i = 0; i < 10; i++ )); do
+        target[i]=$(printf '%d' "'${PS2_SYSTEM_CNF:i:1}")
+    done
+
+    pos=0
+
+    while [ "$pos" -lt "$dir_bytes" ]; do
+        length=${dir[pos]}
+
+        # Records never straddle a sector; a zero length is the padding at the
+        # end of one, and the next record starts on the next sector.
+        if [ "$length" -eq 0 ]; then
+            pos=$(( (pos / ISO_SECTOR + 1) * ISO_SECTOR ))
+
+            continue
+        fi
+
+        name_length=${dir[pos + 32]:-0}
+
+        # The name, case-insensitively, followed by nothing or by ";1".
+        if [ "$name_length" -ge 10 ]; then
+            ok=1
+
+            for (( i = 0; i < 10; i++ )); do
+                local byte=${dir[pos + 33 + i]:-0}
+                [ "$byte" -ge 97 ] && [ "$byte" -le 122 ] && byte=$(( byte - 32 ))
+                [ "$byte" -eq "${target[i]}" ] || { ok=0; break; }
+            done
+
+            if [ "$ok" -eq 1 ] && { [ "$name_length" -eq 10 ] || [ "${dir[pos + 43]:-0}" -eq 59 ]; }; then
+                lba=$(le32 dir $(( pos + 2 )))
+                size=$(le32 dir $(( pos + 10 )))
+
+                # SYSTEM.CNF is a few lines; a large "file" is not one.
+                [ "$size" -gt 0 ] && [ "$size" -le "$ISO_SECTOR" ] || return 1
+
+                dd if="$file" bs="$ISO_SECTOR" skip="$lba" count=1 2>/dev/null | head -c "$size"
+
+                return 0
+            fi
+        fi
+
+        pos=$(( pos + length ))
+    done
+
+    return 1
+}
+
+PS2_SYSTEM_CNF="SYSTEM.CNF"
+
 # Streamed, never captured whole: `strings` over a 4 GB disc would otherwise land
 # in a shell variable. `-m1` also lets strings exit early on a hit.
 scan_disc() {
@@ -197,7 +296,15 @@ fi
 startup=$(startup_from_name "$iso_file") || startup=""
 
 if [ -z "$startup" ]; then
-    header=$(read_header "$iso_file")
+    # SYSTEM.CNF through the directory first, which costs a few kilobytes
+    # wherever it sits; the 16 MiB slice only for an image that is not plain
+    # ISO9660, and the whole-disc walk behind that as it always was.
+    header=$(system_cnf "$iso_file") || header=""
+
+    if ! grep -qiE "BOOT2" <<<"$header"; then
+        header=$(read_header "$iso_file")
+    fi
+
     startup=$(startup_from_disc "$iso_file" "$header") || startup=""
 else
     header=""
