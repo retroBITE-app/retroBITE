@@ -116,7 +116,7 @@ start_reverb --debug
 # own $timeout says — and a killed child takes the listener down with it. The
 # restart loop in queue-workers.sh brings it back, but the job still never
 # finishes. The longest on each: MatchGame 120 (scraper), ScanConsoleFolder
-# and WriteConsoleExports 1800 (media, default), SyncHashIndex 900 (ra),
+# 1800 (media, default), WriteConsoleExports 1800 (toolbox), SyncHashIndex 900 (ra),
 # ReconcileProgress 300 (ra-progress), HashFile 3600 (hash). Raise the number
 # here when one of those grows.
 . /usr/local/bin/queue-workers.sh
@@ -131,6 +131,10 @@ workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:listen \
 # runs beside the downloads instead of in front of them.
 workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:listen \
     --queue=thumbnails --sleep=3 --tries=3
+
+# The console toolbox: an export's 1800 plus the margin the others carry.
+workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:listen \
+    --queue=toolbox --sleep=3 --tries=3 --timeout=1860
 
 # RetroAchievements. Note that queue:listen ignores retry_after entirely — it
 # reboots per job and goes by --timeout — so the long-connection split that

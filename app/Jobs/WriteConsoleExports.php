@@ -40,9 +40,10 @@ class WriteConsoleExports implements ShouldQueue
         public readonly string $export,
         public readonly bool $force = false,
     ) {
-        // Disk work, like hashing. Not the scraper queue, which exists to pace
-        // provider requests and would sit blocked behind a library of covers.
-        $this->onQueue('media');
+        // The toolbox's own queue and worker: not the scraper queue, which
+        // exists to pace provider requests, and not media, where a press of
+        // Write OPL art would wait behind every artwork download queued.
+        $this->onQueue('toolbox');
     }
 
     public function handle(): void

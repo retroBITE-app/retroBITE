@@ -38,12 +38,12 @@ new class extends Component
     /**
      * Loader exports being written, counted in files rather than jobs.
      *
-     * Its own row rather than one of the queues': one job writes a whole
-     * console, so the media queue can only say "1" while nineteen files go
+     * Shown on the Toolbox row while one runs: one job writes a whole
+     * console, so the queue alone can only say "1" while nineteen files go
      * past. The worker leaves its count in ExportProgress, and that is the
-     * figure worth showing. One not yet picked up has no count and is already
-     * in the artwork depth, so it is left to that row. Two at once are added
-     * together, the way the queues are in the bar above.
+     * figure worth showing. One not yet picked up has no count, so the row
+     * shows the queue's jobs until it has. Two at once are added together,
+     * the way the queues are in the bar above.
      *
      * @return array{busy: bool, done: int, total: int, percent: int}
      */
@@ -139,51 +139,35 @@ new class extends Component
                     <div class="flex items-baseline justify-between gap-2 text-xs">
                         <span class="truncate text-fg-faint">{{ __($queue->label) }}</span>
 
+                        @php($writing = $queue->key === 'toolbox' && $exports['busy'])
+
                         {{-- A quiet queue keeps its row but gives up the
                              brighter figure, so the busy ones are still the
                              ones the eye lands on. --}}
-                        <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $queue->busy(), 'text-fg-faint' => ! $queue->busy()])>
-                            @if ($queue->waiting())
+                        <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $queue->busy() || $writing, 'text-fg-faint' => ! $queue->busy() && ! $writing])>
+                            @if ($writing)
+                                {{-- Files written out of files to write, where
+                                     the other rows count jobs left. --}}
+                                {{ $exports['done'] }}<span class="text-fg-faint">/{{ $exports['total'] }}</span>
+                            @elseif ($queue->waiting())
                                 {{-- Everything left is scheduled for later: a
                                      spent allowance, not a stuck queue. --}}
                                 <span class="text-fg-faint">{{ __('waiting') }}</span>
                             @endif
-                            {{ $queue->remaining() }}
+                            @unless ($writing)
+                                {{ $queue->remaining() }}
+                            @endunless
                         </span>
                     </div>
 
                     <div class="mt-1 h-1 overflow-hidden rounded-sm bg-raised">
                         <div
                             class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
-                            style="width: {{ $queue->percent() }}%"
+                            style="width: {{ $writing ? $exports['percent'] : $queue->percent() }}%"
                         ></div>
                     </div>
                 </div>
             @endforeach
-
-            {{-- Files written out of files to write, where the rows above
-                 count jobs left. Zero when nothing is being written, like
-                 any other quiet row. --}}
-            <div wire:key="activity-exports">
-                <div class="flex items-baseline justify-between gap-2 text-xs">
-                    <span class="truncate text-fg-faint">{{ __('Exporting') }}</span>
-
-                    <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $exports['busy'], 'text-fg-faint' => ! $exports['busy']])>
-                        @if ($exports['busy'])
-                            {{ $exports['done'] }}<span class="text-fg-faint">/{{ $exports['total'] }}</span>
-                        @else
-                            0
-                        @endif
-                    </span>
-                </div>
-
-                <div class="mt-1 h-1 overflow-hidden rounded-sm bg-raised">
-                    <div
-                        class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
-                        style="width: {{ $exports['percent'] }}%"
-                    ></div>
-                </div>
-            </div>
         </div>
     </div>
 </div>

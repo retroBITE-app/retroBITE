@@ -3,11 +3,13 @@
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
+use App\Jobs\InspectGameFile;
 use App\Jobs\MatchGame;
 use App\Jobs\MeasureLibrary;
 use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
+use App\Jobs\WriteConsoleExports;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
@@ -20,6 +22,7 @@ use App\Support\ExportProgress;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
+use App\Support\SystemActivity;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -874,14 +877,41 @@ it('says how many files an export has written, not how many jobs it queued', fun
     ExportProgress::advance('ps2', 'cfg', 12, 19);
 
     Livewire::test('system-activity')
-        ->assertSeeInOrder(['Exporting', '12', '/19']);
+        ->assertSeeInOrder(['Toolbox', '12', '/19'])
+        ->assertDontSee('Exporting');
 
     ExportProgress::finish('ps2', 'cfg');
 
     // The row stays, as every quiet one does; only the count goes.
     Livewire::test('system-activity')
-        ->assertSee('Exporting')
+        ->assertSee('Toolbox')
         ->assertDontSee('/19');
+});
+
+it('runs the toolbox on a queue of its own, not behind the artwork', function () {
+    Queue::fake();
+
+    WriteConsoleExports::dispatch('ps2', 'art');
+    InspectGameFile::dispatch(GameFile::factory()->create()->id);
+
+    Queue::assertPushedOn('toolbox', WriteConsoleExports::class);
+    Queue::assertPushedOn('toolbox', InspectGameFile::class);
+});
+
+it('counts a queued export on the Toolbox row, not on Artwork', function () {
+    DB::table('jobs')->insert([
+        'queue' => 'toolbox',
+        'payload' => '{}',
+        'attempts' => 0,
+        'available_at' => now()->timestamp,
+        'created_at' => now()->timestamp,
+    ]);
+    SystemActivity::forget();
+
+    $activity = SystemActivity::current();
+
+    expect($activity->queues['toolbox']->remaining())->toBe(1)
+        ->and($activity->queues['artwork']->remaining())->toBe(0);
 });
 
 /**
@@ -1802,6 +1832,22 @@ it('will not run a shelf action on a page fixed to no console', function () {
         ->call('writeConsoleExport', 'cfg');
 
     Queue::assertNothingPushed();
+});
+
+it('queues the OPL export from a PS2 shelf, on the toolbox queue', function () {
+    Queue::fake();
+    File::ensureDirectoryExists($this->root.'/ps2');
+    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
+    Game::factory()->forConsole('ps2')->matched()->create(['title' => 'Tekken Tag Tournament', 'slug' => 'ttt']);
+
+    Livewire::test('games.index', ['console' => 'ps2'])
+        ->assertSee('Write OPL configs')
+        ->call('writeConsoleExport', 'cfg')
+        ->assertDispatched('toast-show');
+
+    Queue::assertPushedOn('toolbox', WriteConsoleExports::class, function (WriteConsoleExports $job): bool {
+        return $job->console === 'ps2' && $job->export === 'cfg';
+    });
 });
 
 it('offers an export only where the console\'s toolbox writes one', function () {

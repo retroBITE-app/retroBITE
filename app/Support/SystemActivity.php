@@ -54,6 +54,7 @@ final class SystemActivity
         'thumbnails' => ['label' => 'Thumbnails', 'queues' => ['thumbnails']],
         'achievements' => ['label' => 'Achievements', 'queues' => ['ra']],
         'progress' => ['label' => 'Progress', 'queues' => ['ra-progress']],
+        'toolbox' => ['label' => 'Toolbox', 'queues' => ['toolbox']],
     ];
 
     /** @param  array<string, QueueActivity>  $queues */

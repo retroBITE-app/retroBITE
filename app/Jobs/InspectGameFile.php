@@ -17,9 +17,10 @@ use Illuminate\Support\Facades\Log;
  *
  * A PlayStation 2 disc carries the serial Open PS2 Loader keys its artwork and
  * its per-game config on, and no provider will hand that over. Reading it means
- * opening the image, which is why this is queued and on the media queue beside
- * hashing: it is disk work, and the single scraper worker exists to pace
- * provider requests rather than to sit blocked behind a disc image.
+ * opening the image, which is why this is queued, and on the toolbox's own queue
+ * beside the loader exports: the single scraper worker exists to pace provider
+ * requests rather than to sit blocked behind a disc image, and on media it would
+ * wait behind every artwork download a scan queues.
  *
  * Deliberately not chained to identification. ScreenScraper has no serial
  * parameter, so nothing learned here can improve a lookup, and coupling the two
@@ -41,7 +42,7 @@ class InspectGameFile implements ShouldQueue
         public readonly int $fileId,
         public readonly bool $force = false,
     ) {
-        $this->onQueue('media');
+        $this->onQueue('toolbox');
     }
 
     public function handle(): void

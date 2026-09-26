@@ -90,6 +90,11 @@ workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:work \
 workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:work \
     --queue=thumbnails --sleep=3 --tries=3 --max-time=3600
 
+# The console toolbox: loader exports and license ID reading, on a queue of
+# their own so pressing Write OPL art never waits behind a library's artwork.
+workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:work \
+    --queue=toolbox --sleep=3 --tries=3 --max-time=3600
+
 # RetroAchievements: identification and set downloads are HTTP and quick, so
 # one worker keeps up; progress gets its own so a library-wide backfill of the
 # first two cannot starve it.
