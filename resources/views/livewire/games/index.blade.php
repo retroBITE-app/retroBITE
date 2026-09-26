@@ -12,7 +12,6 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\Media;
 use App\Support\Console;
-use App\Support\Layouts\Layouts;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
 use App\Tools\ConsoleTools;
@@ -158,18 +157,18 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     }
 
     /**
-     * How this console's folder is read, for the badge beside the title.
+     * How this console's folder is read, for the figures beside the title.
      *
-     * Null where the console knows one arrangement — saying so on 134 of the
-     * 135 consoles tells nobody anything — and null for the whole library,
-     * which is read every way at once.
+     * Shown on every console's shelf, the only arrangement it knows included:
+     * it says how the folder is read whether or not there was a choice. Null
+     * for the whole library, which is read every way at once.
      */
     #[Computed]
     public function layoutLabel(): ?string
     {
         $console = $this->lockedTo;
 
-        if ($console === null || count(Layouts::keysFor($console)) <= 1) {
+        if ($console === null) {
             return null;
         }
 

@@ -2180,7 +2180,7 @@ it('searches from beside the heading on the whole library', function () {
     $page->assertSeeInOrder(['Games', 'Search titles', 'All consoles']);
 });
 
-it('names the layout among the shelf figures, only where there was a choice', function () {
+it('names the layout among the shelf figures on every console', function () {
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
     Game::factory()->forConsole('ps2')->matched()->create(['title' => 'Okami', 'slug' => 'okami']);
 
@@ -2190,9 +2190,10 @@ it('names the layout among the shelf figures, only where there was a choice', fu
 
     Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
 
+    // A console with one arrangement still says which it is.
     $this->get(route('consoles.games', ['console' => 'snes']))
         ->assertOk()
-        ->assertDontSee('>Layout<', false);
+        ->assertSeeInOrder(['Layout', 'However it already is', 'Files', 'On disk']);
 });
 
 it('focuses the search on Ctrl+K and marks the view in force', function () {
