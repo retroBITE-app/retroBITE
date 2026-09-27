@@ -110,7 +110,7 @@
 
                     <span class="min-w-0 flex-1 leading-tight">
                         <span class="block truncate text-sm text-fg-soft">{{ auth()->user()->username ?? auth()->user()->name }}</span>
-                        <span class="block font-mono text-xs text-fg-faint">{{ config('app.version', 'v0.0.1') }}</span>
+                        <span class="block font-mono text-xs text-fg-faint">v{{ config('app.version', '20260927') }}</span>
                     </span>
 
                     <form method="POST" action="{{ route('logout') }}">
