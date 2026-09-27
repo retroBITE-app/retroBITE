@@ -46,12 +46,18 @@ php /app/artisan migrate --force
 # Never the games tree: ROM files are read and never written, ownership
 # included, and it is a bind mount that can be tens of thousands of files on a
 # slow or external disk — walking it on every boot is what made a start hang
-# here for minutes. Everything else only where the owner is wrong, so after the
+# here for minutes — or a network mount (sshfs, NFS) that refuses ownership
+# changes outright. Everything else only where the owner is wrong, so after the
 # first boot this is a quick walk that writes nothing, rather than a chown of
 # every downloaded image and thumbnail.
+#
+# Never fatal either: a tree whose ownership cannot be set still works when
+# user-setup.sh matched the ids, and a boot that dies here takes the whole web
+# container down with it.
 find /app/storage /app/bootstrap/cache \
     -path /app/storage/app/games -prune -o \
-    \( ! -user "$WEB_USER" -o ! -group "$WEB_GROUP" \) -exec chown -h "$WEB_USER:$WEB_GROUP" {} +
+    \( ! -user "$WEB_USER" -o ! -group "$WEB_GROUP" \) -exec chown -h "$WEB_USER:$WEB_GROUP" {} + \
+    || echo "WARNING: could not hand every file under storage/ to $WEB_USER; carrying on." >&2
 
 # Live updates (keys were set at the top, before anything ran PHP).
 start_reverb

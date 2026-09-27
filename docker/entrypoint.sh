@@ -13,8 +13,31 @@ echo "===================================="
 # One account serves both protocols. It needs a real shell: vsftpd's PAM stack
 # ends with pam_shells.so, which refuses any user whose shell is not in
 # /etc/shells — and /sbin/nologin never is.
+#
+# And it takes the ids of whoever owns the library, the way the web container's
+# user-setup.sh does, rather than the library being changed to suit it. A
+# network mount — sshfs, NFS — belongs to the machine that exports it and will
+# not let anybody here reassign its files; matched ids read and write it as they
+# are. A root-owned /games is a plain local folder, and keeps the old defaults.
+GAMES_UID=$(stat -c '%u' /games 2>/dev/null || echo 0)
+GAMES_GID=$(stat -c '%g' /games 2>/dev/null || echo 0)
+
 if ! id "$USER" &>/dev/null; then
-    useradd -m -d "/home/$USER" -s /bin/bash "$USER"
+    if [ "$GAMES_UID" != "0" ]; then
+        GAMES_GROUP=$(getent group "$GAMES_GID" | cut -d: -f1)
+
+        if [ -z "$GAMES_GROUP" ]; then
+            groupadd -g "$GAMES_GID" "$USER"
+            GAMES_GROUP="$USER"
+        fi
+
+        useradd -m -d "/home/$USER" -s /bin/bash -u "$GAMES_UID" -o -g "$GAMES_GROUP" "$USER"
+    else
+        useradd -m -d "/home/$USER" -s /bin/bash "$USER"
+    fi
+elif [ "$GAMES_UID" != "0" ] && [ "$(id -u "$USER")" != "$GAMES_UID" ]; then
+    # A container kept from before the library moved: follow the new owner.
+    usermod -o -u "$GAMES_UID" "$USER"
 fi
 
 # Set the Samba password, then the Unix one FTP authenticates against.
@@ -65,7 +88,8 @@ GAME_FOLDERS=${GAME_FOLDERS:-ps2 ps3 gc wii xbox dreamcast}
 SMB_SHARES=${SMB_SHARES:-ps2 gc wii}
 
 for folder in $GAME_FOLDERS; do
-    mkdir -p "/games/$folder"
+    # One folder refused must not stop the shares from starting.
+    mkdir -p "/games/$folder" || echo "WARNING: could not create /games/$folder" >&2
 done
 
 # Generated fresh each boot so a changed SMB_SHARES never leaves a stale share
@@ -89,9 +113,18 @@ for share in $SMB_SHARES; do
 SHARE
 done
 
-# Ensure games directory has correct permissions
-chown -R :users /games
-chmod -R 775 /games
+# Only when the share account cannot already write to the library, and never
+# fatally. With the ids matched above this is skipped outright — which is also
+# what keeps a boot from walking every file of a remote library over the
+# network. A mount that refuses ownership changes gets one warning, not a
+# restart loop: its owner decides who may write to it, not this container.
+if su -s /bin/sh "$USER" -c 'test -w /games'; then
+    echo "Library is writable as $USER; its ownership is left alone."
+elif chown -R :users /games 2>/dev/null && chmod -R g+rwX /games 2>/dev/null; then
+    echo "Library handed to the users group."
+else
+    echo "WARNING: /games is not writable as $USER, and its ownership cannot be changed from here (a network mount?). Uploads over SMB and FTP will fail until its owner allows them." >&2
+fi
 
 # Three daemons, kept alive. supervisord did this before, but it is a Python
 # program and pulled a CPython runtime in purely to run three execs. Docker's own
