@@ -212,6 +212,117 @@ final class LibraryFiles
     }
 
     /**
+     * File games that sit loose in the console's folder into folders of their
+     * own, every file of each — a cue with its bins, a playlist and its discs —
+     * and record where they went.
+     *
+     * A game already in a folder is left where it is; so is one with a file
+     * missing, or whose folder would clash with something already there. A
+     * sheet names its files relative to itself, and the set moves together,
+     * so it still reads. A failure while moving puts back every file moved.
+     *
+     * @param  array<int, array{game: Game, folder: string}>  $moves  the folder is a name, not a path
+     * @return int how many games were moved
+     *
+     * @throws LibraryFileRejected
+     */
+    public function organize(Console $console, array $moves): int
+    {
+        if (! ConsoleSourceFolder::has($console)) {
+            throw LibraryFileRejected::because(LibraryFileRejection::Unconfigured);
+        }
+
+        $root = (string) ConsoleSourceFolder::pathFor($console);
+        $plan = [];
+        $games = 0;
+        $taken = [];
+
+        foreach ($moves as ['game' => $game, 'folder' => $folder]) {
+            $entries = $this->planOrganize($console, $game, $folder, $root, $taken);
+
+            if ($entries === []) {
+                continue;
+            }
+
+            foreach ($entries as $entry) {
+                $taken[Arr::get($entry, 'to')] = true;
+            }
+
+            $plan = [...$plan, ...$entries];
+            $games++;
+        }
+
+        if ($plan === []) {
+            return 0;
+        }
+
+        $moved = $this->relocateAll($console, $plan);
+
+        try {
+            DB::transaction(function () use ($plan): void {
+                foreach ($plan as ['file' => $file, 'path' => $path]) {
+                    $file->update(['path' => $path]);
+                }
+            });
+        } catch (Throwable $e) {
+            Log::error('Organized files could not be recorded.', ['console' => $console->key, 'exception' => $e::class]);
+
+            $this->rollBack($console, $moved);
+
+            throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
+        }
+
+        FolderCounts::recount($console);
+
+        return $games;
+    }
+
+    /**
+     * Where one game's files go, or nothing when the game is not one to move.
+     *
+     * @param  array<string, bool>  $taken  targets earlier games in this batch claimed
+     * @return array<int, array{file: GameFile, from: string, to: string, path: string}>
+     */
+    private function planOrganize(Console $console, Game $game, string $folder, string $root, array $taken): array
+    {
+        // A name, never a path: nothing the caller passes can move files out
+        // of the console's folder or into somebody else's.
+        if ($folder === '' || $folder !== basename($folder) || in_array($folder, ['.', '..'], true)) {
+            return [];
+        }
+
+        $entries = [];
+
+        foreach ($game->files as $file) {
+            $from = $this->consoleRelative($console, $file);
+
+            // Loose at the top only: a game already in a folder is filed.
+            if ($from === null || Str::contains($from, '/')) {
+                return [];
+            }
+
+            if (! $file->isPresent() || ! $this->onDisk($console, $from)) {
+                return [];
+            }
+
+            $to = $folder.'/'.$file->filename;
+
+            if (array_key_exists($to, $taken) || $this->onDisk($console, $to)) {
+                return [];
+            }
+
+            $entries[] = ['file' => $file, 'from' => $from, 'to' => $to, 'path' => $root.'/'.$to];
+        }
+
+        // A row for a file that has gone missing can still hold the name.
+        if ($entries !== [] && GameFile::query()->whereIn('path', array_column($entries, 'path'))->exists()) {
+            return [];
+        }
+
+        return $entries;
+    }
+
+    /**
      * Where each file goes, checked against the disk and the database first.
      *
      * @return array<int, array{file: GameFile, from: string, to: string, path: string}>

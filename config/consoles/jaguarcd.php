@@ -16,6 +16,6 @@ return [
     'retroachievements_id' => 77,
     'cover_aspect' => '5/7',
     'cover_height' => 280,
-    'layouts' => ['custom'],
+    'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',
 ];

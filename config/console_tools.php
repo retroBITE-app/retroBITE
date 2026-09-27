@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Tools\ConsoleTool\DiscFolders;
 use App\Tools\ConsoleTool\PS2;
 
 /**
@@ -36,7 +37,21 @@ return [
 
     'script' => 'Inspect.sh',
 
+    // The CD systems that keep one folder per game share one toolbox: the
+    // arrangement, and the playlist it needs written, are the same on each.
     'consoles' => [
         'ps2' => PS2::class,
+        'psx' => DiscFolders::class,
+        'saturn' => DiscFolders::class,
+        'megacd' => DiscFolders::class,
+        'pcenginecd' => DiscFolders::class,
+        'neogeocd' => DiscFolders::class,
+        '3do' => DiscFolders::class,
+        'pcfx' => DiscFolders::class,
+        'jaguarcd' => DiscFolders::class,
+        'amigacd32' => DiscFolders::class,
+        'amigacdtv' => DiscFolders::class,
+        'cdi' => DiscFolders::class,
+        'fmtowns' => DiscFolders::class,
     ],
 ];

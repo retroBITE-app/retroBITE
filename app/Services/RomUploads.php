@@ -50,14 +50,16 @@ final class RomUploads
      *
      * @param  int  $size  bytes the browser says the file holds
      * @param  string  $destination  one of ConsoleSourceFolder::destinationsFor()' keys
+     * @param  string  $folder  the game's own folder, required where the layout files one game per folder and refused elsewhere
      *
      * @throws UploadRejected
      */
-    public function begin(Console $console, int $userId, string $filename, int $size, string $destination): PendingUpload
+    public function begin(Console $console, int $userId, string $filename, int $size, string $destination, string $folder = ''): PendingUpload
     {
         $this->assertAcceptable($console, $filename, $size, $destination);
+        $this->assertFolder($console, $folder);
 
-        $upload = new PendingUpload((string) Str::uuid(), $userId, $console->key, $destination, $filename, $size);
+        $upload = new PendingUpload((string) Str::uuid(), $userId, $console->key, $destination, $filename, $size, $folder);
 
         try {
             $this->assertRoomFor($console, $upload);
@@ -209,6 +211,23 @@ final class RomUploads
 
         if ($size < 1) {
             throw UploadRejected::because(UploadRejection::EmptyFile);
+        }
+    }
+
+    /**
+     * A game folder where the layout wants one, and none where it does not.
+     *
+     * Held to the same rule as a file name: one name, nothing a path could be
+     * built out of, so an upload still lands inside the console's folder.
+     *
+     * @throws UploadRejected
+     */
+    private function assertFolder(Console $console, string $folder): void
+    {
+        $wanted = ConsoleSourceFolder::layoutFor($console)->perGameFolders();
+
+        if ($wanted ? ! self::isPlainName($folder) : $folder !== '') {
+            throw UploadRejected::because(UploadRejection::BadFolder);
         }
     }
 

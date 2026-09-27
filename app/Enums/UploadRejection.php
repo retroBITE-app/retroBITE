@@ -15,6 +15,7 @@ enum UploadRejection: string
 {
     case Unconfigured = 'unconfigured';
     case BadName = 'bad_name';
+    case BadFolder = 'bad_folder';
     case WrongType = 'wrong_type';
     case Excluded = 'excluded';
     case Destination = 'destination';
@@ -36,6 +37,7 @@ enum UploadRejection: string
         return match ($this) {
             self::Unconfigured => __('This console is not in the library yet, so it has no folder to upload into.'),
             self::BadName => __('That file name cannot be used. Rename it without slashes or a leading dot and try again.'),
+            self::BadFolder => __('Each game goes in a folder of its own here. Give it a folder name without slashes or a leading dot and try again.'),
             self::WrongType => __('That file type is not one this console plays.'),
             self::Excluded => __('That file is one the library ignores, so it would never appear on the shelf.'),
             self::Destination => __('That folder is not one this console\'s layout reads games from.'),

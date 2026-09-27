@@ -107,6 +107,21 @@ final class PS2 extends ConsoleTools
         return ['cfg', 'art'];
     }
 
+    /** @see ConsoleTools::exportLabel() */
+    public function exportLabel(string $export): string
+    {
+        return $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art');
+    }
+
+    /** Names the loader and the folder it reads: CFG/ or ART/ under the drive. */
+    public function exportConfirm(string $export, string $folder): string
+    {
+        return __('Write OPL :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
+            'export' => Str::upper($export),
+            'folder' => $folder.'/'.($export === 'cfg' ? $this->configDir : $this->artDir),
+        ]);
+    }
+
     /** Only a drive arranged the way OPL expects has a CFG/ or an ART/. */
     public function canExport(): bool
     {

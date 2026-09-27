@@ -555,7 +555,9 @@ new #[Title('Consoles')] class extends Component
 
         $tools = ConsoleTools::for($console);
 
-        if ($tools === null || ! in_array($export, $tools->exports(), true)) {
+        // canExport() as well as the list: the item is only drawn when it is
+        // true, and a call made without the menu must not get further.
+        if ($tools === null || ! $tools->canExport() || ! in_array($export, $tools->exports(), true)) {
             return;
         }
 
@@ -721,11 +723,8 @@ new #[Title('Consoles')] class extends Component
                                         @foreach ($rowExports as $export)
                                             <flux:menu.item icon="arrow-down-tray"
                                                             wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
-                                                            wire:confirm="{{ __('Write OPL :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
-                                                                'export' => Str::upper($export),
-                                                                'folder' => $row['folder'].'/'.Str::upper($export),
-                                                            ]) }}">
-                                                {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
+                                                            wire:confirm="{{ App\Tools\ConsoleTools::for($row['console'])?->exportConfirm($export, (string) $row['folder']) }}">
+                                                {{ App\Tools\ConsoleTools::for($row['console'])?->exportLabel($export) }}
                                             </flux:menu.item>
                                         @endforeach
 

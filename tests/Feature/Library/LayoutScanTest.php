@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FileRole;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
@@ -123,4 +124,45 @@ it('does not descend below a game directory under opl', function () {
     scanPs2('opl');
 
     expect(GameFile::pluck('path')->all())->toBe(['ps2/DVD/SLES_503.86.Game.iso']);
+});
+
+/** A PS1 card laid out one folder per game. */
+function foldersTree(): void
+{
+    $files = [
+        'psx/Crash Bandicoot/Crash.cue' => "FILE \"Crash.bin\" BINARY\n  TRACK 01 MODE2/2352\n",
+        'psx/Crash Bandicoot/Crash.bin' => 'x',
+        'psx/Final Fantasy IX/FF9 (Disc 1).cue' => "FILE \"FF9 (Disc 1).bin\" BINARY\n  TRACK 01 MODE2/2352\n",
+        'psx/Final Fantasy IX/FF9 (Disc 1).bin' => 'x',
+        'psx/Final Fantasy IX/FF9 (Disc 2).cue' => "FILE \"FF9 (Disc 2).bin\" BINARY\n  TRACK 01 MODE2/2352\n",
+        'psx/Final Fantasy IX/FF9 (Disc 2).bin' => 'x',
+    ];
+
+    foreach ($files as $relative => $contents) {
+        File::ensureDirectoryExists(dirname(test()->root.'/'.$relative));
+        File::put(test()->root.'/'.$relative, $contents);
+    }
+}
+
+it('makes one game per folder, named for the folder, under game folders', function () {
+    foldersTree();
+
+    ConsoleSourceFolder::add(new Console('psx'), null, 'folders');
+    app(LibraryScanner::class)->scan(new Console('psx'));
+
+    // Both discs of a set land on one game with no playlist to say so.
+    expect(Game::query()->orderBy('title')->pluck('title')->all())->toBe(['Crash Bandicoot', 'Final Fantasy IX'])
+        ->and(Game::query()->where('title', 'Final Fantasy IX')->sole()->files()->count())->toBe(4);
+});
+
+it('numbers the discs once the folder carries a playlist', function () {
+    foldersTree();
+    File::put($this->root.'/psx/Final Fantasy IX/Final Fantasy IX.m3u', "FF9 (Disc 1).cue\nFF9 (Disc 2).cue\n");
+
+    ConsoleSourceFolder::add(new Console('psx'), null, 'folders');
+    app(LibraryScanner::class)->scan(new Console('psx'));
+
+    $game = Game::query()->where('title', 'Final Fantasy IX')->sole();
+
+    expect($game->files()->where('role', FileRole::Sheet)->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2]);
 });

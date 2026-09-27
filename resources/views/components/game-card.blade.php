@@ -1,17 +1,15 @@
 {{--
     One game on the library shelf.
 
-    The card is exactly as big as its cover. Nothing is stretched to fill the
-    column it sits in and nothing is letterboxed to a shape it is not: the
-    frame shrinks to the art in both directions, so a wide box and a tall one
-    each look like themselves.
+    Every card on a shelf is the one shape its console's config gives —
+    `cover_height` and `cover_aspect` in config/consoles/*.php — identified or
+    not, so a game still waiting on its art takes exactly the room it will
+    have. The art is fitted inside that frame whole rather than cropped: a
+    scan the provider cut wider or taller than the console's boxes shows with
+    ground around it, not with its edges gone.
 
-    Size comes from the console, as `cover_height` in config/consoles/*.php,
-    and it is a ceiling rather than a fixed height — a narrow column shrinks
-    the cover further instead of adding bars around it. That ceiling is the
-    one knob that makes one console's shelf smaller than another's.
-
-    Only a placeholder is measured outright, having no art to be measured by.
+    The height is a ceiling rather than a fixed size: a narrow column shrinks
+    the frame, keeping its shape, instead of spilling out of it.
 --}}
 @props([
     'game',
@@ -56,7 +54,10 @@
      that twitches as the pointer crosses it is worse than no outline at all.
      The padding is likewise unconditional, which is what leaves the colour
      somewhere to go. --}}
-<div class="group relative flex w-fit max-w-full flex-col gap-2 rounded-2xl border-3 border-transparent p-2 transition-colors hover:border-accent-tint/55 focus-within:border-accent-tint/55">
+{{-- As wide as its column allows, and no wider than the console's cover
+     plus the card's own padding and border (8 + 3 a side): a fixed frame here
+     would set a minimum the column cannot shrink below, and the cards overlap. --}}
+<div style="max-width: {{ $coverWidth + 22 }}px" class="group relative flex w-full flex-col gap-2 rounded-2xl border-3 border-transparent p-2 transition-colors hover:border-accent-tint/55 focus-within:border-accent-tint/55">
     <a
         href="{{ route('games.show', $game->routeParameters()) }}"
         wire:navigate
@@ -68,8 +69,8 @@
          be, which is the whole point of a shelf of boxes that are not all the
          same shape. The placeholder below is the exception and says so. --}}
     <div
-        @if ($cover === null) style="height: {{ $coverHeight }}px; width: {{ $coverWidth }}px" @endif
-        class="relative flex w-fit max-w-full items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken"
+        style="aspect-ratio: {{ $coverWidth }} / {{ $coverHeight }}"
+        class="relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken"
     >
         @if ($cover !== null)
             <img
@@ -78,8 +79,7 @@
                 src="{{ $coverMedia->url(App\Enums\ThumbnailSize::Grid) }}"
                 alt="{{ $game->title }}"
                 loading="lazy"
-                style="max-height: {{ $coverHeight }}px"
-                class="block h-auto w-auto max-w-full"
+                class="block size-full object-contain"
             />
         @else
             <div class="flex h-full w-full flex-col items-center justify-center gap-3 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]">

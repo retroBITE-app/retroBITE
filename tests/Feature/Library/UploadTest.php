@@ -10,6 +10,7 @@ use App\Services\LibraryScanner;
 use App\Services\RomUploads;
 use App\Support\Console;
 use App\Support\LibraryPath;
+use App\Support\Uploads\PendingUpload;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -207,6 +208,52 @@ describe('chunks', function () {
         auth()->logout();
 
         sendChunk($this->upload->id, 0, 'abcd')->assertUnauthorized();
+    });
+});
+
+describe('game folders', function () {
+    beforeEach(function () {
+        File::ensureDirectoryExists($this->root.'/psx');
+        $this->psx = new Console('psx');
+        ConsoleSourceFolder::add($this->psx, null, 'folders');
+        $this->actingAs($this->user);
+    });
+
+    it('files each upload into its game\'s own folder', function () {
+        $upload = uploads()->begin($this->psx, $this->user->id, 'FF9 (Disc 1).cue', 4, '', 'Final Fantasy IX');
+
+        expect($upload->relative())->toBe('Final Fantasy IX/FF9 (Disc 1).cue');
+
+        sendChunk($upload->id, 0, 'FILE')->assertOk();
+
+        // The folder is made on the way in.
+        expect(uploads()->finish($upload->id, $this->user->id))->toBe('psx/Final Fantasy IX/FF9 (Disc 1).cue')
+            ->and(File::get($this->root.'/psx/Final Fantasy IX/FF9 (Disc 1).cue'))->toBe('FILE');
+    });
+
+    it('asks for a folder a game can have, and no other', function (string $folder) {
+        expect(refusal(function () use ($folder): void {
+            uploads()->begin($this->psx, $this->user->id, 'Crash.cue', 4, '', $folder);
+        }))->toBe(UploadRejection::BadFolder);
+    })->with([
+        'none at all' => [''],
+        'a path' => ['Crash/../../etc'],
+        'hidden' => ['.Crash'],
+        'backslashed' => ['Crash\\Bandicoot'],
+    ]);
+
+    it('refuses a game folder on a layout that files games loose', function () {
+        ConsoleSourceFolder::add($this->snes, null, 'custom');
+
+        expect(refusal(function (): void {
+            uploads()->begin($this->snes, $this->user->id, 'Super Mario World.sfc', 4, '', 'Super Mario World');
+        }))->toBe(UploadRejection::BadFolder);
+    });
+
+    it('keeps an upload begun before folders existed readable', function () {
+        $stored = ['id' => 'x', 'user_id' => 1, 'console' => 'psx', 'destination' => '', 'filename' => 'Crash.cue', 'size' => 4];
+
+        expect(PendingUpload::fromArray($stored)?->relative())->toBe('Crash.cue');
     });
 });
 

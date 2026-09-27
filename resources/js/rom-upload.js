@@ -21,6 +21,7 @@ const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
  *     extensions: string[],
  *     excluded: string[],
  *     destination: string,
+ *     perGameFolders: boolean,
  *     csrf: string,
  *     messages: { wrongType: string, excluded: string, failed: string, cancelled: string, expired: string },
  * }} config
@@ -58,6 +59,54 @@ export default function romUpload(config) {
             return this.files.some((entry) => ['done', 'failed', 'cancelled'].includes(entry.status));
         },
 
+        /**
+         * The files as the list draws them: one group per game folder where
+         * the layout files a game per folder, one unnamed group otherwise.
+         */
+        get groups() {
+            if (! config.perGameFolders) return [{ folder: '', entries: this.files }];
+
+            const groups = [];
+
+            for (const entry of this.files) {
+                let group = groups.find((candidate) => candidate.folder === entry.folder);
+
+                if (group === undefined) {
+                    group = { folder: entry.folder, entries: [] };
+                    groups.push(group);
+                }
+
+                group.entries.push(entry);
+            }
+
+            return groups;
+        },
+
+        /**
+         * The folder a file's game goes in, guessed from its name: the
+         * extension and any "(Disc 2)" or "(Track 1)" taken off, so a cue and
+         * its bins, or every disc of a set, land in one folder. Only a guess —
+         * the list lets it be changed before anything is sent.
+         */
+        folderFor(name) {
+            const guessed = name
+                .replace(/\.[^.]+$/, '')
+                .replace(/\s*[([]\s*(disc|disk|cd|track)\s*\d+[^)\]]*[)\]]/gi, '')
+                .replace(/[\s._-]+$/, '')
+                .trim();
+
+            return guessed !== '' ? guessed : name.replace(/\.[^.]+$/, '');
+        },
+
+        /** Move every file still waiting in one folder to another name. */
+        renameGroup(from, to) {
+            const folder = to.trim();
+
+            for (const entry of this.files) {
+                if (entry.folder === from && entry.status === 'queued') entry.folder = folder;
+            }
+        },
+
         pick(event) {
             this.add(Array.from(event.target.files ?? []));
 
@@ -84,12 +133,15 @@ export default function romUpload(config) {
                     continue;
                 }
 
-                if (this.files.some((entry) => entry.name === file.name && entry.status === 'queued')) continue;
+                const folder = config.perGameFolders ? this.folderFor(file.name) : '';
+
+                if (this.files.some((entry) => entry.name === file.name && entry.folder === folder && entry.status === 'queued')) continue;
 
                 this.files.push({
                     key: ++this.sequence,
                     file,
                     name: file.name,
+                    folder,
                     size: file.size,
                     sent: 0,
                     status: 'queued',
@@ -151,7 +203,7 @@ export default function romUpload(config) {
             entry.message = '';
             entry.sent = 0;
 
-            const begun = await this.$wire.begin(entry.name, entry.size, this.destination);
+            const begun = await this.$wire.begin(entry.name, entry.size, this.destination, entry.folder);
 
             if (! begun.ok) return this.fail(entry, begun.message);
 

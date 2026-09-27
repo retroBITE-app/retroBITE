@@ -217,6 +217,24 @@ abstract class ConsoleTools
         return [];
     }
 
+    /** What the menu calls an export, e.g. "Write OPL configs". */
+    public function exportLabel(string $export): string
+    {
+        return __('Write :export files', ['export' => Str::upper($export)]);
+    }
+
+    /**
+     * What the confirmation says an export will do, and where: $folder is the
+     * console's folder, as the library names it.
+     */
+    public function exportConfirm(string $export, string $folder): string
+    {
+        return __('Write :export files into :folder? Existing files are kept, and nothing else in the folder is touched.', [
+            'export' => Str::upper($export),
+            'folder' => $folder,
+        ]);
+    }
+
     /**
      * This console's own reading of a filename under that layout.
      *
@@ -231,6 +249,31 @@ abstract class ConsoleTools
     public function titleFor(ConsoleLayout $layout, string $relative): ?string
     {
         return null;
+    }
+
+    /** Whether this console's loose games can be moved into folders of their own here. */
+    public function canOrganize(): bool
+    {
+        return false;
+    }
+
+    /**
+     * The folder a game is filed in when organized: its title, with what no
+     * filesystem a console reads will take stripped out. Null when nothing of
+     * the title is left.
+     */
+    public function folderFor(Game $game): ?string
+    {
+        $name = (string) preg_replace('/[\/\\\\:*?"<>|\x00-\x1f\x7f]+/u', ' ', $game->title);
+        // Trailing dots and spaces are refused by FAT and by Windows shares.
+        $name = rtrim(trim((string) preg_replace('/\s+/u', ' ', $name)), '. ');
+
+        if ($name === '') {
+            return null;
+        }
+
+        // 255 bytes, cut on a character boundary.
+        return rtrim(mb_strcut($name, 0, 255, 'UTF-8'), '. ');
     }
 
     /** Whether this console's files can be renamed to or from a loader's convention here. */

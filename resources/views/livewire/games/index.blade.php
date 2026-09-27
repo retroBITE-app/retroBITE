@@ -533,6 +533,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             && ConsoleSourceFolder::has($console);
     }
 
+    /** Whether the toolbox can file this console's loose games into folders of their own. */
+    #[Computed]
+    public function canOrganize(): bool
+    {
+        return $this->consoleTools?->canOrganize() ?? false;
+    }
+
     /** Whether the toolbox can rename this console's files to or from its loader's form. */
     #[Computed]
     public function canRename(): bool
@@ -540,6 +547,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         $console = $this->lockedTo;
 
         return $console !== null && (ConsoleTools::for($console)?->canRename() ?? false);
+    }
+
+    /** This console's toolbox, which names its own exports, or null for none. */
+    #[Computed]
+    public function consoleTools(): ?ConsoleTools
+    {
+        return $this->lockedTo === null ? null : ConsoleTools::for($this->lockedTo);
     }
 
     /**
@@ -758,15 +772,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                             {{-- The only actions here that write into somebody's
                                  library, so each says where it writes before it
                                  does it. Offered only where the loader that reads
-                                 those folders is the one in use. --}}
+                                 those folders is the one in use, and each named by
+                                 the console's toolbox. --}}
                             @foreach ($this->consoleExports as $export)
                                 <flux:menu.item icon="arrow-down-tray"
                                                 wire:click="writeConsoleExport('{{ $export }}')"
-                                                wire:confirm="{{ __('Write OPL :export files into :console\'s folder? Existing files are kept, and nothing else in the folder is touched.', [
-                                                    'export' => Str::upper($export),
-                                                    'console' => $this->lockedTo->name,
-                                                ]) }}">
-                                    {{ $export === 'cfg' ? __('Write OPL configs') : __('Write OPL art') }}
+                                                wire:confirm="{{ $this->consoleTools->exportConfirm($export, (string) App\Models\ConsoleSourceFolder::pathFor($this->lockedTo)) }}">
+                                    {{ $this->consoleTools->exportLabel($export) }}
                                 </flux:menu.item>
                             @endforeach
 
@@ -774,6 +786,12 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                             @if ($this->canRename)
                                 <flux:menu.item icon="pencil-square" x-on:click="$dispatch('rename-files')">
                                     {{ __('Rename files') }}
+                                </flux:menu.item>
+                            @endif
+
+                            @if ($this->canOrganize)
+                                <flux:menu.item icon="folder-open" x-on:click="$dispatch('organize-games')">
+                                    {{ __('Organize into game folders') }}
                                 </flux:menu.item>
                             @endif
 
@@ -1050,7 +1068,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             --}}
             <ul class="grid grid-cols-2 items-start justify-items-start gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                 @foreach ($this->games as $game)
-                    <li wire:key="card-{{ $game->id }}">
+                    <li wire:key="card-{{ $game->id }}" class="w-full">
                         <x-game-card :game="$game" :show-console="$this->lockedTo === null">
                             <x-slot:actions>
                                 @if ($game->canBeIdentified())
@@ -1295,6 +1313,10 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
     {{-- Mounted only while the setting is on, so the uploader is not on the
          page at all otherwise. The chunk route stays up regardless. --}}
+    @if ($this->canOrganize)
+        <livewire:games.organize-modal :console="$this->lockedTo->key" wire:key="organize-modal-{{ $this->lockedTo->key }}" />
+    @endif
+
     @if ($this->canRename)
         <livewire:games.rename-modal :console="$this->lockedTo->key" wire:key="rename-modal-{{ $this->lockedTo->key }}" />
     @endif
