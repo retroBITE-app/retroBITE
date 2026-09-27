@@ -77,27 +77,28 @@ it('adds a console without asking when its folder is where convention says', fun
 
 it('asks where the roms are when the console folder is missing', function () {
     Queue::fake();
-    File::ensureDirectoryExists($this->root.'/my-playstation-dumps');
+    File::ensureDirectoryExists($this->root.'/my-snes-dumps');
 
+    // A console with one layout, so choosing its folder is the last step.
     $component = Livewire::test('consoles.index')
         ->call('openAdd')
         // Not just the state: the modal has to actually open. Asserting only
         // that a property was set is what let a dead button ship — Flux modals
         // have no open prop, so the page looked unresponsive.
         ->assertDispatched('modal-show', name: 'add-console')
-        ->call('choose', 'psx');
+        ->call('choose', 'snes');
 
-    $component->assertSet('adding', 'psx');
+    $component->assertSet('adding', 'snes');
 
     // Nothing is added until a folder is chosen.
     expect(ConsoleSourceFolder::count())->toBe(0);
     Queue::assertNothingPushed();
 
-    $component->set('chosenFolder', 'my-playstation-dumps')->call('useFolder')
+    $component->set('chosenFolder', 'my-snes-dumps')->call('useFolder')
         ->assertDispatched('modal-close', name: 'add-console')
         ->assertSet('adding', '');
 
-    expect(ConsoleSourceFolder::sole()->path)->toBe('my-playstation-dumps');
+    expect(ConsoleSourceFolder::sole()->path)->toBe('my-snes-dumps');
     Queue::assertPushed(ScanConsoleFolder::class);
 });
 
@@ -862,6 +863,21 @@ it('remembers whether the library is drawn as covers or as a list', function () 
     Livewire::withQueryParams(['view' => 'cards'])->test('games.index')->assertDontSee('Achievements');
 });
 
+it('draws every cover in the console\'s own frame, art or not', function () {
+    // One frame for every card, the console's own, whatever shape a scan the
+    // provider sent; art or none, the shelf is one shape throughout.
+    $identified = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tomb Raider', 'slug' => 'tomb-raider']);
+    Media::factory()->for($identified)->ofType('box-2D', 'eu')->create();
+    Game::factory()->forConsole('psx')->create(['title' => 'Tomb Raider (Europe)', 'slug' => 'tomb-raider-europe']);
+
+    $html = Livewire::test('games.index', ['console' => 'psx'])->html();
+
+    // PS1's 7/6 at 280 high: its jewel cases are a touch wider than tall.
+    expect(substr_count($html, 'aspect-ratio: 327 / 280'))->toBe(2)
+        ->and(substr_count($html, 'max-width: 349px'))->toBe(2)
+        ->and($html)->toContain('object-contain');
+});
+
 it('sizes an empty slot from the console it belongs to', function () {
     // Real art supplies its own width; a placeholder has none, so the
     // console's ratio stands in and the slot holds a cover's worth of space.
@@ -869,8 +885,8 @@ it('sizes an empty slot from the console it belongs to', function () {
     Game::factory()->forConsole('psx')->matched()->create(['title' => 'Vagrant Story', 'slug' => 'vagrant']);
 
     // 2/3 and 5/7 of the same 280px.
-    Livewire::test('games.index', ['console' => 'snes'])->assertSee('width: 187px', escape: false);
-    Livewire::test('games.index', ['console' => 'psx'])->assertSee('width: 200px', escape: false);
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('aspect-ratio: 187 / 280', escape: false);
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('aspect-ratio: 327 / 280', escape: false);
 });
 
 it('says how many files an export has written, not how many jobs it queued', function () {

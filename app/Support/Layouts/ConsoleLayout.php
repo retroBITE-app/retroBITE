@@ -63,6 +63,15 @@ abstract class ConsoleLayout
     }
 
     /**
+     * Whether each game lives in a folder of its own, which the uploader and
+     * the organizer then make. False for every layout that files games loose.
+     */
+    public function perGameFolders(): bool
+    {
+        return false;
+    }
+
+    /**
      * Whether games may sit below a game directory rather than directly in it.
      *
      * True for the layouts that impose no structure. A loader that reads one

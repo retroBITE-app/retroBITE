@@ -1,6 +1,7 @@
 <?php
 
 use App\Support\Layouts\CustomLayout;
+use App\Support\Layouts\FoldersLayout;
 use App\Support\Layouts\OplLayout;
 use App\Support\Layouts\RetroArchLayout;
 
@@ -97,4 +98,26 @@ it('lays out retroarch\'s thumbnail tree and nothing else', function () {
     // And the scanner keeps skipping them, which is the point of the two
     // lists being separate: made on setup, never read as a game.
     expect($layout->accepts('media/Named_Boxarts/Tekken.png'))->toBeFalse();
+});
+
+it('names a game after its folder under the game folders layout', function (string $path, string $title) {
+    expect((new FoldersLayout)->titleFor($path))->toBe($title);
+})->with([
+    'a cue in its folder' => ['Crash Bandicoot/Crash.cue', 'Crash Bandicoot'],
+    // Two discs, one game: the folder says so, not the file names.
+    'a disc of a set' => ['Final Fantasy IX/FF9 (Disc 2).cue', 'Final Fantasy IX'],
+    'deeper still' => ['Final Fantasy IX/extras/FF9 (Disc 1).bin', 'Final Fantasy IX'],
+    // Not filed yet: the file is the only name there is.
+    'loose at the top' => ['Tekken 3.cue', 'Tekken 3'],
+]);
+
+it('reads every folder under the game folders layout', function (string $path) {
+    expect((new FoldersLayout)->accepts($path))->toBeTrue();
+})->with([['Tekken 3.cue'], ['Crash Bandicoot/Crash.bin'], ['Final Fantasy IX/extras/FF9 (Disc 1).bin']]);
+
+it('files games in folders of their own only under the game folders layout', function () {
+    expect((new FoldersLayout)->perGameFolders())->toBeTrue()
+        ->and((new CustomLayout)->perGameFolders())->toBeFalse()
+        ->and((new OplLayout)->perGameFolders())->toBeFalse()
+        ->and((new RetroArchLayout)->perGameFolders())->toBeFalse();
 });

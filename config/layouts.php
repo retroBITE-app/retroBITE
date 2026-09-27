@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Support\Layouts\CustomLayout;
+use App\Support\Layouts\FoldersLayout;
 use App\Support\Layouts\OplLayout;
 use App\Support\Layouts\RetroArchLayout;
 
@@ -17,6 +18,7 @@ use App\Support\Layouts\RetroArchLayout;
 
 return [
     'custom' => CustomLayout::class,
+    'folders' => FoldersLayout::class,
     'opl' => OplLayout::class,
     'retroarch' => RetroArchLayout::class,
 ];

@@ -17,6 +17,7 @@ final readonly class PendingUpload
     /**
      * @param  string  $destination  relative to the console's folder, '' for its root
      * @param  int  $size  bytes the file was declared to hold
+     * @param  string  $folder  the game's own folder under the destination, '' for none
      */
     public function __construct(
         public string $id,
@@ -25,6 +26,7 @@ final readonly class PendingUpload
         public string $destination,
         public string $filename,
         public int $size,
+        public string $folder = '',
     ) {}
 
     /**
@@ -45,6 +47,8 @@ final readonly class PendingUpload
             (string) Arr::get($stored, 'destination'),
             (string) Arr::get($stored, 'filename'),
             (int) Arr::get($stored, 'size'),
+            // Absent on an upload begun before game folders existed.
+            (string) Arr::get($stored, 'folder', ''),
         );
     }
 
@@ -53,13 +57,15 @@ final readonly class PendingUpload
      */
     public function relative(): string
     {
-        return $this->destination === ''
-            ? $this->filename
-            : trim($this->destination, '/').'/'.$this->filename;
+        $parts = array_filter([trim($this->destination, '/'), $this->folder, $this->filename], function (string $part): bool {
+            return $part !== '';
+        });
+
+        return implode('/', $parts);
     }
 
     /**
-     * @return array{id: string, user_id: int, console: string, destination: string, filename: string, size: int}
+     * @return array{id: string, user_id: int, console: string, destination: string, filename: string, size: int, folder: string}
      */
     public function toArray(): array
     {
@@ -70,6 +76,7 @@ final readonly class PendingUpload
             'destination' => $this->destination,
             'filename' => $this->filename,
             'size' => $this->size,
+            'folder' => $this->folder,
         ];
     }
 }

@@ -56,7 +56,7 @@ class WriteConsoleExports implements ShouldQueue
 
         $tools = ConsoleTools::for($console);
 
-        if ($tools === null || ! in_array($this->export, $tools->exports(), true)) {
+        if ($tools === null || ! $tools->canExport() || ! in_array($this->export, $tools->exports(), true)) {
             Log::warning('An export was asked of a console that does not offer it.', [
                 'console' => $this->console,
                 'export' => $this->export,

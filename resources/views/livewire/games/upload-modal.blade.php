@@ -51,6 +51,13 @@ new class extends Component
         return ConsoleSourceFolder::destinationsFor($this->target);
     }
 
+    /** Whether each game goes in a folder of its own, which the list then asks the name of. */
+    #[Computed]
+    public function perGameFolders(): bool
+    {
+        return ConsoleSourceFolder::layoutFor($this->target)->perGameFolders();
+    }
+
     /**
      * The extensions this console plays, lowercase, for the picker and the
      * browser's own check.
@@ -98,10 +105,10 @@ new class extends Component
      * @return array{ok: bool, id?: string, url?: string, chunk?: int, message?: string}
      */
     #[Renderless]
-    public function begin(string $filename, int $size, string $destination, RomUploads $uploads): array
+    public function begin(string $filename, int $size, string $destination, RomUploads $uploads, string $folder = ''): array
     {
         try {
-            $upload = $uploads->begin($this->target, (int) Auth::id(), $filename, $size, $destination);
+            $upload = $uploads->begin($this->target, (int) Auth::id(), $filename, $size, $destination, $folder);
         } catch (UploadRejected $e) {
             return ['ok' => false, 'message' => $e->reason->label()];
         }
@@ -160,6 +167,7 @@ new class extends Component
                 'extensions' => $this->extensions,
                 'excluded' => $this->excluded,
                 'destination' => (string) array_key_first($this->destinations),
+                'perGameFolders' => $this->perGameFolders,
                 'csrf' => csrf_token(),
                 'messages' => [
                     'wrongType' => __('Not a file type :console plays.', ['console' => $this->target->name]),
@@ -240,9 +248,28 @@ new class extends Component
                 </ul>
             </template>
 
-            <template x-if="files.length > 0">
+            {{-- One list per game folder where the layout files a game per
+                 folder, each headed by its folder's name, which can be changed
+                 before anything is sent; one plain list otherwise. --}}
+            <template x-for="group in groups" :key="group.folder">
+                <div x-show="group.entries.length > 0" class="flex flex-col gap-1.5">
+                    <template x-if="{{ $this->perGameFolders ? 'true' : 'false' }}">
+                        <label class="flex items-center gap-2">
+                            <flux:icon.folder class="size-4 shrink-0 text-fg-faint" />
+                            <span class="sr-only">{{ __('Game folder') }}</span>
+                            <input
+                                type="text"
+                                class="min-w-0 flex-1 rounded-md border border-line-input bg-sunken px-2.5 py-1 font-mono text-xs text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-deep"
+                                x-bind:value="group.folder"
+                                x-bind:disabled="running"
+                                x-on:change="renameGroup(group.folder, $event.target.value)"
+                            />
+                            <span class="shrink-0 font-mono text-xs text-fg-faint">/</span>
+                        </label>
+                    </template>
+
                 <ul class="flex max-h-72 flex-col divide-y divide-line overflow-y-auto rounded-lg border border-line">
-                    <template x-for="entry in files" :key="entry.key">
+                    <template x-for="entry in group.entries" :key="entry.key">
                         <li class="flex flex-col gap-1.75 px-3.5 py-2.5">
                             <div class="flex items-baseline justify-between gap-3">
                                 <span class="min-w-0 truncate font-mono text-xs text-fg-soft" x-text="entry.name"></span>
@@ -274,6 +301,7 @@ new class extends Component
                         </li>
                     </template>
                 </ul>
+                </div>
             </template>
 
             <div class="flex items-center justify-between gap-2">
