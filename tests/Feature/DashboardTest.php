@@ -5,6 +5,7 @@ use App\Models\Game;
 use App\Models\User;
 use App\Services\NetworkService;
 use App\Support\Console;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -75,4 +76,27 @@ test('the page does not wait on the share probe', function () {
         ->assertOk()
         ->assertSee('Network shares')
         ->assertSee('Checking…');
+});
+
+test('it greets by the hour where the owner is, and by name', function () {
+    $this->actingAs(User::factory()->create(['username' => 'rakma']));
+
+    // 16:30 UTC is still the afternoon there, and already evening in Sweden.
+    $this->travelTo(CarbonImmutable::parse('2026-09-27 16:30:00', 'UTC'));
+
+    config()->set('app.timezone', 'UTC');
+    $this->get(route('dashboard'))->assertOk()->assertSee('Good afternoon, rakma');
+
+    config()->set('app.timezone', 'Europe/Stockholm');
+    $this->get(route('dashboard'))->assertOk()->assertSee('Good evening, rakma');
+});
+
+test('it greets by display name where there is no username', function () {
+    $this->actingAs(User::factory()->create(['username' => null, 'name' => 'Player One']));
+
+    $this->get(route('dashboard'))->assertOk()->assertSee(', Player One');
+});
+
+test('it tells time in UTC unless the install says otherwise', function () {
+    expect(config('app.timezone'))->toBe('UTC');
 });

@@ -141,15 +141,19 @@
         ])
         ->all();
 
-    $hour = (int) now()->format('G');
+    // The hour where the library's owner is, per APP_TIMEZONE — the server's
+    // own clock is UTC unless told otherwise, and a greeting two hours out
+    // is the one line on the page anybody would notice.
+    $hour = (int) now(config('app.timezone'))->format('G');
     $greeting = $hour >= 17 ? __('Good evening') : ($hour >= 12 ? __('Good afternoon') : __('Good morning'));
+    $name = auth()->user()->username ?? auth()->user()->name;
 @endphp
 
 <x-layouts::app :title="__('Dashboard')">
     <div class="flex flex-col gap-6">
         <div class="-mb-2 flex items-center justify-between gap-4">
             <div class="min-w-0">
-                <p class="kicker mb-1.5 text-fg-faint">{{ $greeting }}</p>
+                <p class="kicker mb-1.5 text-fg-faint">{{ __(':greeting, :name', ['greeting' => $greeting, 'name' => $name]) }}</p>
                 <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Your collection') }}</h1>
             </div>
         </div>
