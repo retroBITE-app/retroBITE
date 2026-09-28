@@ -615,7 +615,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
 
         Flux::toast(text: $queued === 0
-            ? __('Nothing to fetch — every identified game on :console already has artwork.', ['console' => $console->name])
+            ? __('Nothing to fetch — every identified game on :console already has the artwork switched on in Settings → Media.', ['console' => $console->name])
             : trans_choice(
                 '{1} Fetching artwork for one game.|[2,*] Fetching artwork for :count games. The library fills in as it goes.',
                 $queued,

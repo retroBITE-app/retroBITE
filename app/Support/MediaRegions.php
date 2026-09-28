@@ -19,6 +19,12 @@ use Illuminate\Support\Arr;
 final class MediaRegions
 {
     /**
+     * Regions that are not a country: the provider's own default and the
+     * world, plus none at all.
+     */
+    private const NEUTRAL = ['', 'ss', 'wor'];
+
+    /**
      * Anything not in the list still works; it simply has no label.
      *
      * @return array<string, string>
@@ -134,13 +140,18 @@ final class MediaRegions
     /**
      * One entry per type, from one named region and nowhere else.
      *
-     * For somebody who asked for the Japanese artwork by name. No fallback:
-     * a type this region has nothing for is left alone rather than fetched
-     * from the chain, which would spend a download re-fetching the copy they
-     * already have under a label that says Japan.
+     * For somebody who asked for the Japanese artwork by name. No fallback
+     * for a type the provider holds per country: one this region has nothing
+     * for is left alone rather than fetched from the chain, which would spend
+     * a download re-fetching the copy they already have under a label that
+     * says Japan.
      *
-     * Region-less media — fanart and video carry none — are left out for the
-     * same reason: they have no regional variant to go and get.
+     * A type the provider holds only for the world — screenshots, title
+     * screens, fanart — has no regional variant to choose, so it comes along
+     * whatever the region. Leaving it out lost the screenshot of every game
+     * fetched by region before screenshots were switched on, and nearly every
+     * theme shows one. One already held costs nothing: its checksum is
+     * recognised without a download.
      *
      * @param  array<int, array<string, mixed>>  $medias
      * @return array<int, array<string, mixed>>
@@ -150,16 +161,36 @@ final class MediaRegions
         $picked = [];
 
         foreach (self::byType($medias) as $entries) {
-            foreach ($entries as $entry) {
-                if (Arr::get($entry, 'region') === $region) {
-                    $picked[] = $entry;
+            $chosen = Arr::first($entries, fn (array $entry): bool => Arr::get($entry, 'region') === $region);
 
-                    break;
-                }
+            if ($chosen === null && self::onlyNeutral($entries)) {
+                $chosen = self::pick($entries);
+            }
+
+            if ($chosen !== null) {
+                $picked[] = $chosen;
             }
         }
 
         return $picked;
+    }
+
+    /**
+     * Whether every copy of a type is region-less or for the whole world.
+     *
+     * @param  array<int, array<string, mixed>>  $entries
+     */
+    private static function onlyNeutral(array $entries): bool
+    {
+        foreach ($entries as $entry) {
+            $region = (string) Arr::get($entry, 'region', '');
+
+            if (! in_array($region, self::NEUTRAL, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

@@ -432,23 +432,31 @@ class Game extends Model
     }
 
     /**
-     * Games holding no artwork at all.
+     * Whether the provider offers artwork of a switched-on type this game
+     * does not hold yet.
      *
-     * The useful half of a bulk fetch: a game the provider has already
-     * answered for costs another metadata request to ask again, and on a
-     * console of three thousand that is three thousand lookups spent to
-     * re-download nothing.
+     * Judged against the list kept from the provider's last answer, not
+     * against the settings alone. The provider does not hold every type for
+     * every game, and a game short of a logo that does not exist would
+     * otherwise be asked about for ever; the list says which gaps can be
+     * filled. A game with no list says nothing either way, so it counts once:
+     * its fetch asks the provider and keeps the answer.
      *
-     * Deliberately "none at all" rather than "short of a type". The provider
-     * does not hold every type for every game, so a game with a cover and no
-     * logo is usually a game whose logo does not exist, and it would sit in
-     * this list being asked about for ever.
+     * Reads the loaded relations, so a console's worth can be judged from one
+     * eager-loaded query.
      *
-     * @param  Builder<Game>  $query
+     * @param  array<int, string>  $wanted
      */
-    public function scopeMissingMedia(Builder $query): void
+    public function lacksMedia(array $wanted): bool
     {
-        $query->whereDoesntHave('media');
+        if ($this->media->isEmpty() || $this->mediaList === null) {
+            return true;
+        }
+
+        $offered = array_column((array) $this->mediaList->medias, 'type');
+        $held = $this->media->pluck('screenscraper_type')->all();
+
+        return array_diff(array_intersect($wanted, $offered), $held) !== [];
     }
 
     /**

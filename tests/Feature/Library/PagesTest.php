@@ -122,13 +122,15 @@ it('does not offer a console that is already in the library', function () {
         ->assertSee('Nothing matches that.');
 });
 
-it('fetches artwork for a whole console, skipping the games that already have some', function () {
+it('fetches artwork for a whole console, skipping the games that already have all it offers', function () {
     Queue::fake();
     ConsoleSourceFolder::add(new Console('snes'));
 
     $bare = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 101]);
     $dressed = Game::factory()->forConsole('snes')->create(['screenscraper_id' => 102]);
     Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+    // Everything its kept list offers is already here.
+    $dressed->rememberMediaList([['type' => 'box-2D', 'region' => 'eu', 'url' => 'https://api.screenscraper.fr/x']]);
 
     // A placeholder has no provider id, and artwork is fetched by provider id.
     Game::factory()->forConsole('snes')->create(['screenscraper_id' => null, 'status' => GameStatus::Placeholder]);
@@ -1800,6 +1802,7 @@ it('fetches artwork for this console from its own shelf', function () {
     $bare = Game::factory()->forConsole('snes')->matched(101)->create();
     $dressed = Game::factory()->forConsole('snes')->matched(102)->create();
     Media::factory()->for($dressed)->ofType('box-2D', 'eu')->create();
+    $dressed->rememberMediaList([['type' => 'box-2D', 'region' => 'eu', 'url' => 'https://api.screenscraper.fr/x']]);
 
     // Another console's games are not this shelf's business, however the menu
     // was reached.
