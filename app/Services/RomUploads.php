@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\TransferFailure;
+use App\Enums\TransferMode;
 use App\Enums\UploadRejection;
 use App\Exceptions\LibraryPathException;
+use App\Exceptions\TransferFailed;
 use App\Exceptions\UploadRejected;
+use App\Jobs\FileTransferJob;
 use App\Models\ConsoleSourceFolder;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\Scanning\FolderCounts;
 use App\Support\Uploads\PendingUpload;
+use App\Transfers\FileTransfer;
+use App\Transfers\Location;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -148,13 +154,20 @@ final class RomUploads
         }
 
         try {
-            $path = $this->paths->moveInto($console, $upload->relative(), $part);
-        } catch (LibraryPathException $e) {
-            Log::warning('Upload could not be placed.', ['console' => $console->key, 'reason' => $e->reason]);
+            // Out of staging and into the console's folder: a rename, through
+            // the one job that moves files, run here so the answer is this one.
+            FileTransferJob::now([new FileTransfer(
+                Location::staging(basename($part)),
+                Location::library($console, $upload->relative()),
+            )], TransferMode::Move);
+
+            $path = $this->paths->within($console, $upload->relative());
+        } catch (TransferFailed|LibraryPathException $e) {
+            Log::warning('Upload could not be placed.', ['console' => $console->key, 'reason' => $e instanceof TransferFailed ? $e->reason->value : $e->reason]);
 
             $this->discard($upload->id);
 
-            throw UploadRejected::because($e->reason === LibraryPathException::EXISTS
+            throw UploadRejected::because($e instanceof TransferFailed && $e->reason === TransferFailure::Exists
                 ? UploadRejection::Exists
                 : UploadRejection::Unwritable);
         }

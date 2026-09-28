@@ -14,8 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 10,
     'retroachievements_id' => 6,
-    'cover_aspect' => '5/7',
-    'cover_height' => 260,
+    'cover_aspect' => '1/1',
     'layouts' => ['custom'],
     'default_layout' => 'custom',
 ];

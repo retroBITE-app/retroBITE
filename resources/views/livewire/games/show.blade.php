@@ -7,21 +7,27 @@ use App\Exceptions\LibraryFileRejected;
 use App\Jobs\MatchGame;
 use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
-use App\Models\Game;
-use App\Models\GameFile;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
+use App\Models\Destination;
+use App\Models\Game;
+use App\Models\GameFile;
 use App\Models\Media;
 use App\Models\RaAchievement;
 use App\Models\RaGame;
 use App\Models\RaProgress;
 use App\Models\RaUnlock;
+use App\Models\Transfer;
 use App\Services\LibraryFiles;
 use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
 use App\Tools\ConsoleTools;
+use App\Transfers\SendToShare;
+use App\Transfers\TransferRejected;
+use App\Transfers\TransferTargets;
 use Carbon\CarbonInterface;
 use Flux\Flux;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Number;
@@ -74,9 +80,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Url(as: 'tab')]
     public string $tab = '';
 
+    /** The transfer to a network share this page is waiting on, if any. */
+    public ?int $watchingTransfer = null;
+
     public function mount(Game $game): void
     {
         $this->game = $game;
+
+        $running = $this->latestTransfer;
+        $this->watchingTransfer = $running !== null && ! $running->isFinished() ? $running->id : null;
     }
 
     /**
@@ -437,6 +449,75 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         $this->reloadGame();
 
         Flux::toast(variant: 'success', text: __('Deleted :file.', ['file' => (string) $filename]));
+    }
+
+    /**
+     * The network shares this game can be sent to.
+     *
+     * @return EloquentCollection<int, Destination>
+     */
+    #[Computed]
+    public function destinations(): EloquentCollection
+    {
+        return Destination::query()->orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function latestTransfer(): ?Transfer
+    {
+        return Transfer::query()->with('destination')->where('game_id', $this->game->id)->latest('id')->first();
+    }
+
+    /**
+     * Copy the game to a saved network share. Queued: a disc image takes
+     * minutes, and the banner follows it from here.
+     */
+    public function sendToShare(int $destinationId, string $target, SendToShare $sender): void
+    {
+        $destination = Destination::query()->find($destinationId);
+        $transferTarget = TransferTargets::find($target);
+
+        if ($destination === null || $transferTarget === null) {
+            Flux::toast(variant: 'warning', text: __('That destination is no longer there.'));
+
+            return;
+        }
+
+        try {
+            $transfer = $sender->send($this->game, $transferTarget, $destination);
+        } catch (TransferRejected $e) {
+            Flux::toast(variant: 'warning', text: $e->getMessage());
+
+            return;
+        }
+
+        $this->watchingTransfer = $transfer->id;
+        unset($this->latestTransfer);
+
+        $this->js("\$flux.modal('transfer').close()");
+        Flux::toast(variant: 'success', text: __('Sending to :name.', ['name' => $destination->name]));
+    }
+
+    /** Run on each transfer signal: re-read the progress, and say how it ended. */
+    public function checkTransfer(): void
+    {
+        unset($this->latestTransfer);
+        $transfer = $this->latestTransfer;
+
+        if ($transfer === null || $transfer->id !== $this->watchingTransfer || ! $transfer->isFinished()) {
+            return;
+        }
+
+        $this->watchingTransfer = null;
+        $name = $transfer->destination->name ?? __('the share');
+
+        if ($transfer->status === Transfer::DONE) {
+            Flux::toast(variant: 'success', text: $transfer->files_skipped > 0
+                ? __('Sent to :name. :count were already there.', ['name' => $name, 'count' => $transfer->files_skipped])
+                : __('Sent to :name.', ['name' => $name]));
+        } else {
+            Flux::toast(variant: 'danger', text: __('Not sent to :name: :reason', ['name' => $name, 'reason' => $transfer->failure?->label() ?? __('the transfer failed.')]));
+        }
     }
 
     /** Sent by the identify modal once a hand-picked match is applied. */
@@ -844,15 +925,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
-     * How tall the console's covers stand, in pixels.
+     * How tall the cover stands, in pixels: the same on every console's page.
      *
-     * A SNES box is wide and flat where a PS2 case is tall, so the shelf is
+     * A SNES box is wide and flat where a PS2 case is tall, so the page is
      * levelled by height and each cover keeps its own width.
      */
     #[Computed]
     public function coverHeight(): int
     {
-        return CoverGeometry::height($this->game->console());
+        return CoverGeometry::HERO_HEIGHT;
     }
 
     /**
@@ -864,7 +945,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Computed]
     public function coverPlaceholderWidth(): int
     {
-        return CoverGeometry::width($this->game->console());
+        return CoverGeometry::heroWidth($this->game->console());
     }
 
     /** The region flag, or null when no picture depicts this code. */
@@ -1473,6 +1554,19 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     <x-copy-button variant="menu" role="menuitem" :text="$this->libraryPath" :label="__('Copy path')">
                         <flux:icon.document-duplicate class="size-[15px] text-fg-muted" />
                     </x-copy-button>
+
+                    {{-- Copies the game to a USB drive or a network share, laid
+                         out for another system, Batocera first. The library
+                         is read, never changed. --}}
+                    <button
+                        type="button"
+                        role="menuitem"
+                        x-on:click="open = false; $flux.modal('transfer').show()"
+                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                    >
+                        <flux:icon.arrow-up-tray class="size-[15px] text-fg-muted" />
+                        {{ __('Send to…') }}
+                    </button>
                 </div>
             </div>
         </div>
@@ -1567,8 +1661,35 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </dl>
     </section>
 
-    @if ($awaiting !== null || $fetchingFrom !== null || $ratingFrom !== null)
+    @if ($awaiting !== null || $fetchingFrom !== null || $ratingFrom !== null || $watchingTransfer !== null)
         <section class="relative z-1 flex flex-col gap-3 px-4 pt-6.5 lg:px-8 lg:pt-10">
+            @if ($watchingTransfer !== null && ($sending = $this->latestTransfer) !== null)
+                {{-- A copy to a network share, on the queue. An hour to the
+                     timeout: FileTransferJob's own, for a disc on a slow link. --}}
+                <x-live-wait :game="$game->id" on="transfer" check="checkTransfer" :since="$sending->created_at?->timestamp" :timeout="3600"
+                             class="flex flex-wrap items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
+                    <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
+                    <p class="text-sm text-accent">
+                        {{ $sending->status === App\Models\Transfer::QUEUED
+                            ? __('Waiting to send to :name…', ['name' => $sending->destination->name ?? __('the share')])
+                            : __('Sending to :name…', ['name' => $sending->destination->name ?? __('the share')]) }}
+                    </p>
+                    <p class="ml-auto font-mono text-xs text-accent">{{ $sending->files_done }} / {{ $sending->files_total }}</p>
+
+                    {{-- Queued and untouched for half a minute means no worker
+                         is on the transfer queue — a container started before
+                         it existed, or QUEUE_WORKERS_TRANSFER=0. Said, rather
+                         than spinning for an hour. One re-check at the mark. --}}
+                    @if ($sending->status === App\Models\Transfer::QUEUED)
+                        @if (now()->diffInSeconds($sending->created_at, true) >= 30)
+                            <p class="basis-full text-xs text-fg-soft">{{ __('Nothing has picked this up yet. Is a worker running for the transfer queue? Restarting retroBite starts one.') }}</p>
+                        @else
+                            <span x-init="setTimeout(() => $wire.checkTransfer(), {{ (31 - (int) now()->diffInSeconds($sending->created_at, true)) * 1000 }})"></span>
+                        @endif
+                    @endif
+                </x-live-wait>
+            @endif
+
             @if ($awaiting !== null)
                 <x-live-wait :game="$game->id" on="identified" check="checkAnswer" :since="$awaitingSince" :timeout="$this::WAIT_SECONDS"
                              class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
@@ -1955,4 +2076,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     @if ($this->canRename)
         <livewire:games.rename-modal :console="$game->console" :game-id="$game->id" wire:key="rename-modal" />
     @endif
+
+    {{-- Opened from Actions → Send to. --}}
+    <x-transfer-modal :game="$game" :destinations="$this->destinations" />
 </x-lightbox>

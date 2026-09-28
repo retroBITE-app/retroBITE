@@ -13,8 +13,16 @@ services:
       DB_DATABASE: ${DB_DATABASE:-retrobite}
       DB_USERNAME: ${DB_USERNAME:-retrobite}
       DB_PASSWORD: ${DB_PASSWORD:-retrobite}
+      # Transfers write to a drive from the browser, which Chrome allows only
+      # on https or localhost; a page opened another way links here. The same
+      # port as published below.
+      TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:81}
     ports:
       - "81:80"
+    # Settings → Destinations searches the LAN for network shares. mDNS and
+    # NetBIOS cannot cross Docker's bridge; a scan of the SMB port can, on the
+    # network HOST_IP in .env is on — so set HOST_IP for the search to work.
+    # Copying to a share works either way.
     volumes:
       - ${GAMES_PATH:-./games}:/app/storage/app/games
       - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs

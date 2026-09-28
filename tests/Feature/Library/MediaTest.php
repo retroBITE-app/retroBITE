@@ -417,6 +417,24 @@ it('passes region-less media straight through', function () {
         ->and(Media::sole()->region)->toBeNull();
 });
 
+it('fetches a world-only screenshot whatever region was asked for, but no other country\'s cover', function () {
+    Http::fake([
+        '*media=box-2D*' => Http::response(PNG.'cover', 200),
+        '*media=ss*' => Http::response(PNG.'shot', 200),
+    ]);
+
+    // The screenshot exists only for the world, as nearly every one does; the
+    // cover exists for Japan alone, so a United States fetch has none to take.
+    (new ScrapeGameMedia($this->game->id, [
+        entry('box-2D', 'a', region: 'jp'),
+        entry('ss', 'b', region: 'wor'),
+    ], region: 'us'))->handle(app(ScreenScraperService::class), app(MediaLibrary::class));
+
+    expect(Media::sole())
+        ->screenscraper_type->toBe('ss')
+        ->region->toBe('wor');
+});
+
 it('keeps one of each type, not one overall', function () {
     // Distinct bytes per type: identical content is deduplicated on md5, which
     // would otherwise hide the second type rather than prove it was fetched.
@@ -528,6 +546,29 @@ it('fills gaps from the kept list and renews it only for re-fetch all', function
 
     ScrapeGameMedia::queueForConsole('psx', held: true);
     Bus::assertDispatched(ScrapeGameMedia::class, fn (ScrapeGameMedia $job): bool => $job->fresh);
+});
+
+it('fills a type switched on after the game already had artwork', function () {
+    Bus::fake();
+
+    // Screenshots were off when the cover came; the kept list offers one.
+    Media::factory()->for($this->game)->ofType('box-2D', 'us')->create();
+    $this->game->rememberMediaList([entry('box-2D'), entry('ss', region: 'wor')]);
+
+    expect(ScrapeGameMedia::queueForConsole('psx'))->toBe(1);
+    Bus::assertDispatched(ScrapeGameMedia::class, fn (ScrapeGameMedia $job): bool => $job->gameId === $this->game->id && ! $job->fresh);
+});
+
+it('leaves a game alone when the provider has nothing more to give it', function () {
+    Bus::fake();
+
+    // ss is switched on, but this game has none at the provider: asking again
+    // would come back with nothing, every time.
+    Media::factory()->for($this->game)->ofType('box-2D', 'us')->create();
+    $this->game->rememberMediaList([entry('box-2D'), entry('video')]);
+
+    expect(ScrapeGameMedia::queueForConsole('psx'))->toBe(0);
+    Bus::assertNotDispatched(ScrapeGameMedia::class);
 });
 
 it('keeps the list from a rating fetch too', function () {

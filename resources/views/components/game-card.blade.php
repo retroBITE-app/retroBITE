@@ -2,14 +2,18 @@
     One game on the library shelf.
 
     Every card on a shelf is the one shape its console's config gives —
-    `cover_height` and `cover_aspect` in config/consoles/*.php — identified or
-    not, so a game still waiting on its art takes exactly the room it will
-    have. The art is fitted inside that frame whole rather than cropped: a
-    scan the provider cut wider or taller than the console's boxes shows with
-    ground around it, not with its edges gone.
+    `cover_aspect` in config/consoles/*.php — identified or
+    not, so a row is one height and a game still waiting on its art takes
+    exactly the room it will have. The art fills that frame, never making its
+    row taller or sitting in a band of empty ground: a box standing taller
+    than the frame — a portrait Super Famicom one on a shelf of landscape
+    Super Nintendo boxes — is cropped from the top down, anything else fitted
+    to it. So the config's aspect is the one most of the console's boxes have;
+    measure them before changing it.
 
-    The height is a ceiling rather than a fixed size: a narrow column shrinks
-    the frame, keeping its shape, instead of spilling out of it.
+    Fluid: the card fills its shelf column (see games.index, which picks how
+    many to a row from the same shape), so every console has the same space
+    between its cards, and the frame keeps its shape at any width.
 --}}
 @props([
     'game',
@@ -30,8 +34,8 @@
     // Inline styles rather than Tailwind arbitrary values: the numbers come
     // out of config at runtime, and a class Tailwind never sees in the source
     // is a class it never generates.
-    $coverHeight = App\Support\CoverGeometry::height($console);
-    $coverWidth = App\Support\CoverGeometry::width($console);
+    $coverAspect = App\Support\CoverGeometry::aspect($console);
+    $coverRatio = App\Support\CoverGeometry::ratioOf($console);
 
     // Selected by the library list off the joined progress row, and absent
     // everywhere else — so ?? rather than a bare read, or a card rendered from
@@ -54,10 +58,7 @@
      that twitches as the pointer crosses it is worse than no outline at all.
      The padding is likewise unconditional, which is what leaves the colour
      somewhere to go. --}}
-{{-- As wide as its column allows, and no wider than the console's cover
-     plus the card's own padding and border (8 + 3 a side): a fixed frame here
-     would set a minimum the column cannot shrink below, and the cards overlap. --}}
-<div style="max-width: {{ $coverWidth + 22 }}px" class="group relative flex w-full flex-col gap-2 rounded-2xl border-3 border-transparent p-2 transition-colors hover:border-accent-tint/55 focus-within:border-accent-tint/55">
+<div class="group relative flex w-full flex-col gap-2 rounded-2xl border-3 border-transparent p-2 transition-colors hover:border-accent-tint/55 focus-within:border-accent-tint/55">
     <a
         href="{{ route('games.show', $game->routeParameters()) }}"
         wire:navigate
@@ -65,11 +66,8 @@
         class="absolute inset-0 z-10 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-deep"
     ></a>
 
-    {{-- No height of its own: the frame is whatever the image turns out to
-         be, which is the whole point of a shelf of boxes that are not all the
-         same shape. The placeholder below is the exception and says so. --}}
     <div
-        style="aspect-ratio: {{ $coverWidth }} / {{ $coverHeight }}"
+        style="aspect-ratio: {{ $coverAspect }}"
         class="relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-line-strong bg-sunken"
     >
         @if ($cover !== null)
@@ -79,7 +77,22 @@
                 src="{{ $coverMedia->url(App\Enums\ThumbnailSize::Grid) }}"
                 alt="{{ $game->title }}"
                 loading="lazy"
-                class="block size-full object-contain"
+                {{-- Filled, or cropped when it stands taller than the frame:
+                     a portrait Super Famicom box on a shelf of landscape
+                     Super Nintendo ones keeps its top — the console's band
+                     and the title, where those boxes put them — and loses
+                     the rest below, rather than being squashed. Decided once the picture is in,
+                     because nothing records its size until then — and at
+                     once for one the browser already had, which can finish
+                     loading before the listener is there to hear it. A
+                     tenth of slack, so a box a hair off the config's ratio
+                     is filled rather than trimmed. Swapped, not added: with
+                     both on, object-fill comes later in the stylesheet and
+                     wins. --}}
+                x-data="{ fit() { if ($el.naturalHeight > 0) { const tall = $el.naturalWidth / $el.naturalHeight < {{ round($coverRatio * 0.9, 4) }}; $el.classList.toggle('object-fill', ! tall); $el.classList.toggle('object-cover', tall); $el.classList.toggle('object-top', tall) } } }"
+                x-init="$el.complete && fit()"
+                x-on:load="fit()"
+                class="block size-full object-fill"
             />
         @else
             <div class="flex h-full w-full flex-col items-center justify-center gap-3 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]">

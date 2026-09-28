@@ -27,6 +27,9 @@ final class GameUpdated implements ShouldBroadcastNow
 
     public const RATING = 'rating';
 
+    /** A transfer to a network share moved on: a file copied, or the whole of it done or failed. */
+    public const TRANSFER = 'transfer';
+
     /** A job for this game gave up. Every wait on the page checks again. */
     public const FAILED = 'failed';
 

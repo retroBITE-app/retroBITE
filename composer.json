@@ -11,6 +11,7 @@
     "require": {
         "php": "^8.3",
         "ext-intl": "*",
+        "icewind/smb": "^3.8",
         "intervention/image": "^4.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",

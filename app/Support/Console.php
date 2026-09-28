@@ -231,7 +231,7 @@ final class Console
     /**
      * Presentation fields the frontend needs, rather than the whole config entry.
      *
-     * @return array{name: string, icon: string, file_icon: string, folder: string, cover_aspect: ?string, cover_height: ?int}
+     * @return array{name: string, icon: string, file_icon: string, folder: string, cover_aspect: ?string}
      */
     public function toMetaArray(): array
     {
@@ -244,7 +244,6 @@ final class Console
             'folder' => $this->folder,
             'path' => $this->libraryPath(),
             'cover_aspect' => Arr::get($meta, 'cover_aspect'),
-            'cover_height' => Arr::get($meta, 'cover_height'),
         ];
     }
 

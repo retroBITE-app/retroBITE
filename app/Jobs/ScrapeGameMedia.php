@@ -80,9 +80,10 @@ class ScrapeGameMedia implements ShouldQueue
      * one game at a time.
      *
      * The metadata request is spent only where it buys something. Filling
-     * gaps uses the list kept from the last answer, which is what a type
-     * switched on in Settings needs, and costs a lookup only for a game
-     * identified before lists were kept. $held is the other job — every game
+     * gaps takes every game short of a switched-on type its kept list offers
+     * — what a type switched on in Settings needs, not only games with no
+     * artwork at all — and costs a lookup only for a game identified before
+     * lists were kept. $held is the other job — every game
      * again, with the list itself renewed, to pick up artwork people have
      * uploaded since — and that is one lookup per game, as its confirmation
      * says. The bytes are mostly free on a second run either way, because a
@@ -94,11 +95,25 @@ class ScrapeGameMedia implements ShouldQueue
      */
     public static function queueForConsole(string $console, bool $held = false): int
     {
-        $ids = Game::query()
+        $games = Game::query()
             ->forConsole($console)
-            ->whereNotNull('screenscraper_id')
-            ->unless($held, fn ($query) => $query->missingMedia())
-            ->pluck('id');
+            ->whereNotNull('screenscraper_id');
+
+        if ($held) {
+            $ids = $games->pluck('id');
+        } else {
+            $wanted = MediaTypes::enabled();
+            $ids = collect();
+
+            $games->with(['media:id,game_id,screenscraper_type', 'mediaList'])
+                ->chunkById(500, function ($chunk) use ($ids, $wanted): void {
+                    foreach ($chunk as $game) {
+                        if ($game->lacksMedia($wanted)) {
+                            $ids->push($game->id);
+                        }
+                    }
+                });
+        }
 
         foreach ($ids as $id) {
             self::dispatch($id, fresh: $held);
