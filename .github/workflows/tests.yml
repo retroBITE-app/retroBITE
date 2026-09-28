@@ -1,10 +1,9 @@
 name: tests
 
+# Manual only for now: automatic runs on push and pull_request burned through
+# the free account's Actions minutes. Restore those triggers to re-enable.
 on:
-  push:
-    branches:
-      - develop
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
