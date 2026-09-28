@@ -458,6 +458,24 @@
 }
 
 /*
+ * The cover shelf: as many columns as fit a card at --shelf-min, set at the
+ * call site by the console's cover shape, and never fewer than two. Fluid
+ * rather than a column count per breakpoint, so a row fills any width and a
+ * card is never much wider than its minimum. auto-fill rather than auto-fit:
+ * a console of two games keeps shelf-sized cards instead of two posters. The
+ * gap lives here because the two-column floor subtracts it.
+ */
+@utility shelf {
+    --shelf-gap: calc(var(--spacing) * 4);
+    display: grid;
+    gap: var(--shelf-gap);
+    grid-template-columns: repeat(
+        auto-fill,
+        minmax(min(var(--shelf-min, 200px), calc((100% - var(--shelf-gap)) / 2)), 1fr)
+    );
+}
+
+/*
  * The two key-art scrims: a fade from the artwork into the page ground so the
  * title block sits on something readable. Utilities rather than inline values
  * because Tailwind's `/alpha` modifier does not work inside a raw gradient —
