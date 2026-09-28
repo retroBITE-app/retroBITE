@@ -925,15 +925,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
-     * How tall the console's covers stand, in pixels.
+     * How tall the cover stands, in pixels: the same on every console's page.
      *
-     * A SNES box is wide and flat where a PS2 case is tall, so the shelf is
+     * A SNES box is wide and flat where a PS2 case is tall, so the page is
      * levelled by height and each cover keeps its own width.
      */
     #[Computed]
     public function coverHeight(): int
     {
-        return CoverGeometry::height($this->game->console());
+        return CoverGeometry::HERO_HEIGHT;
     }
 
     /**
@@ -945,7 +945,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Computed]
     public function coverPlaceholderWidth(): int
     {
-        return CoverGeometry::width($this->game->console());
+        return CoverGeometry::heroWidth($this->game->console());
     }
 
     /** The region flag, or null when no picture depicts this code. */

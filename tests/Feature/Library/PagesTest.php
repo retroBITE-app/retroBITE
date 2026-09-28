@@ -865,19 +865,20 @@ it('remembers whether the library is drawn as covers or as a list', function () 
     Livewire::withQueryParams(['view' => 'cards'])->test('games.index')->assertDontSee('Achievements');
 });
 
-it('draws every cover in the console\'s own frame, art or not', function () {
-    // One frame for every card, the console's own, whatever shape a scan the
-    // provider sent; art or none, the shelf is one shape throughout.
+it('draws every cover in the console\'s own frame, art or not, and fills it', function () {
+    // One frame for every card, the console's own, so a row is one height:
+    // a box of another shape is fitted to the frame rather than making its
+    // row taller, and a game with no art yet takes the same room.
     $identified = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Tomb Raider', 'slug' => 'tomb-raider']);
     Media::factory()->for($identified)->ofType('box-2D', 'eu')->create();
     Game::factory()->forConsole('psx')->create(['title' => 'Tomb Raider (Europe)', 'slug' => 'tomb-raider-europe']);
 
     $html = Livewire::test('games.index', ['console' => 'psx'])->html();
 
-    // PS1's 7/6 at 280 high: its jewel cases are a touch wider than tall.
-    expect(substr_count($html, 'aspect-ratio: 327 / 280'))->toBe(2)
-        ->and(substr_count($html, 'max-width: 349px'))->toBe(2)
-        ->and($html)->toContain('object-contain');
+    // PS1's jewel case, square, and as wide as its column.
+    expect(substr_count($html, 'aspect-ratio: 1/1'))->toBe(2)
+        ->and($html)->not->toContain('max-width:')
+        ->and($html)->toContain('block size-full object-fill');
 });
 
 it('sizes an empty slot from the console it belongs to', function () {
@@ -886,9 +887,20 @@ it('sizes an empty slot from the console it belongs to', function () {
     Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
     Game::factory()->forConsole('psx')->matched()->create(['title' => 'Vagrant Story', 'slug' => 'vagrant']);
 
-    // 2/3 and 5/7 of the same 280px.
-    Livewire::test('games.index', ['console' => 'snes'])->assertSee('aspect-ratio: 187 / 280', escape: false);
-    Livewire::test('games.index', ['console' => 'psx'])->assertSee('aspect-ratio: 327 / 280', escape: false);
+    // A landscape Super Nintendo box and a square jewel case.
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('aspect-ratio: 11/8', escape: false);
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('aspect-ratio: 1/1', escape: false);
+});
+
+it('puts more to a row where covers stand tall than where they lie wide', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Mario World', 'slug' => 'smw']);
+    Game::factory()->forConsole('psx')->matched()->create(['title' => 'Vagrant Story', 'slug' => 'vagrant']);
+    Game::factory()->forConsole('nes')->matched()->create(['title' => 'Zelda', 'slug' => 'zelda']);
+
+    // Seven, six and five on the widest screens: portrait, square, landscape.
+    Livewire::test('games.index', ['console' => 'nes'])->assertSee('2xl:grid-cols-7');
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('2xl:grid-cols-6');
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('2xl:grid-cols-5');
 });
 
 it('says how many files an export has written, not how many jobs it queued', function () {
