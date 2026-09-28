@@ -123,9 +123,12 @@ workers QUEUE_WORKERS_HASH 1 php /app/artisan queue:work database-long \
 
 # Copies to network shares, on the long connection for the same reason as
 # hashing: a disc image over a slow link outlasts any short retry_after.
-# Bound by the network rather than this machine, so a second worker only helps
-# when sending to two shares at once.
-workers QUEUE_WORKERS_TRANSFER 1 php /app/artisan queue:work database-long \
+# Three, because a copy spends its time waiting on the share's answers (tens of
+# milliseconds each, several per file) rather than on bandwidth, and a console
+# sent at once is a job per game: three games in flight go about three times
+# as fast. The game list is written under a lock, so two sends to one box do
+# not lose each other's entries.
+workers QUEUE_WORKERS_TRANSFER 3 php /app/artisan queue:work database-long \
     --queue=transfer --sleep=3 --tries=2 --timeout=3600 --max-time=3600
 
 # The scheduler, for the nightly index sync and the progress pulse.

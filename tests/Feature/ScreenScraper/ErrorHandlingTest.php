@@ -129,3 +129,22 @@ it('records the account allowance from a successful response', function () {
         // The scarce one: ten times smaller, and the first to run out.
         ->and(ScreenScraperQuota::failedRemaining())->toBe(1993);
 });
+
+it('still reads an error off a media answer', function () {
+    Http::fake(['*' => Http::response(ssBody('Votre quota de scrape est dépassé pour aujourd\'hui !'), 430)]);
+
+    app(ScreenScraperService::class)->fetchMedia('https://api.screenscraper.fr/api2/mediaJeu.php?jeuid=1&media=video');
+})->throws(QuotaExhausted::class);
+
+it('takes a large media file as it is, reading only its head for an error', function () {
+    // A video's worth, with words deep inside that an error would carry: a
+    // file is not read as a message, and not copied over and over to check.
+    $video = str_repeat("\x00\x01", 8 * 1024 * 1024).'api closed';
+    Http::fake(['*' => Http::response($video, 200)]);
+
+    $before = memory_get_usage();
+    $fetch = app(ScreenScraperService::class)->fetchMedia('https://api.screenscraper.fr/api2/mediaJeu.php?jeuid=1&media=video');
+
+    expect($fetch->contents)->toBe($video)
+        ->and(memory_get_peak_usage() - $before)->toBeLessThan(5 * strlen($video));
+});

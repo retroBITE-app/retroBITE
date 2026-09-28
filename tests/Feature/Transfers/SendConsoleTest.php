@@ -2,6 +2,9 @@
 
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
+use App\Enums\TransferFailure;
+use App\Jobs\FileTransferJob;
+use App\Jobs\PlanConsoleTransfer;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Destination;
 use App\Models\Game;
@@ -10,8 +13,11 @@ use App\Models\Transfer;
 use App\Models\User;
 use App\Support\Console;
 use App\Transfers\BatoceraTarget;
+use App\Transfers\Endpoints\Endpoints;
 use App\Transfers\SendToShare;
 use App\Transfers\Smb\ShareClient;
+use Illuminate\Bus\PendingBatch;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -160,4 +166,70 @@ it('starts a share send from the shelf and says how it went', function () {
 
     expect(Transfer::query()->count())->toBe(2)
         ->and(File::exists(consoleShareFile('roms/gb/Tetris (World).zip')))->toBeTrue();
+});
+
+it('asks the share what it holds before queuing, and sends again only what is missing', function () {
+    gbGame('Tetris', ['Tetris (World).zip' => 'tetris']);
+    gbGame('Alleyway', ['Alleyway (World).zip' => 'alleyway']);
+    $sender = app(SendToShare::class);
+    $target = app(BatoceraTarget::class);
+
+    $sender->sendConsole('gb', $target, $this->destination);
+
+    // One game's file gone from the share since.
+    File::delete(consoleShareFile('roms/gb/Alleyway (World).zip'));
+
+    Bus::fake();
+    $sent = $sender->sendConsole('gb', $target, $this->destination);
+    Bus::assertDispatched(PlanConsoleTransfer::class);
+
+    $ids = Transfer::query()->where('batch_id', $sent['batch'])->pluck('id')->all();
+    $sender->planConsole($ids, app(Endpoints::class));
+
+    // One job, for the one game short of a file; the other is done already.
+    // Its folders were made by the plan, so the job does not make them again.
+    Bus::assertBatched(fn (PendingBatch $batch): bool => $batch->jobs->count() === 1
+        && $batch->jobs->every(fn (FileTransferJob $job): bool => $job->prepared));
+    expect(Transfer::query()->where('batch_id', $sent['batch'])->whereColumn('files_skipped', 'files_total')->count())->toBe(1);
+});
+
+it('writes the list at once when every game is on the share already', function () {
+    gbGame('Tetris', ['Tetris (World).zip' => 'tetris']);
+    $sender = app(SendToShare::class);
+    $target = app(BatoceraTarget::class);
+
+    $sender->sendConsole('gb', $target, $this->destination);
+    File::delete(consoleShareFile('roms/gb/gamelist.xml'));
+
+    $sent = $sender->sendConsole('gb', $target, $this->destination);
+
+    // No copy to wait for, so the list comes straight away and the game is done.
+    expect(File::get(consoleShareFile('roms/gb/gamelist.xml')))->toContain('Tetris (World).zip')
+        ->and(Transfer::query()->where('batch_id', $sent['batch'])->sole())
+        ->status->toBe(Transfer::DONE)
+        ->files_skipped->toBe(1);
+});
+
+it('makes each folder once in the plan, before any game is copied into it', function () {
+    gbGame('Tetris', ['Tetris (World).zip' => 'tetris']);
+    Bus::fake();
+
+    $sent = app(SendToShare::class)->sendConsole('gb', app(BatoceraTarget::class), $this->destination);
+    app(SendToShare::class)->planConsole(Transfer::query()->where('batch_id', $sent['batch'])->pluck('id')->all(), app(Endpoints::class));
+
+    // Nothing is copied yet — the job is faked — but the folder is there.
+    expect(is_dir(consoleShareFile('roms/gb')))->toBeTrue()
+        ->and(File::exists(consoleShareFile('roms/gb/Tetris (World).zip')))->toBeFalse();
+});
+
+it('stops the whole send in the plan when the share cannot be written, and says why on every game', function () {
+    File::ensureDirectoryExists($this->root.'/network/batocera/readonly');
+    $this->destination->update(['share' => 'readonly']);
+    gbGame('Tetris', ['Tetris (World).zip' => 'tetris']);
+    gbGame('Alleyway', ['Alleyway (World).zip' => 'alleyway']);
+
+    app(SendToShare::class)->sendConsole('gb', app(BatoceraTarget::class), $this->destination);
+
+    expect(Transfer::query()->pluck('status')->unique()->all())->toBe([Transfer::FAILED])
+        ->and(Transfer::query()->pluck('failure')->unique()->all())->toBe([TransferFailure::Unwritable]);
 });

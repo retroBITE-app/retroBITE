@@ -34,6 +34,18 @@ final class ShareEndpoint implements Endpoint
         return $this->share()->size($this->remote($path));
     }
 
+    /**
+     * The names of what is in a folder of the destination.
+     *
+     * @return list<string>
+     *
+     * @throws TransferFailed
+     */
+    public function namesIn(string $directory): array
+    {
+        return $this->share()->names($this->remote($directory === '' ? null : $directory));
+    }
+
     public function freeBytes(): ?int
     {
         // smbclient can say, but only by a `du` whose output differs between

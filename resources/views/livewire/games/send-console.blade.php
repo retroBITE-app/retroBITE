@@ -74,7 +74,7 @@ new class extends Component
     /**
      * The console's latest send to a share, counted by how its games went.
      *
-     * @return array{batch: string, destination: string, total: int, copied: int, done: int, failed: int, finished: bool}|null
+     * @return array{batch: string, destination: string, total: int, copied: int, present: int, done: int, failed: int, finished: bool}|null
      */
     #[Computed]
     public function progress(): ?array
@@ -98,6 +98,7 @@ new class extends Component
             ->selectRaw('sum(status = ?) as done', [Transfer::DONE])
             ->selectRaw('sum(status = ?) as failed', [Transfer::FAILED])
             ->selectRaw('sum(status <> ? and files_done >= files_total) as copied', [Transfer::FAILED])
+            ->selectRaw('sum(status <> ? and files_total > 0 and files_skipped >= files_total) as present', [Transfer::FAILED])
             ->first();
 
         $total = (int) $row?->getAttribute('total');
@@ -109,6 +110,7 @@ new class extends Component
             'destination' => $latest->destination->name ?? __('the share'),
             'total' => $total,
             'copied' => (int) $row?->getAttribute('copied'),
+            'present' => (int) $row?->getAttribute('present'),
             'done' => $done,
             'failed' => $failed,
             'finished' => $done + $failed === $total,
@@ -165,8 +167,14 @@ new class extends Component
 
         $this->watching = null;
 
+        // A send run again finds most of its games there already; said, so a
+        // quick finish does not read as nothing having happened.
+        $there = $progress['present'] > 0
+            ? ' '.trans_choice('{1} One was already there.|[2,*] :count were already there.', $progress['present'], ['count' => $progress['present']])
+            : '';
+
         if ($progress['failed'] === 0) {
-            Flux::toast(variant: 'success', text: __('Sent :count games to :name.', ['count' => $progress['done'], 'name' => $progress['destination']]));
+            Flux::toast(variant: 'success', text: __('Sent :count games to :name.', ['count' => $progress['done'], 'name' => $progress['destination']]).$there);
         } else {
             Flux::toast(variant: 'warning', text: __('Sent :done of :total games to :name. :failed could not be sent; their pages say why.', [
                 'done' => $progress['done'],
@@ -188,6 +196,9 @@ new class extends Component
             <p class="text-sm text-accent">{{ __('Sending :console to :name…', ['console' => $this->target->name, 'name' => $sending['destination']]) }}</p>
             <p class="ml-auto font-mono text-xs text-accent">
                 {{ $sending['copied'] + $sending['failed'] }} / {{ $sending['total'] }}
+                @if ($sending['present'] > 0)
+                    · {{ __(':count already there', ['count' => $sending['present']]) }}
+                @endif
                 @if ($sending['failed'] > 0)
                     · {{ trans_choice(':count failed|:count failed', $sending['failed'], ['count' => $sending['failed']]) }}
                 @endif

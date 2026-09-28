@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Transfers\Smb;
 
 use App\Models\Destination;
-use Icewind\SMB\AnonymousAuth;
 use Icewind\SMB\BasicAuth;
 use Icewind\SMB\IAuth;
 use Icewind\SMB\IServer;
@@ -15,11 +14,14 @@ use Icewind\SMB\ServerFactory;
 use Throwable;
 
 /**
- * Other machines' shares through `smbclient`, by way of icewind/smb.
+ * Other machines' shares through libsmbclient, by way of icewind/smb.
  *
- * The binary rather than a CIFS mount: a mount needs SYS_ADMIN in the web
- * container and one mount per destination, and smbclient needs neither. It
- * is `samba-client` in the image.
+ * Rather than a CIFS mount: a mount needs SYS_ADMIN in the web container and
+ * one mount per destination, and libsmbclient needs neither. It is the
+ * `smbclient` PHP extension in the image, over `samba-client`'s library;
+ * icewind picks it on its own when the extension is loaded. Without it,
+ * icewind drives the `smbclient` command instead, whose text it misreads
+ * after a long directory listing — see docs/adr/0004.
  */
 final class SmbclientShareClient implements ShareClient
 {
@@ -64,7 +66,7 @@ final class SmbclientShareClient implements ShareClient
     private function auth(?string $username, ?string $password): IAuth
     {
         if ($username === null || $username === '') {
-            return new AnonymousAuth;
+            return new GuestAuth;
         }
 
         // DOMAIN\user, as Windows writes it, or a bare name.

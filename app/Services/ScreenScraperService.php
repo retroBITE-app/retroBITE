@@ -33,6 +33,9 @@ class ScreenScraperService
 {
     private const SOFTNAME = 'retroBITE';
 
+    /** How much of a media answer is read for an error message, in bytes. */
+    private const ERROR_HEAD = 4096;
+
     private const DEFAULT_REGION = 'ss';
 
     private const PREFERRED_LANG = 'en';
@@ -255,7 +258,10 @@ class ScreenScraperService
         $response = $this->paced(fn (): Response => $this->send($this->withQuery($url, $query)));
         $body = $response->body();
 
-        if ($error = $this->classify($response->status(), $this->readableBody($body))) {
+        // Only the head is read for an error. An error is a sentence; a
+        // manual or a video is tens of megabytes, and re-encoding and
+        // lowering all of it, copy after copy, ran a worker out of memory.
+        if ($error = $this->classify($response->status(), $this->readableBody(substr($body, 0, self::ERROR_HEAD)))) {
             throw $error;
         }
 

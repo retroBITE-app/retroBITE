@@ -44,8 +44,9 @@ still decides the layout and the game list (`App\Transfers\TransferTarget`,
 
 - **This computer's USB drive** — written by the browser as before, with no
   job, because the drive is not on the server.
-- **A network share** — a saved `Destination`, written by the job with
-  `smbclient`. Only copies: nothing is moved out of the library.
+- **A network share** — a saved `Destination`, written by the job through
+  libsmbclient (the `smbclient` PHP extension, by way of icewind/smb). Only
+  copies: nothing is moved out of the library.
 
 **Shares are found, not typed.** A search asks four ways and merges the
 answers: mDNS for `_smb._tcp`, NetBIOS and plain DNS for known names such as
@@ -68,7 +69,13 @@ only when somebody presses the button.
 - **A job per file.** Simpler, but a game is several files that only work
   together; losing all-or-nothing loses the guarantee `moveGame` had.
 - **Mounting the share with CIFS.** Needs `SYS_ADMIN` in the web container and
-  a mount per destination. `smbclient` needs neither.
+  a mount per destination. libsmbclient needs neither.
+- **Driving the `smbclient` command.** What icewind/smb falls back to without
+  the extension, and what the first version did. Its parser of the command's
+  text falls out of step after a long directory listing — a Batocera
+  `images/` folder of a few thousand files — and reads the next command's
+  answer as the rest of it, so a console sent at once failed on most of its
+  games.
 - **Host networking for the web container by default.** Would let mDNS and
   NetBIOS work on Linux, but breaks the compose network the database is
   reached over, and does nothing on Docker Desktop. The scan works on both.

@@ -41,10 +41,14 @@ fi
 # Started in a loop so a crash costs two seconds of live updates rather than
 # all of them until the container restarts: without the socket, every banner
 # and figure that shows work in progress looks frozen while the work goes on.
+# A memory limit of its own: Reverb is a server that runs as long as the
+# container, not a request, and the 128M a request gets ran out under a
+# library-wide artwork fetch (thousands of signals, each printed by --debug in
+# dev) — after which nothing on any page refreshed until a restart.
 start_reverb() {
     (
         while true; do
-            su-exec "$WEB_USER" php /app/artisan reverb:start --host=127.0.0.1 --port=8080 "$@"
+            su-exec "$WEB_USER" php -d memory_limit=512M /app/artisan reverb:start --host=127.0.0.1 --port=8080 "$@"
             echo "Reverb exited; restarting in 2s." >&2
             sleep 2
         done

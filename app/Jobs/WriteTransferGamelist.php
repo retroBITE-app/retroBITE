@@ -14,9 +14,11 @@ use App\Transfers\Endpoints\Endpoints;
 use App\Transfers\Location;
 use App\Transfers\TransferRejected;
 use App\Transfers\TransferTargets;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -88,7 +90,25 @@ class WriteTransferGamelist implements ShouldQueue
         try {
             $path = $target->plan($first->game)->gamelist;
             $share = $endpoints->resolve(Location::destination($first->destination, $path)->endpoint);
-            $share->replace($path, $target->mergeGamelist($share->read($path), ...$arrived->pluck('game')->all()));
+
+            // Read, merged and written under a lock: with several transfer
+            // workers, two sends to one box could otherwise both read the
+            // list before either wrote it, and one game's entry would go.
+            Cache::lock('transfer-gamelist:'.$first->destination->id.':'.$path, 120)->block(60, function () use ($share, $path, $target, $arrived): void {
+                $share->replace($path, $target->mergeGamelist($share->read($path), ...$arrived->pluck('game')->all()));
+            });
+        } catch (LockTimeoutException) {
+            // Another send is writing this list and did not finish in a
+            // minute; try again after the backoff rather than write blind.
+            if ($this->attempts() < $this->tries) {
+                $this->release($this->backoff);
+
+                return;
+            }
+
+            $this->finish($arrived, TransferFailure::Unreachable);
+
+            return;
         } catch (TransferRejected $e) {
             Log::warning('A game list on a share could not be merged.', ['transfer' => $first->id, 'games' => $arrived->count(), 'reason' => $e->getMessage()]);
             $this->finish($arrived, TransferFailure::Rejected);

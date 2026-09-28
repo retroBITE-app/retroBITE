@@ -61,6 +61,21 @@ final class SmbclientShare implements RemoteShare
         return $info->isDirectory() ? -1 : $info->getSize();
     }
 
+    public function names(string $directory): array
+    {
+        try {
+            $entries = $this->share->dir($directory);
+        } catch (NotFoundException) {
+            return [];
+        } catch (Throwable $e) {
+            throw self::translate($e, $directory);
+        }
+
+        // getName() only: getSize() and isDirectory() each stat the entry,
+        // and a Batocera images/ folder holds thousands of them.
+        return array_values(array_map(fn ($entry): string => $entry->getName(), $entries));
+    }
+
     public function makeDirectory(string $path): void
     {
         $built = '';

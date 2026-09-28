@@ -29,7 +29,8 @@ use Throwable;
  *
  * 1. everything is checked before anything is written: each source a plain,
  *    readable file; each destination folder made and proven writable with a
- *    probe; room enough where the free space can be read; no name twice;
+ *    probe (or already, by whoever queued it — see $prepared); room enough
+ *    where the free space can be read; no name twice;
  * 2. nothing is written over. A copy finding the same name at the same size
  *    skips it, so a transfer that stopped part way resumes; any other clash
  *    refuses the list. A move refuses on any clash;
@@ -60,11 +61,15 @@ class FileTransferJob implements ShouldQueue
     /**
      * @param  list<FileTransfer>  $transfers
      * @param  int|null  $transferId  the Transfer row to report to, when a person is watching one
+     * @param  bool  $prepared  the destination folders were made and proven writable
+     *                          already — by the plan of a console send, once for
+     *                          all its games rather than again for each one
      */
     public function __construct(
         public readonly array $transfers,
         public readonly TransferMode $mode = TransferMode::Copy,
         public readonly ?int $transferId = null,
+        public readonly bool $prepared = false,
     ) {
         $this->onConnection('database-long')->onQueue('transfer');
     }
@@ -209,9 +214,13 @@ class FileTransferJob implements ShouldQueue
             }
         }
 
-        foreach ($folders as $byFolder) {
-            foreach ($byFolder as $folder => $endpoint) {
-                $endpoint->prepare((string) $folder);
+        // A folder that has gone since it was prepared fails the copy into
+        // it, which is undone like any other failed write.
+        if (! $this->prepared) {
+            foreach ($folders as $byFolder) {
+                foreach ($byFolder as $folder => $endpoint) {
+                    $endpoint->prepare((string) $folder);
+                }
             }
         }
 

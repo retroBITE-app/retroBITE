@@ -96,13 +96,13 @@ RUN apk add --no-cache \
         # and carries no `strings`; reading a PS2 disc's serial needs both, and
         # without them the export fails at runtime as exit 127.
         bash binutils \
-        # smbclient, which writes transfers to network shares (icewind/smb
-        # drives it), and nmblookup, which finds them by NetBIOS name.
+        # libsmbclient, which the smbclient extension below writes network
+        # shares through, and nmblookup, which finds them by NetBIOS name.
         samba-client \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS libzip-dev icu-dev libpng-dev libjpeg-turbo-dev \
         freetype-dev postgresql-dev openldap-dev libmemcached-dev zlib-dev \
-        gettext-dev libxml2-dev linux-headers libwebp-dev \
+        gettext-dev libxml2-dev linux-headers libwebp-dev samba-dev \
     # gd without this builds silently without JPEG support and only fatals when
     # something calls imagecreatefromjpeg().
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
@@ -117,6 +117,13 @@ RUN apk add --no-cache \
     # line takes the default.
     && yes '' | pecl install memcached \
     && docker-php-ext-enable memcached \
+    # icewind/smb over libsmbclient rather than by driving the smbclient
+    # command: its parser of smbclient's text falls out of step after a long
+    # directory listing (a Batocera images/ folder), reading the next
+    # command's answer as the rest of the listing. Picked by icewind on its
+    # own when the extension is loaded.
+    && yes '' | pecl install smbclient \
+    && docker-php-ext-enable smbclient \
     && apk del .build-deps \
     && rm -rf /tmp/pear
 

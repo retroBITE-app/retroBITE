@@ -31,6 +31,13 @@ final class FolderShare implements RemoteShare
         return is_file($absolute) ? (int) filesize($absolute) : null;
     }
 
+    public function names(string $directory): array
+    {
+        $absolute = $this->root.'/'.$directory;
+
+        return is_dir($absolute) ? array_values(array_diff((array) scandir($absolute), ['.', '..'])) : [];
+    }
+
     public function makeDirectory(string $path): void
     {
         $this->refuseIfReadonly($path);

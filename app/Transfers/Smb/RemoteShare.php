@@ -22,6 +22,17 @@ interface RemoteShare
     public function size(string $path): ?int;
 
     /**
+     * The names of what is in a folder — one listing rather than a question
+     * per file, and names alone, which the listing carries for free: a size
+     * or a kind costs a question each. Empty for a folder that is not there.
+     *
+     * @return list<string>
+     *
+     * @throws TransferFailed
+     */
+    public function names(string $directory): array;
+
+    /**
      * Make a folder and every missing folder above it.
      *
      * @throws TransferFailed

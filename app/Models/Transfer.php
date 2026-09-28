@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $game_id
  * @property int|null $destination_id
  * @property string $target
- * @property string|null $batch_id the job batch of a console sent at once
+ * @property string|null $batch_id the send a console sent at once shares
  * @property string $status queued | running | done | failed
  * @property int $files_total
  * @property int $files_done

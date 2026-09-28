@@ -6,8 +6,10 @@ use Illuminate\Support\Facades\Schema;
 
 /*
  * A console sent at once is one transfer per game, tied together by the id
- * of the job batch that copies them, so the console's page can follow the
- * whole send and its game list is written once, after the last game.
+ * of the send, so the console's page can follow the whole of it and its game
+ * list is written once, after the last game. The send's own id rather than
+ * the job batch's: the batch is made only once the share has been asked what
+ * it already holds, and some sends need no batch at all.
  */
 return new class extends Migration
 {
