@@ -148,7 +148,19 @@ class Game extends Model
      */
     public function artwork(MediaKind $kind): ?Media
     {
-        $order = array_flip($kind->screenScraperTypes());
+        return $this->artworkOfTypes($kind->screenScraperTypes());
+    }
+
+    /**
+     * The same choice over any list of provider media types, most preferred
+     * first — for a caller that wants artwork no MediaKind names, such as a
+     * transfer target's box back or manual.
+     *
+     * @param  array<int, string>  $types
+     */
+    public function artworkOfTypes(array $types): ?Media
+    {
+        $order = array_flip($types);
         $regions = array_flip(MediaRegions::chainFor($this->media_region));
 
         return $this->media

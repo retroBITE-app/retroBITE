@@ -7,6 +7,8 @@ use App\Models\AppSetting;
 use App\Support\ConsoleOverrides;
 use App\Support\DocPath;
 use App\Support\LiveUpdates;
+use App\Transfers\Smb\ShareClient;
+use App\Transfers\Smb\SmbclientShareClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Queue\Events\JobFailed;
@@ -32,6 +34,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(DocPath::class, function (): DocPath {
             return new DocPath((string) config('settings.docs_path'));
         });
+
+        // Other machines' shares, for transfers. The tests bind a folder instead.
+        $this->app->bind(ShareClient::class, SmbclientShareClient::class);
     }
 
     /**

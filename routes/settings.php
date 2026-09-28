@@ -12,5 +12,6 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('settings/consoles', 'settings.consoles')->name('console-config.edit');
     Route::livewire('settings/screenscraper', 'settings.screenscraper')->name('screenscraper.edit');
     Route::livewire('settings/retroachievements', 'settings.retroachievements')->name('retroachievements.edit');
+    Route::livewire('settings/destinations', 'settings.destinations')->name('destinations.edit');
     Route::redirect('settings/integrations', '/settings/retroachievements');
 });

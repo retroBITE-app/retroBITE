@@ -123,8 +123,9 @@ start_reverb --debug
 # own $timeout says — and a killed child takes the listener down with it. The
 # restart loop in queue-workers.sh brings it back, but the job still never
 # finishes. The longest on each: MatchGame 120 (scraper), ScanConsoleFolder
-# 1800 (media, default), WriteConsoleExports 1800 (toolbox), SyncHashIndex 900 (ra),
-# ReconcileProgress 300 (ra-progress), HashFile 3600 (hash). Raise the number
+# and WriteConsoleExports 1800 (media, default), SyncHashIndex 900 (ra),
+# ReconcileProgress 300 (ra-progress), HashFile 3600 (hash), FileTransferJob
+# 3600 (transfer). Raise the number
 # here when one of those grows.
 . /usr/local/bin/queue-workers.sh
 
@@ -155,6 +156,13 @@ workers QUEUE_WORKERS_RA_PROGRESS 1 php /app/artisan queue:listen \
 
 workers QUEUE_WORKERS_HASH 1 php /app/artisan queue:listen database-long \
     --queue=hash,ra-hash --sleep=3 --tries=3 --timeout=3660
+
+# Copies to network shares, on the long connection for the same reason as
+# hashing: a disc image over a slow link outlasts any short retry_after.
+# Bound by the network rather than this machine, so a second worker only helps
+# when sending to two shares at once.
+workers QUEUE_WORKERS_TRANSFER 1 php /app/artisan queue:listen database-long \
+    --queue=transfer --sleep=3 --tries=2 --timeout=3660
 
 su-exec "$WEB_USER" php /app/artisan schedule:work &
 

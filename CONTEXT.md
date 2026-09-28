@@ -66,6 +66,13 @@ place on disk that says "these files are one game".
 numbered; how many there are in total is not something the provider can be
 trusted about.
 
+**Version** — one copy of a game that works on its own: a ROM, a cuesheet and
+its tracks, a playlist and its discs. A game can hold several — *Aerostar
+(USA, Europe)*, *(Japan)*, *(USA, Europe) (Fr)* — because a game is every
+region and revision of a title. A transfer sends one of them, chosen from the
+names: no pre-release or hack, the library's region first, the latest
+revision. Not a file: a version of a multi-disc game is several.
+
 ## Metadata and artwork
 
 **Provider** — an outside service consulted about a game. There are two, and
@@ -163,14 +170,34 @@ modification time so a disc image is never read twice for it.
 ## Grouping
 
 **Game collection** — a list of games somebody put together by hand. Not a
-series and not an export target: a franchise is metadata, and what goes onto a
+series and not a transfer target: a franchise is metadata, and what goes onto a
 particular device is a different idea again.
 
-## Deliberately not concepts
+## Transfers
 
-**Export format** — how files must be laid out for a particular loader. Real,
-and not part of the library: a console does not determine it, and nothing here
-models it yet.
+**Transfer** — sending a game from the library to a destination, laid out
+the way a particular transfer target expects: one version of it, not every
+copy the game holds. A whole console can be sent at once — every identified
+game, one version each, one game list. A copy going out: the library
+is read, never changed, and nothing already at the destination is
+overwritten or removed except the game's own entry in the game list. Not an
+OPL export, which writes a loader's files *into* the library.
+
+**Transfer target** — a system a destination can be prepared for, with its
+own folder layout and its own game list: Batocera first, others later. Chosen
+per transfer, not per console — the same game can go to more than one.
+
+**Destination** — where a transfer goes. A USB drive on the computer in front
+of the person, written by the browser and never saved; or a **network share**
+on another machine, saved once and written by the server. Not a console and
+not a transfer target: one Batocera box can be reached as either.
+
+**File transfer** — the server moving or copying files, any files, from one
+location to another: a game between its layout's folders, an upload out of
+staging, a game onto a share. Always a list, and always all or nothing,
+because a game is several files that only work together.
+
+## Deliberately not concepts
 
 **Administrator** — there is no such role. Everyone who can log in can do
 everything.

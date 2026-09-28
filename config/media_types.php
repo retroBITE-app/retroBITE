@@ -35,34 +35,34 @@ return [
     ],
 
     /*
-     * What each type is, in words, for the settings screen: the provider's own
-     * names are terse ("box-2D-back", "mixrbv1") and several only make sense to
-     * somebody who already knows. A type missing here shows its name alone.
+     * What each type is, for the settings screen: the provider's names are
+     * terse (mixrbv2) and sometimes French (manuel). A type missing here is
+     * shown by its raw name alone.
      */
-    'labels' => [
-        'box-2D' => 'Box front',
-        'box-3D' => 'Box, 3D render',
-        'box-2D-back' => 'Box back',
-        'box-2D-side' => 'Box spine',
-        'box-texture' => 'Box wrap, unfolded',
-        'support-2D' => 'Disc or cartridge',
-        'support-texture' => 'Disc or cartridge label, flat',
-        'ss' => 'In-game screenshot',
-        'sstitle' => 'Title screen',
-        'mixrbv1' => 'Composite: screenshot, box and logo',
-        'mixrbv2' => 'Composite, second layout',
-        'wheel' => 'Logo',
-        'wheel-hd' => 'Logo, high resolution',
-        'wheel-carbon' => 'Logo on carbon',
-        'wheel-steel' => 'Logo on steel',
-        'screenmarquee' => 'Arcade marquee',
-        'screenmarqueesmall' => 'Arcade marquee, small',
-        'steamgrid' => 'Steam grid banner',
-        'fanart' => 'Fan art wallpaper',
-        'bezel-16-9' => 'Screen bezel, 16:9',
-        'video' => 'Gameplay video',
-        'video-normalized' => 'Gameplay video, normalised',
-        'manuel' => 'Manual',
+    'types' => [
+        'box-2D' => ['name' => 'Box art', 'description' => 'The front of the box, flat, as scanned.'],
+        'box-3D' => ['name' => 'Box art, 3D', 'description' => 'The box rendered in perspective, spine and all.'],
+        'box-2D-back' => ['name' => 'Box back', 'description' => 'The back of the box, flat.'],
+        'box-2D-side' => ['name' => 'Box spine', 'description' => 'The side of the box, for shelves that show spines.'],
+        'box-texture' => ['name' => 'Box texture', 'description' => 'The whole box unfolded — front, spine and back in one image — for front-ends that build their own 3D box.'],
+        'support-2D' => ['name' => 'Cartridge or disc', 'description' => 'The medium itself: the cartridge, disc or tape, photographed or scanned.'],
+        'support-texture' => ['name' => 'Cartridge or disc label', 'description' => 'The medium\'s label, flat, for front-ends that build their own 3D cartridge.'],
+        'ss' => ['name' => 'Screenshot', 'description' => 'A frame from gameplay.'],
+        'sstitle' => ['name' => 'Title screen', 'description' => 'The game\'s title screen.'],
+        'mixrbv1' => ['name' => 'Mix, layout 1', 'description' => 'Screenshot, box, cartridge and logo composed into one picture, in Recalbox\'s first layout.'],
+        'mixrbv2' => ['name' => 'Mix, layout 2', 'description' => 'The same composition in Recalbox\'s second layout, which most front-ends use.'],
+        'wheel' => ['name' => 'Logo', 'description' => 'The game\'s logo on a transparent background, as front-ends show it in a wheel or carousel.'],
+        'wheel-hd' => ['name' => 'Logo, HD', 'description' => 'The same logo at a higher resolution.'],
+        'wheel-carbon' => ['name' => 'Logo on carbon', 'description' => 'The logo on a carbon-fibre plate.'],
+        'wheel-steel' => ['name' => 'Logo on steel', 'description' => 'The logo on a brushed-steel plate.'],
+        'screenmarquee' => ['name' => 'Marquee', 'description' => 'A wide banner the shape of an arcade cabinet\'s marquee, logo on artwork.'],
+        'screenmarqueesmall' => ['name' => 'Marquee, small', 'description' => 'A smaller cut of the marquee banner.'],
+        'steamgrid' => ['name' => 'Steam grid', 'description' => 'A wide banner cut for Steam\'s library grid.'],
+        'fanart' => ['name' => 'Fan art', 'description' => 'Wallpaper-style artwork, shown behind the game as a backdrop.'],
+        'bezel-16-9' => ['name' => 'Bezel, 16:9', 'description' => 'A frame drawn around a 4:3 game to fill a widescreen TV.'],
+        'video' => ['name' => 'Video', 'description' => 'A short clip of gameplay. Several megabytes per game.'],
+        'video-normalized' => ['name' => 'Video, normalised', 'description' => 'The same clip re-encoded to one size and format, which players cope with better.'],
+        'manuel' => ['name' => 'Manual', 'description' => 'The instruction manual, as a PDF — manuel is the provider\'s French. Often tens of megabytes.'],
     ],
 
     /*

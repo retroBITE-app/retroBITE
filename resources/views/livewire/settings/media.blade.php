@@ -4,6 +4,7 @@ use App\Enums\MediaKind;
 use App\Models\AppSetting;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
+use App\Transfers\BatoceraTarget;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -68,6 +69,31 @@ new #[Title('Media settings')] class extends Component
                 ->mapWithKeys(fn (string $type) => [$type => $kind->label()]));
     }
 
+    /**
+     * Where each type ends up on a Batocera box, by the name its game artwork
+     * setting uses — so somebody picking what to fetch sees what it is for.
+     *
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function batocera(): array
+    {
+        return BatoceraTarget::artworkLabels();
+    }
+
+    /**
+     * Switch on what a Batocera box uses and nothing else. Not saved until
+     * Save, so it can be looked at and changed first.
+     */
+    public function useBatocera(): void
+    {
+        $recommended = BatoceraTarget::recommendedTypes();
+
+        foreach (array_keys($this->enabled) as $type) {
+            $this->enabled[$type] = in_array($type, $recommended, true);
+        }
+    }
+
     public function save(): void
     {
         MediaTypes::remember(Collection::make($this->enabled)->filter()->keys()->all());
@@ -111,30 +137,39 @@ new #[Title('Media settings')] class extends Component
             </div>
 
             <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-7">
-                <p class="kicker mb-1 text-fg-faint">{{ __('Types to fetch') }}</p>
+                <div class="mb-1 flex items-center justify-between gap-3">
+                    <p class="kicker text-fg-faint">{{ __('Types to fetch') }}</p>
+                    <flux:button size="xs" variant="ghost" type="button" wire:click="useBatocera">
+                        {{ __('Recommended for Batocera') }}
+                    </flux:button>
+                </div>
                 <p class="mb-4 text-sm text-fg-soft">
-                    {{ __('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account.') }}
+                    {{ __('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account. The first tag says what retroBite shows it as; the second, what it becomes when a game is sent to Batocera.') }}
                 </p>
 
                 @foreach ($this->groups as ['label' => $label, 'types' => $types])
                     <p class="kicker mt-5 mb-2 text-fg-dim first:mt-0">{{ __($label) }}</p>
 
-                    <div class="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                    <div class="flex flex-col gap-3.5">
                         @foreach ($types as $type)
-                            <label wire:key="type-{{ $type }}" class="flex cursor-pointer items-center gap-3">
-                                <flux:checkbox wire:model="enabled.{{ $type }}" />
-                                {{-- The provider's name, what it is in words, and — for
-                                     the types that fill one — the slot it stands in for,
-                                     outlined so the two do not read as one phrase. --}}
+                            @php $described = App\Support\MediaTypes::describe($type); @endphp
+                            <label wire:key="type-{{ $type }}" class="flex cursor-pointer items-start gap-3">
+                                <flux:checkbox wire:model="enabled.{{ $type }}" class="mt-0.5" />
                                 <span class="min-w-0 flex-1">
-                                    <span class="flex items-center gap-2">
-                                        <span class="font-mono text-sm text-fg-bright">{{ $type }}</span>
+                                    <span class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span class="text-sm text-fg-bright">{{ __($described['name'] ?? $type) }}</span>
+                                        @if ($described !== null)
+                                            <span class="font-mono text-xs text-fg-faint">{{ $type }}</span>
+                                        @endif
                                         @if ($this->roles->has($type))
-                                            <span class="rounded border border-line-bright px-1.5 py-px text-[10px] leading-tight text-fg-muted">{{ $this->roles[$type] }}</span>
+                                            <span class="kicker rounded-md border border-line-input px-1.5 py-0.5 text-fg-dim">{{ $this->roles[$type] }}</span>
+                                        @endif
+                                        @if (isset($this->batocera[$type]))
+                                            <span class="kicker rounded-md border border-accent/40 px-1.5 py-0.5 text-accent">{{ __('Batocera: :what', ['what' => $this->batocera[$type]]) }}</span>
                                         @endif
                                     </span>
-                                    @if (($description = App\Support\MediaTypes::label($type)) !== null)
-                                        <span class="block truncate text-xs text-fg-faint">{{ $description }}</span>
+                                    @if ($described !== null)
+                                        <span class="mt-0.5 block text-xs text-fg-soft">{{ __($described['description']) }}</span>
                                     @endif
                                 </span>
                             </label>

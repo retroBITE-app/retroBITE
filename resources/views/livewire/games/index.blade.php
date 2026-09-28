@@ -797,6 +797,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
                             <flux:menu.separator />
 
+                            {{-- Every identified game, one copy each, to a drive
+                                 or a share. Opens a preview first. --}}
+                            <flux:menu.item icon="arrow-up-tray" x-on:click="$dispatch('send-console')">
+                                {{ __('Send all games to…') }}
+                            </flux:menu.item>
+
+                            <flux:menu.separator />
+
                             <flux:menu.item icon="photo" wire:click="fetchConsoleMedia">
                                 {{ __('Fetch missing artwork') }}
                             </flux:menu.item>
@@ -936,6 +944,10 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                     @endif
                 </div>
             </div>
+
+            {{-- Under the hero, where a banner for a send in progress reads as
+                 news about this console. Also holds the Send all modal. --}}
+            <livewire:games.send-console :console="$this->lockedTo->key" wire:key="send-console-{{ $this->lockedTo->key }}" />
         @else
             {{-- No hero here: there is no one console to be specific about. The
                  padding the layout used to supply is this band's own now, and

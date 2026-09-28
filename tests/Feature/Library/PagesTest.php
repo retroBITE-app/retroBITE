@@ -2285,11 +2285,11 @@ it('says in words what every media type it offers is', function () {
         ->assertOk()
         ->assertSee('box-2D-back')
         ->assertSee('Box back')
-        ->assertSee('Disc or cartridge');
+        ->assertSee('Cartridge or disc');
 
-    // A type added to the catalogue without a label would show its bare name
-    // again — the thing this exists to stop.
+    // A type added to the catalogue without a description would show its bare
+    // name again — the thing this exists to stop.
     foreach (MediaTypes::offered() as $type) {
-        expect(MediaTypes::label($type))->not->toBeNull("{$type} has no label");
+        expect(MediaTypes::describe($type))->not->toBeNull("{$type} has no description");
     }
 });
