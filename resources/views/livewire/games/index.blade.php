@@ -965,12 +965,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             </div>
         @endif
 
-        {{-- The filter row and the shelf under it stop at 1600px of content
-             (plus their gutters), so a wide screen does not blow the covers
-             up to poster size. Held to the left, under the console's name,
-             rather than centred away from it. The hero above runs full
-             width. --}}
-        <div class="relative w-full max-w-[1664px] px-4 pt-6 pb-6 lg:px-8 lg:pt-7">
+        {{-- The shelf runs full width: it adds a column as soon as another
+             card fits, so a wide screen gets more covers rather than bigger
+             ones. The table does not, and stops at 1600px of content (plus
+             its gutters) so a row stays readable end to end. The filter row
+             follows whichever is under it, keeping the view toggle over its
+             right edge. Held to the left, under the console's name, rather
+             than centred away from it. The hero above runs full width. --}}
+        <div @class(['relative w-full px-4 pt-6 pb-6 lg:px-8 lg:pt-7', 'max-w-[1664px]' => $this->viewMode !== 'cards'])>
         {{-- Three jobs in one row, ruled off from each other: which part of
              the library to look in, how to order what comes back, and how to
              draw it. Search lives up in the hero bar, beside Actions.
@@ -1063,7 +1065,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         </div>
         </div>
 
-        <div class="flex w-full max-w-[1664px] flex-col gap-6 px-4 lg:px-8">
+        <div @class(['flex w-full flex-col gap-6 px-4 lg:px-8', 'max-w-[1664px]' => $this->viewMode !== 'cards'])>
         @if ($this->games->isEmpty())
             <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
                 <p class="text-sm text-fg-soft">{{ __('Nothing matches that.') }}</p>
@@ -1071,25 +1073,24 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             </div>
         @elseif ($this->viewMode === 'cards')
             {{--
-                A column count per breakpoint, set by the shape of the
-                console's covers: more to a row where they stand tall, fewer
-                where they lie wide, so a row of NES boxes and a row of Super
-                Nintendo ones come out at much the same height. The covers
-                are fluid and fill their columns, so the space between two
-                cards is the gap and nothing else, on every console. The whole
-                library, every console mixed, counts as portrait: the default.
-
-                Written out in full per shape, because Tailwind only builds
-                the classes it can see in the source.
+                A minimum card width, set by the shape of the console's
+                covers, and as many columns as fit it (the `shelf` utility in
+                app.css): narrower where they stand tall, wider where they lie
+                wide, so a row of NES boxes and a row of Super Nintendo ones
+                come out at much the same height. No breakpoints: the row
+                gains a column the moment another card fits, so it fills any
+                width and the space between two cards is the gap alone. The
+                whole library, every console mixed, counts as portrait: the
+                default.
             --}}
             @php
-                $shelfColumns = match (App\Support\CoverGeometry::orientation($this->lockedTo)) {
-                    'landscape' => 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
-                    'square' => 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6',
-                    default => 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7',
+                $shelfMin = match (App\Support\CoverGeometry::orientation($this->lockedTo)) {
+                    'landscape' => 280,
+                    'square' => 230,
+                    default => 200,
                 };
             @endphp
-            <ul class="grid items-start gap-4 {{ $shelfColumns }}">
+            <ul class="shelf items-start" style="--shelf-min: {{ $shelfMin }}px">
                 @foreach ($this->games as $game)
                     <li wire:key="card-{{ $game->id }}" class="w-full">
                         <x-game-card :game="$game" :show-console="$this->lockedTo === null">

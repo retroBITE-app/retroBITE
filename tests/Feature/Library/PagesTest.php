@@ -897,10 +897,10 @@ it('puts more to a row where covers stand tall than where they lie wide', functi
     Game::factory()->forConsole('psx')->matched()->create(['title' => 'Vagrant Story', 'slug' => 'vagrant']);
     Game::factory()->forConsole('nes')->matched()->create(['title' => 'Zelda', 'slug' => 'zelda']);
 
-    // Seven, six and five on the widest screens: portrait, square, landscape.
-    Livewire::test('games.index', ['console' => 'nes'])->assertSee('2xl:grid-cols-7');
-    Livewire::test('games.index', ['console' => 'psx'])->assertSee('2xl:grid-cols-6');
-    Livewire::test('games.index', ['console' => 'snes'])->assertSee('2xl:grid-cols-5');
+    // A narrower minimum packs more to a row: portrait, square, landscape.
+    Livewire::test('games.index', ['console' => 'nes'])->assertSee('--shelf-min: 200px', escape: false);
+    Livewire::test('games.index', ['console' => 'psx'])->assertSee('--shelf-min: 230px', escape: false);
+    Livewire::test('games.index', ['console' => 'snes'])->assertSee('--shelf-min: 280px', escape: false);
 });
 
 it('says how many files an export has written, not how many jobs it queued', function () {
@@ -1063,11 +1063,8 @@ it('says nothing rather than throwing when the drive is not mounted', function (
         // The cap is the point: covers stretch to their column, so without one a
         // wide screen draws either postage stamps or posters.
         Livewire::test('games.index', ['console' => 'snes'])
-            ->assertSee('grid-cols-2', escape: false)
-            ->assertSee('sm:grid-cols-3', escape: false)
-            ->assertSee('lg:grid-cols-4', escape: false)
-            ->assertSee('xl:grid-cols-5', escape: false)
-            ->assertSee('2xl:grid-cols-6', escape: false);
+            ->assertSee('class="shelf', escape: false)
+            ->assertSee('--shelf-min: 280px', escape: false);
     });
 
 });
