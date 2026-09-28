@@ -34,11 +34,17 @@ enum MediaKind: string
      * The provider sends far more types than these three have room for — videos,
      * manuals, marquees — so null is an ordinary answer, and the caller falls
      * back to showing the raw type it was given.
+     *
+     * A type can fill more than one slot — a screenshot stands in for a
+     * missing backdrop — so the slot it leads wins over one that only borrows
+     * it: `ss` is a Screenshot that can be a backdrop, not a Backdrop.
      */
     public static function fromScreenScraperType(string $type): ?self
     {
-        return Collection::make(self::cases())
-            ->first(fn (self $kind) => in_array($type, $kind->screenScraperTypes(), true));
+        $kinds = Collection::make(self::cases());
+
+        return $kinds->first(fn (self $kind) => ($kind->screenScraperTypes()[0] ?? null) === $type)
+            ?? $kinds->first(fn (self $kind) => in_array($type, $kind->screenScraperTypes(), true));
     }
 
     /**

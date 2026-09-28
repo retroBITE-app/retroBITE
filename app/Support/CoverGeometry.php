@@ -7,29 +7,32 @@ namespace App\Support;
 use Illuminate\Support\Arr;
 
 /**
- * How tall and how wide a console's covers stand.
+ * What shape a console's covers are.
  *
- * A SNES box is wide and flat where a PS2 case is tall, and the numbers for
- * both live in config/consoles/*.php. This is the one place that reads them,
- * since the game page and the library cards have to agree.
+ * A SNES box is wide and flat where a PS2 case is tall, and the shape of both
+ * lives in config/consoles/*.php as `cover_aspect`. This is the one place that
+ * reads it, since the game page and the library cards have to agree.
  *
- * The two readings answer different layouts. The shelf is a grid: a card fills
- * its column, so all it needs is {@see aspect()} and the height follows. The
- * game page is not, and levels its covers by {@see height()} in pixels.
+ * The shelf is fluid: a card fills its column, the height follows from
+ * {@see aspect()}, and {@see orientation()} decides how many columns a row
+ * has. The game page is not a grid, and levels its covers at
+ * {@see HERO_HEIGHT} instead.
  */
 final class CoverGeometry
 {
-    /** What a console without measurements of its own falls back to. */
-    public const DEFAULT_HEIGHT = 280;
-
     public const DEFAULT_ASPECT = '5/7';
 
-    /** How tall this console's covers stand, in pixels. */
-    public static function height(?Console $console): int
-    {
-        $height = (int) Arr::get($console?->toMetaArray() ?? [], 'cover_height');
+    /** How tall the game page's cover stands, whatever the console. */
+    public const HERO_HEIGHT = 280;
 
-        return $height > 0 ? $height : self::DEFAULT_HEIGHT;
+    /**
+     * How wide a cover stands on the game page, at {@see HERO_HEIGHT}.
+     *
+     * For a placeholder, which has no art to take a width from.
+     */
+    public static function heroWidth(?Console $console): int
+    {
+        return (int) round(self::HERO_HEIGHT * self::ratioOf($console));
     }
 
     /**
@@ -46,18 +49,28 @@ final class CoverGeometry
         return self::ratio($aspect) !== null ? $aspect : self::DEFAULT_ASPECT;
     }
 
-    /**
-     * How wide a cover stands at that height, in pixels.
-     *
-     * For the game page, where a placeholder has no art to take a width from
-     * and nothing else would give the empty box one. The shelf has no use for
-     * it: there the column decides the width and the ratio decides the rest.
-     */
-    public static function width(?Console $console): int
+    /** Width over height: under one stands tall, over one lies wide. */
+    public static function ratioOf(?Console $console): float
     {
-        $ratio = self::ratio(self::aspect($console)) ?? 5 / 7;
+        return self::ratio(self::aspect($console)) ?? 5 / 7;
+    }
 
-        return (int) round(self::height($console) * $ratio);
+    /**
+     * Whether the covers stand, lie, or are near enough square — which is
+     * how many to a shelf row. A tenth either side of square counts as it:
+     * a jewel case is a touch off, and is still one.
+     *
+     * @return 'portrait'|'square'|'landscape'
+     */
+    public static function orientation(?Console $console): string
+    {
+        $ratio = self::ratioOf($console);
+
+        return match (true) {
+            $ratio < 0.9 => 'portrait',
+            $ratio > 1.1 => 'landscape',
+            default => 'square',
+        };
     }
 
     /** The ratio an "N/M" string describes, or null when it describes none. */

@@ -51,12 +51,18 @@ final class MediaTypes
             ->all();
     }
 
-    /** What a type is, in words, or null for one the catalogue does not describe. */
-    public static function label(string $type): ?string
+    /**
+     * What a type is, in words, or null for one the catalogue does not describe.
+     *
+     * @return array{name: string, description: string}|null
+     */
+    public static function describe(string $type): ?array
     {
-        $label = Arr::get((array) config('media_types.labels', []), $type);
+        $described = config('media_types.types.'.$type);
 
-        return is_string($label) ? (string) __($label) : null;
+        return is_array($described) && isset($described['name'], $described['description'])
+            ? ['name' => (string) $described['name'], 'description' => (string) $described['description']]
+            : null;
     }
 
     /**

@@ -615,7 +615,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         $queued = ScrapeGameMedia::queueForConsole($console->key, held: $held);
 
         Flux::toast(text: $queued === 0
-            ? __('Nothing to fetch — every identified game on :console already has artwork.', ['console' => $console->name])
+            ? __('Nothing to fetch — every identified game on :console already has the artwork switched on in Settings → Media.', ['console' => $console->name])
             : trans_choice(
                 '{1} Fetching artwork for one game.|[2,*] Fetching artwork for :count games. The library fills in as it goes.',
                 $queued,
@@ -797,6 +797,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
                             <flux:menu.separator />
 
+                            {{-- Every identified game, one copy each, to a drive
+                                 or a share. Opens a preview first. --}}
+                            <flux:menu.item icon="arrow-up-tray" x-on:click="$dispatch('send-console')">
+                                {{ __('Send all games to…') }}
+                            </flux:menu.item>
+
+                            <flux:menu.separator />
+
                             <flux:menu.item icon="photo" wire:click="fetchConsoleMedia">
                                 {{ __('Fetch missing artwork') }}
                             </flux:menu.item>
@@ -936,6 +944,10 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                     @endif
                 </div>
             </div>
+
+            {{-- Under the hero, where a banner for a send in progress reads as
+                 news about this console. Also holds the Send all modal. --}}
+            <livewire:games.send-console :console="$this->lockedTo->key" wire:key="send-console-{{ $this->lockedTo->key }}" />
         @else
             {{-- No hero here: there is no one console to be specific about. The
                  padding the layout used to supply is this band's own now, and
@@ -953,7 +965,12 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             </div>
         @endif
 
-        <div class="relative px-4 pt-6 pb-6 lg:px-8 lg:pt-7">
+        {{-- The filter row and the shelf under it stop at 1600px of content
+             (plus their gutters), so a wide screen does not blow the covers
+             up to poster size. Held to the left, under the console's name,
+             rather than centred away from it. The hero above runs full
+             width. --}}
+        <div class="relative w-full max-w-[1664px] px-4 pt-6 pb-6 lg:px-8 lg:pt-7">
         {{-- Three jobs in one row, ruled off from each other: which part of
              the library to look in, how to order what comes back, and how to
              draw it. Search lives up in the hero bar, beside Actions.
@@ -1046,7 +1063,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         </div>
         </div>
 
-        <div class="flex flex-col gap-6 px-4 lg:px-8">
+        <div class="flex w-full max-w-[1664px] flex-col gap-6 px-4 lg:px-8">
         @if ($this->games->isEmpty())
             <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
                 <p class="text-sm text-fg-soft">{{ __('Nothing matches that.') }}</p>
@@ -1054,19 +1071,25 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             </div>
         @elseif ($this->viewMode === 'cards')
             {{--
-                A fixed column count per breakpoint rather than wrapping on
-                whatever fits: the cap is the point, so a row holds the same
-                number of games on a laptop every time instead of reflowing
-                by a column each time the window moves.
+                A column count per breakpoint, set by the shape of the
+                console's covers: more to a row where they stand tall, fewer
+                where they lie wide, so a row of NES boxes and a row of Super
+                Nintendo ones come out at much the same height. The covers
+                are fluid and fill their columns, so the space between two
+                cards is the gap and nothing else, on every console. The whole
+                library, every console mixed, counts as portrait: the default.
 
-                The counts are set against the content column — the viewport
-                less the 16rem sidebar and the page's own padding — so a cell
-                is wide enough for a cover at the sizes config asks for.
-                Covers are not stretched to the cell; a card is as wide as its
-                own art, which is why the cells are left-aligned and the rows
-                start at the top rather than being levelled to the tallest.
+                Written out in full per shape, because Tailwind only builds
+                the classes it can see in the source.
             --}}
-            <ul class="grid grid-cols-2 items-start justify-items-start gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            @php
+                $shelfColumns = match (App\Support\CoverGeometry::orientation($this->lockedTo)) {
+                    'landscape' => 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
+                    'square' => 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6',
+                    default => 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7',
+                };
+            @endphp
+            <ul class="grid items-start gap-4 {{ $shelfColumns }}">
                 @foreach ($this->games as $game)
                     <li wire:key="card-{{ $game->id }}" class="w-full">
                         <x-game-card :game="$game" :show-console="$this->lockedTo === null">

@@ -84,12 +84,7 @@ return [
     'cover_aspect' => [
         'type' => 'text',
         'label' => 'Cover aspect',
-        'description' => 'CSS ratio for key art, e.g. 2/3.',
+        'description' => 'CSS ratio for key art, e.g. 2/3. The shape most of the console\'s boxes have: it also decides how many to a shelf row.',
     ],
 
-    'cover_height' => [
-        'type' => 'number',
-        'label' => 'Cover height',
-        'description' => 'Pixels. How tall a shelf row stands.',
-    ],
 ];

@@ -7,6 +7,11 @@ use App\Http\Controllers\Docs\ServeMediaController as ServeDocMediaController;
 use App\Http\Controllers\FaviconController;
 use App\Http\Controllers\Library\ServeMediaController;
 use App\Http\Controllers\Library\UploadChunkController;
+use App\Http\Controllers\Transfers\ConsolePlanController;
+use App\Http\Controllers\Transfers\MergeConsoleGamelistController;
+use App\Http\Controllers\Transfers\MergeGamelistController;
+use App\Http\Controllers\Transfers\ServeGameFileController;
+use App\Http\Controllers\Transfers\TransferPlanController;
 use App\Models\Game;
 use Illuminate\Support\Facades\Route;
 
@@ -57,6 +62,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // was once reached by its id, which says nothing about where it lives.
     Route::get('games/{id}', fn (int $id) => redirect()->route('games.show', Game::findOrFail($id)->routeParameters(), 301))
         ->whereNumber('id');
+    // Transfers: the browser copies a game onto a drive, and asks the server
+    // what to write, for the bytes, and for the merged game list. {gameId}
+    // rather than {game}: that parameter is bound by console and slug above.
+    Route::get('transfers/{target}/games/{gameId}', TransferPlanController::class)
+        ->whereNumber('gameId')->name('transfers.plan');
+    Route::post('transfers/{target}/games/{gameId}/gamelist', MergeGamelistController::class)
+        ->whereNumber('gameId')->name('transfers.gamelist');
+    Route::get('transfers/files/{file}', ServeGameFileController::class)
+        ->whereNumber('file')->name('transfers.files');
+    // A whole console at once: every identified game, one version each.
+    Route::get('transfers/{target}/consoles/{console}', ConsolePlanController::class)
+        ->name('transfers.console-plan');
+    Route::post('transfers/{target}/consoles/{console}/gamelist', MergeConsoleGamelistController::class)
+        ->name('transfers.console-gamelist');
+
     // The media disk sits outside public/, so this authed route is the only
     // way to a downloaded image.
     Route::get('media/{path}', ServeMediaController::class)->where('path', '.*')->name('media.show');

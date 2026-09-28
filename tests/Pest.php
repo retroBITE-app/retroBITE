@@ -2,10 +2,12 @@
 
 use App\Models\AppSetting;
 use App\Support\ConsoleOverrides;
+use App\Transfers\Smb\ShareClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
+use Tests\Fakes\RefusingShareClient;
 use Tests\TestCase;
 
 /*
@@ -35,6 +37,10 @@ pest()->extend(TestCase::class)
         // machine means reading an actual disc image for minutes, and in CI
         // means a binary that is not there.
         Process::preventStrayProcesses();
+
+        // Nor a network share: smbclient is a process too, just not one the
+        // Process facade starts.
+        app()->instance(ShareClient::class, new RefusingShareClient);
 
         // AppSetting memoises for the length of a request, and that static
         // outlives RefreshDatabase — which empties the table underneath it and

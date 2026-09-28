@@ -15,7 +15,6 @@ return [
     'screenscraper_id' => 216,
     'retroachievements_id' => 80,
     'cover_aspect' => '2/3',
-    'cover_height' => 280,
     'layouts' => ['custom'],
     'default_layout' => 'custom',
 ];

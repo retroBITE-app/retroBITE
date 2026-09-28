@@ -110,7 +110,7 @@ it('files uploads into game folders where the layout wants them', function () {
     // @js writes the config with its quotes escaped as \u0022.
     $modal->assertSee('\u0022perGameFolders\u0022:true', false);
 
-    $answer = $modal->instance()->begin('Crash.cue', 4, '', app(App\Services\RomUploads::class), 'Crash Bandicoot');
+    $answer = $modal->instance()->begin('Crash.cue', 4, '', app(RomUploads::class), 'Crash Bandicoot');
 
     expect($answer['ok'])->toBeTrue();
 

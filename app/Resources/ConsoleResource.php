@@ -29,8 +29,6 @@ final class ConsoleResource
 
     public readonly ?string $coverAspect;
 
-    public readonly ?int $coverHeight;
-
     public readonly ?int $screenscraperId;
 
     public readonly ?int $retroachievementsId;
@@ -63,7 +61,6 @@ final class ConsoleResource
         $this->fileIcon = self::asString($meta, 'file_icon');
         $this->folder = self::asString($meta, 'folder');
         $this->coverAspect = self::asString($meta, 'cover_aspect');
-        $this->coverHeight = self::asInt($meta, 'cover_height');
         $this->screenscraperId = self::asInt($meta, 'screenscraper_id');
         $this->retroachievementsId = self::asInt($meta, 'retroachievements_id');
         $this->fileExtensions = (array) Arr::get($meta, 'file_extensions', []);

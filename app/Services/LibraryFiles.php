@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\LibraryFileRejection;
+use App\Enums\TransferFailure;
+use App\Enums\TransferMode;
 use App\Exceptions\LibraryFileRejected;
 use App\Exceptions\LibraryPathException;
+use App\Exceptions\TransferFailed;
+use App\Jobs\FileTransferJob;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\Scanning\FolderCounts;
+use App\Transfers\FileTransfer;
+use App\Transfers\Location;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -22,8 +28,8 @@ use Throwable;
 /**
  * Moving a game between its layout's folders, and deleting one of its files.
  *
- * The only changes to somebody's library the game page makes. Every write
- * goes through LibraryPath, and the database is changed to match rather than
+ * The only changes to somebody's library the game page makes. A move goes
+ * through FileTransferJob and a delete through LibraryPath, and the database is changed to match rather than
  * left for the next scan to find: a moved game keeps its checksums, its match
  * and its artwork, which a rescan would have to rebuild from nothing.
  */
@@ -95,7 +101,8 @@ final class LibraryFiles
      * Move every file of a game into another of its layout's folders.
      *
      * All or nothing: every check is made before the first file moves, and a
-     * failure part way through moves the ones already moved back.
+     * failure part way through moves the ones already moved back. Renames,
+     * so it runs in the request rather than on the queue.
      *
      * @throws LibraryFileRejected
      */
@@ -116,7 +123,9 @@ final class LibraryFiles
         }
 
         $plan = $this->planMove($console, $game, $destination);
-        $moved = $this->relocateAll($console, $plan);
+        $moves = $this->movesFor($console, $plan);
+
+        $this->transfer($moves);
 
         try {
             DB::transaction(function () use ($plan): void {
@@ -127,7 +136,7 @@ final class LibraryFiles
         } catch (Throwable $e) {
             Log::error('Moved files could not be recorded.', ['game' => $game->id, 'exception' => $e::class]);
 
-            $this->rollBack($console, $moved);
+            $this->moveBack($moves);
 
             throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
         }
@@ -192,7 +201,9 @@ final class LibraryFiles
             return 0;
         }
 
-        $moved = $this->relocateAll($console, $plan);
+        $moves = $this->movesFor($console, $plan);
+
+        $this->transfer($moves);
 
         try {
             DB::transaction(function () use ($plan): void {
@@ -203,7 +214,7 @@ final class LibraryFiles
         } catch (Throwable $e) {
             Log::error('Renamed files could not be recorded.', ['console' => $console->key, 'exception' => $e::class]);
 
-            $this->rollBack($console, $moved);
+            $this->moveBack($moves);
 
             throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
         }
@@ -256,7 +267,9 @@ final class LibraryFiles
             return 0;
         }
 
-        $moved = $this->relocateAll($console, $plan);
+        $moves = $this->movesFor($console, $plan);
+
+        $this->transfer($moves);
 
         try {
             DB::transaction(function () use ($plan): void {
@@ -267,7 +280,7 @@ final class LibraryFiles
         } catch (Throwable $e) {
             Log::error('Organized files could not be recorded.', ['console' => $console->key, 'exception' => $e::class]);
 
-            $this->rollBack($console, $moved);
+            $this->moveBack($moves);
 
             throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
         }
@@ -325,7 +338,7 @@ final class LibraryFiles
     /**
      * Where each file goes, checked against the disk and the database first.
      *
-     * @return array<int, array{file: GameFile, from: string, to: string, path: string}>
+     * @return list<array{file: GameFile, from: string, to: string, path: string}>
      *
      * @throws LibraryFileRejected
      */
@@ -370,11 +383,12 @@ final class LibraryFiles
     }
 
     /**
-     * The renames that can be made, each checked against the disk and the
-     * database; any that cannot are left out rather than refused.
+     * Where each renamed file goes, leaving out any that cannot be renamed.
      *
      * @param  array<int, array{file: GameFile, to: string}>  $renames
-     * @return array<int, array{file: GameFile, from: string, to: string, path: string}>
+     * @return list<array{file: GameFile, from: string, to: string, path: string}>
+     *
+     * @throws LibraryFileRejected
      */
     private function planRename(Console $console, array $renames): array
     {
@@ -415,49 +429,54 @@ final class LibraryFiles
     }
 
     /**
-     * Move every planned file, moving them back if one of them fails.
+     * A plan's steps as moves inside the console's folder, for FileTransferJob.
      *
-     * @param  array<int, array{file: GameFile, from: string, to: string, path: string}>  $plan
-     * @return array<int, array{from: string, to: string}> the moves made, in order
-     *
-     * @throws LibraryFileRejected
+     * @param  array<int, array{from: string, to: string}>  $plan
+     * @return list<FileTransfer>
      */
-    private function relocateAll(Console $console, array $plan): array
+    private function movesFor(Console $console, array $plan): array
     {
-        $moved = [];
-
-        foreach ($plan as ['from' => $from, 'to' => $to]) {
-            try {
-                $this->paths->relocate($console, $from, $to);
-            } catch (LibraryPathException $e) {
-                Log::warning('A game could not be moved.', ['console' => $console->key, 'reason' => $e->reason]);
-
-                $this->rollBack($console, $moved);
-
-                throw LibraryFileRejected::because($e->reason === LibraryPathException::EXISTS
-                    ? LibraryFileRejection::Exists
-                    : LibraryFileRejection::Unwritable);
-            }
-
-            $moved[] = ['from' => $from, 'to' => $to];
-        }
-
-        return $moved;
+        return array_values(array_map(
+            fn (array $step): FileTransfer => new FileTransfer(Location::library($console, $step['from']), Location::library($console, $step['to'])),
+            $plan,
+        ));
     }
 
     /**
-     * Undo moves, last first. Logged rather than thrown: the caller is already failing.
+     * Move every planned file, moving them back if one of them fails.
      *
-     * @param  array<int, array{from: string, to: string}>  $moved
+     * @param  list<FileTransfer>  $moves
+     *
+     * @throws LibraryFileRejected
      */
-    private function rollBack(Console $console, array $moved): void
+    private function transfer(array $moves): void
     {
-        foreach (array_reverse($moved) as ['from' => $from, 'to' => $to]) {
-            try {
-                $this->paths->relocate($console, $to, $from);
-            } catch (LibraryPathException $e) {
-                Log::error('A move could not be undone.', ['console' => $console->key, 'reason' => $e->reason]);
-            }
+        try {
+            FileTransferJob::now($moves, TransferMode::Move);
+        } catch (TransferFailed $e) {
+            throw LibraryFileRejected::because(match ($e->reason) {
+                TransferFailure::Exists => LibraryFileRejection::Exists,
+                TransferFailure::SourceMissing => LibraryFileRejection::Missing,
+                default => LibraryFileRejection::Unwritable,
+            });
+        }
+    }
+
+    /**
+     * Undo a move whose rows could not be written. Logged rather than thrown:
+     * the caller is already failing.
+     *
+     * @param  list<FileTransfer>  $moves
+     */
+    private function moveBack(array $moves): void
+    {
+        try {
+            FileTransferJob::now(
+                array_map(fn (FileTransfer $move): FileTransfer => new FileTransfer($move->to, $move->from), $moves),
+                TransferMode::Move,
+            );
+        } catch (TransferFailed $e) {
+            Log::error('A move could not be undone.', ['reason' => $e->reason->value]);
         }
     }
 

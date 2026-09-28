@@ -18,6 +18,10 @@ services:
       DB_DATABASE: ${DB_DATABASE:-retrobite}
       DB_USERNAME: ${DB_USERNAME:-retrobite}
       DB_PASSWORD: ${DB_PASSWORD:-retrobite}
+      # Transfers write to a drive from the browser, which Chrome allows only
+      # on https or localhost; a page opened another way links here. The same
+      # port as published below.
+      TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:82}
     ports:
       - 82:80
       # Vite. Fixed by vite.config.js with strictPort, so a clash fails loudly.
