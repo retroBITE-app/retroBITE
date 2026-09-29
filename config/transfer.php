@@ -1,15 +1,18 @@
 <?php
 
 use App\Transfers\BatoceraTarget;
+use App\Transfers\OplTarget;
 
 return [
 
     /*
      * The systems a game can be sent to, by key. Each lays out a drive its own
-     * way; see App\Transfers\TransferTarget. Batocera first, others later.
+     * way; see App\Transfers\TransferTarget. The first a console's games
+     * play on is offered first, unless its library is laid out for another.
      */
     'targets' => [
         'batocera' => BatoceraTarget::class,
+        'opl' => OplTarget::class,
     ],
 
     /*

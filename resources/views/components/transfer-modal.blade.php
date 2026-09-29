@@ -15,24 +15,44 @@
 
 @php
     // One game from its page, or a whole console from its shelf: the same
-    // drive and share code either way, pointed at a different plan.
-    $targets = collect(App\Transfers\TransferTargets::all())->mapWithKeys(fn ($target) => [$target->key() => [
-        'label' => $target->label(),
-        'plan' => $console !== null
-            ? route('transfers.console-plan', ['target' => $target->key(), 'console' => $console->key])
-            : route('transfers.plan', ['target' => $target->key(), 'gameId' => $game->id]),
-        'gamelist' => $console !== null
-            ? route('transfers.console-gamelist', ['target' => $target->key(), 'console' => $console->key])
-            : route('transfers.gamelist', ['target' => $target->key(), 'gameId' => $game->id]),
-    ]])->all();
+    // drive and share code either way, pointed at a different plan. Only the
+    // systems that play the console's games, the one its library is laid out
+    // for first.
+    $sentConsole = $console ?? $game->console();
+    $available = $sentConsole !== null ? App\Transfers\TransferTargets::for($sentConsole) : App\Transfers\TransferTargets::all();
+    $recommended = $sentConsole !== null ? App\Transfers\TransferTargets::recommendedFor($sentConsole)?->key() : null;
+
+    $targets = collect($available)->mapWithKeys(function (App\Transfers\TransferTarget $target) use ($console, $game): array {
+        $folders = collect($target->root())->map(function (string $folder): string {
+            return $folder.'/';
+        });
+
+        return [$target->key() => [
+            'label' => $target->label(),
+            'root' => $target->root(),
+            // What to ask when the chosen folder has none of the target's own.
+            'confirm' => $folders->isEmpty() ? '' : __('This folder has no :folders in it. Use it as the root of the drive and create :first here?', [
+                'folders' => $folders->join(', ', ' '.__('or').' '),
+                'first' => $folders->first(),
+            ]),
+            'plan' => $console !== null
+                ? route('transfers.console-plan', ['target' => $target->key(), 'console' => $console->key])
+                : route('transfers.plan', ['target' => $target->key(), 'gameId' => $game->id]),
+            'gamelist' => $console !== null
+                ? route('transfers.console-gamelist', ['target' => $target->key(), 'console' => $console->key])
+                : route('transfers.gamelist', ['target' => $target->key(), 'gameId' => $game->id]),
+        ]];
+    })->all();
 
     $shares = collect($destinations)->mapWithKeys(fn ($destination) => [(string) $destination->id => [
         'label' => $destination->name,
         'address' => $destination->address(),
     ]])->all();
 
+    // Joined to this page's path in the browser, not from request(): the
+    // modal is re-rendered by the page's Livewire updates, whose request is
+    // livewire/update, not the page.
     $localhost = config('transfer.localhost_url');
-    $localhostHere = $localhost !== null ? rtrim($localhost, '/').'/'.ltrim(request()->path(), '/') : null;
 
     $subject = $console !== null
         ? trans_choice('{1} The one identified game on :console, one copy of it.|[2,*] All :count identified games on :console, one copy of each.', $count, ['count' => $count, 'console' => $console->name])
@@ -40,7 +60,7 @@
 @endphp
 
 <flux:modal name="transfer" class="w-full max-w-xl">
-    <div x-data="transfer(@js(['targets' => $targets, 'shares' => $shares]))" class="flex flex-col gap-5">
+    <div x-data="transfer(@js(['targets' => $targets, 'target' => $recommended, 'shares' => $shares]))" class="flex flex-col gap-5">
         <div>
             <flux:heading size="lg">{{ __('Send to') }}</flux:heading>
             <flux:text class="mt-1">{{ $subject }}</flux:text>
@@ -79,10 +99,20 @@
         {{-- A USB drive: the browser copies, where it can. --}}
         <template x-if="destination === 'usb' && !supported">
             <div class="rounded-lg border border-line-input bg-sunken px-4 py-3 text-sm text-fg-soft">
-                <p>{{ __('Writing to a drive needs Chrome or Edge, with this page opened through localhost on the machine retroBite runs on.') }}</p>
-                @if ($localhostHere !== null)
-                    <a href="{{ $localhostHere }}" class="mt-2 inline-block font-mono text-accent hover:underline">{{ $localhostHere }}</a>
+                <p>{{ __('Writing to a drive needs Chromium or Edge, with this page opened through localhost on the machine retroBite runs on.') }}</p>
+                @if ($localhost !== null)
+                    <a x-data="{ href: @js(rtrim($localhost, '/')) + window.location.pathname + window.location.search }"
+                       x-bind:href="href" x-text="href"
+                       class="mt-2 inline-block font-mono text-accent hover:underline"></a>
                 @endif
+
+                {{-- Chromium has the API; some of its browsers ship it switched off. --}}
+                <p class="mt-2">{{ __('Brave and some other Chromium browsers turn drive access off. In Brave:') }}</p>
+                <ol class="mt-1 list-decimal space-y-0.5 pl-5">
+                    <li>{{ __('Open') }} <span class="font-mono break-all text-fg-bright">brave://flags/#file-system-access-api</span></li>
+                    <li>{{ __('Set it to Enabled.') }}</li>
+                    <li>{{ __('Relaunch Brave.') }}</li>
+                </ol>
             </div>
         </template>
 
@@ -116,17 +146,22 @@
                     <template x-if="plan.files.length > 100">
                         <li class="truncate text-fg-faint" x-text="`… ${plan.files.length - 100} ` + @js(__('more'))"></li>
                     </template>
-                    <li class="truncate text-fg-faint" x-text="plan.gamelist"></li>
+                    <template x-for="extra in plan.extras.slice(0, 100)" :key="extra.destination">
+                        <li class="truncate" x-text="extra.destination"></li>
+                    </template>
+                    <template x-if="plan.gamelist">
+                        <li class="truncate text-fg-faint" x-text="plan.gamelist"></li>
+                    </template>
                 </ul>
                 <template x-if="plan.rejected > 0">
-                    <p class="mt-2 text-xs text-fg-faint" x-text="`${plan.rejected} ` + @js(__('left out: their files are outside the console\'s folder.'))"></p>
+                    <p class="mt-2 text-xs text-fg-faint" x-text="`${plan.rejected} ` + @js(__('left out: they cannot be laid out this way.'))"></p>
                 </template>
             </div>
         </template>
 
         <template x-if="status === 'confirm-root'">
             <div class="rounded-lg border border-accent-tint/55 bg-accent-tint/10 px-4 py-3 text-sm text-accent">
-                <p>{{ __('This folder has no roms/ or batocera/roms/ in it. Use it as the root of the drive and create roms/ here?') }}</p>
+                <p x-text="targets[target].confirm"></p>
                 <div class="mt-3 flex gap-2">
                     <flux:button size="sm" variant="primary" x-on:click="start(true)">{{ __('Use this folder') }}</flux:button>
                     <flux:button size="sm" variant="subtle" x-on:click="status = 'idle'; chooseDrive()">{{ __('Choose another') }}</flux:button>

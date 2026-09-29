@@ -9,6 +9,7 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
+use App\Support\Console;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
@@ -116,6 +117,32 @@ final class BatoceraTarget implements TransferTarget
     public function label(): string
     {
         return 'Batocera';
+    }
+
+    /** Every console: ours were named after Batocera's systems to begin with. */
+    public function supports(Console $console): bool
+    {
+        return true;
+    }
+
+    /**
+     * roms/ at the top of the drive, or under batocera/ — the layout of an
+     * external drive is not documented, so both are recognised.
+     */
+    public function root(): array
+    {
+        return ['roms', 'batocera/roms'];
+    }
+
+    /** None: everything Batocera reads is copied, and its list is merged. */
+    public function extras(Game $game): array
+    {
+        return [];
+    }
+
+    public function extra(Game $game, string $destination): ?string
+    {
+        return null;
     }
 
     public function plan(Game $game): TransferPlan

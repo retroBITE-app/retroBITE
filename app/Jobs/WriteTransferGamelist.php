@@ -10,9 +10,11 @@ use App\Events\SystemUpdated;
 use App\Exceptions\TransferFailed;
 use App\Models\Transfer;
 use App\Support\LiveUpdates;
+use App\Transfers\Endpoints\Endpoint;
 use App\Transfers\Endpoints\Endpoints;
 use App\Transfers\Location;
 use App\Transfers\TransferRejected;
+use App\Transfers\TransferTarget;
 use App\Transfers\TransferTargets;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -23,13 +25,16 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * The last step of sending to a share: the games' entries in the target's
- * game list, merged into whatever list is there. It only runs once the files
- * have arrived — chained after one game's FileTransferJob, or run once a
- * console's batch is through, for every game in it whose files arrived.
+ * The last step of sending to a share: the target's own files for each game
+ * (TransferTarget::extras(), an OPL config and art), then the games' entries
+ * in the target's game list, merged into whatever list is there. It only runs
+ * once the files have arrived — chained after one game's FileTransferJob, or
+ * run once a console's batch is through, for every game in it whose files
+ * arrived.
  *
- * Not a file transfer — the list is written, not copied — and the one write
- * to a destination that replaces a file. Everyone else's entries stay as they
+ * Not a file transfer — these are made and written, not copied. An extra
+ * already on the share is left as it is; the list is the one write to a
+ * destination that replaces a file. Everyone else's entries stay as they
  * were; a list that cannot be read is left alone and the transfer fails.
  */
 class WriteTransferGamelist implements ShouldQueue
@@ -88,8 +93,18 @@ class WriteTransferGamelist implements ShouldQueue
         }
 
         try {
+            $share = $endpoints->resolve(Location::destination($first->destination, '')->endpoint);
+
+            $this->writeExtras($share, $target, $arrived);
+
             $path = $target->plan($first->game)->gamelist;
-            $share = $endpoints->resolve(Location::destination($first->destination, $path)->endpoint);
+
+            // A system that keeps no list: the files arriving was the send.
+            if ($path === null) {
+                $this->finish($arrived, null);
+
+                return;
+            }
 
             // Read, merged and written under a lock: with several transfer
             // workers, two sends to one box could otherwise both read the
@@ -142,6 +157,43 @@ class WriteTransferGamelist implements ShouldQueue
             ->with(['game.files', 'game.media', 'destination'])
             ->whereKey($this->console !== [] ? $this->console : [$this->transferId])
             ->get();
+    }
+
+    /**
+     * Each game's extras that the share does not have yet, made now and
+     * written; one already there is somebody's, and stays. Each folder is
+     * made once, the first time one of them goes into it.
+     *
+     * @param  Collection<int, Transfer>  $arrived
+     *
+     * @throws TransferFailed
+     */
+    private function writeExtras(Endpoint $share, TransferTarget $target, Collection $arrived): void
+    {
+        $prepared = [];
+
+        foreach ($arrived as $transfer) {
+            foreach ($target->extras($transfer->game) as $destination) {
+                if ($share->sizeOf($destination) !== null) {
+                    continue;
+                }
+
+                $bytes = $target->extra($transfer->game, $destination);
+
+                if ($bytes === null) {
+                    continue;
+                }
+
+                $folder = dirname($destination) === '.' ? '' : dirname($destination);
+
+                if (! in_array($folder, $prepared, true)) {
+                    $share->prepare($folder);
+                    $prepared[] = $folder;
+                }
+
+                $share->replace($destination, $bytes);
+            }
+        }
     }
 
     /** @param  Collection<int, Transfer>  $transfers */

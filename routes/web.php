@@ -11,6 +11,7 @@ use App\Http\Controllers\Transfers\ConsolePlanController;
 use App\Http\Controllers\Transfers\MergeConsoleGamelistController;
 use App\Http\Controllers\Transfers\MergeGamelistController;
 use App\Http\Controllers\Transfers\ServeGameFileController;
+use App\Http\Controllers\Transfers\TransferExtraController;
 use App\Http\Controllers\Transfers\TransferPlanController;
 use App\Models\Game;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +70,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereNumber('gameId')->name('transfers.plan');
     Route::post('transfers/{target}/games/{gameId}/gamelist', MergeGamelistController::class)
         ->whereNumber('gameId')->name('transfers.gamelist');
+    // A file the target makes rather than copies: an OPL config, a piece of its art.
+    Route::get('transfers/{target}/games/{gameId}/extras/{path}', TransferExtraController::class)
+        ->whereNumber('gameId')->where('path', '.*')->name('transfers.extra');
     Route::get('transfers/files/{file}', ServeGameFileController::class)
         ->whereNumber('file')->name('transfers.files');
     // A whole console at once: every identified game, one version each.

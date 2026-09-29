@@ -39,7 +39,19 @@ final class OplLayout extends ConsoleLayout
     /** @return string[] */
     public function gameDirectories(): array
     {
-        return ['DVD', 'CD'];
+        return [$this->dvdDirectory(), $this->cdDirectory()];
+    }
+
+    /** Where a DVD-sized disc goes: OPL reads DVD/ and CD/ as different media. */
+    public function dvdDirectory(): string
+    {
+        return 'DVD';
+    }
+
+    /** Where a disc no bigger than a CD goes. */
+    public function cdDirectory(): string
+    {
+        return 'CD';
     }
 
     /** @return string[] */

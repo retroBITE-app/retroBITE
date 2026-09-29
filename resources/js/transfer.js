@@ -12,7 +12,9 @@
  *
  * Nothing on the drive is overwritten or removed, except this game's own entry
  * in the game list: a file already there at the same size is skipped, so an
- * interrupted transfer picks up where it stopped. Each file is written under a
+ * interrupted transfer picks up where it stopped. A target's own files — the
+ * plan's extras, such as OPL's config and art — are made by the server as
+ * they are fetched, and one already on the drive is left as it is. Each file is written under a
  * temporary name and renamed when complete, so a half-written ROM never sits
  * on the drive under its real name.
  */
@@ -106,15 +108,17 @@ function folders(root) {
 const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
 /**
- * The modal's state. `targets` maps each target's key to its label and the
- * URLs for this game: { batocera: { label, plan, gamelist } }. `shares` maps
- * each saved destination's id to its label and address.
+ * The modal's state. `targets` maps each target's key to its label, the
+ * folders that mark its root, the question to ask when none is there, and the
+ * URLs for this game: { batocera: { label, root, confirm, plan, gamelist } }.
+ * `target` is the one to start on. `shares` maps each saved destination's id
+ * to its label and address.
  */
-export default ({ targets, shares }) => ({
+export default ({ targets, target, shares }) => ({
     supported: window.isSecureContext && 'showDirectoryPicker' in window,
     targets,
     shares,
-    target: Object.keys(targets)[0],
+    target: target ?? Object.keys(targets)[0],
     destination: 'usb', // 'usb', or a share's id
     plan: null,
     drive: null,
@@ -185,20 +189,32 @@ export default ({ targets, shares }) => ({
     },
 
     /**
-     * Where Batocera's tree starts on this drive: the chosen folder when it
-     * holds roms/, its batocera/ folder when that does, or null when neither —
-     * the layout of an external drive is not documented, so it is recognised
-     * rather than assumed.
+     * Where the target's tree starts on this drive: the folder holding the
+     * first of its markers found — roms/ for Batocera, at the top or under
+     * batocera/ — or null when none is, since the layout of an external drive
+     * is recognised rather than assumed. A target with no markers starts at
+     * the chosen folder itself.
      */
-    async rootOf(drive) {
-        if (await hasDirectory(drive, 'roms')) {
+    async rootOf(drive, markers) {
+        if (markers.length === 0) {
             return drive;
         }
 
-        if (await hasDirectory(drive, 'batocera')) {
-            const batocera = await drive.getDirectoryHandle('batocera');
-            if (await hasDirectory(batocera, 'roms')) {
-                return batocera;
+        for (const marker of markers) {
+            const parts = marker.split('/');
+            const last = parts.pop();
+            let dir = drive;
+
+            try {
+                for (const part of parts) {
+                    dir = await dir.getDirectoryHandle(part);
+                }
+            } catch {
+                continue;
+            }
+
+            if (await hasDirectory(dir, last)) {
+                return dir;
             }
         }
 
@@ -220,10 +236,10 @@ export default ({ targets, shares }) => ({
             return;
         }
 
-        const root = (await this.rootOf(this.drive)) ?? (confirmedRoot ? this.drive : null);
+        const root = (await this.rootOf(this.drive, this.targets[this.target].root)) ?? (confirmedRoot ? this.drive : null);
 
         if (!root) {
-            // Neither roms/ nor batocera/roms/: ask before making this the root.
+            // None of the target's own folders: ask before making this the root.
             this.status = 'confirm-root';
             return;
         }
@@ -238,9 +254,15 @@ export default ({ targets, shares }) => ({
             this.plan = plan;
             this.total = plan.bytes;
 
-            await this.copyAll(root, plan.files);
+            const tree = folders(root);
 
-            await this.writeGamelist(root, plan.gamelist);
+            await this.copyAll(tree, plan.files);
+
+            await this.writeExtras(tree, plan.extras);
+
+            if (plan.gamelist !== null) {
+                await this.writeGamelist(root, plan.gamelist);
+            }
 
             this.current = '';
             this.status = 'done';
@@ -255,9 +277,8 @@ export default ({ targets, shares }) => ({
      * failure stops the rest from starting; the ones already under way finish,
      * and then it is thrown, so the modal says what went wrong as before.
      */
-    async copyAll(root, files) {
+    async copyAll(tree, files) {
         const queue = [...files];
-        const tree = folders(root);
         let failure = null;
 
         const worker = async () => {
@@ -316,6 +337,30 @@ export default ({ targets, shares }) => ({
             await final.write(await handle.getFile());
             await final.close();
             await dir.removeEntry(partName);
+        }
+    },
+
+    /**
+     * The target's own files, once the game's are on the drive: each fetched
+     * as the server makes it and written, unless the drive has one already —
+     * somebody may have tuned it there.
+     */
+    async writeExtras(tree, extras) {
+        for (const extra of extras) {
+            const parts = extra.destination.split('/');
+            const name = parts.pop();
+            const folder = parts.join('/');
+            this.current = extra.destination;
+
+            if ((await tree.names(folder)).has(name)) {
+                this.skipped++;
+                continue;
+            }
+
+            const response = await this.fetchOk(extra.url);
+            const writable = await (await (await tree.handle(folder)).getFileHandle(name, { create: true })).createWritable();
+            await writable.write(await response.blob());
+            await writable.close();
         }
     },
 
