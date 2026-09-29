@@ -98,9 +98,11 @@
     --color-accent-deep: #c9902a;
     --color-accent-muted: #a09879;
 
-    /* Feedback. The design has no success colour — it uses the accent. */
+    /* Feedback. Success is kept for a finished job's badge; elsewhere the
+       design marks what went well with the accent. */
     --color-danger: #c98b7f;
     --color-warn: #cf8759;
+    --color-success: #8fbf7f;
 
     /* Overlay ground, for `bg-scrim/72` */
     --color-scrim: #080809;
@@ -223,6 +225,7 @@
 
     --color-danger: #c98b7f;
     --color-warn: #cf8759;
+    --color-success: #8fbf7f;
     --color-scrim: #080809;
     --color-zinc-500: #6d6a64;
 
@@ -263,6 +266,7 @@
 
     --color-danger: #e0968a;
     --color-warn: #d9b35a;
+    --color-success: #9ad6ae;
     --color-scrim: #060807;
     --color-zinc-500: #5f6b62;
 
@@ -305,6 +309,7 @@
 
     --color-danger: #e58fb8;
     --color-warn: #e0c050;
+    --color-success: #8ccf8a;
     --color-scrim: #090707;
     --color-zinc-500: #6f6664;
 
@@ -345,6 +350,7 @@
 
     --color-danger: #d99582;
     --color-warn: #e0a458;
+    --color-success: #a9c98a;
     --color-scrim: #080906;
     --color-zinc-500: #686c58;
 
@@ -385,6 +391,7 @@
 
     --color-danger: #e39088;
     --color-warn: #d9a25a;
+    --color-success: #86c79a;
     --color-scrim: #07080b;
     --color-zinc-500: #616978;
 

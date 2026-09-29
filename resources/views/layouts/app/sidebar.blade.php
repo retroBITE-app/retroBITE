@@ -75,9 +75,28 @@
                     {{ __('Games') }}
                 </flux:sidebar.item>
 
-                <flux:sidebar.item icon="wrench-screwdriver" :href="route('builder.index')" :current="request()->routeIs('builder.*')" wire:navigate>
-                    {{ __('Builder') }}
-                </flux:sidebar.item>
+                {{-- Tools opens and closes, and stands open while one of its
+                     pages is showing. Its items are drawn exactly as the
+                     consoles under Consoles are — the group's rail and indent
+                     come from the published flux/sidebar/group view — so the
+                     two nested lists read as one kind of thing. The next tool
+                     is another link here. --}}
+                <flux:sidebar.group expandable icon="wrench-screwdriver" :heading="__('Tools')" :expanded="request()->routeIs('tools.*')">
+                    @php($isCurrent = request()->routeIs('tools.conversion'))
+
+                    <a
+                        href="{{ route('tools.conversion') }}"
+                        wire:navigate
+                        @class([
+                            'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                            'bg-accent-tint/13 text-accent shadow-rail' => $isCurrent,
+                            'text-fg-cool hover:bg-hover hover:text-fg' => ! $isCurrent,
+                        ])
+                    >
+                        <flux:icon.arrows-right-left class="size-4 shrink-0" />
+                        <span class="truncate">{{ __('Conversion') }}</span>
+                    </a>
+                </flux:sidebar.group>
 
                 <flux:sidebar.item icon="book-open" :href="route('docs.index')" :current="request()->routeIs('docs.*')" wire:navigate>
                     {{ __('Docs') }}

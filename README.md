@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/mattiasghodsian/retroBite/">
+  <a href="https://github.com/retroBITE-app/retroBITE/">
     <img alt="retroBite" src="retroBITE.png" width="400">
   </a>
   <p align="center">A clean, self-hosted collection manager for retro games. <br>Pair your ROMs with rich metadata and artwork, then serve your library over the local network directly to your devices.</p>

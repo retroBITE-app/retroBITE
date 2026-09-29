@@ -62,6 +62,15 @@ find /app/storage /app/bootstrap/cache \
 # Live updates (keys were set at the top, before anything ran PHP).
 start_reverb
 
+# Conversions, before any worker can pick a conversion up: a conversion the
+# database still says is running was interrupted by whatever stopped this
+# container, so it is marked failed and its half-written output removed. Then
+# which conversion tools are here, into the log. Neither may stop the boot.
+su-exec "$WEB_USER" php /app/artisan conversion:recover \
+    || echo "WARNING: could not check for interrupted conversions; carrying on." >&2
+su-exec "$WEB_USER" php /app/artisan conversion:tools \
+    || echo "WARNING: could not check the conversion tools; carrying on." >&2
+
 # Queue workers, split by what actually limits them. One per queue unless
 # .env says otherwise (see .env.example): the smallest footprint that still
 # works every queue, on hardware nobody here has measured.
@@ -96,9 +105,12 @@ workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:work \
 workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:work \
     --queue=thumbnails --sleep=3 --tries=3 --max-time=3600
 
-# The console toolbox: loader exports and license ID reading, on a queue of
-# their own so pressing Write OPL art never waits behind a library's artwork.
-workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:work \
+# The console toolbox: loader exports, license ID reading and format
+# conversions, on a queue of their own so pressing Write OPL art never waits
+# behind a library's artwork. On the long connection because a conversion runs
+# for up to CONVERSION_TIMEOUT seconds, past the default connection's half-hour
+# retry_after, after which a second toolbox worker would start it again.
+workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:work database-long \
     --queue=toolbox --sleep=3 --tries=3 --max-time=3600
 
 # RetroAchievements: identification and set downloads are HTTP and quick, so

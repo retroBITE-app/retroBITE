@@ -64,7 +64,98 @@ RUN git clone --depth 1 --branch "$RALIBRETRO_TAG" \
     && cp "$(find /src -type f -name RAHasher -perm -u+x | head -n 1)" /usr/local/bin/RAHasher \
     && /usr/local/bin/RAHasher | head -n 1
 
-# Stage 4: PHP-FPM + nginx runtime
+# Stage 4: the conversion tools
+#
+# chdman (MAME), maxcso, ecm/unecm and extract-xiso — the command-line tools
+# the format conversions in app/Conversion run. None is packaged for a stable
+# Alpine (chdman only in edge/testing, where an old version is dropped the day
+# a new one lands, so it cannot be pinned), so each is built here from a pinned
+# tag, on the same Alpine as the runtime below: they link its shared libraries,
+# and the runtime stage runs each once so a library that moved fails the build
+# rather than the first conversion.
+FROM alpine:3.24 AS converters
+
+RUN apk add --no-cache build-base git cmake meson ninja-build pkgconf python3 linux-headers \
+        zlib-dev flac-dev zstd-dev libuv-dev lz4-dev expat-dev utf8proc-dev \
+        sdl2-dev sdl2_ttf-dev fontconfig-dev
+
+# chdman alone, not MAME. `make TOOLS=1 EMULATOR=0` still builds the whole SDL
+# front end (fonts, X11 input, OpenGL) before the tools; generating the
+# project and asking for the chdman target builds its four libraries and
+# nothing else, in about a minute. The bx patch is Alpine's own
+# (aports testing/mame): bx has no musl branch and assumes glibc's
+# fseeko64/pthread_setname_np otherwise.
+ARG MAME_TAG=mame0289
+COPY patches/mame-musl-bx.patch /src/mame-musl-bx.patch
+RUN git clone --depth 1 --branch "$MAME_TAG" https://github.com/mamedev/mame.git /src/mame \
+    && cd /src/mame \
+    && patch -p1 < /src/mame-musl-bx.patch \
+    && export CFLAGS=-DBX_CRT_MUSL CXXFLAGS=-DBX_CRT_MUSL \
+    && make TOOLS=1 EMULATOR=0 NOWERROR=1 REGENIE=1 OSD=sdl NO_X11=1 NO_USE_XINPUT=1 NO_OPENGL=1 \
+        NO_USE_MIDI=1 NO_USE_PORTAUDIO=1 NO_USE_PULSEAUDIO=1 NO_USE_PIPEWIRE=1 USE_QTDEBUG=0 \
+        USE_SYSTEM_LIB_ZLIB=1 USE_SYSTEM_LIB_FLAC=1 USE_SYSTEM_LIB_ZSTD=1 USE_SYSTEM_LIB_EXPAT=1 USE_SYSTEM_LIB_UTF8PROC=1 \
+        generate build/projects/sdl/mame/gmake-linux/Makefile \
+    && make -C build/projects/sdl/mame/gmake-linux config=release64 precompile \
+    && make -C build/projects/sdl/mame/gmake-linux config=release64 -j"$(nproc)" chdman \
+    && install -m755 chdman /usr/local/bin/chdman \
+    && rm -rf /src/mame \
+    && chdman 2>&1 | grep -q "(${MAME_TAG}"
+
+# maxcso vendors its own libdeflate, 7-zip and zopfli; libuv and lz4 are
+# linked from the system. It prints its version to stderr and exits 1.
+ARG MAXCSO_TAG=v1.13.0
+RUN git clone --depth 1 --branch "$MAXCSO_TAG" https://github.com/unknownbrackets/maxcso.git /src/maxcso \
+    && make -C /src/maxcso -j"$(nproc)" \
+    && install -m755 /src/maxcso/maxcso /usr/local/bin/maxcso \
+    && maxcso --version 2>&1 | grep -q "maxcso ${MAXCSO_TAG}"
+
+# kidoz/ecm: the maintained fork of Neill Corlett's ecm/unecm, C23, meson.
+ARG ECM_TAG=v1.3.4
+RUN git clone --depth 1 --branch "$ECM_TAG" https://github.com/kidoz/ecm.git /src/ecm \
+    && meson setup /src/ecm/build /src/ecm --buildtype=release \
+    && ninja -C /src/ecm/build ecm unecm \
+    && install -m755 /src/ecm/build/ecm /src/ecm/build/unecm /usr/local/bin/ \
+    && ecm --version | grep -q "${ECM_TAG#v}"
+
+# For the Xbox toolset to come; installed and detected, used by nothing yet.
+ARG EXTRACT_XISO_TAG=build-202609111233
+RUN git clone --depth 1 --branch "$EXTRACT_XISO_TAG" https://github.com/XboxDev/extract-xiso.git /src/xiso \
+    && cmake -S /src/xiso -B /src/xiso/build \
+    && make -C /src/xiso/build -j"$(nproc)" \
+    && install -m755 /src/xiso/build/extract-xiso /usr/local/bin/extract-xiso \
+    && extract-xiso -h 2>&1 | grep -q "extract-xiso v"
+
+# cue2pops and pops2cue: PS1 disc to POPStarter VCD and back. Plain C with
+# no dependencies. cue2pops (makefu's Linux fork of krHACKen's v2.0) has no
+# tags, so a commit is pinned; it prints its banner and exits 0 with no
+# arguments. pops2cue (bucanero's rebuild) compares bytes against negative
+# literals, so it needs a signed char — the default on x86, not on arm64.
+ARG CUE2POPS_REF=3f2be6126bd50dfe6b998bc8926f88ce9139c19a
+ARG POPS2CUE_REF=981e776b384bc5ab2f1125208a8853f2596d1153
+RUN git clone https://github.com/makefu/cue2pops-linux.git /src/cue2pops \
+    && git -C /src/cue2pops checkout -q "$CUE2POPS_REF" \
+    && cc -O2 /src/cue2pops/cue2pops.c -o /usr/local/bin/cue2pops \
+    && cue2pops 2>&1 | grep -q "conversion tool v2.0" \
+    && git clone https://github.com/bucanero/pops2cue.git /src/pops2cue \
+    && git -C /src/pops2cue checkout -q "$POPS2CUE_REF" \
+    && cc -O2 -fsigned-char /src/pops2cue/pops2cue.c -o /usr/local/bin/pops2cue \
+    && { pops2cue 2>&1 || true; } | grep -q "POPS2CUE v1.0"
+
+# nodtool (encounter/nod): GameCube and Wii — RVZ, WBFS and back to ISO. The
+# release ships static musl binaries, so it is fetched rather than built, and
+# checked against the checksum pinned here. 2.0 is an alpha, and the only
+# line whose convert writes anything but ISO.
+ARG NODTOOL_VERSION=v2.0.0-alpha.12
+ARG NODTOOL_SHA256_X86_64=ee8345c004248eb82a86dd0c6068e0fcf3dc75baf68d18fe949bf4589822f5a5
+ARG NODTOOL_SHA256_AARCH64=33e801c0e4aee7e714ad84e89521f50e2f79005571b9d4779b695e44ea21ff99
+RUN arch="$(uname -m)" \
+    && case "$arch" in x86_64) sum="$NODTOOL_SHA256_X86_64" ;; aarch64) sum="$NODTOOL_SHA256_AARCH64" ;; *) echo "no nodtool for $arch" >&2; exit 1 ;; esac \
+    && wget -q -O /tmp/nodtool "https://github.com/encounter/nod/releases/download/${NODTOOL_VERSION}/nodtool-linux-${arch}" \
+    && echo "$sum  /tmp/nodtool" | sha256sum -c - \
+    && install -m755 /tmp/nodtool /usr/local/bin/nodtool \
+    && nodtool -V | grep -q "nodtool ${NODTOOL_VERSION#v}"
+
+# Stage 5: PHP-FPM + nginx runtime
 FROM php:8.5-fpm-alpine AS runner
 
 # php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
@@ -99,6 +190,8 @@ RUN apk add --no-cache \
         # libsmbclient, which the smbclient extension below writes network
         # shares through, and nmblookup, which finds them by NetBIOS name.
         samba-client \
+        # What the conversion tools (the converters stage) link against.
+        sdl2 libflac zstd-libs utf8proc libuv lz4-libs libstdc++ \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS libzip-dev icu-dev libpng-dev libjpeg-turbo-dev \
         freetype-dev postgresql-dev openldap-dev libmemcached-dev zlib-dev \
@@ -139,6 +232,20 @@ COPY --from=frontend-builder /app/public/build ./public/build
 
 # On PATH, which is where config/retroachievements.php looks by default.
 COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/RAHasher
+
+# The conversion tools, on PATH, which is where config/converters.php
+# looks by default. Each is run once: they were built against the converters
+# stage's Alpine, and a runtime image that moved to another would otherwise
+# fail at the first conversion rather than here.
+COPY --from=converters /usr/local/bin/chdman /usr/local/bin/maxcso /usr/local/bin/ecm /usr/local/bin/unecm /usr/local/bin/extract-xiso /usr/local/bin/cue2pops /usr/local/bin/pops2cue /usr/local/bin/nodtool /usr/local/bin/
+RUN chdman 2>&1 | grep -q "CHD) manager" \
+    && maxcso --version 2>&1 | grep -q "maxcso v" \
+    && ecm --version | grep -q "ecm" \
+    && unecm --version | grep -q "ecm" \
+    && extract-xiso -h 2>&1 | grep -q "extract-xiso v" \
+    && cue2pops 2>&1 | grep -q "conversion tool v" \
+    && { pops2cue 2>&1 || true; } | grep -q "POPS2CUE v" \
+    && nodtool -V | grep -q "nodtool "
 
 # Nginx server block
 COPY docker/web/nginx.conf /etc/nginx/http.d/default.conf

@@ -85,9 +85,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Livewire call. Not behind the UI toggle: that hides the modal, not this.
     Route::post('uploads/{upload}', UploadChunkController::class)->whereUuid('upload')->name('uploads.chunk');
 
-    // Static landing page for the section that has no behaviour yet. Routed so
-    // the sidebar link resolves rather than 404.
-    Route::view('builder', 'pages.builder')->name('builder.index');
+    // Tools → Conversion: format conversions, queued on the toolbox worker.
+    Route::livewire('tools/conversion', 'tools.conversion')->name('tools.conversion');
+
+    // Where the page was when it was called the Builder, kept so a bookmark still lands.
+    Route::get('builder', function () {
+        return redirect()->route('tools.conversion', status: 301);
+    });
 
     // Docs
     Route::livewire('docs', 'docs.index')->name('docs.index');

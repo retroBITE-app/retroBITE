@@ -10,6 +10,7 @@ use App\Jobs\RetroAchievements\SyncGameProgress;
 use App\Jobs\RetroAchievements\SyncHashIndex;
 use App\Jobs\RetroAchievements\SyncRecentUnlocks;
 use App\Jobs\RetroAchievements\SyncSet;
+use App\Jobs\RunConversion;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\Game;
@@ -51,6 +52,10 @@ it('can be pushed onto a real queue', function (string $job, array $arguments) {
     'ra recent' => [SyncRecentUnlocks::class, [1]],
     'ra reconcile' => [ReconcileProgress::class, [1]],
     'ra game progress' => [SyncGameProgress::class, [1, 1]],
+
+    // On database-long rather than the default connection, which is the
+    // same jobs table and so still counts here.
+    'conversion' => [RunConversion::class, [1]],
 ]);
 
 /*
