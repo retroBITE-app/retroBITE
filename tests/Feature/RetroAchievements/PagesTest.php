@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Support\Console;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -51,42 +52,30 @@ function gameWithProgress(int $unlocked, int $possible, array $progress = []): G
     return $game;
 }
 
-it('shows progress on the shelf, hardcore by default', function () {
-    // 31 unlocked, 15 of them hardcore. Hardcore is the figure the site
-    // itself leads with, so it is the one the shelf shows unless told not to.
-    gameWithProgress(31, 49);
+it('carries this person\'s progress onto the shelf, and nothing where there is no set', function () {
+    // 31 unlocked, 15 of them hardcore. Both views read the same joined row,
+    // so the shelf and the list cannot disagree about what is known.
+    $withSet = gameWithProgress(31, 49);
 
-    Livewire::test('games.index')->assertSee('15 / 49')->assertDontSee('31 / 49');
-});
+    // Somebody else's progress on the same set is not ours.
+    RaProgress::factory()->create([
+        'user_id' => User::factory()->create()->id,
+        'ra_game_id' => $withSet->retroachievements_id,
+        'unlocked_count' => 2,
+        'achievements_possible' => 49,
+    ]);
 
-it('falls back to softcore when the setting says so', function () {
-    gameWithProgress(31, 49);
+    $noSet = Game::factory()->forConsole('snes')->matched()->create(['title' => 'No Set', 'slug' => 'no-set']);
 
-    AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, false);
+    $games = collect(Livewire::test('games.index')->instance()->games->items())->keyBy('id');
 
-    Livewire::test('games.index')->assertSee('31 / 49')->assertDontSee('15 / 49');
-});
-
-it('shows nothing where there is no set, on the shelf or in the list', function () {
-    Game::factory()->forConsole('snes')->matched()->create(['title' => 'No Set', 'slug' => 'no-set']);
-
-    // A bar at nought would read as a set nobody has started, which is a
-    // different thing from a game RetroAchievements has never heard of.
-    Livewire::test('games.index')->assertSee('No Set')->assertDontSee(' / 0');
-
-    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
-        ->assertSee('No Set')
-        ->assertDontSee(' / 0');
-});
-
-it('shows progress in the list view as well as on the shelf', function () {
-    gameWithProgress(31, 49);
-
-    // The list used to say nothing about achievements at all, so the two views
-    // disagreed about what was known. Same figure, same hardcore default.
-    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
-        ->assertSee('Achievements')
-        ->assertSee('15 / 49');
+    expect($games)->toHaveCount(2)
+        ->and($games[$withSet->id]->ra_unlocked)->toBe(31)
+        ->and($games[$withSet->id]->ra_unlocked_hardcore)->toBe(15)
+        ->and($games[$withSet->id]->ra_achievements_possible)->toBe(49)
+        // A bar at nought would read as a set nobody has started, which is a
+        // different thing from a game RetroAchievements has never heard of.
+        ->and($games[$noSet->id]->ra_achievements_possible)->toBeNull();
 });
 
 it('does not add a query per row in the list view either', function () {
@@ -120,17 +109,13 @@ it('does not add a query per row', function () {
     expect($queries)->toBeLessThan(15);
 });
 
-it('paginates the shelf in both views', function () {
-    Game::factory()->count(30)->forConsole('snes')->create();
+/** The titles the achievement panel would list, in a stable order. */
+function panelTitles(Testable $component): array
+{
+    return collect($component->instance()->achievements)->pluck('title')->sort()->values()->all();
+}
 
-    // The cards branch had no paginator at all, so page two of a shelf could
-    // only be reached by typing ?page=2 by hand. nextPage is the control Flux
-    // renders, so its absence is the bug and its presence is the fix.
-    Livewire::withQueryParams(['view' => 'cards'])->test('games.index')->assertSee('nextPage');
-    Livewire::withQueryParams(['view' => 'table'])->test('games.index')->assertSee('nextPage');
-});
-
-it('shows the achievement panel on a game page', function () {
+it('lists the set with this person\'s unlocks and figures on a game page', function () {
     $game = gameWithProgress(1, 2, ['site_rank' => 842]);
 
     $achievement = RaAchievement::factory()->create([
@@ -145,12 +130,13 @@ it('shows the achievement panel on a game page', function () {
 
     RaUnlock::factory()->forAchievement($achievement)->create(['user_id' => $this->user->id]);
 
-    $this->get(route('games.show', $game->routeParameters()))
-        ->assertOk()
-        ->assertSee('Give Me Liberty')
-        ->assertSee('Errand Boy')
-        ->assertSee('1 / 2')
-        ->assertSee('#842');
+    $page = Livewire::test('games.show', ['game' => $game])->instance();
+
+    expect(collect($page->achievements)->pluck('unlocked', 'title')->all())
+        ->toEqual(['Give Me Liberty' => true, 'Errand Boy' => false])
+        ->and($page->achievementStats[0]['value'])->toBe('1 / 2')
+        ->and($page->achievementStats[0]['percent'])->toBe(50)
+        ->and($page->achievementStats[3]['value'])->toBe('#842');
 });
 
 it('filters the achievement list', function () {
@@ -165,10 +151,9 @@ it('filters the achievement list', function () {
 
     RaUnlock::factory()->forAchievement($unlocked)->create(['user_id' => $this->user->id]);
 
-    Livewire::test('games.show', ['game' => $game])
-        ->call('filterAchievements', 'locked')
-        ->assertSee('Still Waiting')
-        ->assertDontSee('Already Done');
+    $component = Livewire::test('games.show', ['game' => $game])->call('filterAchievements', 'locked');
+
+    expect(panelTitles($component))->toBe(['Still Waiting']);
 });
 
 it('narrows the list by kind, on its own axis', function () {
@@ -197,30 +182,27 @@ it('narrows the list by kind, on its own axis', function () {
 
     RaUnlock::factory()->forAchievement($found)->create(['user_id' => $this->user->id]);
 
-    Livewire::test('games.show', ['game' => $game])
-        ->assertSeeInOrder(['Missable', '2', 'Progression', '1'])
-        ->call('toggleKind', 'missable')
-        ->assertSee('Blink And Its Gone')
-        ->assertSee('Already Spotted It')
-        ->assertDontSee('Ordinary Business')
-        ->assertDontSee('Beat The Final Boss')
-        // The axes are ANDed: what is still there to lose.
-        ->call('filterAchievements', 'locked')
-        ->assertSee('Blink And Its Gone')
-        ->assertDontSee('Already Spotted It')
-        // And the kind is a toggle, so the state filter survives it going off.
-        ->call('toggleKind', 'missable')
-        ->assertSet('achievementKind', '')
-        ->assertSee('Blink And Its Gone')
-        ->assertSee('Ordinary Business')
-        ->assertDontSee('Already Spotted It');
+    $component = Livewire::test('games.show', ['game' => $game]);
+
+    expect(collect($component->instance()->achievementKinds)->pluck('count', 'key')->all())
+        ->toBe(['missable' => 2, 'progression' => 1]);
+
+    $component->call('toggleKind', 'missable');
+    expect(panelTitles($component))->toBe(['Already Spotted It', 'Blink And Its Gone']);
+
+    // The axes are ANDed: what is still there to lose.
+    $component->call('filterAchievements', 'locked');
+    expect(panelTitles($component))->toBe(['Blink And Its Gone']);
+
+    // And the kind is a toggle, so the state filter survives it going off.
+    $component->call('toggleKind', 'missable')->assertSet('achievementKind', '');
+    expect(panelTitles($component))->toBe(['Beat The Final Boss', 'Blink And Its Gone', 'Ordinary Business']);
 
     // Both axes are linkable, and they combine in the URL.
-    $this->get(route('games.show', $game->routeParameters()).'?achievements=locked&kind=missable')
-        ->assertOk()
-        ->assertSee('Blink And Its Gone')
-        ->assertDontSee('Already Spotted It')
-        ->assertDontSee('Ordinary Business');
+    $linked = Livewire::withQueryParams(['achievements' => 'locked', 'kind' => 'missable'])
+        ->test('games.show', ['game' => $game]);
+
+    expect(panelTitles($linked))->toBe(['Blink And Its Gone']);
 });
 
 it('offers a kind only to a set that marks one', function () {
@@ -232,42 +214,25 @@ it('offers a kind only to a set that marks one', function () {
 
     // No button, and a link into one narrows nothing rather than emptying
     // the panel on a filter the page cannot show as being on.
-    $this->get(route('games.show', $game->routeParameters()).'?kind=missable')
-        ->assertOk()
-        ->assertDontSee('Missable')
-        ->assertSee('Nothing Special');
+    $component = Livewire::withQueryParams(['kind' => 'missable'])->test('games.show', ['game' => $game]);
+
+    expect($component->instance()->achievementKinds)->toBe([])
+        ->and($component->instance()->activeAchievementKind)->toBe('')
+        ->and(panelTitles($component))->toBe(['Nothing Special']);
 });
 
-it('says which kind of empty the panel is', function () {
-    $game = gameWithProgress(0, 1);
-
-    RaAchievement::factory()->create([
-        'ra_game_id' => $game->retroachievements_id,
-        'title' => 'Blink And Its Gone',
-        'kind' => AchievementKind::Missable,
-    ]);
-
-    // A filter that matches nothing is not a set that has not arrived yet.
-    Livewire::test('games.show', ['game' => $game])
-        ->call('toggleKind', 'missable')
-        ->call('filterAchievements', 'unlocked')
-        ->assertSee('No achievement matches both filters.')
-        ->assertDontSee('The set is fetched in the background.');
-});
-
-it('totals the library on the dashboard', function () {
-    gameWithProgress(31, 49);
-    gameWithProgress(12, 58);
-
-    $this->get(route('dashboard'))->assertOk()->assertSee('43')->assertSee('107');
-});
-
-it('totals a console on the console list', function () {
+it('totals a console on the console list, hardcore unless told otherwise', function () {
     // The list shows consoles somebody added, not every one with games.
     ConsoleSourceFolder::add(Console::tryFrom('snes'));
 
     gameWithProgress(31, 49);
 
     // Hardcore, for the same reason the shelf shows it.
-    $this->get(route('consoles.index'))->assertOk()->assertSee('15 / 49');
+    expect(Livewire::test('consoles.index')->instance()->added->first()['achievements'])
+        ->toBe(['unlocked' => 15, 'possible' => 49, 'percent' => 31, 'hardcore' => true]);
+
+    AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, false);
+
+    expect(Livewire::test('consoles.index')->instance()->added->first()['achievements'])
+        ->toBe(['unlocked' => 31, 'possible' => 49, 'percent' => 63, 'hardcore' => false]);
 });

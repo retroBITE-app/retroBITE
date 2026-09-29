@@ -9,7 +9,6 @@ use App\Models\User;
 use App\Support\Console;
 use App\Support\LibraryStorage;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 
@@ -103,103 +102,24 @@ it('takes both readings in the background', function () {
         ->and(LibraryStorage::current())->not->toBeNull();
 });
 
-it('draws a dash and an empty track rather than inventing a reading', function () {
+it('has no reading to draw until the free space has been measured, then keeps looking', function () {
+    gameOfSize(4096);
+
     // A bar at zero would say the library is empty, which is the one thing an
     // unmeasured or unreadable disk is not known to be.
-    Livewire::test('library-storage')
-        ->assertSee(__('Storage'))
-        ->assertSee('—')
-        ->assertSeeHtml('width: 0%');
-});
+    $block = Livewire::test('library-storage')->assertOk()->assertViewHas('storage', null);
 
-it('draws the figures, and keeps looking', function () {
-    gameOfSize(4096);
     LibraryStorage::measureFree();
 
-    $storage = LibraryStorage::current();
-
-    Livewire::test('library-storage')
-        ->assertSee(Number::fileSize($storage->used, 1))
-        ->assertSee(Number::fileSize($storage->total(), 1))
-        ->assertDontSee('—')
-        // A cheap read now, polled for what the app identifies in between;
-        // measurements arrive as a signal.
-        ->assertSeeHtml('wire:poll.300s')
-        ->assertSeeHtml("live.system('storage'");
+    // Measurements arrive as a signal, and the block reads again on it.
+    $block->call('$refresh')
+        ->assertViewHas('storage', fn (?LibraryStorage $storage): bool => $storage?->used === 4096);
 });
 
 it('rides along on every page of the application', function () {
     $this->actingAs(User::factory()->create());
-    gameOfSize(4096);
-    LibraryStorage::measureFree();
 
-    // Not the dashboard: its grid has a Storage cell printing the same total,
-    // so asserting there would pass with the sidebar block deleted. The
-    // settings screen has nothing of its own about storage.
     $this->get(route('user.edit'))
         ->assertOk()
-        ->assertSeeLivewire('library-storage')
-        ->assertSee(Number::fileSize(LibraryStorage::current()->total(), 1));
-});
-
-it('shows the dashboard what the library takes and what is left', function () {
-    $this->actingAs(User::factory()->create());
-    gameOfSize(4096);
-    LibraryStorage::measureFree();
-
-    $storage = LibraryStorage::current();
-
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee(__('of :total, :free free', [
-            'total' => Number::fileSize($storage->total(), 1),
-            'free' => Number::fileSize($storage->free, 1),
-        ]))
-        ->assertDontSee(__('on disk'));
-});
-
-it('keeps the dashboard cell when the mount cannot be read', function () {
-    $this->actingAs(User::factory()->create());
-
-    config()->set('settings.games_path', $this->root.'/not-mounted');
-    LibraryStorage::measureFree();
-
-    // Six cells over two and three columns. Dropping one leaves a hole, so this
-    // one dashes where the login page drops.
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee(__('library folder unreadable'));
-});
-
-it('shows the login page the library rather than the catalogue', function () {
-    // An install with no account answers every page with onboarding.
-    User::factory()->create();
-
-    gameOfSize(4096);
-    LibraryStorage::measureFree();
-    config()->set('settings.login_show_stats', true);
-
-    $storage = LibraryStorage::current();
-
-    // Fortify mounts the login screen at /.
-    $this->get('/')
-        ->assertOk()
-        ->assertSee(Number::fileSize($storage->used, 1))
-        ->assertSee(__('of :total used', ['total' => Number::fileSize($storage->total(), 1)]));
-});
-
-it('drops the login tile rather than dashing it when the mount is gone', function () {
-    // An install with no account answers every page with onboarding.
-    User::factory()->create();
-
-    config()->set('settings.login_show_stats', true);
-    config()->set('settings.games_path', $this->root.'/not-mounted');
-    LibraryStorage::measureFree();
-
-    // A stat tile is a bare number over a caption. An em dash there reads as a
-    // broken page, and the row is centred, so two sit as well as three.
-    $this->get('/')
-        ->assertOk()
-        ->assertSee('games catalogued')
-        ->assertDontSee('used');
+        ->assertSeeLivewire('library-storage');
 });

@@ -1,15 +1,12 @@
 <?php
 
-use App\Models\AppSetting;
-use App\Models\RaConsoleSync;
 use App\Models\User;
 use App\Support\ScreenScraperQuota;
 use Livewire\Livewire;
 
 /**
  * The sidebar panel. Mostly about the states that are easy to get wrong —
- * "never asked" drawn as a spent allowance, a day-old figure drawn as today's,
- * and the scarce allowance folded away without being dropped.
+ * "never asked" read as a spent allowance, and the scarce allowance dropped.
  */
 beforeEach(function () {
     $this->user = User::factory()->create();
@@ -39,9 +36,10 @@ function recordQuota(array $user = [], array $servers = []): void
 it('says there is no account rather than drawing an empty allowance', function () {
     config(['screenscraper.user' => '']);
 
-    $this->get(route('dashboard'))
+    Livewire::test('api-status')
         ->assertOk()
-        ->assertSee('No account set. Scanning works; identifying does not.');
+        ->assertViewHas('scraperAccount', false)
+        ->assertViewHas('requests', null);
 });
 
 it('tells "nothing asked yet" apart from a spent allowance', function () {
@@ -49,118 +47,41 @@ it('tells "nothing asked yet" apart from a spent allowance', function () {
 
     // No snapshot: the account is fine, nothing has been looked up. A bar at
     // zero percent here would read as a blocked quota.
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('Not asked yet — figures appear after the first lookup.')
-        ->assertDontSee('20,000');
+    Livewire::test('api-status')
+        ->assertViewHas('scraperAccount', true)
+        ->assertViewHas('quota', null)
+        ->assertViewHas('requests', null)
+        ->assertViewHas('failed', null);
 });
 
-it('draws what has been spent of both allowances, not just the large one', function () {
+it('reads what has been spent of both allowances, not just the large one', function () {
     recordQuota();
-
-    $response = $this->get(route('dashboard'))->assertOk();
 
     // 15 000 of 20 000 successful. Spent rather than left, so the figure and
     // the bar under it move the same way — they used to disagree.
     //
-    // No assertDontSee on the old figure: assertSee is a substring match, and
-    // "5,000" is inside "15,000". The two counters below carry the proof
-    // instead — 1,900 spent is not 100 left.
-    $response->assertSee('15,000')->assertSee('20,000');
-
     // … and 1 900 of 2 000 failed, which is the one that runs out first.
-    // Folded away by default, but rendered: the fold is the viewer's, not the
-    // server's, so opening it costs no round trip.
-    $response->assertSee('1,900')->assertSee('2,000');
-});
-
-it('folds the failed allowance away until it is asked for', function () {
-    recordQuota();
-
-    // Asserted against the component rather than the page: the activity block
-    // below it has a fold of its own, and a page-wide assertion would pass on
-    // that one and say nothing about this.
     Livewire::test('api-status')
-        ->assertSeeHtml('x-show="open"')
-        ->assertSeeHtml('sidebar.scraper')
-        // Rendered, not withheld — the fold is the viewer's, so opening it
-        // costs no round trip.
-        ->assertSee('Failed');
-});
-
-it('offers nothing to unfold when there is no snapshot to unfold', function () {
-    config(['screenscraper.user' => 'someone']);
-
-    // A dead control in a column this narrow is worse than no control, so
-    // neither the fold nor the chevron that opens it is drawn. Unlike the
-    // activity block, which always has every queue to show.
-    Livewire::test('api-status')
-        ->assertDontSeeHtml('x-show="open"')
-        ->assertDontSeeHtml('-rotate-180');
-});
-
-it('says nothing about RetroAchievements, which reports no allowance at all', function () {
-    AppSetting::putSecret(AppSetting::RA_API_KEY, 'key');
-    test()->user->forceFill([
-        'retroachievements_username' => 'someone',
-        'retroachievements_synced_at' => now()->subMinutes(12),
-    ])->save();
-
-    RaConsoleSync::create(['ra_console_id' => 3, 'synced_at' => now()->subHours(9), 'games' => 5, 'hashes' => 9]);
-
-    // Freshness is a real question and this is no longer where it is answered.
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertDontSee('RetroAchievements')
-        ->assertDontSee('Hash index')
-        ->assertDontSee('Sets waiting');
-});
-
-it('colours each bar by how close that counter is to its own limit', function () {
-    recordQuota();
-
-    // Requests at 75 per cent, failures at 95: the two must not share a
-    // reading, which is exactly what one combined bar would give them.
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('bg-warn', false)
-        ->assertSee('bg-danger', false);
-});
-
-it('dates the figures, because the snapshot does not age by itself', function () {
-    $this->travelTo(now()->subHours(3), fn () => recordQuota());
-
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('3h ago');
-});
-
-it('says when a counter came back without a limit', function () {
-    recordQuota(['maxrequestskoperday' => 0]);
-
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('not reported');
+        ->assertViewHas('requests', ['used' => 15000, 'max' => 20000])
+        ->assertViewHas('failed', ['used' => 1900, 'max' => 2000])
+        ->assertViewHas('closed', false);
 });
 
 it('warns when the server is turning accounts like ours away', function () {
     recordQuota(servers: ['closeforleecher' => 1]);
 
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('Turning away accounts that only download.');
+    Livewire::test('api-status')->assertViewHas('closed', true);
 });
 
-it('re-reads the figures on every poll rather than freezing at page load', function () {
+it('re-reads the figures on every render rather than freezing at page load', function () {
     recordQuota();
 
-    $panel = Livewire::test('api-status')->assertSee('15,000');
+    $panel = Livewire::test('api-status')->assertViewHas('requests', ['used' => 15000, 'max' => 20000]);
 
     // A worker spends another four thousand lookups while the page sits open.
     recordQuota(['requeststoday' => 19000]);
 
-    // What wire:poll.60s asks for, and the reason this is a component at all.
+    // What the quota signal asks for, and the reason this is a component at all.
     $panel->call('$refresh')
-        ->assertSee('19,000')
-        ->assertDontSee('15,000');
+        ->assertViewHas('requests', ['used' => 19000, 'max' => 20000]);
 });

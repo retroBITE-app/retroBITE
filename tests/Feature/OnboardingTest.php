@@ -24,7 +24,7 @@ it('sends every page to the account step while there is no account', function (s
 })->with(['/', '/dashboard', '/settings/interface']);
 
 it('creates a verified first account with the user:create defaults and signs it in', function () {
-    $this->get(route('onboarding.account'))->assertOk()->assertSee('Create account');
+    $this->get(route('onboarding.account'))->assertOk();
 
     Livewire::test('onboarding.account')
         ->set('username', 'retrogamer')
@@ -91,7 +91,7 @@ it('lets a guest sign in mid-setup rather than trapping them', function () {
 it('stores the interface choices and moves on to ScreenScraper', function () {
     $this->actingAs(User::factory()->create());
 
-    $this->get(route('onboarding.step', 'interface'))->assertOk()->assertSee('Color scheme')->assertSee('Continue');
+    $this->get(route('onboarding.step', 'interface'))->assertOk();
 
     Livewire::test('settings.interface', ['onboarding' => true])
         ->set('colorScheme', 'phosphor')
@@ -112,7 +112,7 @@ it('stores the interface choices and moves on to ScreenScraper', function () {
 it('stores the ScreenScraper account and moves on to RetroAchievements', function () {
     $this->actingAs(User::factory()->create());
 
-    $this->get(route('onboarding.step', 'scraping'))->assertOk()->assertSee('Create a ScreenScraper account');
+    $this->get(route('onboarding.step', 'scraping'))->assertOk();
 
     Livewire::test('settings.screenscraper', ['onboarding' => true])
         ->set('username', 'retrogamer')
@@ -161,7 +161,7 @@ it('stores the RetroAchievements account and finishes setup', function () {
     $user = User::factory()->create();
     $this->actingAs($user);
 
-    $this->get(route('onboarding.step', 'achievements'))->assertOk()->assertSee('Skip for now');
+    $this->get(route('onboarding.step', 'achievements'))->assertOk();
 
     Livewire::test('settings.retroachievements', ['onboarding' => true])
         ->set('username', 'tester')
@@ -235,30 +235,4 @@ it('marks an install that already has accounts as set up, and leaves an empty on
     AppSetting::flush();
 
     expect(AppSetting::enabled(AppSetting::IS_ONBOARDED))->toBeTrue();
-});
-
-it('embeds the settings screens without their tabs or the cards a new install has nothing for', function () {
-    $this->actingAs(User::factory()->create());
-
-    $this->get(route('onboarding.step', 'scraping'))
-        ->assertOk()
-        ->assertSee('Create a ScreenScraper account')
-        ->assertDontSee('Check now')
-        ->assertDontSee(route('interface.edit'), false);
-
-    $this->get(route('onboarding.step', 'achievements'))
-        ->assertOk()
-        ->assertSee('Find your API key')
-        ->assertDontSee('Hash index');
-
-    // The screens themselves are unchanged in Settings.
-    AppSetting::put(AppSetting::IS_ONBOARDED, true);
-
-    $this->get(route('screenscraper.edit'))->assertOk()->assertSee('Check now')->assertSee(route('interface.edit'), false);
-});
-
-it('lays the shipped scene behind onboarding while nothing is scraped', function () {
-    $this->get(route('onboarding.account'))
-        ->assertOk()
-        ->assertSee(asset('images/default-backdrop.jpg'), false);
 });

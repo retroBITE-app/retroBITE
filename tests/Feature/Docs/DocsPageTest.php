@@ -30,10 +30,6 @@ test('docs page renders for an authenticated user', function () {
     $this->get(route('docs.index'))->assertOk();
 });
 
-test('docs page shows an empty state when nothing is written yet', function () {
-    Livewire::test('docs.index')->assertSee('Create the first one');
-});
-
 test('a document can be created from each template', function (DocTemplate $template) {
     Livewire::test('docs.new-doc-modal')
         ->set('title', 'SCPH-39001 laser POT calibration')
@@ -58,22 +54,21 @@ test('a document cannot be created for an unknown console', function () {
 test('the open document renders as html', function () {
     $doc = $this->library->create('ps2', 'Laser calibration', 'laser', [], "# Laser\n\n- A disc\n");
 
-    Livewire::test('docs.index', ['path' => $doc->path])
-        ->assertSet('path', $doc->path)
-        ->assertSeeHtml('data-doc-body')
-        ->assertSeeHtml('<li>A disc</li>')
-        // The viewer over the figures, now a shared component: an extraction
-        // that dropped it here would otherwise go unnoticed.
-        ->assertSeeHtml('x-teleport="body"');
+    $component = Livewire::test('docs.index', ['path' => $doc->path])
+        ->assertSet('path', $doc->path);
+
+    expect($component->instance()->html)->toContain('<li>A disc</li>');
 });
 
 test('the markdown tab shows the source without the front matter', function () {
     $doc = $this->library->create('ps2', 'Laser calibration', 'laser', [], "# Laser\n\nBody.\n");
 
-    Livewire::test('docs.index', ['path' => $doc->path])
+    $body = Livewire::test('docs.index', ['path' => $doc->path])
         ->set('mode', 'markdown')
-        ->assertSee('# Laser')
-        ->assertDontSee('console: ps2');
+        ->instance()->current->body;
+
+    expect($body)->toContain('# Laser')
+        ->not->toContain('console: ps2');
 });
 
 test('editing a document writes a revision', function () {

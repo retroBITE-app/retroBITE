@@ -83,15 +83,19 @@ it('puts every console back at once', function () {
 it('offers the reset only once something has been edited', function () {
     $this->actingAs(User::factory()->create());
 
-    Livewire::test('settings.consoles')
-        ->assertSet('search', '')
-        ->assertDontSee('Reset all')
-        ->call('edit', 'snes')
+    $component = Livewire::test('settings.consoles')->assertSet('search', '');
+
+    expect($component->instance()->editedCount)->toBe(0);
+
+    $component->call('edit', 'snes')
         ->set('fields.name', 'SNES')
-        ->call('save')
-        ->assertSee('Reset all')
-        ->call('restoreAll')
-        ->assertDontSee('Reset all');
+        ->call('save');
+
+    expect($component->instance()->editedCount)->toBe(1);
+
+    $component->call('restoreAll');
+
+    expect($component->instance()->editedCount)->toBe(0);
 
     expect(ConsoleOverrides::all())->toBe([]);
 });
