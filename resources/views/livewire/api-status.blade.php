@@ -15,8 +15,8 @@ use Livewire\Component;
  * One provider, not two. RetroAchievements reports no allowance of any kind —
  * there is no number to read — so what it had here was freshness wearing a
  * quota's clothes, and three rows of it in a column this narrow bought less
- * than it cost. {@see \App\Support\RetroAchievements\SyncFreshness} still
- * answers that question for wherever it lands next.
+ * than it cost. How old each console's hash index is shows on the
+ * RetroAchievements settings screen instead, which is where it gets asked.
  *
  * Of the two counters, only the successful one is drawn by default. They are
  * the same weight — the failed allowance is a tenth the size, 2 000 against
