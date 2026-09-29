@@ -1,5 +1,7 @@
 <?php
 
+use App\Conversion\Converters;
+use App\Conversion\SourceSet;
 use App\Enums\AchievementKind;
 use App\Enums\MediaKind;
 use App\Enums\ThumbnailSize;
@@ -566,7 +568,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {
         $this->loadRelations();
         $this->forgetArtwork();
-        unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath, $this->moveTargets, $this->moveBlocked);
+        unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath, $this->moveTargets, $this->moveBlocked, $this->convertible);
     }
 
     private function stopWaiting(): void
@@ -1306,7 +1308,37 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 'icon' => 'photo',
                 'count' => count($this->gallery),
             ] : null,
+            $this->convertible !== null ? [
+                'key' => 'conversion',
+                'label' => __('Conversion'),
+                'icon' => 'arrows-right-left',
+                'count' => $this->convertible,
+            ] : null,
         ]));
+    }
+
+    /**
+     * How many of the game's sets some conversion reads, for the Conversion
+     * tab — or null, and no tab, when the console's own config lists no
+     * `converters` at all. A console that lists some keeps the tab even for
+     * a game with nothing to convert, so the tab says why rather than going.
+     */
+    #[Computed]
+    public function convertible(): ?int
+    {
+        $console = $this->game->console();
+
+        if ($console === null || ! Converters::offersOn($console)) {
+            return null;
+        }
+
+        // From the files the page has already loaded, not a query of its own:
+        // this is asked on every request the page makes.
+        return SourceSet::fromFiles($this->game, $this->files)
+            ->filter(function (SourceSet $set): bool {
+                return Converters::reads($set);
+            })
+            ->count();
     }
 
     /**
@@ -1989,6 +2021,20 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </section>
+    @endif
+
+    {{-- The same picker as Tools → Conversion, held to this game. The queue
+         is that page's: what was queued here is followed there. --}}
+    @if ($this->activeTab === 'conversion')
+        <section class="relative z-1 flex flex-col gap-4 px-4 pt-4.5 lg:px-8">
+            <livewire:conversion.picker :console-key="$game->console" :game-id="$game->id" wire:key="conversion-picker-{{ $game->id }}" />
+
+            <div class="flex justify-end">
+                <flux:button size="sm" variant="ghost" icon="queue-list" :href="route('tools.conversion', ['console' => $game->console])" wire:navigate>
+                    {{ __('Open the queue in Tools → Conversion') }}
+                </flux:button>
             </div>
         </section>
     @endif

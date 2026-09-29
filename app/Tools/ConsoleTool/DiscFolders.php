@@ -11,6 +11,7 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Layouts\FoldersLayout;
 use App\Support\LibraryPath;
+use App\Support\Scanning\DiscOrder;
 use App\Tools\ConsoleTools;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -188,16 +189,8 @@ final class DiscFolders extends ConsoleTools
                 return $file->filename;
             })
             ->sort(function (string $a, string $b): int {
-                return ($this->discNumber($a) <=> $this->discNumber($b)) ?: strnatcasecmp($a, $b);
+                return DiscOrder::compare($a, $b);
             })
             ->values();
-    }
-
-    /** The disc a name says it is, "(Disc 2)" or "Disc 2", or none. */
-    private function discNumber(string $name): int
-    {
-        return Str::isMatch('/\bdisc\s*(\d+)/i', $name)
-            ? (int) Str::match('/\bdisc\s*(\d+)/i', $name)
-            : PHP_INT_MAX;
     }
 }

@@ -108,6 +108,15 @@ find /app/storage /app/bootstrap/cache \
 # point of running it here.
 start_reverb --debug
 
+# Conversions, before any worker can pick a conversion up: a conversion the
+# database still says is running was interrupted by whatever stopped this
+# container, so it is marked failed and its half-written output removed. Then
+# which conversion tools are here, into the log. Neither may stop the boot.
+su-exec "$WEB_USER" php /app/artisan conversion:recover \
+    || echo "WARNING: could not check for interrupted conversions; carrying on." >&2
+su-exec "$WEB_USER" php /app/artisan conversion:tools \
+    || echo "WARNING: could not check the conversion tools; carrying on." >&2
+
 # queue:listen rather than queue:work, which is the whole difference here.
 # work keeps one booted application in memory for its whole life, so a job runs
 # whatever the code was when the worker started — edit a job class and the
@@ -123,7 +132,7 @@ start_reverb --debug
 # own $timeout says — and a killed child takes the listener down with it. The
 # restart loop in queue-workers.sh brings it back, but the job still never
 # finishes. The longest on each: MatchGame 120 (scraper), ScanConsoleFolder
-# and WriteConsoleExports 1800 (media, default), SyncHashIndex 900 (ra),
+# 1800 (media, default), RunConversion 7060 (toolbox), SyncHashIndex 900 (ra),
 # ReconcileProgress 300 (ra-progress), HashFile 3600 (hash), FileTransferJob
 # 3600 (transfer). Raise the number
 # here when one of those grows.
@@ -140,9 +149,11 @@ workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:listen \
 workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:listen \
     --queue=thumbnails --sleep=3 --tries=3
 
-# The console toolbox: an export's 1800 plus the margin the others carry.
-workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:listen \
-    --queue=toolbox --sleep=3 --tries=3 --timeout=1860
+# The console toolbox: a conversion's 7000 (CONVERSION_TIMEOUT) plus the
+# minute RunConversion adds and the margin the others carry. On the long
+# connection, as in production.
+workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:listen database-long \
+    --queue=toolbox --sleep=3 --tries=3 --timeout=7090
 
 # RetroAchievements. Note that queue:listen ignores retry_after entirely — it
 # reboots per job and goes by --timeout — so the long-connection split that

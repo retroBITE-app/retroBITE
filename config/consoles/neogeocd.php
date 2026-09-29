@@ -17,4 +17,5 @@ return [
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',
+    'converters' => [],
 ];

@@ -47,6 +47,12 @@ final class LibraryPath
         $this->root = rtrim($root ?? (string) config('settings.games_path'), '/');
     }
 
+    /** The library root, absolute and without a trailing slash: what every relative path hangs off. */
+    public function root(): string
+    {
+        return $this->root;
+    }
+
     /**
      * Admit a path inside a console's own folder.
      *
@@ -205,8 +211,9 @@ final class LibraryPath
      * Move a staged upload into a console's folder, never over anything.
      *
      * The source has to be a plain file directly inside the staging
-     * directory, so this cannot be turned into a way to move arbitrary files
-     * around the library. Returns the new path relative to the library root.
+     * directory, or inside one folder of it where a conversion writes,
+     * so this cannot be turned into a way to move arbitrary files around the
+     * library. Returns the new path relative to the library root.
      *
      * @param  string  $relative  relative to the CONSOLE's folder, e.g. "DVD/Game.iso"
      * @param  string  $source  absolute path of the staged file
@@ -218,11 +225,13 @@ final class LibraryPath
         $staging = realpath($this->stagingDirectory());
         $real = realpath($source);
 
-        if ($staging === false || $real === false || is_link($source) || ! is_file($real) || dirname($real) !== $staging) {
+        $inStaging = $real !== false && (dirname($real) === $staging || dirname($real, 2) === $staging);
+
+        if ($staging === false || ! $inStaging || is_link($source) || ! is_file((string) $real)) {
             throw LibraryPathException::outsideRoot(basename($source));
         }
 
-        return $this->place($console, $real, $relative);
+        return $this->place($console, (string) $real, $relative);
     }
 
     /**

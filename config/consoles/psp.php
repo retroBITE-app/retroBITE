@@ -17,4 +17,5 @@ return [
     'cover_aspect' => '3/5',
     'layouts' => ['custom'],
     'default_layout' => 'custom',
+    'converters' => [],
 ];

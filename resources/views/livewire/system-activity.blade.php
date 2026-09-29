@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\ConversionStatus;
+use App\Models\Conversion;
 use App\Support\ExportProgress;
 use App\Support\SystemActivity;
 use Livewire\Component;
@@ -32,6 +34,53 @@ new class extends Component
         return [
             'activity' => SystemActivity::current(),
             'exports' => $this->exports(),
+            'converting' => $this->converting(),
+        ];
+    }
+
+    /**
+     * How far the conversion queue is, for the Toolbox row: one job there can
+     * be an hour of one disc, and "1" says nothing about it.
+     *
+     * Counted over the batch — every conversion queued, or queued again by a
+     * retry, since the oldest one still waiting or running — so a queue of five reads 2/5 as it goes,
+     * and the percent is the whole batch's: the finished ones in full, the
+     * running ones as far as they have got. Null when nothing is left to do.
+     *
+     * @return array{done: int, total: int, percent: int}|null
+     */
+    private function converting(): ?array
+    {
+        $since = Conversion::query()->unfinished()->min('queued_at');
+
+        if ($since === null) {
+            return null;
+        }
+
+        $finished = array_map(function (ConversionStatus $status): string {
+            return $status->value;
+        }, ConversionStatus::finishedCases());
+        $active = array_map(function (ConversionStatus $status): string {
+            return $status->value;
+        }, ConversionStatus::activeCases());
+
+        // Counted in the database, one row back, rather than the whole batch.
+        $batch = Conversion::query()
+            ->toBase()
+            ->where('queued_at', '>=', $since)
+            ->selectRaw('count(*) as total')
+            ->selectRaw('sum(case when status in ('.implode(', ', array_fill(0, count($finished), '?')).') then 1 else 0 end) as done', $finished)
+            ->selectRaw('sum(case when status in ('.implode(', ', array_fill(0, count($active), '?')).') then progress else 0 end) as running', $active)
+            ->first();
+
+        $total = (int) data_get($batch, 'total', 0);
+        $done = (int) data_get($batch, 'done', 0);
+        $running = (float) data_get($batch, 'running', 0);
+
+        return [
+            'done' => $done,
+            'total' => $total,
+            'percent' => (int) min(100, round(100 * ($done + $running / 100) / max(1, $total))),
         ];
     }
 
@@ -73,7 +122,11 @@ new class extends Component
     x-data="{
         open: $persist(false).as('sidebar.activity'),
         stop: null,
-        init() { this.stop = live.system('activity', () => this.$wire.$refresh()) },
+        init() {
+            const refresh = () => this.$wire.$refresh()
+            const stops = [live.system('activity', refresh), live.system('conversion', refresh)]
+            this.stop = () => stops.forEach((stop) => stop?.())
+        },
         destroy() { this.stop?.() },
     }"
     class="mb-3 border-b border-line pb-3"
@@ -134,27 +187,35 @@ new class extends Component
     --}}
     <div x-show="open" x-cloak>
         <div class="mt-2.5 flex flex-col gap-2">
+            @php(['done' => $convertingDone, 'total' => $convertingTotal, 'percent' => $convertingPercent] = $converting ?? ['done' => 0, 'total' => 0, 'percent' => 0])
+
             @foreach ($activity->all() as $queue)
                 <div wire:key="activity-{{ $queue->key }}">
                     <div class="flex items-baseline justify-between gap-2 text-xs">
                         <span class="truncate text-fg-faint">{{ __($queue->label) }}</span>
 
                         @php($writing = $queue->key === 'toolbox' && $exports['busy'])
+                        @php($convertingHere = $queue->key === 'toolbox' && ! $writing && $converting !== null)
 
                         {{-- A quiet queue keeps its row but gives up the
                              brighter figure, so the busy ones are still the
                              ones the eye lands on. --}}
-                        <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $queue->busy() || $writing, 'text-fg-faint' => ! $queue->busy() && ! $writing])>
+                        <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $queue->busy() || $writing || $convertingHere, 'text-fg-faint' => ! $queue->busy() && ! $writing && ! $convertingHere])>
                             @if ($writing)
                                 {{-- Files written out of files to write, where
                                      the other rows count jobs left. --}}
                                 {{ $exports['done'] }}<span class="text-fg-faint">/{{ $exports['total'] }}</span>
+                            @elseif ($convertingHere)
+                                {{-- Conversions done out of the batch, and how far the
+                                     batch is: a running disc moves the percent before
+                                     it moves the count. --}}
+                                {{ $convertingDone }}<span class="text-fg-faint">/{{ $convertingTotal }} · </span>{{ $convertingPercent }}<span class="text-fg-faint">%</span>
                             @elseif ($queue->waiting())
                                 {{-- Everything left is scheduled for later: a
                                      spent allowance, not a stuck queue. --}}
                                 <span class="text-fg-faint">{{ __('waiting') }}</span>
                             @endif
-                            @unless ($writing)
+                            @unless ($writing || $convertingHere)
                                 {{ $queue->remaining() }}
                             @endunless
                         </span>
@@ -163,7 +224,7 @@ new class extends Component
                     <div class="mt-1 h-1 overflow-hidden rounded-sm bg-raised">
                         <div
                             class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
-                            style="width: {{ $writing ? $exports['percent'] : $queue->percent() }}%"
+                            style="width: {{ $writing ? $exports['percent'] : ($convertingHere ? $convertingPercent : $queue->percent()) }}%"
                         ></div>
                     </div>
                 </div>

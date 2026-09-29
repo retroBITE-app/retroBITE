@@ -34,6 +34,9 @@ final class SystemUpdated implements ShouldBroadcastNow
     /** A console being sent to a share has moved on: a game copied, or the list written. */
     public const TRANSFER = 'transfer';
 
+    /** A conversion has moved on: queued, further along, or over. */
+    public const CONVERSION = 'conversion';
+
     public function __construct(public readonly string $what) {}
 
     public function broadcastOn(): PrivateChannel

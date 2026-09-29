@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # retroBITE — PlayStation 2 disc inspection
-# https://github.com/mattiasghodsian/retroBite
+# https://github.com/retroBITE-app/retroBITE
 #
 # Part of retroBITE and written for it. Invoked by App\Tools\ConsoleTool\PS2
 # through Illuminate\Support\Facades\Process; not meant to be run by hand,

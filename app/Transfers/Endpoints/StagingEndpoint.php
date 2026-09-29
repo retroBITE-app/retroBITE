@@ -11,9 +11,11 @@ use App\Support\LibraryPath;
 use Illuminate\Support\Str;
 
 /**
- * Where uploads are assembled. A source only, and only for plain files
- * directly inside it: a finished upload leaves by a move into a console's
- * folder, which {@see LibraryEndpoint::adopt()} makes a rename.
+ * Where uploads are assembled, and conversions written. A source only,
+ * and only for plain files directly inside it or inside one folder of it — a
+ * conversion writes into a folder of its own, because a cue sheet names its
+ * bin and both have to carry their final names. Either leaves by a move into
+ * a console's folder, which {@see LibraryEndpoint::adopt()} makes a rename.
  */
 final class StagingEndpoint extends LocalEndpoint
 {
@@ -30,7 +32,9 @@ final class StagingEndpoint extends LocalEndpoint
 
     protected function absolute(string $path): string
     {
-        if ($path === '' || Str::contains($path, ['/', '\\', "\0"]) || $path === '.' || $path === '..') {
+        $segments = explode('/', $path);
+
+        if (count($segments) > 2 || Str::contains($path, ['\\', "\0"]) || array_intersect($segments, ['', '.', '..']) !== []) {
             throw TransferFailed::because(TransferFailure::Rejected, $path);
         }
 
