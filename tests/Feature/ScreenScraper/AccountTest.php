@@ -64,12 +64,18 @@ it('asks anonymously when no login is configured', function () {
 });
 
 it('hands back the whole ssuser block rather than a reading of it', function () {
-    Http::fake(['*' => Http::response(ssAccountBody([
-        'id' => 'somebody',
-        'niveau' => '3',
-        'maxrequestsperday' => '100000',
-        'requeststoday' => '412',
-    ]), 200)]);
+    Http::fake(['*' => Http::sequence()
+        ->push(ssAccountBody([
+            'id' => 'somebody',
+            'niveau' => '3',
+            'maxrequestsperday' => '100000',
+            'requeststoday' => '412',
+        ]), 200)
+        ->push(ssAccountBody([
+            'id' => '',
+            'maxrequestsperday' => '10000',
+            'requeststoday' => '3',
+        ]), 200)]);
 
     // Raw on purpose: this is a diagnostic, and a field the provider adds
     // later should turn up without this method having to learn about it.
@@ -79,6 +85,11 @@ it('hands back the whole ssuser block rather than a reading of it', function () 
             'niveau' => '3',
             'maxrequestsperday' => '100000',
         ]);
+
+    // Nor is an empty name filled in: that is how the provider says it fell
+    // back to the developer account, and the caller is the one to say so.
+    expect(app(ScreenScraperService::class)->account())
+        ->toMatchArray(['id' => '', 'maxrequestsperday' => '10000']);
 });
 
 it('says nothing rather than inventing an account when the block is missing', function () {
@@ -114,15 +125,3 @@ it('records the allowance it was just told about', function () {
  * The shape of the answer when the login was not accepted: the numbers are
  * plausible, nothing is an error, and `id` is the only thing that differs.
  */
-it('reports an unnamed account when the provider fell back to the developer', function () {
-    Http::fake(['*' => Http::response(ssAccountBody([
-        'id' => '',
-        'maxrequestsperday' => '10000',
-        'requeststoday' => '3',
-    ]), 200)]);
-
-    $account = app(ScreenScraperService::class)->account();
-
-    expect($account['id'])->toBe('')
-        ->and($account['maxrequestsperday'])->toBe('10000');
-});

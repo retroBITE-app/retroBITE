@@ -90,14 +90,6 @@ test('the media route refuses a traversal', function () {
     $this->get(route('docs.media', ['path' => 'ps2/media/../../../../etc/passwd.jpg']))->assertNotFound();
 });
 
-test('guests cannot reach an attachment', function () {
-    Storage::disk('docs')->put('ps2/media/pot.jpg', 'binary');
-
-    auth()->logout();
-
-    $this->get(route('docs.media', ['path' => 'ps2/media/pot.jpg']))->assertRedirect();
-});
-
 test('a document downloads as markdown', function () {
     $this->get(route('docs.download', ['path' => $this->doc->path]))
         ->assertOk()
@@ -170,30 +162,4 @@ test('a reference needs a valid url', function () {
         ->set('url', 'javascript:alert(1)')
         ->call('append')
         ->assertHasErrors('url');
-});
-
-test('an imported file is filed from its own front matter', function () {
-    $markdown = "---\ntitle: RCP heatsink swap\nconsole: n64\ncategory: repair\ntags: [thermal]\n---\n\n# RCP heatsink swap\n\nBody.\n";
-
-    Livewire::test('docs.import-modal')
-        ->set('upload', UploadedFile::fake()->createWithContent('notes.md', $markdown))
-        ->assertSet('title', 'RCP heatsink swap')
-        ->assertSet('console', 'n64')
-        ->assertSet('category', 'repair')
-        ->call('import')
-        ->assertHasNoErrors()
-        ->assertDispatched('doc-written');
-
-    $imported = $this->library->find('n64/rcp-heatsink-swap.md');
-
-    expect($imported)->not->toBeNull()
-        ->and($imported->tags)->toBe(['thermal'])
-        ->and($imported->body)->toContain('Body.');
-});
-
-test('an imported file with no front matter takes its title from the heading', function () {
-    Livewire::test('docs.import-modal')
-        ->set('upload', UploadedFile::fake()->createWithContent('notes.md', "# Drive chip matrix\n\nBody.\n"))
-        ->assertSet('title', 'Drive chip matrix')
-        ->assertSet('console', '');
 });

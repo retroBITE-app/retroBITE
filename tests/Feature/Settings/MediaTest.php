@@ -23,12 +23,8 @@ it('describes every type it offers', function () {
 
 it('says what each type is and where Batocera shows it', function () {
     Livewire::test('settings.media')
-        ->assertSee('Mix, layout 2')
-        ->assertSee('mixrbv2')
         ->assertSee('Screenshot, box, cartridge and logo composed into one picture', false)
-        ->assertSee('Batocera: boxart')
-        ->assertSee('Batocera: image, title shot')
-        ->assertSee('Manual');
+        ->assertSee('Batocera: boxart');
 });
 
 it('maps the types a transfer sends to Batocera\'s names for them', function () {

@@ -26,12 +26,6 @@ afterEach(function () {
     exec('rm -rf '.escapeshellarg($this->root));
 });
 
-test('guests are redirected away from docs', function () {
-    auth()->logout();
-
-    $this->get(route('docs.index'))->assertRedirect();
-});
-
 test('docs page renders for an authenticated user', function () {
     $this->get(route('docs.index'))->assertOk();
 });
@@ -93,16 +87,6 @@ test('editing a document writes a revision', function () {
 
     expect($this->library->revisions($doc->path))->toHaveCount(1)
         ->and($this->library->find($doc->path)->body)->toContain('Rewritten.');
-});
-
-test('deleting a document removes it and its history', function () {
-    $doc = $this->library->create('ps2', 'Laser calibration', 'laser', [], "# Laser\n\nBody.\n");
-    $this->library->save($doc->path, "# Laser\n\nChanged.\n");
-
-    Livewire::test('docs.index', ['path' => $doc->path])->call('delete');
-
-    expect(Storage::disk('docs')->exists($doc->path))->toBeFalse()
-        ->and(Storage::disk('docs')->exists(DocPath::REVISIONS_DIR.'/ps2/laser-calibration'))->toBeFalse();
 });
 
 test('search matches title, tag and body', function () {

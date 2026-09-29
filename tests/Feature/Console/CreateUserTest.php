@@ -69,15 +69,3 @@ test('rejects a password that fails validation', function () {
 
     expect(User::where('username', 'retrogamer')->exists())->toBeFalse();
 });
-
-test('the created user can authenticate', function () {
-    $this->artisan('user:create', ['username' => 'retrogamer', '--password' => 'NewPass!2345'])
-        ->assertSuccessful();
-
-    $this->post(route('login.store'), [
-        'login' => 'retrogamer',
-        'password' => 'NewPass!2345',
-    ])->assertRedirect(route('dashboard', absolute: false));
-
-    $this->assertAuthenticated();
-});

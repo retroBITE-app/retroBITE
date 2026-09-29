@@ -133,11 +133,12 @@ it('rides along on every page of the application', function () {
     gameOfSize(4096);
     LibraryStorage::measureFree();
 
-    // The library total, not the word Storage: the dashboard grid has a cell
-    // with that label too, so asserting it would pass with the sidebar block
-    // deleted.
-    $this->get(route('dashboard'))
+    // Not the dashboard: its grid has a Storage cell printing the same total,
+    // so asserting there would pass with the sidebar block deleted. The
+    // settings screen has nothing of its own about storage.
+    $this->get(route('user.edit'))
         ->assertOk()
+        ->assertSeeLivewire('library-storage')
         ->assertSee(Number::fileSize(LibraryStorage::current()->total(), 1));
 });
 

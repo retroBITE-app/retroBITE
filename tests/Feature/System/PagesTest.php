@@ -14,7 +14,11 @@ it('says the system is idle when nothing is queued, and does not poll', function
     Livewire::test('system-activity')
         ->assertSee('idle')
         ->assertDontSeeHtml('wire:poll')
-        ->assertSeeHtml("live.system('activity'");
+        ->assertSeeHtml("live.system('activity'")
+        // Idle keeps the fold rather than hiding the control, so the queues
+        // stay one click away whether or not anything is on them.
+        ->assertSeeHtml('x-show="open"')
+        ->assertSee('Achievements');
 });
 
 it('names the work while there is any', function () {
@@ -52,13 +56,6 @@ it('names every queue once unfolded, including the ones with nothing in them', f
         ->assertSee('Artwork')
         ->assertSee('Achievements')
         ->assertSee('Progress');
-});
-
-it('keeps the fold on an idle system rather than hiding the control', function () {
-    Livewire::test('system-activity')
-        ->assertSee('idle')
-        ->assertSeeHtml('x-show="open"')
-        ->assertSee('Achievements');
 });
 
 it('rides along on every page', function () {

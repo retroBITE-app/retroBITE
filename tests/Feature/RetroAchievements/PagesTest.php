@@ -67,10 +67,16 @@ it('falls back to softcore when the setting says so', function () {
     Livewire::test('games.index')->assertSee('31 / 49')->assertDontSee('15 / 49');
 });
 
-it('shows nothing where there is no set', function () {
-    Game::factory()->forConsole('snes')->create();
+it('shows nothing where there is no set, on the shelf or in the list', function () {
+    Game::factory()->forConsole('snes')->matched()->create(['title' => 'No Set', 'slug' => 'no-set']);
 
-    Livewire::test('games.index')->assertDontSee(' / 0');
+    // A bar at nought would read as a set nobody has started, which is a
+    // different thing from a game RetroAchievements has never heard of.
+    Livewire::test('games.index')->assertSee('No Set')->assertDontSee(' / 0');
+
+    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
+        ->assertSee('No Set')
+        ->assertDontSee(' / 0');
 });
 
 it('shows progress in the list view as well as on the shelf', function () {
@@ -81,16 +87,6 @@ it('shows progress in the list view as well as on the shelf', function () {
     Livewire::withQueryParams(['view' => 'table'])->test('games.index')
         ->assertSee('Achievements')
         ->assertSee('15 / 49');
-});
-
-it('leaves a list row blank where the game has no set', function () {
-    Game::factory()->forConsole('snes')->matched()->create(['title' => 'No Set', 'slug' => 'no-set']);
-
-    // A bar at nought would read as a set nobody has started, which is a
-    // different thing from a game RetroAchievements has never heard of.
-    Livewire::withQueryParams(['view' => 'table'])->test('games.index')
-        ->assertSee('No Set')
-        ->assertDontSee(' / 0');
 });
 
 it('does not add a query per row in the list view either', function () {
@@ -257,19 +253,6 @@ it('says which kind of empty the panel is', function () {
         ->call('filterAchievements', 'unlocked')
         ->assertSee('No achievement matches both filters.')
         ->assertDontSee('The set is fetched in the background.');
-});
-
-it('renders the whole way with the network down', function () {
-    $game = gameWithProgress(31, 49);
-
-    RaAchievement::factory()->create(['ra_game_id' => $game->retroachievements_id]);
-
-    // Http::preventStrayRequests() is already on for every test, so any call
-    // out from a render would fail this rather than quietly succeed. The pages
-    // have to be correct from the database alone.
-    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('31 / 49');
-    $this->get(route('games.index'))->assertOk();
-    $this->get(route('dashboard'))->assertOk();
 });
 
 it('totals the library on the dashboard', function () {

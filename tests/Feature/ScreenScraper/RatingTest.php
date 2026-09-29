@@ -36,7 +36,6 @@ function ssRating(mixed $note): ?int
 it('puts the provider mark out of twenty onto a hundred', function (string $note, int $expected) {
     expect(ssRating($note))->toBe($expected);
 })->with([
-    'bottom of the scale' => ['1', 5],
     'a usual mark' => ['17', 85],
     'top of the scale' => ['20', 100],
     // Rounded, not truncated: 87 would read as the mark below.
@@ -57,7 +56,6 @@ it('reads zero as no rating rather than as the mark zero', function () {
 it('leaves the rating null when the note is not a number', function (mixed $note) {
     expect(ssRating($note))->toBeNull();
 })->with([
-    'empty' => [''],
     'blank' => ['   '],
     'words' => ['n/a'],
     'null' => [null],

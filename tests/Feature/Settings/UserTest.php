@@ -7,7 +7,15 @@ use Livewire\Livewire;
 test('user settings page is displayed', function () {
     $this->actingAs(User::factory()->create());
 
-    $this->get(route('user.edit'))->assertOk();
+    // The password form asks for the current password, which is what authorises
+    // a change. A gate in front of the whole screen only cost a prompt before
+    // reading your own name.
+    $this->get(route('user.edit'))
+        ->assertOk()
+        ->assertSee('Password')
+        ->assertDontSee('Manage your passkeys for passwordless sign-in')
+        ->assertDontSee('Add a passkey to sign in without a password')
+        ->assertDontSee('Two-factor authentication');
 });
 
 test('the pages profile and security used to live at still arrive', function () {
@@ -19,15 +27,6 @@ test('the pages profile and security used to live at still arrive', function () 
     foreach (['/settings', '/settings/profile', '/settings/security'] as $old) {
         expect($this->get($old)->headers->get('Location'))->toBe('/settings/user');
     }
-});
-
-test('the page opens without confirming a password first', function () {
-    $this->actingAs(User::factory()->create());
-
-    // The password form asks for the current password, which is what authorises
-    // a change. A gate in front of the whole screen only cost a prompt before
-    // reading your own name.
-    $this->get(route('user.edit'))->assertOk();
 });
 
 test('profile information can be updated', function () {
@@ -62,19 +61,6 @@ test('email verification status is unchanged when email address is unchanged', f
     $response->assertHasNoErrors();
 
     expect($user->refresh()->email_verified_at)->not->toBeNull();
-});
-
-test('the page renders without two factor when the feature is disabled', function () {
-    config(['fortify.features' => []]);
-
-    $this->actingAs(User::factory()->create());
-
-    $this->get(route('user.edit'))
-        ->assertOk()
-        ->assertSee('Password')
-        ->assertDontSee('Manage your passkeys for passwordless sign-in')
-        ->assertDontSee('Add a passkey to sign in without a password')
-        ->assertDontSee('Two-factor authentication');
 });
 
 test('password can be updated', function () {

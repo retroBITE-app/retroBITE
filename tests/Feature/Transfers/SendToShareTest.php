@@ -137,5 +137,7 @@ it('offers the saved shares and the USB drive in the modal', function () {
     Livewire::test('games.show', ['game' => $this->game])
         ->assertSee('Send to…')
         ->assertSee('USB drive on this computer')
-        ->assertSee('Living room');
+        ->assertSee('Living room')
+        // The USB path runs in the browser, so the modal has to carry it too.
+        ->assertSeeHtml('x-data="transfer(');
 });

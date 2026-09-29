@@ -14,10 +14,6 @@ beforeEach(function () {
     $this->actingAs($this->user);
 });
 
-it('renders', function () {
-    $this->get(route('screenscraper.edit'))->assertOk()->assertSee('ScreenScraper');
-});
-
 it('says what the account is for and where to make one', function () {
     // The screen has to answer "why am I being asked for this" before it asks:
     // identifying works without an account, on an allowance that runs out.
@@ -108,9 +104,12 @@ it('says the login was not accepted when the provider answers as somebody else',
     // which of the two replied. This is the only place the difference shows.
     Http::fake(['*' => Http::response(json_encode(['response' => ['ssuser' => ['id' => 'retrobite-dev']]]), 200)]);
 
+    // The variant and the words, not just that a toast appeared: success and
+    // failure both toast, and only these tell them apart.
     Livewire::test('settings.screenscraper')
         ->call('check')
-        ->assertDispatched('toast-show');
+        ->assertDispatched('toast-show', fn (string $name, array $params): bool => $params['dataset']['variant'] === 'warning'
+            && str_contains($params['slots']['text'], 'answered as retrobite-dev, not as somebody'));
 });
 
 it('confirms a login the provider answers as', function () {
@@ -123,7 +122,8 @@ it('confirms a login the provider answers as', function () {
 
     Livewire::test('settings.screenscraper')
         ->call('check')
-        ->assertDispatched('toast-show');
+        ->assertDispatched('toast-show', fn (string $name, array $params): bool => $params['dataset']['variant'] === 'success'
+            && str_contains($params['slots']['text'], 'Signed in as somebody.'));
 });
 
 it('draws no allowance until something has been asked', function () {

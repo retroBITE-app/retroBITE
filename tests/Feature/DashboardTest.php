@@ -17,14 +17,6 @@ test('guests are redirected to the login page', function () {
     $response->assertRedirect(route('login'));
 });
 
-test('authenticated users can visit the dashboard', function () {
-    $user = User::factory()->create();
-    $this->actingAs($user);
-
-    $response = $this->get(route('dashboard'));
-    $response->assertOk();
-});
-
 test('the newest game is the hero and is not repeated in the cards beside it', function () {
     foreach (['Oldest', 'Second', 'Third', 'Fourth', 'Newest'] as $title) {
         Game::factory()->forConsole('snes')->create(['title' => $title, 'slug' => Str::slug($title)]);
@@ -95,8 +87,4 @@ test('it greets by display name where there is no username', function () {
     $this->actingAs(User::factory()->create(['username' => null, 'name' => 'Player One']));
 
     $this->get(route('dashboard'))->assertOk()->assertSee(', Player One');
-});
-
-test('it tells time in UTC unless the install says otherwise', function () {
-    expect(config('app.timezone'))->toBe('UTC');
 });

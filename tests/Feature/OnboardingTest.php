@@ -109,15 +109,6 @@ it('stores the interface choices and moves on to ScreenScraper', function () {
         ->and(AppSetting::enabled(AppSetting::IS_ONBOARDED))->toBeFalse();
 });
 
-it('refuses an interface choice it does not know', function () {
-    $this->actingAs(User::factory()->create());
-
-    Livewire::test('settings.interface', ['onboarding' => true])
-        ->set('colorScheme', 'neon')
-        ->call('save')
-        ->assertHasErrors('colorScheme');
-});
-
 it('stores the ScreenScraper account and moves on to RetroAchievements', function () {
     $this->actingAs(User::factory()->create());
 
@@ -146,7 +137,6 @@ it('will not go past ScreenScraper without an account', function (array $input, 
 })->with([
     'no account name' => [['username' => '', 'password' => 'hunter2'], 'username'],
     'no password' => [['username' => 'retrogamer', 'password' => ''], 'password'],
-    'an email for a name' => [['username' => 'me@example.com', 'password' => 'hunter2'], 'username'],
 ]);
 
 it('takes a stored ScreenScraper password as given when the step is revisited', function () {

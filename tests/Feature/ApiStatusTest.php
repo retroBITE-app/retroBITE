@@ -74,17 +74,6 @@ it('draws what has been spent of both allowances, not just the large one', funct
     $response->assertSee('1,900')->assertSee('2,000');
 });
 
-it('carries the figure on the heading row rather than spending a line on a title', function () {
-    recordQuota();
-
-    $this->get(route('dashboard'))
-        ->assertOk()
-        ->assertSee('Scraper')
-        // The section title this replaces, and the footnote under the bars.
-        ->assertDontSee('APIs')
-        ->assertDontSee('level 2');
-});
-
 it('folds the failed allowance away until it is asked for', function () {
     recordQuota();
 

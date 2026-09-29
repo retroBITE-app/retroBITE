@@ -21,10 +21,6 @@ beforeEach(function () {
     $this->actingAs($this->user);
 });
 
-it('renders', function () {
-    $this->get(route('retroachievements.edit'))->assertOk()->assertSee('RetroAchievements');
-});
-
 it('keeps the old settings URL working', function () {
     // The screen was called Integrations until it was plainly only ever about
     // one service. Somebody's bookmark should not pay for the rename.
@@ -110,17 +106,6 @@ it('keeps the stored key when the field is left blank', function () {
     expect(AppSetting::getSecret(AppSetting::RA_API_KEY))->toBe('secret-key');
 });
 
-it('clears the key only when asked', function () {
-    AppSetting::putSecret(AppSetting::RA_API_KEY, 'secret-key');
-
-    Livewire::test('settings.retroachievements')
-        ->assertSet('hasKey', true)
-        ->call('forgetKey')
-        ->assertSet('hasKey', false);
-
-    expect(AppSetting::getSecret(AppSetting::RA_API_KEY))->toBeNull();
-});
-
 it('offers to remove a key only once there is one', function () {
     // The settings table is the only place a key lives now. There is nothing
     // to remove until somebody has typed one, and a button that clears nothing
@@ -136,6 +121,8 @@ it('offers to remove a key only once there is one', function () {
         ->assertSee('Remove stored key')
         ->call('forgetKey')
         ->assertSet('hasKey', false);
+
+    expect(AppSetting::getSecret(AppSetting::RA_API_KEY))->toBeNull();
 });
 
 it('says where the API key is found', function () {

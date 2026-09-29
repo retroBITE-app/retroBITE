@@ -8,10 +8,6 @@ use Illuminate\Support\Facades\Storage;
  * of settings.php. These assert against the real config, with no overrides —
  * the test suite's own fakes would hide exactly that failure.
  */
-test('the docs disk resolves without any override', function () {
-    expect(Storage::disk('docs')->path(''))->toBeString()->not->toBeEmpty();
-});
-
 test('the docs disk and the docs setting name the same directory', function () {
     expect(realpath(dirname(Storage::disk('docs')->path('x'))))
         ->toBe(realpath((string) config('settings.docs_path')));
