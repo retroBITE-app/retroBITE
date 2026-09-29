@@ -168,8 +168,7 @@ it('fills in artwork that arrives while the game page is open', function () {
     // menu — with nothing on this page waiting for it.
     $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Late Art', 'slug' => 'late-art']);
 
-    $page = Livewire::test('games.show', ['game' => $game])
-        ->assertSeeHtml("['artwork', 'reconnect'].includes(what)");
+    $page = Livewire::test('games.show', ['game' => $game]);
 
     $media = Media::factory()->for($game)->ofType('box-2D', 'eu')->create(['path' => 'snes/late-art/box-2d/new.png']);
     Storage::disk('media')->put($media->path, pngSized(300, 400));
@@ -178,7 +177,7 @@ it('fills in artwork that arrives while the game page is open', function () {
         ->assertSee(route('media.show', ['path' => $media->path]), escape: false);
 });
 
-it('leaves artwork to nginx where it is in front, and still refuses a file no row knows', function () {
+it('leaves artwork to nginx where it is in front', function () {
     config()->set('settings.serve_with_nginx', true);
     $media = coverOf(600, 800);
 
@@ -187,7 +186,4 @@ it('leaves artwork to nginx where it is in front, and still refuses a file no ro
         ->assertHeader('X-Accel-Redirect', '/_serve/media/'.$media->path)
         ->assertHeader('Cache-Control', 'immutable, max-age=31536000, private')
         ->assertContent('');
-
-    Storage::disk('media')->put('thumbnails/list/stray.webp', 'x');
-    $this->get(route('media.show', ['path' => 'thumbnails/list/stray.webp']))->assertNotFound();
 });

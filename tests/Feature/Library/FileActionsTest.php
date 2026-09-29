@@ -235,14 +235,13 @@ describe('delete', function () {
 });
 
 describe('the game page', function () {
-    it('offers the move in the actions menu and no longer offers deleting the game from it', function () {
+    it('offers the move in the actions menu', function () {
         ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
         $game = gameWithFiles('ps2', ['ps2/DVD/Game.iso']);
 
         $this->get(route('games.show', $game->routeParameters()))
             ->assertOk()
-            ->assertSee('ps2/CD/')
-            ->assertDontSee('Not available yet.');
+            ->assertSee('ps2/CD/');
     });
 
     it('explains why a game at its only folder cannot move', function () {

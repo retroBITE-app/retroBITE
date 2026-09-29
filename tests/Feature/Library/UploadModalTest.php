@@ -107,12 +107,11 @@ it('files uploads into game folders where the layout wants them', function () {
     $modal = Livewire::test('games.upload-modal', ['console' => 'psx']);
 
     // The list groups by folder only where there are folders to group by.
-    // @js writes the config with its quotes escaped as \u0022.
-    $modal->assertSee('\u0022perGameFolders\u0022:true', false);
+    expect($modal->instance()->perGameFolders)->toBeTrue();
 
     $answer = $modal->instance()->begin('Crash.cue', 4, '', app(RomUploads::class), 'Crash Bandicoot');
 
     expect($answer['ok'])->toBeTrue();
 
-    Livewire::test('games.upload-modal', ['console' => 'ps2'])->assertSee('\u0022perGameFolders\u0022:false', false);
+    expect(Livewire::test('games.upload-modal', ['console' => 'ps2'])->instance()->perGameFolders)->toBeFalse();
 });

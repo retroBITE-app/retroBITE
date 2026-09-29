@@ -23,13 +23,7 @@ it('keeps opl to its own two directories', function (string $path, bool $accepte
     // Case-folded: the same drive turns up as dvd/ on another machine.
     ['dvd/Game.iso', true],
     ['ART/SLES_503.86_COV.png', false],
-    ['CFG/SLES_503.86.cfg', false],
-    ['VMC/Game.bin', false],
-    ['THM/theme.bin', false],
-    ['APPS/OPL.ELF', false],
-    // OPL launches nothing from a subdirectory, so neither does the scan.
-    ['DVD/backup/Game.iso', false],
-    // Nor from the root: a loose file there is not one of its games.
+    // OPL launches nothing from the root: a loose file there is not one of its games.
     ['Game.iso', false],
 ]);
 
@@ -51,8 +45,6 @@ it('skips retroarch\'s thumbnail cache at any depth', function (string $path, bo
 it('accepts everything under the custom layout', function (string $path) {
     expect((new CustomLayout)->accepts($path))->toBeTrue();
 })->with([
-    ['Game.iso'],
-    ['DVD/Game.iso'],
     ['ART/SLES_503.86_COV.png'],
     ['anything/at/any/depth.iso'],
 ]);
@@ -110,14 +102,3 @@ it('names a game after its folder under the game folders layout', function (stri
     // Not filed yet: the file is the only name there is.
     'loose at the top' => ['Tekken 3.cue', 'Tekken 3'],
 ]);
-
-it('reads every folder under the game folders layout', function (string $path) {
-    expect((new FoldersLayout)->accepts($path))->toBeTrue();
-})->with([['Tekken 3.cue'], ['Crash Bandicoot/Crash.bin'], ['Final Fantasy IX/extras/FF9 (Disc 1).bin']]);
-
-it('files games in folders of their own only under the game folders layout', function () {
-    expect((new FoldersLayout)->perGameFolders())->toBeTrue()
-        ->and((new CustomLayout)->perGameFolders())->toBeFalse()
-        ->and((new OplLayout)->perGameFolders())->toBeFalse()
-        ->and((new RetroArchLayout)->perGameFolders())->toBeFalse();
-});

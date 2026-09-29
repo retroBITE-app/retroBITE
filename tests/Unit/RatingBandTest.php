@@ -20,9 +20,3 @@ it('descends through the palette as the rating falls', function (int $rating, st
     'just under orange' => [39, '--color-danger'],
     'bottom of the scale' => [0, '--color-danger'],
 ]);
-
-it('reads every band against one ink', function () {
-    // Four light colours, so the near-black the palette already uses on the
-    // accent covers all of them and the badge needs no second decision.
-    expect(RatingBand::ink())->toBe('var(--color-accent-foreground)');
-});

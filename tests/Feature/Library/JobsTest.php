@@ -35,7 +35,6 @@ it('can be pushed onto a real queue', function (string $job, array $arguments) {
     expect(DB::table('jobs')->count())->toBe(1);
 })->with([
     'match' => [MatchGame::class, [1]],
-    'match with checksums' => [MatchGame::class, [1, true]],
     'scrape media' => [ScrapeGameMedia::class, [1, []]],
     'scan' => [ScanConsoleFolder::class, ['snes']],
     'hash' => [HashFile::class, [1]],

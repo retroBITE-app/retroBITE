@@ -144,20 +144,11 @@ it('treats a cuesheet with no playlist as its own game', function () {
 
     $result = scan('psx');
 
+    // The tracks carry a psx file extension, so a flat walk would have made each
+    // a game of its own and spent a lookup on it.
     expect($result->gamesCreated)->toBe(1)
         ->and(Game::sole()->title)->toBe('Tekken 3')
         ->and(GameFile::where('role', FileRole::Track)->count())->toBe(2);
-});
-
-it('never treats a track named by a sheet as a game of its own', function () {
-    put('psx/Game.cue', "FILE \"Game (Track 01).bin\" BINARY\n");
-    put('psx/Game (Track 01).bin');
-
-    scan('psx');
-
-    // The .bin carries a psx file extension, so a flat walk would have made it
-    // a second game and spent a lookup on it.
-    expect(Game::count())->toBe(1);
 });
 
 it('reads an unquoted FILE directive', function () {
@@ -246,9 +237,11 @@ it('marks a vanished file missing instead of deleting it', function () {
     File::delete($this->root.'/snes/Zelda.sfc');
     $result = scan('snes');
 
+    // The row survives, so identification is not thrown away with it.
     expect($result->filesMissing)->toBe(1)
         ->and(GameFile::count())->toBe(2)
-        ->and(GameFile::missing()->sole()->filename)->toBe('Zelda.sfc');
+        ->and(GameFile::missing()->sole()->filename)->toBe('Zelda.sfc')
+        ->and(GameFile::present()->sole()->filename)->toBe('Super Mario World.sfc');
 });
 
 it('clears the missing mark when a file comes back', function () {

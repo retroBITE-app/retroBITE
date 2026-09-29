@@ -100,7 +100,9 @@ it('identifies a game from its filename and size alone', function () {
         ->and($game->slug)->toBe('final-fantasy-ix')
         ->and($game->status)->toBe(GameStatus::Matched)
         ->and($game->publisher)->toBe('Square')
-        ->and($game->matched_at)->not->toBeNull();
+        ->and($game->matched_at)->not->toBeNull()
+        // The answer carried no note, so there is no rating to record.
+        ->and($game->rating)->toBeNull();
 
     // No checksum was computed: reading 430 MB to learn what the filename
     // already told the provider would be wasted work.
@@ -288,15 +290,6 @@ it('records the provider rating on a game it identifies', function () {
 
     // Their mark out of twenty, ours out of a hundred.
     expect($game->refresh()->rating)->toBe(90);
-});
-
-it('leaves the rating null when the provider offers none', function () {
-    providerHit();
-
-    $game = psxGame();
-    matcher()->match($game);
-
-    expect($game->refresh()->rating)->toBeNull();
 });
 
 it('hands a rating to the surviving game of a merge that had none', function () {

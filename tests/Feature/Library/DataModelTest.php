@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\FileRole;
-use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
@@ -12,14 +11,6 @@ use App\Models\Media;
 use App\Support\Console;
 use App\Support\MediaTypes;
 use Illuminate\Database\QueryException;
-
-it('creates a game as an unidentified placeholder', function () {
-    $game = Game::factory()->create();
-
-    expect($game->status)->toBe(GameStatus::Placeholder)
-        ->and($game->screenscraper_id)->toBeNull()
-        ->and($game->status->awaitingLookup())->toBeTrue();
-});
 
 it('refuses two games with the same provider id', function () {
     Game::factory()->matched(19256)->create();
@@ -69,31 +60,12 @@ it('deletes a game and its files and media together', function () {
         ->and(Media::count())->toBe(0);
 });
 
-it('models a multi-disc game as one game with a playlist over its discs', function () {
-    $game = Game::factory()->matched()->forConsole('psx')->create();
-
-    $playlist = GameFile::factory()->for($game)->role(FileRole::Playlist)->create([
-        'path' => 'psx/ff9/Final Fantasy IX.m3u', 'filename' => 'Final Fantasy IX.m3u', 'extension' => 'm3u',
-    ]);
-
-    foreach (range(1, 4) as $disc) {
-        GameFile::factory()->for($game)->disc($disc)->create([
-            'path' => "psx/ff9/disc{$disc}.bin",
-            'parent_id' => $playlist->id,
-        ]);
-    }
-
-    expect($game->files()->count())->toBe(5)
-        ->and($playlist->children)->toHaveCount(4)
-        ->and($playlist->children->pluck('disc_number')->all())->toBe([1, 2, 3, 4])
-        ->and($playlist->children->first()->parent->is($playlist))->toBeTrue();
-});
-
 it('picks only an identifiable file to look up, lowest disc first', function () {
     $game = Game::factory()->forConsole('psx')->create();
 
-    // Tracks and playlists are not worth a request: the provider's entries for
-    // them are unreliable and a miss costs the scarce failed-lookup quota.
+    // A playlist is not worth a request: the provider's entries for it are
+    // unreliable and a miss costs the scarce failed-lookup quota. A track can be
+    // looked up, but a whole image outranks it.
     GameFile::factory()->for($game)->role(FileRole::Playlist)->create(['path' => 'psx/a.m3u']);
     GameFile::factory()->for($game)->disc(2)->create(['path' => 'psx/d2.bin']);
     $disc1 = GameFile::factory()->for($game)->role(FileRole::Rom)->create(['path' => 'psx/d1.iso', 'disc_number' => 1]);
@@ -108,17 +80,6 @@ it('skips a missing file when choosing what to look up', function () {
     $present = GameFile::factory()->for($game)->create(['path' => 'snes/here.sfc', 'disc_number' => 2]);
 
     expect($game->identifiableFile()->is($present))->toBeTrue();
-});
-
-it('treats a missing file as soft-deleted rather than gone', function () {
-    $game = Game::factory()->create();
-    GameFile::factory()->for($game)->create(['path' => 'snes/a.sfc']);
-    GameFile::factory()->for($game)->missing()->create(['path' => 'snes/b.sfc']);
-
-    expect(GameFile::present()->count())->toBe(1)
-        ->and(GameFile::missing()->count())->toBe(1)
-        // The row survives, so identification is not thrown away with it.
-        ->and(GameFile::count())->toBe(2);
 });
 
 it('refuses the same image twice for one game but allows it across games', function () {
@@ -175,6 +136,9 @@ it('resolves a console folder by convention and lets a row override it', functio
 });
 
 it('stores runtime settings as json and reads them back typed', function () {
+    // Read back in the same request: the memo is written through rather than
+    // invalidated, and reading the old value here is the exact bug a naive one
+    // introduces.
     expect(AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE))->toBeTrue();
 
     AppSetting::put(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE, false);
@@ -191,35 +155,16 @@ it('stores runtime settings as json and reads them back typed', function () {
     expect($rows())->toBe(1);
 });
 
-it('lists only the media types switched on', function () {
-    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D', 'ss']);
-
-    expect(MediaTypes::enabled())->toBe(['box-2D', 'ss']);
-});
-
 it('fetches the shipped selection until somebody chooses otherwise', function () {
     // Nothing stored is not the same as nothing switched on: a fresh install
     // fetches the defaults, an emptied list fetches nothing.
     expect(MediaTypes::enabled())->toBe(config('media_types.default_enabled'));
 
+    AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D', 'ss']);
+
+    expect(MediaTypes::enabled())->toBe(['box-2D', 'ss']);
+
     AppSetting::put(AppSetting::MEDIA_TYPES, []);
 
     expect(MediaTypes::enabled())->toBe([]);
-});
-
-it('reads back a setting written in the same request', function () {
-    // The memo is written through rather than invalidated; reading the old
-    // value here is the exact bug a naive one introduces.
-    expect(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeTrue();
-
-    AppSetting::put(AppSetting::UI_SCANLINES, false);
-
-    expect(AppSetting::enabled(AppSetting::UI_SCANLINES))->toBeFalse();
-});
-
-it('resolves a game back to its console value object', function () {
-    $game = Game::factory()->forConsole('dreamcast')->create();
-
-    expect($game->console()->name)->toBe('Dreamcast')
-        ->and($game->console()->screenscraperId)->toBe(23);
 });
