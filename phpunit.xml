@@ -69,6 +69,8 @@
              discovery says which network it means rather than inheriting it. -->
         <env name="HOST_IP" value="" force="true"/>
         <env name="TRANSFER_DISCOVERY_SUBNETS" value="" force="true"/>
+        <!-- No nginx in front of the suite: files are sent by PHP itself. -->
+        <env name="SERVE_WITH_NGINX" value="false" force="true"/>
 
         <!--
             Laravel resolves env() through a repository that reads $_SERVER before
@@ -99,5 +101,6 @@
         <server name="NIGHTWATCH_ENABLED" value="false" force="true"/>
         <server name="HOST_IP" value="" force="true"/>
         <server name="TRANSFER_DISCOVERY_SUBNETS" value="" force="true"/>
+        <server name="SERVE_WITH_NGINX" value="false" force="true"/>
     </php>
 </phpunit>

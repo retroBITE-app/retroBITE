@@ -17,6 +17,9 @@ services:
       # on https or localhost; a page opened another way links here. The same
       # port as published below.
       TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:81}
+      # nginx is in front, so game files and artwork are sent by it rather
+      # than streamed by PHP (App\Support\NginxFile).
+      SERVE_WITH_NGINX: "true"
     ports:
       - "81:80"
     # Settings → Destinations searches the LAN for network shares. mDNS and

@@ -18,6 +18,11 @@
  */
 
 const DB = 'retrobite-transfer';
+
+// Files copied at once. A console is thousands of small files, and each spends
+// most of its time waiting — on the server's answer, on the drive's directory —
+// rather than moving bytes, so a few in flight go several times as fast.
+const CONCURRENCY = 4;
 const STORE = 'drives';
 const DRIVE_KEY = 'drive';
 
@@ -63,6 +68,39 @@ async function existingSize(dir, name) {
     } catch {
         return null;
     }
+}
+
+/**
+ * The folders of one run, each looked up and listed once rather than once per
+ * file: on a USB drive every lookup is a trip to its directory. Promises are
+ * kept, not results, so two copies starting together share one lookup.
+ */
+function folders(root) {
+    const handles = new Map();
+    const listings = new Map();
+
+    const handle = (path) => {
+        if (!handles.has(path)) {
+            handles.set(path, directoryFor(root, path === '' ? [] : path.split('/')));
+        }
+        return handles.get(path);
+    };
+
+    return {
+        handle,
+        async names(path) {
+            if (!listings.has(path)) {
+                listings.set(path, (async () => {
+                    const names = new Set();
+                    for await (const name of (await handle(path)).keys()) {
+                        names.add(name);
+                    }
+                    return names;
+                })());
+            }
+            return listings.get(path);
+        },
+    };
 }
 
 const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
@@ -200,9 +238,7 @@ export default ({ targets, shares }) => ({
             this.plan = plan;
             this.total = plan.bytes;
 
-            for (const file of plan.files) {
-                await this.copy(root, file);
-            }
+            await this.copyAll(root, plan.files);
 
             await this.writeGamelist(root, plan.gamelist);
 
@@ -214,13 +250,45 @@ export default ({ targets, shares }) => ({
         }
     },
 
-    async copy(root, file) {
+    /**
+     * Every file, CONCURRENCY at a time, from one shared queue. The first
+     * failure stops the rest from starting; the ones already under way finish,
+     * and then it is thrown, so the modal says what went wrong as before.
+     */
+    async copyAll(root, files) {
+        const queue = [...files];
+        const tree = folders(root);
+        let failure = null;
+
+        const worker = async () => {
+            while (failure === null && queue.length > 0) {
+                const file = queue.shift();
+                try {
+                    await this.copy(tree, file);
+                } catch (error) {
+                    failure ??= error;
+                }
+            }
+        };
+
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+
+        if (failure !== null) {
+            throw failure;
+        }
+    },
+
+    async copy(tree, file) {
         const parts = file.destination.split('/');
         const name = parts.pop();
-        const dir = await directoryFor(root, parts);
+        const folder = parts.join('/');
+        const dir = await tree.handle(folder);
         this.current = file.destination;
 
-        if ((await existingSize(dir, name)) === file.size) {
+        // Asked of the drive only when the folder's listing has the name: a
+        // file that is not there needs no question, and on a first send that
+        // is every one of them.
+        if ((await tree.names(folder)).has(name) && (await existingSize(dir, name)) === file.size) {
             this.skipped++;
             this.written += file.size;
             return;

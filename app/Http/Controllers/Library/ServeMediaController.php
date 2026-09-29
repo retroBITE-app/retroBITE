@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Library;
 
 use App\Http\Controllers\Controller;
 use App\Models\Media;
+use App\Support\NginxFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
@@ -36,6 +37,13 @@ class ServeMediaController extends Controller
         $disk = Storage::disk('media');
 
         abort_unless($disk->exists($path), 404);
+
+        if (NginxFile::enabled()) {
+            return NginxFile::response('/_serve/media', $path, [
+                'Content-Type' => $disk->mimeType($path) ?: 'application/octet-stream',
+                'Cache-Control' => 'private, max-age=31536000, immutable',
+            ]);
+        }
 
         return new StreamedResponse(
             fn () => fpassthru($disk->readStream($path)),

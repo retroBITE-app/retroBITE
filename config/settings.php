@@ -54,6 +54,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Serve files through nginx
+    |--------------------------------------------------------------------------
+    |
+    | True inside the image, where nginx is in front: game files and artwork
+    | are then sent by nginx (X-Accel-Redirect, see App\Support\NginxFile)
+    | rather than streamed by PHP. Off everywhere else, the tests included.
+    |
+    */
+
+    'serve_with_nginx' => (bool) env('SERVE_WITH_NGINX', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Docs
     |--------------------------------------------------------------------------
     |

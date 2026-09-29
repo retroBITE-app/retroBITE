@@ -333,6 +333,22 @@ it('hands over a library file as it is, and only one a row points at', function 
     $this->get('/transfers/files/999999')->assertNotFound();
 });
 
+it('leaves the bytes to nginx where it is in front, with the path spelled for it', function () {
+    config()->set('settings.serve_with_nginx', true);
+    $game = snesGame();
+    $rom = libraryFile($game, "snes/Bill & Ted's #1 (USA).sfc", FileRole::Rom, bytes: 'the exact bytes');
+
+    // The same checks first: a file gone is still a 404, never a redirect.
+    $this->get(route('transfers.files', ['file' => $rom->id]))
+        ->assertOk()
+        ->assertHeader('X-Accel-Redirect', '/_serve/games/snes/Bill%20%26%20Ted%27s%20%231%20%28USA%29.sfc')
+        ->assertHeader('Content-Type', 'application/octet-stream')
+        ->assertContent('');
+
+    $rom->update(['missing_since' => now()]);
+    $this->get(route('transfers.files', ['file' => $rom->id]))->assertNotFound();
+});
+
 it('lets nobody who is not signed in near it', function () {
     $game = snesGame();
     $rom = libraryFile($game, 'snes/smw.sfc', FileRole::Rom);

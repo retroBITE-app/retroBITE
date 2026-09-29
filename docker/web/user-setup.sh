@@ -39,3 +39,11 @@ cat > /usr/local/etc/php-fpm.d/zz-user.conf <<EOF
 user = $WEB_USER
 group = $WEB_GROUP
 EOF
+
+# nginx's workers as the same user and group, so nginx can read exactly what
+# PHP can: game files and artwork are sent by nginx once PHP has approved them
+# (X-Accel-Redirect, App\Support\NginxFile), and the media disk's folders are
+# private to their owner — nginx's own user got a 403 there. Its temp and log
+# folders go with it, or request bodies (uploads) could not be buffered.
+sed -i "s/^user .*;/user $WEB_USER $WEB_GROUP;/" /etc/nginx/nginx.conf
+chown -R "$WEB_USER:$WEB_GROUP" /var/lib/nginx /var/log/nginx /run/nginx 2>/dev/null || true
