@@ -21,10 +21,6 @@ beforeEach(function () {
     $this->actingAs($this->user);
 });
 
-it('renders', function () {
-    $this->get(route('retroachievements.edit'))->assertOk()->assertSee('RetroAchievements');
-});
-
 it('keeps the old settings URL working', function () {
     // The screen was called Integrations until it was plainly only ever about
     // one service. Somebody's bookmark should not pay for the rename.
@@ -110,8 +106,14 @@ it('keeps the stored key when the field is left blank', function () {
     expect(AppSetting::getSecret(AppSetting::RA_API_KEY))->toBe('secret-key');
 });
 
-it('clears the key only when asked', function () {
-    AppSetting::putSecret(AppSetting::RA_API_KEY, 'secret-key');
+it('offers to remove a key only once there is one', function () {
+    // The settings table is the only place a key lives now. There is nothing
+    // to remove until somebody has typed one, and a button that clears nothing
+    // would be a lie.
+    Livewire::test('settings.retroachievements')
+        ->assertSet('hasKey', false);
+
+    AppSetting::putSecret(AppSetting::RA_API_KEY, 'typed-key');
 
     Livewire::test('settings.retroachievements')
         ->assertSet('hasKey', true)
@@ -119,31 +121,6 @@ it('clears the key only when asked', function () {
         ->assertSet('hasKey', false);
 
     expect(AppSetting::getSecret(AppSetting::RA_API_KEY))->toBeNull();
-});
-
-it('offers to remove a key only once there is one', function () {
-    // The settings table is the only place a key lives now. There is nothing
-    // to remove until somebody has typed one, and a button that clears nothing
-    // would be a lie.
-    Livewire::test('settings.retroachievements')
-        ->assertSet('hasKey', false)
-        ->assertDontSee('Remove stored key');
-
-    AppSetting::putSecret(AppSetting::RA_API_KEY, 'typed-key');
-
-    Livewire::test('settings.retroachievements')
-        ->assertSet('hasKey', true)
-        ->assertSee('Remove stored key')
-        ->call('forgetKey')
-        ->assertSet('hasKey', false);
-});
-
-it('says where the API key is found', function () {
-    // The key is not on the profile and not on the front of Settings, and
-    // hunting for it is the step people write in to ask about.
-    Livewire::test('settings.retroachievements')
-        ->assertSee('https://retroachievements.org/settings?tab=applications', escape: false)
-        ->assertSee('Find your API key');
 });
 
 it('queues a sync rather than running one in the request', function () {
@@ -174,7 +151,7 @@ it('queues the nightly index download on demand, one per console in the library'
     AppSetting::putSecret(AppSetting::RA_API_KEY, 'abcdefghijklmnopqrstuvwxyz123456');
     Game::factory()->forConsole('psx')->create();
 
-    $this->get(route('retroachievements.edit'))->assertSee('Refresh indexes now');
+    $this->get(route('retroachievements.edit'))->assertOk();
 
     Livewire::test('settings.retroachievements')->call('syncIndex');
 
@@ -196,8 +173,6 @@ it('queues the sets of identified games that were never fetched', function () {
 
     AppSetting::putSecret(AppSetting::RA_API_KEY, 'abcdefghijklmnopqrstuvwxyz123456');
     Game::factory()->forConsole('psx')->create(['retroachievements_id' => 20721]);
-
-    $this->get(route('retroachievements.edit'))->assertSee('Fetch missing sets');
 
     Livewire::test('settings.retroachievements')->call('syncMissingSets');
 

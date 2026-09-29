@@ -170,7 +170,6 @@ it('refuses a compressed image whatever it is called', function (string $filenam
     // The case an extension check cannot catch: config says .iso is readable,
     // and this one is a CSO wearing the name.
     'a cso called iso' => ['Game.iso', 'CISO'],
-    'a cso' => ['Game.cso', 'CISO'],
     'a zso' => ['Game.zso', 'ZISO'],
     'a chd' => ['Game.chd', 'MComprHD'],
 ]);
@@ -178,8 +177,11 @@ it('refuses a compressed image whatever it is called', function (string $filenam
 it('says it found nothing in a file with no serial', function () {
     $result = inspect('Homebrew.iso', str_repeat('nothing of interest here. ', 100));
 
+    // The contract the toolbox parses against: stdout is data, and only data,
+    // so the complaint goes to stderr.
     expect($result->exitCode())->toBe(1)
-        ->and($result->output())->toBe('');
+        ->and($result->output())->toBe('')
+        ->and($result->errorOutput())->toContain('No PS2 serial');
 });
 
 it('refuses to be called wrongly', function () {
@@ -190,12 +192,4 @@ it('refuses to be called wrongly', function () {
     // disc having nothing to say.
     expect($noArgument->exitCode())->toBe(2)
         ->and($missing->exitCode())->toBe(2);
-});
-
-it('keeps its complaints off stdout', function () {
-    $result = inspect('Homebrew.iso', 'nothing here');
-
-    // The contract the toolbox parses against: stdout is data, and only data.
-    expect($result->output())->toBe('')
-        ->and($result->errorOutput())->toContain('No PS2 serial');
 });

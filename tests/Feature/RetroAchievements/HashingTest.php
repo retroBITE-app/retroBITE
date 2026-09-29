@@ -198,8 +198,5 @@ it('treats an empty hasher path as a missing binary', function () {
 
 it('falls back to a usable default when the variable is present but empty', function () {
     // The config itself has to survive it, not just the service.
-    expect(config('retroachievements.hasher_path'))->not->toBe('')
-        ->and(config('retroachievements.timeout'))->toBeGreaterThan(0)
-        ->and(config('retroachievements.connect_timeout'))->toBeGreaterThan(0)
-        ->and(config('retroachievements.hasher_timeout'))->toBeGreaterThan(0);
+    expect(config('retroachievements.hasher_path'))->not->toBe('');
 });

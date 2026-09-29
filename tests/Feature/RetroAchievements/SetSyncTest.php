@@ -83,8 +83,8 @@ it('runs twice without duplicating or changing anything', function () {
 
 it('marks an achievement that left the set instead of deleting it', function () {
     Http::fake(['*' => Http::sequence()
-        ->push(raSet([raAchievement(1), raAchievement(2)]), 200)
-        ->push(raSet([raAchievement(1)]), 200)]);
+        ->push(raSet([raAchievement(1, ['Points' => 10]), raAchievement(2, ['Points' => 50])]), 200)
+        ->push(raSet([raAchievement(1, ['Points' => 10])]), 200)]);
 
     runSetSync();
     runSetSync();
@@ -94,6 +94,12 @@ it('marks an achievement that left the set instead of deleting it', function () 
     expect(RaAchievement::count())->toBe(2)
         ->and(RaAchievement::find(2)?->removed_at)->not->toBeNull()
         ->and(RaAchievement::find(1)?->removed_at)->toBeNull();
+
+    // Kept, but no longer counted. Demotion is what removal from the official
+    // set means, and RetroAchievements stops counting a demoted achievement
+    // too — so counting it here would make our total disagree with theirs.
+    expect(RaGame::find(4111)?->points_total)->toBe(10)
+        ->and(RaGame::find(4111)?->num_achievements)->toBe(1);
 });
 
 it('asks for the official set and not the demoted one', function () {
@@ -107,22 +113,6 @@ it('asks for the official set and not the demoted one', function () {
     // way looks entirely plausible — ActRaiser came back as four achievements
     // worth 25 points rather than sixty-six worth 653.
     Http::assertSent(fn ($request) => str_contains($request->url(), 'f=3'));
-});
-
-it('does not count an achievement that has left the set', function () {
-    Http::fake(['*' => Http::sequence()
-        ->push(raSet([raAchievement(1, ['Points' => 10]), raAchievement(2, ['Points' => 50])]), 200)
-        ->push(raSet([raAchievement(1, ['Points' => 10])]), 200)]);
-
-    runSetSync();
-    runSetSync();
-
-    // Demotion is what removal from the official set means, and
-    // RetroAchievements stops counting a demoted achievement too — so
-    // counting it here would make our total disagree with theirs.
-    expect(RaGame::find(4111)?->points_total)->toBe(10)
-        ->and(RaGame::find(4111)?->num_achievements)->toBe(1)
-        ->and(RaAchievement::find(2)?->removed_at)->not->toBeNull();
 });
 
 it('marks existing progress stale when the set changes', function () {

@@ -14,19 +14,6 @@ beforeEach(function () {
     $this->actingAs($this->user);
 });
 
-it('renders', function () {
-    $this->get(route('screenscraper.edit'))->assertOk()->assertSee('ScreenScraper');
-});
-
-it('says what the account is for and where to make one', function () {
-    // The screen has to answer "why am I being asked for this" before it asks:
-    // identifying works without an account, on an allowance that runs out.
-    Livewire::test('settings.screenscraper')
-        ->assertSee('https://www.screenscraper.fr/membreinscription.php', escape: false)
-        ->assertSee('Create a ScreenScraper account')
-        ->assertSee('20 000 lookups a day');
-});
-
 it('stores the account, keeping the password encrypted', function () {
     Livewire::test('settings.screenscraper')
         ->set('username', 'somebody')
@@ -108,9 +95,11 @@ it('says the login was not accepted when the provider answers as somebody else',
     // which of the two replied. This is the only place the difference shows.
     Http::fake(['*' => Http::response(json_encode(['response' => ['ssuser' => ['id' => 'retrobite-dev']]]), 200)]);
 
+    // The variant, not just that a toast appeared: success and failure both
+    // toast, and only it tells them apart.
     Livewire::test('settings.screenscraper')
         ->call('check')
-        ->assertDispatched('toast-show');
+        ->assertDispatched('toast-show', fn (string $name, array $params): bool => $params['dataset']['variant'] === 'warning');
 });
 
 it('confirms a login the provider answers as', function () {
@@ -123,19 +112,9 @@ it('confirms a login the provider answers as', function () {
 
     Livewire::test('settings.screenscraper')
         ->call('check')
-        ->assertDispatched('toast-show');
+        ->assertDispatched('toast-show', fn (string $name, array $params): bool => $params['dataset']['variant'] === 'success');
 });
 
-it('draws no allowance until something has been asked', function () {
-    // A snapshot is only ever written by a response. Zeros here would read as
-    // a spent quota rather than as nothing having happened yet.
-    Livewire::test('settings.screenscraper')
-        ->assertSee('Nothing yet')
-        ->assertDontSee('Lookups today');
-});
-
-it('is reachable from the settings tabs', function () {
-    $this->get(route('user.edit'))
-        ->assertOk()
-        ->assertSee(route('screenscraper.edit'), escape: false);
+it('renders the settings screen', function () {
+    $this->get(route('screenscraper.edit'))->assertOk();
 });

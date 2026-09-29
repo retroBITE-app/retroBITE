@@ -132,6 +132,11 @@ it('changes the layout of a console already in the library', function () {
 
     expect(ConsoleSourceFolder::sole()->layout)->toBe('opl');
 
+    // The case building the drive matters most for: a console already in the
+    // library, on a layout whose folders were never needed until now.
+    expect(File::isDirectory($this->root.'/ps2/DVD'))->toBeTrue()
+        ->and(File::isDirectory($this->root.'/ps2/CFG'))->toBeTrue();
+
     // Re-read, because what counts as a game just changed.
     Bus::assertDispatched(ScanConsoleFolder::class);
 });
@@ -142,19 +147,6 @@ it('will not store a layout the console does not offer', function () {
     ConsoleSourceFolder::setLayout(new Console('snes'), 'opl');
 
     expect(ConsoleSourceFolder::sole()->layout)->toBeNull();
-});
-
-it('offers the picker only where there is a choice to make', function () {
-    ConsoleSourceFolder::add(new Console('ps2'));
-    ConsoleSourceFolder::add(new Console('snes'));
-
-    Livewire::test('consoles.index')
-        ->assertSee('Change layout');
-
-    ConsoleSourceFolder::forget(new Console('ps2'));
-
-    Livewire::test('consoles.index')
-        ->assertDontSee('Change layout');
 });
 
 /**
@@ -170,7 +162,6 @@ it('offers to make the folder the console names', function () {
     Livewire::test('consoles.index')
         ->call('choose', 'ps2')
         ->assertSet('step', 'folder')
-        ->assertSee('Create ps2/')
         ->call('createFolder')
         ->assertSet('step', 'layout')
         ->assertHasNoErrors();
@@ -187,8 +178,7 @@ it('offers it beside the folders that are already there', function () {
     // an empty one.
     Livewire::test('consoles.index')
         ->call('choose', 'ps2')
-        ->assertSet('creatable', 'ps2')
-        ->assertSee('Create ps2/');
+        ->assertSet('creatable', 'ps2');
 });
 
 it('does not offer to make a folder that is there', function () {
@@ -226,14 +216,13 @@ it('refuses to build a tree on a library root that is not mounted', function () 
     $missing = $this->root.'/not-mounted';
     config()->set('settings.games_path', $missing);
 
+    // A GAMES_PATH that failed to mount would otherwise get the tree built on
+    // the container's own filesystem: right in the interface, invisible over
+    // the share, gone on the next `up`.
     Livewire::test('consoles.index')
         ->call('choose', 'ps2')
         ->call('createFolder')
-        ->assertHasErrors('chosenFolder')
-        // A GAMES_PATH that failed to mount would otherwise get the tree built
-        // on the container's own filesystem: right in the interface, invisible
-        // over the share, gone on the next `up`.
-        ->assertSee('Check the library mount');
+        ->assertHasErrors('chosenFolder');
 
     expect(File::exists($missing))->toBeFalse()
         ->and(ConsoleSourceFolder::count())->toBe(0);
@@ -274,7 +263,7 @@ it('builds the drive OPL expects', function () {
         ->and(File::exists($this->root.'/ps2/CHT'))->toBeFalse();
 });
 
-it('leaves the folders that are already there alone', function () {
+it('leaves the folders that are already there alone, and makes nothing on a drive already arranged', function () {
     File::ensureDirectoryExists($this->root.'/ps2/DVD');
     File::put($this->root.'/ps2/DVD/Game.iso', 'x');
 
@@ -284,21 +273,16 @@ it('leaves the folders that are already there alone', function () {
 
     expect(File::get($this->root.'/ps2/DVD/Game.iso'))->toBe('x')
         ->and(File::isDirectory($this->root.'/ps2/CD'))->toBeTrue();
-});
 
-it('makes nothing on a drive already arranged that way', function () {
-    foreach (['DVD', 'CD', 'ART', 'CFG', 'VMC', 'THM'] as $directory) {
-        File::ensureDirectoryExists($this->root.'/ps2/'.$directory);
-    }
-    File::put($this->root.'/ps2/DVD/Game.iso', 'x');
+    $before = File::directories($this->root.'/ps2');
 
+    // Asked again, the drive is already arranged that way: nothing is made.
     Livewire::test('consoles.index')
-        ->call('choose', 'ps2')
-        ->dispatch('layout-chosen', console: 'ps2', layout: 'opl')
-        // Nothing was made, so nothing is claimed.
-        ->assertDontSee('Created');
+        ->call('changeLayout', 'ps2')
+        ->dispatch('layout-chosen', console: 'ps2', layout: 'opl');
 
-    expect(File::get($this->root.'/ps2/DVD/Game.iso'))->toBe('x');
+    expect(File::directories($this->root.'/ps2'))->toBe($before)
+        ->and(File::get($this->root.'/ps2/DVD/Game.iso'))->toBe('x');
 });
 
 it('makes nothing for the layout that imposes nothing', function () {
@@ -322,19 +306,6 @@ it('lays out the thumbnail tree for retroarch', function () {
     expect(File::isDirectory($this->root.'/ps2/media'))->toBeTrue()
         // And none of OPL's, which is a different arrangement entirely.
         ->and(File::exists($this->root.'/ps2/DVD'))->toBeFalse();
-});
-
-it('builds the drive when the layout is changed to opl', function () {
-    ConsoleSourceFolder::add(new Console('ps2'), null, 'custom');
-
-    // The case this matters most for: a console already in the library, on a
-    // layout whose folders were never needed until now.
-    Livewire::test('consoles.index')
-        ->call('changeLayout', 'ps2')
-        ->dispatch('layout-chosen', console: 'ps2', layout: 'opl');
-
-    expect(File::isDirectory($this->root.'/ps2/DVD'))->toBeTrue()
-        ->and(File::isDirectory($this->root.'/ps2/CFG'))->toBeTrue();
 });
 
 it('still adds the console when a folder cannot be made', function () {
@@ -362,8 +333,7 @@ it('opens the picker on the layout in force', function () {
 
     Livewire::test('consoles.choose-layout', ['console' => 'ps2', 'editing' => true])
         ->assertSet('layout', 'opl')
-        ->assertSet('current', 'opl')
-        ->assertSee('Current');
+        ->assertSet('current', 'opl');
 });
 
 it('opens on the console default when it has never been asked', function () {
@@ -379,21 +349,16 @@ it('claims nothing is current for a console being added', function () {
     // looked at.
     Livewire::test('consoles.choose-layout', ['console' => 'ps2'])
         ->assertSet('current', null)
-        ->assertSet('layout', 'custom')
-        ->assertDontSee('Current');
+        ->assertSet('layout', 'custom');
 });
 
-it('says on the card how a console is being read', function () {
+it('names the layout only where there was a choice', function () {
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
-
-    Livewire::test('consoles.index')->assertSee('Open PS2 Loader');
-});
-
-it('says nothing about layout where there was no choice', function () {
     ConsoleSourceFolder::add(new Console('snes'), null, null);
 
+    $layouts = Livewire::test('consoles.index')->instance()->added
+        ->mapWithKeys(fn (array $row) => [$row['console']->key => $row['layout']]);
+
     // One arrangement means the same words on every card, meaning nothing.
-    Livewire::test('consoles.index')
-        ->assertSee('snes')
-        ->assertDontSee('However it already is');
+    expect($layouts->all())->toBe(['ps2' => 'Open PS2 Loader', 'snes' => null]);
 });

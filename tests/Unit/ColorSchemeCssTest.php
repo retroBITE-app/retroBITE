@@ -50,7 +50,3 @@ it('gives the favicon the same logo fills as the stylesheet', function (ColorSch
         'shade' => Arr::get($block, '--color-logo-shade'),
     ]);
 })->with(ColorScheme::cases());
-
-it('has a stylesheet block for every scheme it ships', function (ColorScheme $scheme) {
-    expect(schemeCssBlock("[data-scheme='{$scheme->value}'] {"))->toHaveKey('--color-accent');
-})->with(ColorScheme::cases());

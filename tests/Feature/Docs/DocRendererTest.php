@@ -25,7 +25,10 @@ function renderDoc(string $body, string $path = 'ps2/laser.md'): string
 test('embeds a youtube video', function () {
     expect(renderDoc('@video[https://youtu.be/ygdtkkCFxkE]'))
         ->toContain('https://www.youtube-nocookie.com/embed/ygdtkkCFxkE')
-        ->toContain('</iframe>');
+        ->toContain('</iframe>')
+        // A lone video is lifted out of its paragraph: a block inside a <p> is
+        // not valid HTML, and the browser would close the paragraph early.
+        ->not->toContain('<p><div');
 });
 
 test('embeds a youtube watch url', function () {
@@ -42,11 +45,6 @@ test('leaves a non youtube video as plain text', function () {
 test('leaves a malformed video id as plain text', function () {
     expect(renderDoc('@video[https://youtu.be/../../etc/passwd]'))
         ->not->toContain('<iframe');
-});
-
-test('lifts a lone video out of its paragraph', function () {
-    expect(renderDoc('@video[https://youtu.be/ygdtkkCFxkE]'))
-        ->not->toContain('<p><div');
 });
 
 test('wraps a lone image in a captioned figure', function () {
@@ -96,8 +94,13 @@ test('every link opens in a new tab', function () {
         ->toContain('rel="noopener noreferrer"');
 });
 
-test('a refused link scheme is not given a target', function () {
-    expect(renderDoc('[Bad](javascript:alert(1))'))->not->toContain('javascript:');
+test('a refused link keeps its text but loses its destination', function () {
+    // Dropped rather than rewritten: the words stay readable, and there is
+    // nothing left to follow. It still carries the new-tab attributes, which
+    // do nothing on an anchor without an href.
+    expect(renderDoc('[Bad](javascript:alert(1))'))
+        ->toContain('>Bad</a>')
+        ->not->toContain('href=');
 });
 
 /**

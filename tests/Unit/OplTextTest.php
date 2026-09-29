@@ -31,13 +31,8 @@ it('cuts a long synopsis on a word boundary', function () {
     expect($summary)->toEndWith('...')
         // The limit plus the ellipsis, never more.
         ->and(mb_strlen($summary))->toBeLessThanOrEqual(303)
-        ->and($summary)->not->toContain('wor...');
-});
-
-it('ends with three ASCII dots, because OPL cannot draw the other one', function () {
-    $summary = (new OplText)->summarise(str_repeat('word ', 200));
-
-    expect($summary)->toEndWith('...')
+        ->and($summary)->not->toContain('wor...')
+        // Three ASCII dots, because OPL cannot draw the other one.
         ->and($summary)->not->toContain('…');
 });
 

@@ -77,24 +77,22 @@ it('lists name matches without letting a provider credential reach the browser',
         ->call('open')
         ->assertSet('search', 'FF9 Disc 1')
         ->assertSet('searched', true)
-        ->assertSee('Final Fantasy IX')
-        ->assertSee('Final Fantasy VIII')
         ->assertDontSee('sspassword')
         ->assertDontSee('hunter2');
 
-    expect(json_encode($component->get('candidates')))->not->toContain('topsecret');
+    expect(array_column($component->get('candidates'), 'title'))->toBe(['Final Fantasy IX', 'Final Fantasy VIII'])
+        ->and(json_encode($component->get('candidates')))->not->toContain('topsecret');
 });
 
 it('offers the exact checksum match when the file is hashed', function () {
     $game = unidentifiedGame();
     fakeProvider([], providerGame('19256', 'Final Fantasy IX'));
 
-    $component = Livewire::test('games.identify-modal', ['gameId' => $game->id])
-        ->call('open')
-        ->assertSee('Exact MD5 match')
-        ->assertSee('Final Fantasy IX');
+    $component = Livewire::test('games.identify-modal', ['gameId' => $game->id])->call('open');
 
-    expect($component->get('md5Match'))->not->toHaveKey('raw')->not->toHaveKey('cover_url');
+    expect($component->get('md5Match'))
+        ->title->toBe('Final Fantasy IX')
+        ->not->toHaveKey('raw')->not->toHaveKey('cover_url');
 
     Queue::assertNotPushed(HashFile::class);
 });
@@ -120,7 +118,7 @@ it('hashes an unhashed file once, then asks by checksum when the hash lands', fu
 
     $component = Livewire::test('games.identify-modal', ['gameId' => $game->id])
         ->call('open')
-        ->assertSee('Hashing file for an exact match')
+        ->assertNotSet('hashingFileId', null)
         ->assertSet('md5Match', null);
 
     Queue::assertPushed(HashFile::class, 1);
@@ -135,7 +133,7 @@ it('hashes an unhashed file once, then asks by checksum when the hash lands', fu
 
     $component->call('checkHash')
         ->assertSet('hashingFileId', null)
-        ->assertSee('Exact MD5 match');
+        ->assertNotSet('md5Match', null);
 });
 
 it('stops waiting on a hash that never arrives', function () {
@@ -207,18 +205,6 @@ it('shows a fixed message when the provider cannot be reached', function () {
         ->assertSet('candidates', []);
 });
 
-it('offers a hand-picked match on a matched game, and says why not on an unmapped console', function () {
-    $game = Game::factory()->forConsole('psx')->matched(19256)->create(['title' => 'Final Fantasy IX', 'slug' => 'final-fantasy-ix']);
-
-    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('Identify manually');
-
-    config()->set('consoles.psx.screenscraper_id', null);
-
-    $this->get(route('games.show', $game->routeParameters()))
-        ->assertOk()
-        ->assertSee('This console is not mapped to ScreenScraper.');
-});
-
 it('reloads the page once the modal reports a match', function () {
     $game = unidentifiedGame();
 
@@ -227,6 +213,7 @@ it('reloads the page once the modal reports a match', function () {
     $game->update(['title' => 'Final Fantasy IX', 'status' => GameStatus::Matched, 'screenscraper_id' => 19256]);
 
     $component->dispatch('game-identified')
-        ->assertSee('Final Fantasy IX')
         ->assertNotSet('fetchingFrom', null);
+
+    expect($component->get('game')->title)->toBe('Final Fantasy IX');
 });

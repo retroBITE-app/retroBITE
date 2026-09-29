@@ -26,13 +26,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Livewire\Livewire;
 
 /*
  * Signals instead of polls. Every page that used to ask on a timer now waits
- * for one of two events, and these tests pin down who sends which, that a
- * signal can never fail the work that sent it, and that nothing polls that
- * was meant to stop. See docs/adr/0002-live-updates-over-reverb.md.
+ * for one of two events, and these tests pin down who sends which, and that a
+ * signal can never fail the work that sent it. See
+ * docs/adr/0002-live-updates-over-reverb.md.
  */
 
 beforeEach(function () {
@@ -193,17 +192,4 @@ it('hands the browser the key at runtime, and only when signed in', function () 
 
     auth()->logout();
     $this->get(route('login'))->assertDontSee('reverb-key');
-});
-
-it('waits for the game\'s signal on the game page rather than polling', function () {
-    Bus::fake();
-    $this->actingAs(User::factory()->create());
-    $game = Game::factory()->forConsole('snes')->create(['title' => 'Unknown', 'slug' => 'unknown']);
-    GameFile::factory()->for($game)->create(['path' => 'snes/u.sfc', 'filename' => 'u.sfc', 'extension' => 'sfc', 'role' => FileRole::Rom]);
-
-    Livewire::test('games.show', ['game' => $game])
-        ->call('identify')
-        ->assertSee('Waiting for ScreenScraper')
-        ->assertDontSeeHtml('wire:poll')
-        ->assertSeeHtml('live.game('.$game->id);
 });

@@ -235,22 +235,21 @@ describe('delete', function () {
 });
 
 describe('the game page', function () {
-    it('offers the move in the actions menu and no longer offers deleting the game from it', function () {
+    it('offers the move in the actions menu', function () {
         ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
         $game = gameWithFiles('ps2', ['ps2/DVD/Game.iso']);
 
-        $this->get(route('games.show', $game->routeParameters()))
-            ->assertOk()
-            ->assertSee('ps2/CD/')
-            ->assertDontSee('Not available yet.');
+        $page = Livewire::test('games.show', ['game' => $game])->instance();
+
+        expect($page->moveTargets)->toBe(['CD' => 'ps2/CD/'])
+            ->and($page->moveBlocked)->toBeNull();
     });
 
-    it('explains why a game at its only folder cannot move', function () {
+    it('blocks the move for a game at its only folder', function () {
         ConsoleSourceFolder::add(new Console('snes'));
         $game = gameWithFiles('snes', ['snes/Mario.sfc']);
 
-        Livewire::test('games.show', ['game' => $game])
-            ->assertSee('Already in the only folder this console&#039;s layout reads.', false);
+        expect(Livewire::test('games.show', ['game' => $game])->instance()->moveBlocked)->not->toBeNull();
     });
 
     it('moves the game from the page', function () {
@@ -258,8 +257,7 @@ describe('the game page', function () {
         $game = gameWithFiles('ps2', ['ps2/DVD/Game.iso']);
 
         Livewire::test('games.show', ['game' => $game])
-            ->call('moveTo', 'CD')
-            ->assertSee('ps2/DVD/');
+            ->call('moveTo', 'CD');
 
         expect($game->files()->value('path'))->toBe('ps2/CD/Game.iso');
     });
@@ -271,12 +269,10 @@ describe('the game page', function () {
 
         Livewire::test('games.show', ['game' => $game, 'tab' => 'files'])
             ->set('tab', 'files')
-            ->assertSee('Delete Mario.sfc')
-            ->call('deleteFile', $file->id)
-            ->assertDontSee('Delete Mario.sfc')
-            ->assertSee('Delete Mario (Rev 1).sfc');
+            ->call('deleteFile', $file->id);
 
-        expect(File::exists($this->root.'/snes/Mario.sfc'))->toBeFalse()
+        expect($game->files()->pluck('filename')->all())->toBe(['Mario (Rev 1).sfc'])
+            ->and(File::exists($this->root.'/snes/Mario.sfc'))->toBeFalse()
             ->and(File::exists($this->root.'/snes/Mario (Rev 1).sfc'))->toBeTrue();
     });
 });

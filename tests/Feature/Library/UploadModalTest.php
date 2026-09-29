@@ -33,11 +33,11 @@ afterEach(function () {
 it('offers uploads on the shelf only while the setting is on', function () {
     ConsoleSourceFolder::add(new Console('snes'));
 
-    $this->get(route('consoles.games', ['console' => 'snes']))->assertOk()->assertDontSee('Upload files');
+    expect(Livewire::test('games.index', ['console' => 'snes'])->instance()->canUpload)->toBeFalse();
 
     AppSetting::put(AppSetting::UI_UPLOADS, true);
 
-    $this->get(route('consoles.games', ['console' => 'snes']))->assertOk()->assertSee('Upload files');
+    expect(Livewire::test('games.index', ['console' => 'snes'])->instance()->canUpload)->toBeTrue();
 });
 
 it('offers no uploads for a console that is not in the library', function () {
@@ -62,23 +62,19 @@ it('asks for a destination only where the layout offers more than one', function
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
     ConsoleSourceFolder::add(new Console('snes'));
 
-    Livewire::test('games.upload-modal', ['console' => 'ps2'])
-        ->assertSee('ps2/DVD/')
-        ->assertSee('ps2/CD/')
-        ->assertSee('radiogroup', false);
+    expect(Livewire::test('games.upload-modal', ['console' => 'ps2'])->instance()->destinations)
+        ->toEqualCanonicalizing(['DVD' => 'ps2/DVD/', 'CD' => 'ps2/CD/']);
 
-    Livewire::test('games.upload-modal', ['console' => 'snes'])
-        ->assertSee('snes/')
-        ->assertDontSee('radiogroup', false);
+    expect(Livewire::test('games.upload-modal', ['console' => 'snes'])->instance()->destinations)
+        ->toBe(['' => 'snes/']);
 });
 
 it('hands the browser the console\'s own file types', function () {
     ConsoleSourceFolder::add(new Console('snes'));
 
-    Livewire::test('games.upload-modal', ['console' => 'snes'])
-        ->assertSee('.sfc', false)
-        ->assertSee('.smc', false)
-        ->assertDontSee('.iso', false);
+    $extensions = Livewire::test('games.upload-modal', ['console' => 'snes'])->instance()->extensions;
+
+    expect($extensions)->toContain('sfc', 'smc')->not->toContain('iso');
 });
 
 it('answers a refusal with its fixed message', function () {
@@ -107,12 +103,11 @@ it('files uploads into game folders where the layout wants them', function () {
     $modal = Livewire::test('games.upload-modal', ['console' => 'psx']);
 
     // The list groups by folder only where there are folders to group by.
-    // @js writes the config with its quotes escaped as \u0022.
-    $modal->assertSee('\u0022perGameFolders\u0022:true', false);
+    expect($modal->instance()->perGameFolders)->toBeTrue();
 
     $answer = $modal->instance()->begin('Crash.cue', 4, '', app(RomUploads::class), 'Crash Bandicoot');
 
     expect($answer['ok'])->toBeTrue();
 
-    Livewire::test('games.upload-modal', ['console' => 'ps2'])->assertSee('\u0022perGameFolders\u0022:false', false);
+    expect(Livewire::test('games.upload-modal', ['console' => 'ps2'])->instance()->perGameFolders)->toBeFalse();
 });

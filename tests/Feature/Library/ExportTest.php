@@ -272,9 +272,12 @@ it('re-encodes a cached cover to the size OPL reads', function () {
     $path = $this->root.'/ps2/ART/SLES_503.86_COV.png';
     $size = getimagesize($path);
 
+    // The 1.2 builds carry libpng and no JPEG decoder: a _COV.jpg is never
+    // drawn, which is how a whole drive's covers went missing once.
     expect($size[0])->toBe(256)
         ->and($size[1])->toBe(368)
-        ->and($size['mime'])->toBe('image/png');
+        ->and($size['mime'])->toBe('image/png')
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeFalse();
 });
 
 it('writes the disc scan as the icon OPL draws beside the cover, its corners clear', function () {
@@ -345,18 +348,6 @@ it('flattens a transparent cover onto something opaque', function () {
         ->and($colour['red'])->toBe(0)
         ->and($colour['green'])->toBe(0)
         ->and($colour['blue'])->toBe(0);
-});
-
-it('writes covers as PNG, the only format OPL decodes', function () {
-    $game = exportGame();
-    cover($game, pngOf(1000, 1400));
-
-    runExport('art');
-
-    // The 1.2 builds carry libpng and no JPEG decoder: a _COV.jpg is never
-    // drawn, which is how a whole drive's covers went missing once.
-    expect(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue()
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.jpg'))->toBeFalse();
 });
 
 it('writes the in-game and title screenshots for the info page', function () {
@@ -443,8 +434,10 @@ it('runs an export from the job only for a console that offers it', function () 
     (new WriteConsoleExports('ps2', 'art'))->handle();
     (new WriteConsoleExports('snes', 'cfg'))->handle();
 
+    // The SNES has no loader files to write, so the job touches nothing.
     expect(File::exists($this->root.'/ps2/CFG/SLES_503.86.cfg'))->toBeTrue()
-        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue();
+        ->and(File::exists($this->root.'/ps2/ART/SLES_503.86_COV.png'))->toBeTrue()
+        ->and(File::exists($this->root.'/snes'))->toBeFalse();
 });
 
 it('counts files rather than jobs while an export runs', function () {

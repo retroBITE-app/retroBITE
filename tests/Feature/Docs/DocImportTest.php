@@ -83,6 +83,25 @@ test('a zip imports its document and its images', function () {
         ->and(Storage::disk('docs')->exists('gc/media/pot.png'))->toBeTrue();
 });
 
+test('an imported file is filed from its own front matter', function () {
+    $markdown = "---\ntitle: RCP heatsink swap\nconsole: n64\ncategory: repair\ntags: [thermal]\n---\n\n# RCP heatsink swap\n\nBody.\n";
+
+    Livewire::test('docs.import-modal')
+        ->set('upload', UploadedFile::fake()->createWithContent('notes.md', $markdown))
+        ->assertSet('title', 'RCP heatsink swap')
+        ->assertSet('console', 'n64')
+        ->assertSet('category', 'repair')
+        ->call('import')
+        ->assertHasNoErrors()
+        ->assertDispatched('doc-written');
+
+    $imported = $this->library->find('n64/rcp-heatsink-swap.md');
+
+    expect($imported)->not->toBeNull()
+        ->and($imported->tags)->toBe(['thermal'])
+        ->and($imported->body)->toContain('Body.');
+});
+
 test('the chosen console decides the folder, not the front matter', function () {
     $markdown = "---\ntitle: Laser tuning\nconsole: ps2\n---\n\n# Laser tuning\n";
 

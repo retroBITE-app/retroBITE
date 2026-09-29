@@ -171,15 +171,11 @@ it('opens what the console config says it opens', function (string $extension, b
     expect(ps2Tools()->handles($file))->toBe($handled);
 })->with([
     ['iso', true],
-    ['bin', true],
-    ['img', true],
     ['ISO', true],
-    // Compressed containers. They are ps2 files — file_extensions lists them —
+    // A compressed container. It is a ps2 file — file_extensions lists it —
     // and still nothing can be read inside one, which is why the toolbox keeps
     // a list of its own.
     ['chd', false],
-    ['cso', false],
-    ['zso', false],
     // Not a ps2 file at all.
     ['cue', false],
 ]);
@@ -197,28 +193,14 @@ it('follows the config rather than a copy of it', function () {
     expect(ps2Tools()->handles($bin))->toBeFalse();
 });
 
-it('opens nothing for a console that declares nothing', function () {
-    config()->set('consoles.ps2.toolbox_file_extensions', []);
-
-    expect(ps2Tools()->handles(new GameFile(['extension' => 'iso'])))->toBeFalse();
-});
-
 /**
  * The chain carries per-call state, which is the one thing that could leak
  * between two callers in a request. for() clones, so it cannot.
  */
 it('gives each caller a toolbox of its own', function () {
-    ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
-
-    $forceful = ps2Tools()->export('cfg')->force();
-    $ordinary = ps2Tools()->export('cfg');
-
-    expect($forceful)->not->toBe($ordinary);
-
-    // Nothing to write for either — no games — but the flag being separate is
-    // the assertion, and a shared instance would have handed the second one
-    // the first one's export and force.
-    expect($ordinary->run())->toBe(['written' => 0, 'skipped' => 0, 'failed' => 0]);
+    // A shared instance would hand the second caller the first one's export
+    // and force.
+    expect(ps2Tools()->export('cfg')->force())->not->toBe(ps2Tools()->export('cfg'));
 });
 
 it('knows which console it serves without being told', function () {

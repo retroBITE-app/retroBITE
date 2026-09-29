@@ -38,63 +38,38 @@ test('builds a document path from a console and a slug', function () {
         ->toBe('gc/dol-001-vs-dol-101.md');
 });
 
-test('refuses a parent traversal', function () {
-    $this->path->assertDocument('ps2/../../escaped.md');
-})->throws(DocPathException::class);
-
-test('refuses a bare parent segment', function () {
-    $this->path->assertDocument('../escaped.md');
-})->throws(DocPathException::class);
-
-test('refuses an absolute path', function () {
-    $this->path->assertDocument('/etc/passwd.md');
-})->throws(DocPathException::class);
-
-test('refuses a windows separator', function () {
-    $this->path->assertDocument('ps2\\..\\escaped.md');
-})->throws(DocPathException::class);
-
-test('refuses a null byte', function () {
-    $this->path->assertDocument("ps2/laser\0.md");
-})->throws(DocPathException::class);
-
-test('refuses an empty path', function () {
-    $this->path->assertDocument('');
-})->throws(DocPathException::class);
-
-test('refuses a doubled separator', function () {
-    $this->path->assertDocument('ps2//laser.md');
-})->throws(DocPathException::class);
-
-test('refuses a trailing separator', function () {
-    $this->path->assertDocument('ps2/laser.md/');
-})->throws(DocPathException::class);
-
-test('refuses a hidden file', function () {
-    $this->path->assertDocument('ps2/.hidden.md');
-})->throws(DocPathException::class);
-
-test('refuses a doubled extension', function () {
-    $this->path->assertDocument('ps2/laser.php.md');
-})->throws(DocPathException::class);
-
-test('refuses an extension we do not write', function () {
-    $this->path->assertDocument('ps2/laser.php');
-})->throws(DocPathException::class);
-
-test('refuses a document with no extension', function () {
-    $this->path->assertDocument('ps2/laser');
-})->throws(DocPathException::class);
-
-test('refuses a document reached through the revisions folder', function () {
-    $this->path->assertDocument('.revisions/ps2/laser/1758067200.md');
-})->throws(DocPathException::class);
+test('refuses a path a request could craft', function (string $gate, string $path) {
+    $this->path->{$gate}($path);
+})->with([
+    'a parent traversal' => ['assertDocument', 'ps2/../../escaped.md'],
+    'an absolute path' => ['assertDocument', '/etc/passwd.md'],
+    'a windows separator' => ['assertDocument', 'ps2\\..\\escaped.md'],
+    'a null byte' => ['assertDocument', "ps2/laser\0.md"],
+    'an empty path' => ['assertDocument', ''],
+    'a doubled separator' => ['assertDocument', 'ps2//laser.md'],
+    'a trailing separator' => ['assertDocument', 'ps2/laser.md/'],
+    'a hidden file' => ['assertDocument', 'ps2/.hidden.md'],
+    'a doubled extension' => ['assertDocument', 'ps2/laser.php.md'],
+    'an extension we do not write' => ['assertDocument', 'ps2/laser.php'],
+    'a document with no extension' => ['assertDocument', 'ps2/laser'],
+    'a document reached through the revisions folder' => ['assertDocument', '.revisions/ps2/laser/1758067200.md'],
+    'an attachment outside a media folder' => ['assertMedia', 'ps2/scph-39001-pot.jpg'],
+    'a markdown file through the media gate' => ['assertMedia', 'ps2/media/laser.md'],
+    'an executable extension through the media gate' => ['assertMedia', 'ps2/media/shell.php'],
+    'a revision folder for a malformed document' => ['revisionDirectory', '../escaped.md'],
+])->throws(DocPathException::class);
 
 test('refuses a symlink pointing out of the root', function () {
     symlink($this->outside, $this->root.'/leak');
 
-    $this->path->assertDocument('leak/secret.md');
-})->throws(DocPathException::class);
+    try {
+        $this->path->assertDocument('leak/secret.md');
+        $this->fail('expected a DocPathException');
+    } catch (DocPathException $e) {
+        // A resolved escape is reported as outside the root, not as malformed.
+        expect($e->reason)->toBe(DocPathException::OUTSIDE_ROOT);
+    }
+});
 
 test('refuses a symlinked document', function () {
     symlink($this->outside.'/secret.md', $this->root.'/ps2/leak.md');
@@ -105,19 +80,10 @@ test('refuses a symlinked document', function () {
 test('carries the reason and the offending path', function () {
     try {
         $this->path->assertDocument('ps2/../../escaped.md');
+        $this->fail('expected a DocPathException');
     } catch (DocPathException $e) {
         expect($e->reason)->toBe(DocPathException::MALFORMED)
             ->and($e->path)->toBe('ps2/../../escaped.md');
-    }
-});
-
-test('reports a resolved escape as outside the root', function () {
-    symlink($this->outside, $this->root.'/leak');
-
-    try {
-        $this->path->assertDocument('leak/secret.md');
-    } catch (DocPathException $e) {
-        expect($e->reason)->toBe(DocPathException::OUTSIDE_ROOT);
     }
 });
 
@@ -146,18 +112,6 @@ test('admits an attachment in a media folder', function () {
         ->toBe('ps2/media/scph-39001-pot.jpg');
 });
 
-test('refuses an attachment outside a media folder', function () {
-    $this->path->assertMedia('ps2/scph-39001-pot.jpg');
-})->throws(DocPathException::class);
-
-test('refuses a markdown file through the media gate', function () {
-    $this->path->assertMedia('ps2/media/laser.md');
-})->throws(DocPathException::class);
-
-test('refuses an executable extension through the media gate', function () {
-    $this->path->assertMedia('ps2/media/shell.php');
-})->throws(DocPathException::class);
-
 test('accepts an uppercase attachment extension', function () {
     expect($this->path->assertMedia('ps2/media/Pot.JPG'))
         ->toBe('ps2/media/Pot.JPG');
@@ -165,10 +119,6 @@ test('accepts an uppercase attachment extension', function () {
 
 test('names the media folder beside the document', function () {
     expect($this->path->mediaDirectory('ps2/scph-39001-laser.md'))->toBe('ps2/media');
-});
-
-test('links an attachment relative to the document', function () {
-    expect(DocPath::mediaLink('scph-39001-pot.jpg'))->toBe('media/scph-39001-pot.jpg');
 });
 
 test('names the revision folder for a document', function () {
@@ -180,10 +130,6 @@ test('names one revision for the moment it was superseded', function () {
     expect($this->path->revision('ps2/scph-39001-laser.md', 1758067200))
         ->toBe('.revisions/ps2/scph-39001-laser/1758067200.md');
 });
-
-test('refuses a revision folder for a malformed document', function () {
-    $this->path->revisionDirectory('../escaped.md');
-})->throws(DocPathException::class);
 
 test('resolves an absolute path under the root', function () {
     expect($this->path->absolute('ps2/scph-39001-laser.md'))

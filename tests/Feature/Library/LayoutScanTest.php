@@ -64,13 +64,9 @@ it('reads only the game directories under the opl layout', function () {
         'ps2/CD/SLES_503.86.Crash Bandicoot The Wrath of Cortex.iso',
         'ps2/DVD/SLES_503.30.Grand Theft Auto III (Europe).iso',
     ]);
-});
 
-it('takes the serial prefix off the title, but only under opl', function () {
-    oplTree();
-
-    scanPs2('opl');
-
+    // And the serial prefix comes off the title — only here: the custom layout
+    // below keeps it.
     expect(Game::pluck('title')->sort()->values()->all())->toBe([
         'Crash Bandicoot The Wrath of Cortex',
         'Grand Theft Auto III (Europe)',

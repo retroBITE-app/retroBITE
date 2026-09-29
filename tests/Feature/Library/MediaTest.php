@@ -111,14 +111,6 @@ it('writes nothing when the provider says our copy matches', function () {
     Storage::disk('media')->assertDirectoryEmpty('/');
 });
 
-it('treats NOMEDIA as an ordinary answer, not a failure', function () {
-    Http::fake(['*' => Http::response('NOMEDIA', 200)]);
-
-    runScrape($this->game, [entry('box-2D')]);
-
-    expect(Media::count())->toBe(0);
-});
-
 it('keeps the box art when a screenshot fails', function () {
     $cover = PNG.'cover';
 
@@ -247,8 +239,9 @@ it('offers our own checksum when replacing artwork we hold', function () {
 
     Http::assertSent(fn ($request) => str_contains($request->url(), 'md5='.md5($old)));
 
-    // Replacing, not accumulating: a type is one slot, and the copy that
-    // arrives last is the one the game holds.
+    // Replacing, not accumulating: a type and region is one slot, and the copy
+    // that arrives last is the one the game holds. A game may hold a European
+    // and a Japanese cover, never two European ones.
     expect(Media::count())->toBe(1)
         ->and(Media::first()->md5)->toBe(md5($new));
 
@@ -277,22 +270,6 @@ it('keeps each region side by side and lets the preference choose', function () 
 
     expect(Media::count())->toBe(2)
         ->and($this->game->refresh()->load('media')->artwork(MediaKind::Cover)->region)->toBe('jp');
-});
-
-it('replaces one region copy rather than piling revisions up', function () {
-    $old = PNG.'old-eu';
-    $new = PNG.'new-eu';
-
-    Http::fake(['*' => Http::sequence()->push($old, 200)->push($new, 200)]);
-
-    runScrape($this->game, [entry('box-2D', $old, region: 'eu')]);
-    runScrape($this->game->refresh(), [entry('box-2D', $new, region: 'eu')]);
-
-    // One slot per type AND region: a game may hold a European and a Japanese
-    // cover, never two European ones.
-    expect(Media::count())->toBe(1)
-        ->and(Media::sole()->md5)->toBe(md5($new))
-        ->and(Storage::disk('media')->allFiles())->toHaveCount(1);
 });
 
 it('fetches one named region and nothing else', function () {
@@ -354,7 +331,9 @@ it('records what each media type came back with', function () {
     expect($activity->properties['endpoint'])->toBe('mediaJeu.php')
         ->and($activity->properties['outcomes']['box-2D'])->toBe('stored')
         ->and($activity->properties['outcomes']['ss'])->toBe('not held by the provider')
-        ->and($activity->subject->is($this->game))->toBeTrue();
+        ->and($activity->subject->is($this->game))->toBeTrue()
+        // NOMEDIA is an ordinary answer: nothing stored for it, and no failure.
+        ->and(Media::count())->toBe(1);
 });
 
 it('keeps one copy of a type, not every region the provider holds', function () {

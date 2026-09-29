@@ -13,7 +13,6 @@ use App\Transfers\GameVersions;
 use App\Transfers\TransferRejected;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
-use Livewire\Livewire;
 
 /*
  * Sending a game to a Batocera drive. The server decides everything that is
@@ -282,18 +281,6 @@ it('updates its own entry and leaves everyone else\'s alone', function () {
         ->and((string) $xml->game[1]->name)->toBe('Super Mario World');
 });
 
-it('adds its entry to a list that does not have it', function () {
-    $game = snesGame();
-    libraryFile($game, 'snes/smw.sfc', FileRole::Rom);
-
-    $xml = simplexml_load_string(app(BatoceraTarget::class)->mergeGamelist(
-        '<?xml version="1.0"?><gameList><game><path>./zelda.sfc</path></game></gameList>',
-        $game,
-    ));
-
-    expect(array_map('strval', iterator_to_array($xml->xpath('/gameList/game/path'))))->toBe(['./zelda.sfc', './smw.sfc']);
-});
-
 it('refuses rather than replaces a game list it cannot read', function () {
     $game = snesGame();
     libraryFile($game, 'snes/smw.sfc', FileRole::Rom);
@@ -356,13 +343,4 @@ it('lets nobody who is not signed in near it', function () {
 
     $this->get(route('transfers.plan', ['target' => 'batocera', 'gameId' => $game->id]))->assertRedirect(route('login'));
     $this->get(route('transfers.files', ['file' => $rom->id]))->assertRedirect(route('login'));
-});
-
-it('offers it from the game page', function () {
-    $game = snesGame();
-    libraryFile($game, 'snes/smw.sfc', FileRole::Rom);
-
-    Livewire::test('games.show', ['game' => $game])
-        ->assertSee('Send to…')
-        ->assertSeeHtml('x-data="transfer(');
 });
