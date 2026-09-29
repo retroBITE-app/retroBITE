@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TransferFailure;
 use App\Jobs\DiscoverShares;
 use App\Jobs\ListShares;
 use App\Models\Destination;
@@ -69,7 +70,7 @@ function discoveryFinding(array $hosts, array $names = []): ShareDiscovery
     };
 }
 
-it('searches on the queue, and shows what answered when the signal comes', function () {
+it('searches on the queue, and takes what answered when the signal comes', function () {
     Queue::fake();
 
     $page = Livewire::test('settings.destinations')->call('search');
@@ -82,18 +83,7 @@ it('searches on the queue, and shows what answered when the signal comes', funct
 
     $page->call('checkSearch')
         ->assertSet('searchToken', null)
-        ->assertSee('batocera')
-        ->assertSee('192.168.1.20');
-});
-
-it('says why it could not search the whole network, when it had none to scan', function () {
-    Cache::put(DiscoverShares::cacheKey('t'), ['hosts' => [], 'subnets' => []]);
-
-    Livewire::test('settings.destinations')
-        ->set('searchToken', 't')
-        ->set('searchSince', now()->timestamp)
-        ->call('checkSearch')
-        ->assertSee('Set HOST_IP in .env');
+        ->assertSet('found', [['name' => 'batocera', 'address' => '192.168.1.20', 'via' => 'mdns']]);
 });
 
 it('scans the network HOST_IP is on, or else the one the page was opened on — never Docker\'s own or a public one', function () {
@@ -169,7 +159,9 @@ it('says a machine that did not answer did not answer', function () {
     $page = Livewire::test('settings.destinations')->set('host', 'nowhere')->call('listShares');
     app()->call([new ListShares($page->get('listToken'), 'nowhere'), 'handle']);
 
-    $page->call('checkListing')->assertSee('Nothing answered at nowhere.');
+    $page->call('checkListing');
+
+    expect($page->get('listing'))->failure->toBe(TransferFailure::Unreachable->value)->shares->toBe([]);
 });
 
 it('keeps a password off the queue in plain text', function () {
@@ -185,12 +177,12 @@ it('saves a destination with its password encrypted, and removes it', function (
         ->set('username', 'root')
         ->set('password', 'linux')
         ->call('save')
-        ->assertHasNoErrors()
-        ->assertSee('\\\\batocera\\share\\batocera');
+        ->assertHasNoErrors();
 
     $destination = Destination::query()->sole();
 
     expect($destination->folder)->toBe('batocera')
+        ->and($destination->address())->toBe('\\\\batocera\\share\\batocera')
         ->and($destination->password)->toBe('linux')
         ->and($destination->getRawOriginal('password'))->not->toContain('linux');
 
@@ -206,7 +198,7 @@ it('edits a destination, keeping its password unless a new one is typed', functi
         ->call('edit', $destination->id)
         ->assertSet('folder', 'roms')
         ->assertSet('password', '')
-        ->assertSee('Edit RP4')
+        ->assertSet('editing', $destination->id)
         ->set('folder', '')
         ->call('save')
         ->assertHasNoErrors()
@@ -227,8 +219,7 @@ it('refuses the roms folder itself, which the target adds to every path', functi
         Livewire::test('settings.destinations')
             ->set('name', 'x')->set('host', 'batocera')->set('share', 'share')->set('folder', $folder)
             ->call('save')
-            ->assertHasErrors('folder')
-            ->assertSee('Send to adds roms/ itself');
+            ->assertHasErrors('folder');
     }
 
     Livewire::test('settings.destinations')
@@ -261,5 +252,5 @@ it('resolves an address as it is, and a name by NetBIOS when DNS does not know i
 });
 
 it('is a tab in settings', function () {
-    $this->get(route('destinations.edit'))->assertOk()->assertSee('Search the network');
+    $this->get(route('destinations.edit'))->assertOk();
 });

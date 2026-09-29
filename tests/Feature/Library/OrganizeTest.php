@@ -140,11 +140,11 @@ it('keeps the same games through a rescan afterwards', function () {
 it('offers organizing only on the game folders layout', function () {
     looseGame('Crash Bandicoot', ['Crash.cue' => FileRole::Sheet]);
 
-    $this->get(route('consoles.games', ['console' => 'psx']))->assertOk()->assertSee('Organize into game folders');
+    expect(Livewire::test('games.index', ['console' => 'psx'])->instance()->canOrganize)->toBeTrue();
 
     ConsoleSourceFolder::setLayout($this->console, 'custom');
 
-    $this->get(route('consoles.games', ['console' => 'psx']))->assertOk()->assertDontSee('Organize into game folders');
+    expect(Livewire::test('games.index', ['console' => 'psx'])->instance()->canOrganize)->toBeFalse();
 
     expect(organizeModal()->instance()->plan['moves'])->toBe([]);
 });

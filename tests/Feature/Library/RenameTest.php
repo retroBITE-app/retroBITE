@@ -161,18 +161,18 @@ it('keeps the same game and its checksum through a rescan', function () {
 it('offers Rename files on the shelf only for a PS2 drive arranged for OPL', function () {
     renamableGame('Tekken Tag Tournament.iso');
 
-    $this->get(route('consoles.games', ['console' => 'ps2']))->assertOk()->assertSee('Rename files');
+    expect(Livewire::test('games.index', ['console' => 'ps2'])->instance()->canRename)->toBeTrue();
 
     ConsoleSourceFolder::setLayout(new Console('ps2'), 'custom');
 
-    $this->get(route('consoles.games', ['console' => 'ps2']))->assertOk()->assertDontSee('Rename files');
+    expect(Livewire::test('games.index', ['console' => 'ps2'])->instance()->canRename)->toBeFalse();
 });
 
 it('renames one game from its own page, starting on the step that applies', function () {
     $game = renamableGame('SLES_503.86.Tekken Tag Tournament.iso');
     renamableGame('SLES_524.67.Jak II.iso', 'SLES_524.67', 'Jak II');
 
-    $this->get(route('games.show', $game->routeParameters()))->assertOk()->assertSee('Rename file');
+    expect(Livewire::test('games.show', ['game' => $game])->instance()->canRename)->toBeTrue();
 
     renameModal($game->id)
         ->assertSet('mode', 'remove')

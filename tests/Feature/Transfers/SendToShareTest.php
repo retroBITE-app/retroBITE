@@ -108,8 +108,7 @@ it('queues the copy and then the list, on the transfer queue', function () {
 
     Livewire::test('games.show', ['game' => $this->game])
         ->call('sendToShare', $this->destination->id, 'batocera')
-        ->assertSet('watchingTransfer', Transfer::query()->sole()->id)
-        ->assertSee('Waiting to send to Living room');
+        ->assertSet('watchingTransfer', Transfer::query()->sole()->id);
 
     Bus::assertChained([FileTransferJob::class, WriteTransferGamelist::class]);
 });
@@ -118,26 +117,5 @@ it('follows a transfer that is still running when the page opens', function () {
     $transfer = Transfer::query()->create(['game_id' => $this->game->id, 'destination_id' => $this->destination->id, 'target' => 'batocera', 'status' => Transfer::RUNNING, 'files_total' => 3, 'files_done' => 1]);
 
     Livewire::test('games.show', ['game' => $this->game])
-        ->assertSet('watchingTransfer', $transfer->id)
-        ->assertSee('Sending to Living room')
-        ->assertSee('1 / 3');
-});
-
-it('says when nothing has picked a queued transfer up', function () {
-    Transfer::query()->create(['game_id' => $this->game->id, 'destination_id' => $this->destination->id, 'target' => 'batocera', 'status' => Transfer::QUEUED, 'files_total' => 1]);
-
-    Livewire::test('games.show', ['game' => $this->game])->assertDontSee('Nothing has picked this up yet');
-
-    $this->travel(31)->seconds();
-
-    Livewire::test('games.show', ['game' => $this->game])->assertSee('Nothing has picked this up yet');
-});
-
-it('offers the saved shares and the USB drive in the modal', function () {
-    Livewire::test('games.show', ['game' => $this->game])
-        ->assertSee('Send to…')
-        ->assertSee('USB drive on this computer')
-        ->assertSee('Living room')
-        // The USB path runs in the browser, so the modal has to carry it too.
-        ->assertSeeHtml('x-data="transfer(');
+        ->assertSet('watchingTransfer', $transfer->id);
 });

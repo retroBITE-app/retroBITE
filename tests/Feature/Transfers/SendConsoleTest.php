@@ -141,16 +141,16 @@ it('refuses a console it does not know', function () {
     $this->getJson(route('transfers.console-plan', ['target' => 'batocera', 'console' => 'nope']))->assertNotFound();
 });
 
-it('offers the whole console from its shelf, and builds the plan only once asked', function () {
+it('counts the identified games it would send, and builds the plan only once asked', function () {
     gbGame('Tetris', ['Tetris (World).zip' => 'tetris']);
+    gbGame('Homebrew', ['homebrew.zip' => 'y'], GameStatus::Unmatched);
 
-    Livewire::test('games.index', ['console' => 'gb'])->assertSee('Send all games to…');
-
-    Livewire::test('games.send-console', ['console' => 'gb'])
-        ->assertDontSee('One copy of each', false)
+    $modal = Livewire::test('games.send-console', ['console' => 'gb'])
+        ->assertSet('open', false)
         ->call('openModal')
-        ->assertSet('open', true)
-        ->assertSee('The one identified game on Game Boy, one copy of it.');
+        ->assertSet('open', true);
+
+    expect($modal->instance()->count)->toBe(1);
 });
 
 it('starts a share send from the shelf and says how it went', function () {

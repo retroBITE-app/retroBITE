@@ -129,19 +129,14 @@ it('writes nothing on a console laid out some other way', function () {
         ->and(File::exists($this->root.'/psx/Final Fantasy IX/Final Fantasy IX.m3u'))->toBeFalse();
 });
 
-it('names each console\'s exports in its own words on the shelf', function () {
+it('offers each console its own exports on the shelf', function () {
     folderGame('Final Fantasy IX', ['FF9 (Disc 1).cue', 'FF9 (Disc 2).cue']);
 
-    Livewire::test('games.index', ['console' => 'psx'])
-        ->assertSee('Write playlists')
-        ->assertDontSee('Write OPL');
+    expect(Livewire::test('games.index', ['console' => 'psx'])->instance()->consoleExports)->toBe(['m3u']);
 
     File::ensureDirectoryExists($this->root.'/ps2');
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
     Game::factory()->forConsole('ps2')->matched()->create();
 
-    Livewire::test('games.index', ['console' => 'ps2'])
-        ->assertSee('Write OPL configs')
-        ->assertSee('Write OPL art')
-        ->assertDontSee('Write playlists');
+    expect(Livewire::test('games.index', ['console' => 'ps2'])->instance()->consoleExports)->toBe(['cfg', 'art']);
 });

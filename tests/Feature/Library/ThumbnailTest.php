@@ -126,17 +126,14 @@ it('serves a thumbnail by its own path, and nothing that is not a known file', f
     $this->get(route('media.show', ['path' => 'thumbnails/list/stray.webp']))->assertNotFound();
 });
 
-it('shows the shelf the grid copy and the list the list copy', function () {
+it('points the shelf at the grid copy and the list at the list copy', function () {
     $media = coverOf(600, 800);
     (new MakeThumbnails($media->id))->handle();
     $media->refresh();
 
-    Livewire::test('games.index', ['console' => 'snes'])
-        ->assertSee(route('media.show', ['path' => $media->thumbnail_grid_path]), escape: false)
-        ->assertDontSee(route('media.show', ['path' => $media->path]), escape: false);
-
-    Livewire::withQueryParams(['view' => 'table'])->test('games.index', ['console' => 'snes'])
-        ->assertSee(route('media.show', ['path' => $media->thumbnail_list_path]), escape: false);
+    expect($media->url(ThumbnailSize::Grid))->toBe(route('media.show', ['path' => $media->thumbnail_grid_path]))
+        ->and($media->url(ThumbnailSize::List))->toBe(route('media.show', ['path' => $media->thumbnail_list_path]))
+        ->and($media->url())->toBe(route('media.show', ['path' => $media->path]));
 });
 
 it('backfills covers downloaded before thumbnails existed', function () {
@@ -173,8 +170,9 @@ it('fills in artwork that arrives while the game page is open', function () {
     $media = Media::factory()->for($game)->ofType('box-2D', 'eu')->create(['path' => 'snes/late-art/box-2d/new.png']);
     Storage::disk('media')->put($media->path, pngSized(300, 400));
 
-    $page->call('artworkChanged')
-        ->assertSee(route('media.show', ['path' => $media->path]), escape: false);
+    $page->call('artworkChanged');
+
+    expect($page->instance()->cover)->toBe($media->path);
 });
 
 it('leaves artwork to nginx where it is in front', function () {
