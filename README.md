@@ -160,7 +160,7 @@ retroBITE runs only in Docker. We do not support installing it any other way.
    docker compose up -d
    ```
 
-5. Carry on with [First run](#first-run). Open http://localhost:81** and follow the four-step setup.
+5. Open http://localhost:81 and follow the four-step setup.
 
 
 ## Where your data lives
