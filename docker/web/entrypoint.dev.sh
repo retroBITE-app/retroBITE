@@ -131,8 +131,9 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 # queues, because listen kills its child after 60 seconds whatever the job's
 # own $timeout says — and a killed child takes the listener down with it. The
 # restart loop in queue-workers.sh brings it back, but the job still never
-# finishes. The longest on each: MatchGame 120 (scraper), ScanConsoleFolder
-# 1800 (media, default), RunConversion 7060 (toolbox), SyncHashIndex 900 (ra),
+# finishes. The longest on each: MatchGame 120 (scraper), ScrapeGameMedia 900
+# (media), ScanConsoleFolder 1800 (default), WriteConsoleExports 1800
+# (toolbox), SyncHashIndex 900 (ra),
 # ReconcileProgress 300 (ra-progress), HashFile 3600 (hash), FileTransferJob
 # 3600 (transfer). Raise the number
 # here when one of those grows.
@@ -141,8 +142,13 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:listen \
     --queue=scraper --sleep=3 --tries=3 --timeout=150
 
+# Artwork, ScreenScraper traffic sharing the scraper's thread slots, apart
+# from default so a library's downloads never hold a scan back.
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:listen \
-    --queue=media,default --sleep=3 --tries=3 --timeout=1860
+    --queue=media --sleep=3 --tries=3 --timeout=960
+
+workers QUEUE_WORKERS_DEFAULT 1 php /app/artisan queue:listen \
+    --queue=default --sleep=3 --tries=3 --timeout=1860
 
 # Cover thumbnails: CPU work, on a queue of its own so a library's backfill
 # runs beside the downloads instead of in front of them.

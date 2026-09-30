@@ -18,6 +18,12 @@
     // drive and share code either way, pointed at a different plan.
     $targets = collect(App\Transfers\TransferTargets::all())->mapWithKeys(fn ($target) => [$target->key() => [
         'label' => $target->label(),
+        'hint' => $target->hint(),
+        'roots' => $target->roots(),
+        'confirmRoot' => __('This folder has no :folders in it. Use it as the root of the drive and create :root/ here?', [
+            'folders' => collect($target->roots())->map(fn ($root) => $root.'/')->join(', ', ' '.__('or').' '),
+            'root' => $target->roots()[0],
+        ]),
         'plan' => $console !== null
             ? route('transfers.console-plan', ['target' => $target->key(), 'console' => $console->key])
             : route('transfers.plan', ['target' => $target->key(), 'gameId' => $game->id]),
@@ -40,26 +46,30 @@
 @endphp
 
 <flux:modal name="transfer" class="w-full max-w-xl">
-    <div x-data="transfer(@js(['targets' => $targets, 'shares' => $shares]))" class="flex flex-col gap-5">
+    <div x-data="transfer(@js(['targets' => $targets, 'shares' => $shares, 'label' => $console?->name ?? $game?->title]))" class="flex flex-col gap-5">
         <div>
             <flux:heading size="lg">{{ __('Send to') }}</flux:heading>
             <flux:text class="mt-1">{{ $subject }}</flux:text>
         </div>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <flux:select x-model="destination" :label="__('Destination')" x-bind:disabled="status === 'running'">
+            <flux:select x-model="destination" :label="__('Destination')">
                 <flux:select.option value="usb">{{ __('USB drive on this computer') }}</flux:select.option>
                 @foreach ($shares as $id => $share)
                     <flux:select.option value="{{ $id }}">{{ $share['label'] }}</flux:select.option>
                 @endforeach
             </flux:select>
 
-            <flux:select x-model="target" :label="__('Laid out for')" x-bind:disabled="status === 'running'">
+            <flux:select x-model="target" :label="__('Laid out for')">
                 @foreach ($targets as $key => $target)
                     <flux:select.option value="{{ $key }}">{{ $target['label'] }}</flux:select.option>
                 @endforeach
             </flux:select>
         </div>
+
+        <template x-if="targets[target].hint">
+            <p class="-mt-2 text-xs text-fg-faint" x-text="targets[target].hint"></p>
+        </template>
 
         @if ($shares === [])
             <p class="-mt-2 text-xs text-fg-faint">
@@ -92,7 +102,7 @@
                     <p class="kicker text-fg-faint">{{ __('Drive') }}</p>
                     <p class="mt-1 truncate font-mono text-fg-bright" x-text="driveName ?? @js(__('None chosen'))"></p>
                 </div>
-                <flux:button size="sm" variant="subtle" x-on:click="chooseDrive()" x-bind:disabled="status === 'running'">
+                <flux:button size="sm" variant="subtle" x-on:click="chooseDrive()" x-bind:disabled="$store.usb.status === 'running'">
                     <span x-text="driveName ? @js(__('Change')) : @js(__('Choose'))"></span>
                 </flux:button>
             </div>
@@ -126,7 +136,7 @@
 
         <template x-if="status === 'confirm-root'">
             <div class="rounded-lg border border-accent-tint/55 bg-accent-tint/10 px-4 py-3 text-sm text-accent">
-                <p>{{ __('This folder has no roms/ or batocera/roms/ in it. Use it as the root of the drive and create roms/ here?') }}</p>
+                <p x-text="targets[target].confirmRoot"></p>
                 <div class="mt-3 flex gap-2">
                     <flux:button size="sm" variant="primary" x-on:click="start(true)">{{ __('Use this folder') }}</flux:button>
                     <flux:button size="sm" variant="subtle" x-on:click="status = 'idle'; chooseDrive()">{{ __('Choose another') }}</flux:button>
@@ -134,24 +144,36 @@
             </div>
         </template>
 
-        <template x-if="status === 'running'">
+        {{-- The drive's copying is the tab's, not this modal's: it shows
+             here while the modal is open and in the tray when it is not. --}}
+        <template x-if="destination === 'usb' && $store.usb.status === 'running'">
             <div>
+                <p class="mb-2 flex justify-between gap-3 text-sm text-fg-soft">
+                    <span class="truncate" x-text="$store.usb.label"></span>
+                    <template x-if="$store.usb.waiting > 0">
+                        <span class="shrink-0 text-xs text-fg-faint" x-text="`+${$store.usb.waiting} ` + @js(__('waiting'))"></span>
+                    </template>
+                </p>
                 <div class="h-1.5 overflow-hidden rounded-sm bg-raised">
-                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" x-bind:style="`width: ${percent}%`"></div>
+                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" x-bind:style="`width: ${$store.usb.percent}%`"></div>
                 </div>
                 <p class="mt-2 flex justify-between gap-3 text-xs text-fg-faint">
-                    <span class="truncate font-mono" x-text="current"></span>
-                    <span class="shrink-0 font-mono" x-text="`${size(written)} / ${size(total)}`"></span>
+                    <span class="truncate font-mono" x-text="$store.usb.current"></span>
+                    <span class="shrink-0 font-mono" x-text="`${size($store.usb.written)} / ${size($store.usb.total)}` + ($store.usb.left ? ` · ${$store.usb.left}` : '')"></span>
                 </p>
-                <p class="mt-1 text-xs text-fg-faint">{{ __('Keep this tab open until it is done.') }}</p>
+                <p class="mt-1 text-xs text-fg-faint">{{ __('It carries on if you close this or move to another page; keep the tab open until it is done.') }}</p>
             </div>
         </template>
 
-        <template x-if="status === 'done'">
+        <template x-if="destination === 'usb' && $store.usb.status === 'done'">
             <p class="rounded-lg border border-line-input bg-sunken px-4 py-3 text-sm text-fg-soft">
                 {{ __('Done.') }}
-                <span x-show="skipped > 0" x-text="`${skipped} ` + @js(__('already on the drive were left as they were.'))"></span>
+                <span x-show="$store.usb.skipped > 0" x-text="`${$store.usb.skipped} ` + @js(__('already on the drive were left as they were.'))"></span>
             </p>
+        </template>
+
+        <template x-if="destination === 'usb' && $store.usb.status === 'error'">
+            <p class="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger" x-text="$store.usb.message"></p>
         </template>
 
         <template x-if="status === 'error'">
@@ -160,11 +182,13 @@
 
         <div class="flex justify-end gap-2">
             <flux:modal.close>
-                <flux:button variant="ghost" x-bind:disabled="status === 'running'">{{ __('Close') }}</flux:button>
+                <flux:button variant="ghost">
+                    <span x-text="$store.usb.status === 'running' ? @js(__('Keep going in the background')) : @js(__('Close'))"></span>
+                </flux:button>
             </flux:modal.close>
             <flux:button variant="primary" icon="arrow-up-tray" x-on:click="start()"
-                         x-bind:disabled="status === 'running' || !plan || (destination === 'usb' && !supported)">
-                {{ __('Start') }}
+                         x-bind:disabled="!plan || (destination === 'usb' && !supported)">
+                <span x-text="destination === 'usb' && $store.usb.status === 'running' ? @js(__('Add to the queue')) : @js(__('Start'))"></span>
             </flux:button>
         </div>
     </div>

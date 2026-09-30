@@ -72,8 +72,9 @@ interface Endpoint
     public function read(string $path): ?string;
 
     /**
-     * Write a small file, replacing what is there. The one write that may
-     * replace anything, for a target's own game list.
+     * Write a small file, replacing what is there, and making its folder
+     * when there is none. The one write that may replace anything, for a
+     * target's own game list.
      *
      * @throws TransferFailed
      */

@@ -344,3 +344,17 @@ it('lets nobody who is not signed in near it', function () {
     $this->get(route('transfers.plan', ['target' => 'batocera', 'gameId' => $game->id]))->assertRedirect(route('login'));
     $this->get(route('transfers.files', ['file' => $rom->id]))->assertRedirect(route('login'));
 });
+
+it('sends a video to videos/, beside the images', function () {
+    $game = snesGame();
+    libraryFile($game, 'snes/smw.sfc', FileRole::Rom);
+    Media::factory()->for($game)->ofType('video-normalized', 'us')->create(['path' => 'snes/smw/video-normalized/x.mp4', 'extension' => 'mp4', 'size_bytes' => 10]);
+
+    $target = app(BatoceraTarget::class);
+    $xml = simplexml_load_string($target->mergeGamelist(null, $game->fresh()));
+
+    expect(array_column($target->plan($game->fresh())->toArray()['files'], 'destination'))->toBe([
+        'roms/snes/smw.sfc',
+        'roms/snes/videos/smw-video.mp4',
+    ])->and((string) $xml->game->video)->toBe('./videos/smw-video.mp4');
+});

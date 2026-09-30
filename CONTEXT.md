@@ -183,8 +183,9 @@ is read, never changed, and nothing already at the destination is
 overwritten or removed except the game's own entry in the game list. Not an
 OPL export, which writes a loader's files *into* the library.
 
-**Transfer target** — a system a destination can be prepared for, with its
-own folder layout and its own game list: Batocera first, others later. Chosen
+**Transfer target** — a front-end a destination can be prepared for, with its
+own folder layout, system names and game list: Batocera, Recalbox, RetroPie,
+ES-DE (as on Android) and Daijishō, one class each (docs/adr/0005). Chosen
 per transfer, not per console — the same game can go to more than one.
 
 **Destination** — where a transfer goes. A USB drive on the computer in front

@@ -164,9 +164,9 @@ new #[Title('Destinations')] class extends Component
             'name' => ['required', 'string', 'max:100'],
             'host' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9.\-:]+$/'],
             'share' => ['required', 'string', 'max:255', 'not_regex:/[\/\\\\]/'],
-            // Not the roms folder itself: the transfer target adds roms/ to
-            // every path, so pointing here at it lands games in roms/roms/,
-            // where Batocera never looks.
+            // Not the roms folder itself: every transfer target adds roms/ to
+            // (or ROMs/) to every path, so pointing here at it lands games in
+            // roms/roms/, where no front-end looks.
             'folder' => ['nullable', 'string', 'max:255', 'not_regex:/(^|[\/\\\\])\.\.?([\/\\\\]|$)/', 'not_regex:/(^|[\/\\\\])roms[\/\\\\]*$/i'],
             'username' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'max:255'],

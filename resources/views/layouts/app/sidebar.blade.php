@@ -175,6 +175,11 @@
             </flux:toast.group>
         @endpersist
 
+        {{-- A USB transfer goes on from page to page; see transfer-tray. --}}
+        @persist('transfer-tray')
+            <x-transfer-tray />
+        @endpersist
+
         @fluxScripts
     </body>
 </html>

@@ -5,7 +5,8 @@ Date: 2026-09-24
 ## Status
 
 Accepted. Amended by 0004: a USB drive is now one destination among
-several, and network shares are written by the server.
+several, and network shares are written by the server. Amended by 0005:
+the folders that mark a drive's root are the target's, not always `roms/`.
 
 ## Context
 
