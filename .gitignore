@@ -4,6 +4,7 @@
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
+/version.txt
 /storage/*.key
 /storage/pail
 /vendor

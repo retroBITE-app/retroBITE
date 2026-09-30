@@ -87,9 +87,15 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = release ]; then
             channel=master
             [ "$PRERELEASE" = true ] && channel=develop
-            set -- "$channel" --version "$RELEASE_TAG"
+            version=$RELEASE_TAG
           else
-            set -- "$INPUT_CHANNEL" ${INPUT_VERSION:+--version "$INPUT_VERSION"}
+            channel=$INPUT_CHANNEL
+            version=${INPUT_VERSION:-$(git describe --tags --exact-match 2>/dev/null || true)}
           fi
 
-          ./build "$@" --only "$IMAGE" --yes
+          # Baked into the web image by COPY . ., read by config/app.php. An
+          # untagged develop build is named after its commit, as ./build names
+          # its image.
+          echo "${version:-develop-$(git rev-parse --short HEAD)}" > version.txt
+
+          ./build "$channel" ${version:+--version "$version"} --only "$IMAGE" --yes

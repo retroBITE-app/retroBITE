@@ -16,6 +16,14 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+     * The release this image was built from: CI writes version.txt at the repo
+     * root before the build. A source checkout or the dev stack has none.
+     */
+    'version' => (is_file(base_path('version.txt'))
+        ? trim((string) file_get_contents(base_path('version.txt')))
+        : '') ?: 'develop',
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
