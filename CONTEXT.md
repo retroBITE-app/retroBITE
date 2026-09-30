@@ -185,10 +185,11 @@ OPL export, which writes a loader's files *into* the library — though a
 transfer laid out for OPL makes the same CFG and ART files, for the drive.
 
 **Transfer target** — a system a destination can be prepared for, with its
-own folder layout and, where it keeps one, its own game list: Batocera for
-every console, Open PS2 Loader for PS2. Chosen per transfer, not per console —
-the same game can go to more than one — with the one the console's library is
-laid out for offered first.
+own folder layout, system names and, where it keeps one, its own game list:
+Batocera, Recalbox, RetroPie, ES-DE (as on Android) and Daijishō for every
+console, Open PS2 Loader for PS2 — one class each (docs/adr/0005). Chosen per
+transfer, not per console — the same game can go to more than one — with the
+one the console's library is laid out for offered first.
 
 **Destination** — where a transfer goes. A USB drive on the computer in front
 of the person, written by the browser and never saved; or a **network share**

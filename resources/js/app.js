@@ -1,5 +1,6 @@
 import romUpload from './rom-upload';
 import transfer from './transfer';
+import usbTransfers from './usb-transfers';
 // Live updates over Reverb; sets window.Echo and window.live. See echo.js.
 import './echo';
 
@@ -9,4 +10,6 @@ document.addEventListener('alpine:init', () => {
     window.Alpine.data('romUpload', romUpload);
     // Copying a game onto a drive; see transfer.js.
     window.Alpine.data('transfer', transfer);
+    // The copying itself, for the whole tab: it outlives the modal and the page.
+    window.Alpine.store('usb', usbTransfers());
 });

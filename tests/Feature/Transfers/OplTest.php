@@ -198,8 +198,10 @@ it('is offered for PS2 only, and first where the library is laid out for OPL', f
     $ps2 = new Console('ps2');
     $snes = new Console('snes');
 
-    expect(collect(TransferTargets::for($snes))->map->key()->all())->toBe(['batocera'])
-        ->and(collect(TransferTargets::for($ps2))->map->key()->all())->toBe(['batocera', 'opl'])
+    $frontEnds = ['batocera', 'recalbox', 'retropie', 'es-de', 'daijishou'];
+
+    expect(collect(TransferTargets::for($snes))->map->key()->all())->toBe($frontEnds)
+        ->and(collect(TransferTargets::for($ps2))->map->key()->all())->toBe([...$frontEnds, 'opl'])
         ->and(TransferTargets::recommendedFor($ps2)?->key())->toBe('batocera');
 
     ConsoleSourceFolder::setLayout($ps2, 'opl');

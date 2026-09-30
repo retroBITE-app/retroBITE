@@ -76,6 +76,34 @@ it('copies the game and its cover to the share, and adds it to the game list', f
         ->files_total->toBe(2);
 });
 
+it('lays a share out for ES-DE, its game list and artwork outside the ROM folder', function () {
+    Storage::fake('media');
+    Storage::disk('media')->put('snes/smw/box-2d/abc.png', 'png-bytes');
+    Media::factory()->for($this->game)->ofType('box-2D', 'us')->create(['path' => 'snes/smw/box-2d/abc.png', 'extension' => 'png', 'size_bytes' => 9]);
+
+    Livewire::test('games.show', ['game' => $this->game])
+        ->call('sendToShare', $this->destination->id, 'es-de');
+
+    expect(File::get(shareFile('roms/snes/smw.sfc')))->toBe('rom-bytes')
+        ->and(File::get(shareFile('roms/downloaded_media/snes/covers/smw.png')))->toBe('png-bytes')
+        ->and(File::get(shareFile('roms/gamelists/snes/gamelist.xml')))->toContain('<path>./smw.sfc</path>')
+        ->and(File::exists(shareFile('roms/snes/gamelist.xml')))->toBeFalse()
+        ->and(Transfer::query()->sole())->target->toBe('es-de')->status->toBe(Transfer::DONE);
+});
+
+it('lays a share out for Daijishō, the list beside the games without artwork in it', function () {
+    Storage::fake('media');
+    Storage::disk('media')->put('snes/smw/box-2d/abc.png', 'png-bytes');
+    Media::factory()->for($this->game)->ofType('box-2D', 'us')->create(['path' => 'snes/smw/box-2d/abc.png', 'extension' => 'png', 'size_bytes' => 9]);
+
+    Livewire::test('games.show', ['game' => $this->game])
+        ->call('sendToShare', $this->destination->id, 'daijishou');
+
+    expect(File::get(shareFile('roms/snes/media/box2dfront/smw.png')))->toBe('png-bytes')
+        ->and(File::get(shareFile('roms/snes/gamelist.xml')))->toContain('<name>Super Mario World</name>')
+        ->not->toContain('box2dfront');
+});
+
 it('keeps everyone else\'s entries in a game list already on the share', function () {
     File::ensureDirectoryExists(shareFile('roms/snes'));
     File::put(shareFile('roms/snes/gamelist.xml'), '<?xml version="1.0"?><gameList><game><path>./zelda.sfc</path><playcount>7</playcount></game></gameList>');

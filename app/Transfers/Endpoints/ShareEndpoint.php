@@ -119,6 +119,11 @@ final class ShareEndpoint implements Endpoint
         $target = $this->remote($path);
         $temp = (dirname($target) === '.' ? '' : dirname($target).'/').'.'.basename($target).'.retrobite-part';
 
+        // A list can live where no game file went, as ES-DE's does.
+        if (dirname($target) !== '.') {
+            $this->share()->makeDirectory(dirname($target));
+        }
+
         $this->share()->write($temp, $contents);
 
         if ($this->share()->size($target) !== null) {

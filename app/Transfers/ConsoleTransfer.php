@@ -68,7 +68,7 @@ final class ConsoleTransfer
         }
 
         return [
-            'plan' => TransferPlan::combine(array_values($plans), $gamelist),
+            'plan' => TransferPlan::combine(array_values($plans), $gamelist ?? $target->gamelistFor($console)),
             'games' => $games,
             'plans' => $plans,
             'rejected' => $rejected,

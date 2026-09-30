@@ -4,33 +4,32 @@ declare(strict_types=1);
 
 namespace App\Transfers;
 
-use App\Enums\FileRole;
-use App\Models\ConsoleSourceFolder;
-use App\Models\Game;
-use App\Models\GameFile;
 use App\Models\Media;
-use App\Support\Console;
-use DOMDocument;
-use DOMElement;
-use DOMXPath;
-use Illuminate\Support\Str;
 
 /**
  * Batocera: games under roms/{system}/, described in roms/{system}/gamelist.xml.
  *
  * The system folder is the console's own key — ours were named after
- * Batocera's systems to begin with. A game's files keep the arrangement they
- * have in the library, relative to the console's folder, so a multi-disc set
- * arrives as its playlist, cuesheets and tracks, and Batocera launches the
- * playlist. Its artwork goes to images/ beside it, one file per kind Batocera
- * knows ({@see ARTWORK}), named after the file the game list points at.
- *
- * gamelist.xml is the format Batocera's EmulationStation reads: a <gameList>
- * of <game> entries whose paths are relative to the system folder and start
- * with ./, a rating from 0 to 1, and dates as YYYYMMDDTHHMMSS.
+ * Batocera's systems to begin with — but for the few in {@see SYSTEMS}. A
+ * game's files keep the arrangement they have in the library, relative to the
+ * console's folder, so a multi-disc set arrives as its playlist, cuesheets and
+ * tracks, and Batocera launches the playlist. Its artwork goes to images/
+ * beside it, one file per kind Batocera knows ({@see ARTWORK}), named after the
+ * file the game list points at, as Batocera's own scraper names them; a video
+ * goes to videos/.
  */
-final class BatoceraTarget implements TransferTarget
+final class BatoceraTarget extends GamelistTarget
 {
+    /**
+     * Where Batocera's es_systems.yml names a system otherwise than we do.
+     *
+     * @var array<string, string>
+     */
+    private const SYSTEMS = [
+        'gc' => 'gamecube',
+        'msx2plus' => 'msx2+',
+    ];
+
     /**
      * The artwork Batocera shows, by gamelist.xml tag: the suffix its file
      * takes in images/, and the provider media types that can fill it, most
@@ -59,6 +58,17 @@ final class BatoceraTarget implements TransferTarget
         'titleshot' => ['suffix' => 'titleshot', 'label' => 'title shot', 'types' => ['sstitle']],
         'mix' => ['suffix' => 'mix', 'label' => 'mix', 'types' => ['mixrbv2', 'mixrbv1']],
         'manual' => ['suffix' => 'manual', 'label' => 'manual', 'types' => ['manuel']],
+    ];
+
+    /**
+     * Artwork Batocera shows that is not a picture, so not something the
+     * media settings offer to switch on for it: a clip is several megabytes
+     * a game.
+     *
+     * @var array<string, array{suffix: string, types: list<string>}>
+     */
+    private const EXTRAS = [
+        'video' => ['suffix' => 'video', 'types' => ['video-normalized', 'video']],
     ];
 
     /**
@@ -119,256 +129,38 @@ final class BatoceraTarget implements TransferTarget
         return 'Batocera';
     }
 
-    /** Every console: ours were named after Batocera's systems to begin with. */
-    public function supports(Console $console): bool
-    {
-        return true;
-    }
-
-    /**
-     * roms/ at the top of the drive, or under batocera/ — the layout of an
-     * external drive is not documented, so both are recognised.
-     */
     public function root(): array
     {
         return ['roms', 'batocera/roms'];
     }
 
-    /** None: everything Batocera reads is copied, and its list is merged. */
-    public function extras(Game $game): array
+    protected function romsFolder(): string
     {
-        return [];
+        return 'roms';
     }
 
-    public function extra(Game $game, string $destination): ?string
+    protected function systems(): array
     {
-        return null;
+        return self::SYSTEMS;
     }
 
-    public function plan(Game $game): TransferPlan
+    protected function artwork(): array
     {
-        $system = 'roms/'.$game->console;
-        $files = [];
-
-        $console = $game->console();
-
-        foreach ($this->filesOf($game) as $file) {
-            $relative = $this->relative($game, $file);
-
-            if ($console === null || $relative === null) {
-                throw new TransferRejected(__('Some of this game\'s files are outside the console\'s folder.'));
-            }
-
-            $files[] = new PlannedFile(
-                url: route('transfers.files', ['file' => $file->id]),
-                source: Location::library($console, $relative),
-                destination: $system.'/'.$relative,
-                size: (int) $file->size_bytes,
-            );
-        }
-
-        $primary = $this->primary($game);
-
-        $sent = [];
-
-        foreach ($primary !== null ? $this->artworkOf($game) : [] as $tag => $media) {
-            $destination = $system.'/'.$this->imagePath($game, $primary, $tag, $media);
-
-            // One file for two tags — a title screen that is also the image — goes once.
-            if (isset($sent[$destination])) {
-                continue;
-            }
-
-            $sent[$destination] = true;
-            $files[] = new PlannedFile(
-                url: $media->url(),
-                source: Location::media($media->path),
-                destination: $destination,
-                size: (int) $media->size_bytes,
-            );
-        }
-
-        return new TransferPlan($files, $system.'/gamelist.xml');
-    }
-
-    public function mergeGamelist(?string $existing, Game ...$games): string
-    {
-        $document = new DOMDocument('1.0', 'UTF-8');
-        $document->preserveWhiteSpace = false;
-        $document->formatOutput = true;
-
-        if ($existing !== null && trim($existing) !== '') {
-            $previous = libxml_use_internal_errors(true);
-            $loaded = $document->loadXML($existing);
-            libxml_clear_errors();
-            libxml_use_internal_errors($previous);
-
-            if (! $loaded || $document->documentElement?->nodeName !== 'gameList') {
-                throw new TransferRejected(__('The gamelist.xml on the drive could not be read, so it was left as it is.'));
-            }
-        } else {
-            $document->appendChild($document->createElement('gameList'));
-        }
-
-        /** @var DOMElement $list */
-        $list = $document->documentElement;
-
-        // Read once, however many games are merged: a console's worth, one
-        // at a time, would parse a list that grows with every game.
-        $byPath = [];
-
-        foreach ((new DOMXPath($document))->query('/gameList/game') ?: [] as $node) {
-            if ($node instanceof DOMElement) {
-                $byPath[trim((string) $node->getElementsByTagName('path')->item(0)?->textContent)] ??= $node;
-            }
-        }
-
-        foreach ($games as $game) {
-            $entry = $this->entry($document, $game);
-            $path = trim((string) $entry->getElementsByTagName('path')->item(0)?->textContent);
-
-            if (isset($byPath[$path])) {
-                $list->replaceChild($entry, $byPath[$path]);
-            } else {
-                $list->appendChild($entry);
-            }
-
-            $byPath[$path] = $entry;
-        }
-
-        return (string) $document->saveXML();
-    }
-
-    /**
-     * The present files of the one version sent: a game holding several
-     * regions or revisions sends one of them, so Batocera shows one entry
-     * and not the others as nameless games of their own. See GameVersions.
-     *
-     * @return list<GameFile>
-     */
-    private function filesOf(Game $game): array
-    {
-        $files = GameVersions::preferred($game);
-        usort($files, fn (GameFile $a, GameFile $b): int => $a->path <=> $b->path);
-
-        return $files;
-    }
-
-    /**
-     * The file the game list points at, and Batocera launches: the playlist of
-     * a multi-disc set, else the first disc's cuesheet, else the ROM itself.
-     */
-    private function primary(Game $game): ?GameFile
-    {
-        $files = collect($this->filesOf($game));
-
-        return $files->firstWhere('role', FileRole::Playlist)
-            ?? $files->where('role', FileRole::Sheet)->sortBy(fn (GameFile $f) => [$f->disc_number ?? PHP_INT_MAX, $f->path])->first()
-            ?? $files->firstWhere('role', FileRole::Rom)
-            ?? $files->first();
-    }
-
-    /**
-     * A file's path inside the console's folder, as it will be inside the
-     * system folder; null for one outside it, which cannot be read through
-     * the gate.
-     */
-    private function relative(Game $game, GameFile $file): ?string
-    {
-        $console = $game->console();
-        $folder = $console !== null ? trim((string) ConsoleSourceFolder::pathFor($console), '/') : '';
-
-        return $folder !== '' && str_starts_with($file->path, $folder.'/')
-            ? substr($file->path, strlen($folder) + 1)
-            : null;
-    }
-
-    /**
-     * The artwork this game has for each tag Batocera knows, in tag order.
-     *
-     * @return array<string, Media>
-     */
-    private function artworkOf(Game $game): array
-    {
-        $found = [];
-
-        foreach (self::ARTWORK as $tag => ['types' => $types]) {
-            $media = $game->artworkOfTypes($types);
-
-            if ($media !== null) {
-                $found[$tag] = $media;
-            }
-        }
-
-        return $found;
-    }
-
-    /** images/{name of the file the list points at}-{what it is}.{extension} */
-    private function imagePath(Game $game, GameFile $primary, string $tag, Media $media): string
-    {
-        $suffix = self::SUFFIX_BY_TYPE[$media->screenscraper_type] ?? self::ARTWORK[$tag]['suffix'];
-
-        return 'images/'.pathinfo($this->relative($game, $primary) ?? $primary->filename, PATHINFO_FILENAME).'-'.$suffix.'.'.$media->extension;
-    }
-
-    /** This game's <game> entry, built from what the provider told us. */
-    private function entry(DOMDocument $document, Game $game): DOMElement
-    {
-        $primary = $this->primary($game);
         $artwork = [];
 
-        foreach ($primary !== null ? $this->artworkOf($game) : [] as $tag => $media) {
-            $artwork[$tag] = './'.$this->imagePath($game, $primary, $tag, $media);
+        foreach ([...self::ARTWORK, ...self::EXTRAS] as $tag => ['types' => $types]) {
+            $artwork[$tag] = ['types' => $types, 'tag' => $tag];
         }
 
-        $fields = [
-            'path' => $primary !== null ? './'.($this->relative($game, $primary) ?? $primary->filename) : null,
-            'name' => $game->title,
-            'desc' => $game->description,
-            ...$artwork,
-            // Ours is out of a hundred; Batocera's from 0 to 1.
-            'rating' => $game->rating !== null ? rtrim(rtrim(number_format($game->rating / 100, 2, '.', ''), '0'), '.') : null,
-            'releasedate' => $this->releaseDate($game->release_date),
-            'developer' => $game->developer,
-            'publisher' => $game->publisher,
-            // The provider writes a trail ("Platform / Fighter Scrolling");
-            // Batocera shows one genre.
-            'genre' => $game->genre !== null ? trim((string) Str::before($game->genre, ',')) : null,
-            'players' => $this->players($game->players),
-        ];
-
-        $element = $document->createElement('game');
-
-        foreach ($fields as $name => $value) {
-            if ($value === null || $value === '') {
-                continue;
-            }
-
-            $child = $document->createElement($name);
-            $child->appendChild($document->createTextNode((string) $value));
-            $element->appendChild($child);
-        }
-
-        return $element;
+        return $artwork;
     }
 
-    /** "1994-11-01", "1994-11" or "1994" as YYYYMMDDT000000. */
-    private function releaseDate(?string $date): ?string
+    /** images/{name of the file the list points at}-{what it is}.{extension}; a video in videos/. */
+    protected function artworkPath(string $system, string $slot, string $primary, Media $media): string
     {
-        if ($date === null || ! preg_match('/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/', $date, $parts)) {
-            return null;
-        }
+        $suffix = self::SUFFIX_BY_TYPE[$media->screenscraper_type] ?? ([...self::ARTWORK, ...self::EXTRAS][$slot]['suffix']);
+        $folder = $slot === 'video' ? 'videos' : 'images';
 
-        return $parts[1].($parts[2] ?? '01').($parts[3] ?? '01').'T000000';
-    }
-
-    /** The provider's "1-2" as the highest count, which is what Batocera filters by. */
-    private function players(?string $players): ?string
-    {
-        if ($players === null || ! preg_match_all('/\d+/', $players, $numbers)) {
-            return null;
-        }
-
-        return (string) max(array_map('intval', $numbers[0]));
+        return 'roms/'.$system.'/'.$folder.'/'.$this->stem($primary).'-'.$suffix.'.'.$media->extension;
     }
 }

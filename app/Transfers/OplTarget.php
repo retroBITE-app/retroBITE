@@ -54,6 +54,11 @@ final class OplTarget implements TransferTarget
         return $console->key === 'ps2';
     }
 
+    public function hint(): ?string
+    {
+        return null;
+    }
+
     /** The drive's own root: OPL looks for DVD/ and CD/ there and nowhere else. */
     public function root(): array
     {
@@ -144,6 +149,12 @@ final class OplTarget implements TransferTarget
         });
 
         return $kind instanceof MediaKind ? $this->ps2->artFor($game, $kind) : null;
+    }
+
+    /** None: OPL reads its folders. */
+    public function gamelistFor(string $console): ?string
+    {
+        return null;
     }
 
     public function mergeGamelist(?string $existing, Game ...$games): string

@@ -27,9 +27,16 @@ interface TransferTarget
     public function supports(Console $console): bool;
 
     /**
+     * What the drive should be told before it is written, when the front-end
+     * needs a step of its own to see what arrives; null for none.
+     */
+    public function hint(): ?string;
+
+    /**
      * The folders that mark where this system's tree starts on a drive, the
-     * first found winning — roms/ for Batocera. None: the drive's own root is
-     * the tree's, whatever it holds.
+     * first found winning — roms/ for Batocera, at the top or under
+     * batocera/. The first is what a drive without any of them is given.
+     * None: the drive's own root is the tree's, whatever it holds.
      *
      * @return list<string>
      */
@@ -41,6 +48,9 @@ interface TransferTarget
      * @throws TransferRejected when the game cannot be laid out this way
      */
     public function plan(Game $game): TransferPlan;
+
+    /** Where a console's game list goes, from the drive's root; null for a system that keeps none. */
+    public function gamelistFor(string $console): ?string;
 
     /**
      * The files this system wants beside a game's that the library does not

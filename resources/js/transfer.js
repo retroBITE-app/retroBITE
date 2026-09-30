@@ -3,118 +3,29 @@
  * hand it to the server, when the destination is a network share.
  *
  * The server decides everything — which files, where, and what the game list
- * says (see App\Transfers). This only reads the drive, fetches, and writes, with
- * the File System Access API. Chrome and Edge have it, and only in a secure
- * context: https, or localhost, which is how this project runs it. See
- * docs/adr/0003-transfers-from-the-browser.md. A share is written by the
- * server (FileTransferJob); this only asks the game page to start it — see
+ * says (see App\Transfers). A drive is written with the File System Access
+ * API, which Chrome and Edge have, and only in a secure context: https, or
+ * localhost, which is how this project runs it. See
+ * docs/adr/0003-transfers-from-the-browser.md. The copying itself is
+ * usb-transfers.js's, for the whole tab. A share is written by the server
+ * (FileTransferJob); this only asks the game page to start it — see
  * docs/adr/0004-one-job-moves-files.md.
+ */
+
+import { fetchOk, recallDrive, rememberDrive, rootOf, size } from './usb-transfers';
+
+/**
+ * The modal's state. `targets` maps each target's key to its label, what to
+ * tell the user, the folders that mark its root, the question to ask when
+ * none is there, and the URLs for this game:
+ * { batocera: { label, hint, root, confirm, plan, gamelist } }. `target` is
+ * the one to start on. `shares` maps each saved destination's id to its label
+ * and address. `label` is what the tray calls this transfer.
  *
- * Nothing on the drive is overwritten or removed, except this game's own entry
- * in the game list: a file already there at the same size is skipped, so an
- * interrupted transfer picks up where it stopped. A target's own files — the
- * plan's extras, such as OPL's config and art — are made by the server as
- * they are fetched, and one already on the drive is left as it is. Each file is written under a
- * temporary name and renamed when complete, so a half-written ROM never sits
- * on the drive under its real name.
+ * Choosing and checking is done here; the copying is $store.usb's, so it goes
+ * on when the modal is closed or the page left.
  */
-
-const DB = 'retrobite-transfer';
-
-// Files copied at once. A console is thousands of small files, and each spends
-// most of its time waiting — on the server's answer, on the drive's directory —
-// rather than moving bytes, so a few in flight go several times as fast.
-const CONCURRENCY = 4;
-const STORE = 'drives';
-const DRIVE_KEY = 'drive';
-
-/** A tiny IndexedDB wrapper: Chrome can keep a directory handle there. */
-function idb(mode, run) {
-    return new Promise((resolve, reject) => {
-        const open = indexedDB.open(DB, 1);
-        open.onupgradeneeded = () => open.result.createObjectStore(STORE);
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-            const store = open.result.transaction(STORE, mode).objectStore(STORE);
-            const request = run(store);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        };
-    });
-}
-
-const rememberDrive = (handle) => idb('readwrite', (store) => store.put(handle, DRIVE_KEY));
-const recallDrive = () => idb('readonly', (store) => store.get(DRIVE_KEY)).catch(() => null);
-
-async function hasDirectory(parent, name) {
-    try {
-        await parent.getDirectoryHandle(name);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-/** The directory for a relative path, creating what is missing. */
-async function directoryFor(root, parts) {
-    let dir = root;
-    for (const part of parts) {
-        dir = await dir.getDirectoryHandle(part, { create: true });
-    }
-    return dir;
-}
-
-async function existingSize(dir, name) {
-    try {
-        return (await (await dir.getFileHandle(name)).getFile()).size;
-    } catch {
-        return null;
-    }
-}
-
-/**
- * The folders of one run, each looked up and listed once rather than once per
- * file: on a USB drive every lookup is a trip to its directory. Promises are
- * kept, not results, so two copies starting together share one lookup.
- */
-function folders(root) {
-    const handles = new Map();
-    const listings = new Map();
-
-    const handle = (path) => {
-        if (!handles.has(path)) {
-            handles.set(path, directoryFor(root, path === '' ? [] : path.split('/')));
-        }
-        return handles.get(path);
-    };
-
-    return {
-        handle,
-        async names(path) {
-            if (!listings.has(path)) {
-                listings.set(path, (async () => {
-                    const names = new Set();
-                    for await (const name of (await handle(path)).keys()) {
-                        names.add(name);
-                    }
-                    return names;
-                })());
-            }
-            return listings.get(path);
-        },
-    };
-}
-
-const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
-
-/**
- * The modal's state. `targets` maps each target's key to its label, the
- * folders that mark its root, the question to ask when none is there, and the
- * URLs for this game: { batocera: { label, root, confirm, plan, gamelist } }.
- * `target` is the one to start on. `shares` maps each saved destination's id
- * to its label and address.
- */
-export default ({ targets, target, shares }) => ({
+export default ({ targets, target, shares, label }) => ({
     supported: window.isSecureContext && 'showDirectoryPicker' in window,
     targets,
     shares,
@@ -123,12 +34,8 @@ export default ({ targets, target, shares }) => ({
     plan: null,
     drive: null,
     driveName: null,
-    status: 'idle', // idle | confirm-root | running | done | error
+    status: 'idle', // idle | confirm-root | sent | error
     message: '',
-    written: 0,
-    total: 0,
-    current: '',
-    skipped: 0,
 
     async init() {
         this.$watch('target', () => this.loadPlan());
@@ -145,7 +52,7 @@ export default ({ targets, target, shares }) => ({
     /** What will be written, shown before anything is. */
     async loadPlan() {
         try {
-            this.plan = await (await this.fetchOk(this.targets[this.target].plan)).json();
+            this.plan = await (await fetchOk(this.targets[this.target].plan)).json();
         } catch (error) {
             this.plan = null;
             this.status = 'error';
@@ -153,20 +60,7 @@ export default ({ targets, target, shares }) => ({
         }
     },
 
-    size(bytes) {
-        const units = ['B', 'KB', 'MB', 'GB'];
-        let value = bytes;
-        let unit = 0;
-        while (value >= 1024 && unit < units.length - 1) {
-            value /= 1024;
-            unit++;
-        }
-        return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-    },
-
-    get percent() {
-        return this.total > 0 ? Math.round((this.written / this.total) * 100) : 0;
-    },
+    size,
 
     async chooseDrive() {
         try {
@@ -188,39 +82,6 @@ export default ({ targets, target, shares }) => ({
         return (await this.drive.requestPermission(options)) === 'granted';
     },
 
-    /**
-     * Where the target's tree starts on this drive: the folder holding the
-     * first of its markers found — roms/ for Batocera, at the top or under
-     * batocera/ — or null when none is, since the layout of an external drive
-     * is recognised rather than assumed. A target with no markers starts at
-     * the chosen folder itself.
-     */
-    async rootOf(drive, markers) {
-        if (markers.length === 0) {
-            return drive;
-        }
-
-        for (const marker of markers) {
-            const parts = marker.split('/');
-            const last = parts.pop();
-            let dir = drive;
-
-            try {
-                for (const part of parts) {
-                    dir = await dir.getDirectoryHandle(part);
-                }
-            } catch {
-                continue;
-            }
-
-            if (await hasDirectory(dir, last)) {
-                return dir;
-            }
-        }
-
-        return null;
-    },
-
     async start(confirmedRoot = false) {
         if (this.destination !== 'usb') {
             // The server copies to a share; the game page follows it.
@@ -236,169 +97,15 @@ export default ({ targets, target, shares }) => ({
             return;
         }
 
-        const root = (await this.rootOf(this.drive, this.targets[this.target].root)) ?? (confirmedRoot ? this.drive : null);
+        const { root, confirm, plan, gamelist } = this.targets[this.target];
 
-        if (!root) {
-            // None of the target's own folders: ask before making this the root.
+        if (!confirmedRoot && !(await rootOf(this.drive, root))) {
+            // None of the target's roots: ask before making this the root.
             this.status = 'confirm-root';
             return;
         }
 
-        this.status = 'running';
-        this.message = '';
-        this.written = 0;
-        this.skipped = 0;
-
-        try {
-            const plan = await (await this.fetchOk(this.targets[this.target].plan)).json();
-            this.plan = plan;
-            this.total = plan.bytes;
-
-            const tree = folders(root);
-
-            await this.copyAll(tree, plan.files);
-
-            await this.writeExtras(tree, plan.extras);
-
-            if (plan.gamelist !== null) {
-                await this.writeGamelist(root, plan.gamelist);
-            }
-
-            this.current = '';
-            this.status = 'done';
-        } catch (error) {
-            this.status = 'error';
-            this.message = error?.message ?? String(error);
-        }
-    },
-
-    /**
-     * Every file, CONCURRENCY at a time, from one shared queue. The first
-     * failure stops the rest from starting; the ones already under way finish,
-     * and then it is thrown, so the modal says what went wrong as before.
-     */
-    async copyAll(tree, files) {
-        const queue = [...files];
-        let failure = null;
-
-        const worker = async () => {
-            while (failure === null && queue.length > 0) {
-                const file = queue.shift();
-                try {
-                    await this.copy(tree, file);
-                } catch (error) {
-                    failure ??= error;
-                }
-            }
-        };
-
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
-
-        if (failure !== null) {
-            throw failure;
-        }
-    },
-
-    async copy(tree, file) {
-        const parts = file.destination.split('/');
-        const name = parts.pop();
-        const folder = parts.join('/');
-        const dir = await tree.handle(folder);
-        this.current = file.destination;
-
-        // Asked of the drive only when the folder's listing has the name: a
-        // file that is not there needs no question, and on a first send that
-        // is every one of them.
-        if ((await tree.names(folder)).has(name) && (await existingSize(dir, name)) === file.size) {
-            this.skipped++;
-            this.written += file.size;
-            return;
-        }
-
-        const response = await this.fetchOk(file.url);
-        const partName = `.${name}.part`;
-        const handle = await dir.getFileHandle(partName, { create: true });
-        const writable = await handle.createWritable();
-
-        const counted = new TransformStream({
-            transform: (chunk, controller) => {
-                this.written += chunk.byteLength;
-                controller.enqueue(chunk);
-            },
-        });
-
-        await response.body.pipeThrough(counted).pipeTo(writable);
-
-        if (typeof handle.move === 'function') {
-            await handle.move(name);
-        } else {
-            // No rename in this browser: write again under the real name.
-            const final = await (await dir.getFileHandle(name, { create: true })).createWritable();
-            await final.write(await handle.getFile());
-            await final.close();
-            await dir.removeEntry(partName);
-        }
-    },
-
-    /**
-     * The target's own files, once the game's are on the drive: each fetched
-     * as the server makes it and written, unless the drive has one already —
-     * somebody may have tuned it there.
-     */
-    async writeExtras(tree, extras) {
-        for (const extra of extras) {
-            const parts = extra.destination.split('/');
-            const name = parts.pop();
-            const folder = parts.join('/');
-            this.current = extra.destination;
-
-            if ((await tree.names(folder)).has(name)) {
-                this.skipped++;
-                continue;
-            }
-
-            const response = await this.fetchOk(extra.url);
-            const writable = await (await (await tree.handle(folder)).getFileHandle(name, { create: true })).createWritable();
-            await writable.write(await response.blob());
-            await writable.close();
-        }
-    },
-
-    async writeGamelist(root, destination) {
-        const parts = destination.split('/');
-        const name = parts.pop();
-        const dir = await directoryFor(root, parts);
-        this.current = destination;
-
-        let existing = '';
-        try {
-            existing = await (await (await dir.getFileHandle(name)).getFile()).text();
-        } catch {
-            // None yet.
-        }
-
-        const response = await fetch(this.targets[this.target].gamelist, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/xml', 'X-CSRF-TOKEN': csrf(), Accept: 'application/xml' },
-            body: existing,
-        });
-
-        if (!response.ok) {
-            throw new Error(await response.text());
-        }
-
-        const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
-        await writable.write(await response.text());
-        await writable.close();
-    },
-
-    async fetchOk(url) {
-        const response = await fetch(url, { headers: { Accept: '*/*' } });
-
-        if (!response.ok) {
-            throw new Error(`${response.status} ${response.statusText} — ${url}`);
-        }
-
-        return response;
+        this.$store.usb.enqueue({ label, plan, gamelist, root, confirm, confirmed: confirmedRoot }, this.drive);
+        this.status = 'sent';
     },
 });
