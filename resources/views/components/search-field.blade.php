@@ -6,8 +6,9 @@
      so wire:model goes where it is needed.
 
      Ctrl+K (Cmd+K on a Mac) focuses it from anywhere on the page. Only one of
-     these is ever drawn at a time, so the window listener has no rival. --}}
-<label {{ $attributes->only('class')->class('relative flex min-w-0 items-center') }}>
+     these is ever drawn at a time, so the window listener has no rival. With
+     text in it, the hint gives way to a button that empties it. --}}
+<label {{ $attributes->only('class')->class('relative flex min-w-0 items-center') }} x-data="{ filled: false }">
     <flux:icon.magnifying-glass class="pointer-events-none absolute left-2.75 size-3.5 text-fg-dim" />
 
     <input
@@ -15,7 +16,9 @@
         placeholder="{{ $placeholder }}"
         aria-label="{{ $placeholder }}"
         aria-keyshortcuts="Control+K Meta+K"
-        x-data
+        x-ref="input"
+        x-init="$nextTick(() => filled = $el.value !== '')"
+        x-on:input="filled = $el.value !== ''"
         x-on:keydown.ctrl.k.window.prevent="$el.focus(); $el.select()"
         x-on:keydown.meta.k.window.prevent="$el.focus(); $el.select()"
         x-on:keydown.escape="$el.blur()"
@@ -24,5 +27,18 @@
     />
 
     {{-- Hidden while typing, where it would sit on top of the text. --}}
-    <kbd aria-hidden="true" class="pointer-events-none absolute right-2.75 hidden font-sans text-xs text-fg-dim peer-focus:hidden sm:block">⌘K</kbd>
+    <kbd aria-hidden="true" x-show="! filled" class="pointer-events-none absolute right-2.75 hidden font-sans text-xs text-fg-dim peer-focus:hidden sm:block">⌘K</kbd>
+
+    {{-- An input event, as typing sends, so wire:model hears it empty. --}}
+    <button
+        type="button"
+        x-show="filled"
+        x-cloak
+        x-on:click.prevent="$refs.input.value = ''; $refs.input.dispatchEvent(new Event('input', { bubbles: true })); $refs.input.focus()"
+        aria-label="{{ __('Clear search') }}"
+        title="{{ __('Clear search') }}"
+        class="absolute right-1.5 grid size-6 cursor-pointer place-items-center rounded-md text-fg-dim transition-colors hover:bg-hover hover:text-fg-soft"
+    >
+        <flux:icon.x-mark variant="micro" class="size-3.5" />
+    </button>
 </label>

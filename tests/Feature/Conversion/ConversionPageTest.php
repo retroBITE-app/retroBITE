@@ -11,6 +11,7 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\User;
 use App\Support\Console;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Number;
@@ -52,7 +53,14 @@ function pageFile(string $console, string $name, int $size = 4096): GameFile
     File::ensureDirectoryExists(dirname(test()->root.'/'.$console.'/'.$name));
     File::put(test()->root.'/'.$console.'/'.$name, str_repeat("\0", $size));
 
-    return GameFile::factory()->for(Game::factory()->forConsole($console))->create([
+    // Titled after the file, as the scanner titles a game it has not identified:
+    // the list orders by title, and a random one would shuffle it.
+    $game = Game::factory()->forConsole($console)->state([
+        'title' => pathinfo($name, PATHINFO_FILENAME),
+        'slug' => Str::slug($name),
+    ]);
+
+    return GameFile::factory()->for($game)->create([
         'path' => $console.'/'.$name,
         'filename' => basename($name),
         'extension' => Str::lower(pathinfo($name, PATHINFO_EXTENSION)),
@@ -71,7 +79,7 @@ it('opens on the first console with something to convert, and lists its sources'
         ->assertSee('Tool paths');
 });
 
-it('switches consoles by tab and filters the list', function () {
+it('switches consoles by tab and searches the list', function () {
     pageFile('ps2', 'Gran Turismo 4.iso');
     pageFile('ps2', 'Okami.iso');
     pageFile('psx', 'Crash.bin', 2352);
@@ -86,7 +94,7 @@ it('switches consoles by tab and filters the list', function () {
         ->assertDontSee('Okami.iso');
 
     Livewire::test('conversion.picker', ['consoleKey' => 'ps2'])
-        ->set('filter', 'oka')
+        ->set('search', 'oka')
         ->assertSee('Okami.iso')
         ->assertDontSee('Gran Turismo 4.iso');
 });
@@ -345,13 +353,13 @@ it('offers every format any pick can become, and leaves out the picks it does no
     expect(Conversion::query()->pluck('label')->all())->toBe(['Raw.img']);
 });
 
-it('picks everything the filter shows, and puts it all back', function () {
+it('picks everything the search shows, and puts it all back', function () {
     pageFile('ps2', 'Okami.iso');
     pageFile('ps2', 'Okage.iso');
     pageFile('ps2', 'Gran Turismo 4.iso');
 
     $page = Livewire::test('conversion.picker', ['consoleKey' => 'ps2'])
-        ->set('filter', 'oka')
+        ->set('search', 'oka')
         ->call('toggleAll');
 
     expect($page->get('sources'))->toHaveCount(2)
@@ -360,6 +368,55 @@ it('picks everything the filter shows, and puts it all back', function () {
     $page->call('toggleAll');
 
     expect($page->get('sources'))->toBe([]);
+});
+
+it('lists a game kept in several files once, with its files under it', function () {
+    $iso = pageFile('ps2', 'Batman Begins (Europe).iso');
+    $iso->game->update(['title' => 'Batman Begins']);
+    File::put($this->root.'/ps2/Batman Begins (Europe).zso', str_repeat("\0", 2048));
+    $zso = GameFile::factory()->for($iso->game)->create([
+        'path' => 'ps2/Batman Begins (Europe).zso', 'filename' => 'Batman Begins (Europe).zso',
+        'extension' => 'zso', 'size_bytes' => 2048, 'role' => FileRole::Rom,
+    ]);
+    pageFile('ps2', 'Okami.iso');
+
+    $page = Livewire::test('conversion.picker', ['consoleKey' => 'ps2'])
+        ->assertSee('Batman Begins')
+        ->assertSee('2 files')
+        ->assertSee('Batman Begins (Europe).iso')
+        ->assertSee('Batman Begins (Europe).zso')
+        ->assertSee('Okami.iso');
+
+    expect($page->instance()->games)->toHaveCount(2)
+        ->and(Arr::get($page->instance()->games->first(), 'sets')->pluck('file.id')->sort()->values()->all())->toBe([$iso->id, $zso->id]);
+});
+
+it('searches by the game\'s title as well as its files\' names', function () {
+    $file = pageFile('ps2', 'SLES_503.30.iso');
+    $file->game->update(['title' => 'Final Fantasy X']);
+    pageFile('ps2', 'Okami.iso');
+
+    Livewire::test('conversion.picker', ['consoleKey' => 'ps2'])
+        ->set('search', 'fantasy')
+        ->assertSee('SLES_503.30.iso')
+        ->assertDontSee('Okami.iso');
+});
+
+it('narrows the list to one file type, and offers the types on the console', function () {
+    pageFile('ps2', 'Okami.iso');
+    pageFile('ps2', 'Shadow.cso');
+
+    $page = Livewire::test('conversion.picker', ['consoleKey' => 'ps2'])
+        ->assertSee('All types');
+
+    expect($page->instance()->types)->toBe(['cso', 'iso']);
+
+    $page->set('type', 'cso')
+        ->assertSee('Shadow.cso')
+        ->assertDontSee('Okami.iso')
+        ->call('toggleAll');
+
+    expect($page->get('sources'))->toHaveCount(1);
 });
 
 it('picks only files of one format together', function () {

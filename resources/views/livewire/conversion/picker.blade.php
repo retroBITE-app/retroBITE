@@ -33,7 +33,7 @@ use Livewire\Component;
  */
 new class extends Component
 {
-    /** How many sources the list draws; the filter narrows past that. */
+    /** How many games the list draws; the search narrows past that. */
     public const LIST_LIMIT = 200;
 
     #[Locked]
@@ -43,7 +43,11 @@ new class extends Component
     #[Locked]
     public ?int $gameId = null;
 
-    public string $filter = '';
+    /** Narrows the list to the games whose title, or a file's name, has it. */
+    public string $search = '';
+
+    /** A source format, as formatOf() names it, to list alone; '' for every one. */
+    public string $type = '';
 
     /**
      * The picked sources, by the row each was picked by. One or many: every
@@ -125,20 +129,78 @@ new class extends Component
     }
 
     /**
-     * What the list shows: everything, narrowed by the filter.
+     * What the list shows: everything, narrowed by the search and the type.
      *
      * @return Collection<int, SourceSet>
      */
     #[Computed]
     public function sets(): Collection
     {
-        $filter = Str::lower(trim($this->filter));
+        $search = Str::lower(trim($this->search));
 
         return $this->available
-            ->filter(function (SourceSet $set) use ($filter): bool {
-                return $filter === '' || Str::contains(Str::lower($set->label().' '.$set->directory), $filter);
+            ->filter(function (SourceSet $set) use ($search): bool {
+                if ($this->type !== '' && $this->formatOf($set) !== $this->type) {
+                    return false;
+                }
+
+                return $search === '' || Str::contains(Str::lower($this->titleOf($set).' '.$set->label().' '.$set->directory), $search);
             })
             ->values();
+    }
+
+    /**
+     * The shown sets a game at a time, games in title order: one game kept
+     * as an ISO and a ZSO is one entry with both under it.
+     *
+     * @return Collection<int, array{key: string, title: string, sets: Collection<int, SourceSet>}>
+     */
+    #[Computed]
+    public function games(): Collection
+    {
+        return $this->sets
+            ->groupBy(function (SourceSet $set): string {
+                return $set->game !== null ? 'game-'.$set->game->id : 'file-'.$set->file->id;
+            })
+            ->map(function (Collection $sets, string $key): array {
+                return ['key' => $key, 'title' => $this->titleOf($sets->first()), 'sets' => $sets->values()];
+            })
+            ->sortBy('title', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+    }
+
+    /**
+     * The sets of the games the list draws, which select-all picks from.
+     *
+     * @return Collection<int, SourceSet>
+     */
+    #[Computed]
+    public function shown(): Collection
+    {
+        return $this->games
+            ->take(self::LIST_LIMIT)
+            ->flatMap(function (array $game): Collection {
+                return Arr::get($game, 'sets');
+            })
+            ->values();
+    }
+
+    /**
+     * Every source format on the list before the type narrows it, for the
+     * type filter's options.
+     *
+     * @return list<string>
+     */
+    #[Computed]
+    public function types(): array
+    {
+        return array_values($this->available
+            ->map(function (SourceSet $set): string {
+                return $this->formatOf($set);
+            })
+            ->unique()
+            ->sort()
+            ->all());
     }
 
     /**
@@ -243,7 +305,7 @@ new class extends Component
             return;
         }
 
-        // Looked up in everything available, not only what the filter shows: the filter
+        // Looked up in everything available, not only what the search shows: the search
         // can change in the same request as the click.
         $set = $this->available->get($id);
         $picked = $this->pickedFormat;
@@ -269,7 +331,7 @@ new class extends Component
      */
     public function toggleAll(): void
     {
-        $shown = $this->sets->take(self::LIST_LIMIT);
+        $shown = $this->shown;
         $format = $this->pickedFormat ?? ($shown->isNotEmpty() ? $this->formatOf($shown->first()) : null);
 
         if ($format === null) {
@@ -335,6 +397,14 @@ new class extends Component
     protected function formatOf(SourceSet $set): string
     {
         return implode('/', $set->extensions());
+    }
+
+    /** The game a source belongs to, by title; the source's own name when the game has none. */
+    protected function titleOf(SourceSet $set): string
+    {
+        $title = trim((string) $set->game?->title);
+
+        return $title !== '' ? $title : $set->label();
     }
 
     public function clearSelection(): void
@@ -430,7 +500,7 @@ new class extends Component
     public function pickState(): string
     {
         $format = $this->pickedFormat;
-        $shown = $this->sets->take(self::LIST_LIMIT)
+        $shown = $this->shown
             ->filter(function (SourceSet $set) use ($format): bool {
                 return $format === null || $this->formatOf($set) === $format;
             })
@@ -488,14 +558,14 @@ new class extends Component
 <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
     {{-- Sources --}}
     <section class="flex min-w-0 flex-col rounded-xl border border-line bg-surface">
-                @php($sets = $this->sets)
-                @php($shown = $sets->take($this::LIST_LIMIT))
+                @php($games = $this->games)
+                @php($shown = $this->shown)
                 @php($pickState = $this->pickState)
                 @php($pickedFormat = $this->pickedFormat)
 
                 {{-- Select all sits at the head of the list's own column of
                      checkboxes, px-3.5 like the rows so the boxes line up,
-                     and picks what the filter beside it shows. --}}
+                     and picks what the search and type beside it show. --}}
                 <div class="flex items-center gap-3 border-b border-line px-3.5 py-3">
                     <button
                         type="button"
@@ -509,7 +579,14 @@ new class extends Component
                     </button>
 
                     @if ($gameId === null)
-                        <x-search-field wire:model.live.debounce.300ms="filter" :placeholder="__('Filter files')" class="min-w-0 flex-1" />
+                        <x-search-field wire:model.live.debounce.300ms="search" :placeholder="__('Search games')" class="min-w-0 flex-1" />
+
+                        <flux:select wire:model.live="type" size="sm" class="w-28 shrink-0" :aria-label="__('File type')">
+                            <flux:select.option value="">{{ __('All types') }}</flux:select.option>
+                            @foreach ($this->types as $option)
+                                <flux:select.option value="{{ $option }}">{{ Str::upper($option) }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
                     @else
                         <span class="min-w-0 flex-1 text-xs text-fg-faint">{{ __('Pick what to convert') }}</span>
                     @endif
@@ -525,46 +602,95 @@ new class extends Component
                 </div>
 
                 <ul class="max-h-[28rem] divide-y divide-line overflow-y-auto">
-                    @forelse ($shown as $set)
-                        @php($picked = in_array($set->file->id, $sources, true))
-                        {{-- Another format than the picks: it cannot join them. --}}
-                        @php($blocked = ! $picked && $pickedFormat !== null && $this->formatOf($set) !== $pickedFormat)
+                    @forelse ($games->take($this::LIST_LIMIT) as ['key' => $key, 'title' => $title, 'sets' => $gameSets])
+                        {{-- A game kept in more than one file is a heading with
+                             its files under it; a game of one file is one row,
+                             named after the game with the file beneath. A game's
+                             own page lists only its files, so it names each. --}}
+                        @php($grouped = $gameId === null && $gameSets->count() > 1)
 
-                        <li wire:key="set-{{ $set->file->id }}">
-                            <button
-                                type="button"
-                                wire:click="toggleSource({{ $set->file->id }})"
-                                aria-pressed="{{ $picked ? 'true' : 'false' }}"
-                                @disabled($blocked)
-                                @if ($blocked) title="{{ __('Only :format files can be picked with the ones already picked', ['format' => Str::upper($pickedFormat)]) }}" @endif
-                                @class([
-                                    'flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors',
-                                    'cursor-pointer bg-accent-tint/10' => $picked,
-                                    'cursor-pointer hover:bg-hover' => ! $picked && ! $blocked,
-                                    'cursor-not-allowed opacity-40' => $blocked,
-                                ])
-                            >
-                                <x-conversion.check :state="$picked ? 'on' : 'off'" />
+                        {{-- Folded until the title is clicked, or open from the
+                             start when one of its files is picked. Alpine keeps
+                             the fold across re-renders: the li is keyed. --}}
+                        @php($holdsPick = $grouped && $gameSets->contains(function (SourceSet $set) use ($sources): bool {
+                            return in_array($set->file->id, $sources, true);
+                        }))
 
-                                <span class="min-w-0 flex-1">
-                                    <span @class(['block truncate text-sm', 'text-accent' => $picked, 'text-fg-soft' => ! $picked])>{{ $set->label() }}</span>
-                                    <span class="block truncate font-mono text-xs text-fg-faint">{{ $set->directory !== '' ? $set->directory.'/' : '/' }}</span>
-                                </span>
-
-                                @if ($set->isSet())
-                                    <span class="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 font-mono text-[10px] tracking-kicker text-fg-muted uppercase">
-                                        {{ trans_choice(':count disc|:count discs', count($set->discs), ['count' => count($set->discs)]) }}
+                        <li wire:key="{{ $key }}" @if ($grouped) x-data="{ open: @js($holdsPick) }" x-bind:class="open && 'pb-1.5'" @endif>
+                            @if ($grouped)
+                                <button
+                                    type="button"
+                                    x-on:click="open = ! open"
+                                    x-bind:aria-expanded="open"
+                                    class="flex w-full cursor-pointer items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-hover"
+                                >
+                                    <span class="size-4 shrink-0" aria-hidden="true"></span>
+                                    <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                                        <span @class(['truncate text-sm', 'text-accent' => $holdsPick, 'text-fg' => ! $holdsPick])>{{ $title }}</span>
+                                        <flux:icon.chevron-down class="size-3 shrink-0 text-fg-dim transition-transform duration-200" x-bind:class="open && '-rotate-180'" />
                                     </span>
-                                @endif
+                                    <span class="shrink-0 font-mono text-[10px] tracking-kicker text-fg-faint uppercase">
+                                        {{ trans_choice(':count file|:count files', $gameSets->count(), ['count' => $gameSets->count()]) }}
+                                    </span>
+                                </button>
+                            @endif
 
-                                <span class="shrink-0 font-mono text-xs text-fg-dim uppercase">{{ implode('/', $set->extensions()) }}</span>
-                                <span class="w-16 shrink-0 text-right font-mono text-xs text-fg-faint">{{ Number::fileSize($set->bytes(), 1) }}</span>
-                            </button>
+                            @foreach ($gameSets as $set)
+                                @php($picked = in_array($set->file->id, $sources, true))
+                                {{-- Another format than the picks: it cannot join them. --}}
+                                @php($blocked = ! $picked && $pickedFormat !== null && $this->formatOf($set) !== $pickedFormat)
+                                @php($path = $set->directory !== '' ? $set->directory.'/' : '/')
+                                @php($named = $gameId === null && ! $grouped)
+
+                                <button
+                                    type="button"
+                                    wire:key="set-{{ $set->file->id }}"
+                                    wire:click="toggleSource({{ $set->file->id }})"
+                                    @if ($grouped) x-show="open" x-cloak @endif
+                                    aria-pressed="{{ $picked ? 'true' : 'false' }}"
+                                    @disabled($blocked)
+                                    @if ($blocked) title="{{ __('Only :format files can be picked with the ones already picked', ['format' => Str::upper($pickedFormat)]) }}" @endif
+                                    @class([
+                                        'flex w-full items-center gap-3 px-3.5 text-left transition-colors',
+                                        'py-1.5' => $grouped,
+                                        'py-2.5' => ! $grouped,
+                                        'cursor-pointer bg-accent-tint/10' => $picked,
+                                        'cursor-pointer hover:bg-hover' => ! $picked && ! $blocked,
+                                        'cursor-not-allowed opacity-40' => $blocked,
+                                    ])
+                                >
+                                    <x-conversion.check :state="$picked ? 'on' : 'off'" />
+
+                                    {{-- Named after the game, the file goes on a line
+                                         under it; otherwise the file is the one line,
+                                         its folder in front of it. --}}
+                                    @if ($named)
+                                        <span class="min-w-0 flex-1">
+                                            <span @class(['block truncate text-sm', 'text-accent' => $picked, 'text-fg' => ! $picked])>{{ $title }}</span>
+                                            <span class="block truncate font-mono text-xs text-fg-faint">{{ $path.$set->label() }}</span>
+                                        </span>
+                                    @else
+                                        <span class="flex min-w-0 flex-1 items-baseline">
+                                            <span class="max-w-1/2 shrink-0 truncate font-mono text-xs text-fg-faint">{{ $path }}</span>
+                                            <span @class(['truncate text-sm', 'text-accent' => $picked, 'text-fg-soft' => ! $picked])>{{ $set->label() }}</span>
+                                        </span>
+                                    @endif
+
+                                    @if ($set->isSet())
+                                        <span class="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 font-mono text-[10px] tracking-kicker text-fg-muted uppercase">
+                                            {{ trans_choice(':count disc|:count discs', count($set->discs), ['count' => count($set->discs)]) }}
+                                        </span>
+                                    @endif
+
+                                    <span class="shrink-0 font-mono text-xs text-fg-dim uppercase">{{ implode('/', $set->extensions()) }}</span>
+                                    <span class="w-16 shrink-0 text-right font-mono text-xs text-fg-faint">{{ Number::fileSize($set->bytes(), 1) }}</span>
+                                </button>
+                            @endforeach
                         </li>
                     @empty
                         <li class="px-4 py-8 text-center text-sm text-fg-faint">
                             {{ match (true) {
-                                $filter !== '' => __('Nothing matches the filter.'),
+                                $search !== '' || $type !== '' => __('No game matches the search.'),
                                 $gameId !== null => __('Nothing here any of this console\'s conversions reads.'),
                                 default => __('Nothing on this console can be converted. Scan the folder if files were added.'),
                             } }}
@@ -572,9 +698,9 @@ new class extends Component
                     @endforelse
                 </ul>
 
-                @if ($sets->count() > $this::LIST_LIMIT)
+                @if ($games->count() > $this::LIST_LIMIT)
                     <p class="border-t border-line px-3.5 py-2 text-xs text-fg-faint">
-                        {{ __('Showing :shown of :count. Filter to find the rest.', ['shown' => $this::LIST_LIMIT, 'count' => $sets->count()]) }}
+                        {{ __('Showing :shown of :count games. Search to find the rest.', ['shown' => $this::LIST_LIMIT, 'count' => $games->count()]) }}
                     </p>
                 @endif
             </section>
