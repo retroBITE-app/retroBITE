@@ -43,7 +43,11 @@ new class extends Component
     #[Locked]
     public ?int $gameId = null;
 
-    /** Narrows the list to the games whose title, or a file's name, has it. */
+    /**
+     * Narrows the list to the games whose title, or a file's name, has it; or,
+     * as a comma-separated list of ids, to those games — what a console's
+     * shelf sends its picks here as.
+     */
     public string $search = '';
 
     /** A source format, as formatOf() names it, to list alone; '' for every one. */
@@ -137,16 +141,54 @@ new class extends Component
     public function sets(): Collection
     {
         $search = Str::lower(trim($this->search));
+        $ids = $this->searchedIds;
 
         return $this->available
-            ->filter(function (SourceSet $set) use ($search): bool {
+            ->filter(function (SourceSet $set) use ($search, $ids): bool {
                 if ($this->type !== '' && $this->formatOf($set) !== $this->type) {
                     return false;
+                }
+
+                if ($ids !== null && in_array($set->game?->id, $ids, true)) {
+                    return true;
                 }
 
                 return $search === '' || Str::contains(Str::lower($this->titleOf($set).' '.$set->label().' '.$set->directory), $search);
             })
             ->values();
+    }
+
+    /**
+     * The search read as game ids, when it is nothing but numbers and commas;
+     * null otherwise. A lone number still matches titles too: "1942" is a game.
+     *
+     * @return list<int>|null
+     */
+    #[Computed]
+    public function searchedIds(): ?array
+    {
+        $parts = collect(explode(',', $this->search))
+            ->map(function (string $part): string {
+                return trim($part);
+            })
+            ->filter(function (string $part): bool {
+                return $part !== '';
+            });
+
+        $numeric = $parts->isNotEmpty() && $parts->every(function (string $part): bool {
+            return ctype_digit($part);
+        });
+
+        if (! $numeric) {
+            return null;
+        }
+
+        return array_values($parts
+            ->map(function (string $part): int {
+                return (int) $part;
+            })
+            ->unique()
+            ->all());
     }
 
     /**
@@ -603,11 +645,10 @@ new class extends Component
 
                 <ul class="max-h-[28rem] divide-y divide-line overflow-y-auto">
                     @forelse ($games->take($this::LIST_LIMIT) as ['key' => $key, 'title' => $title, 'sets' => $gameSets])
-                        {{-- A game kept in more than one file is a heading with
-                             its files under it; a game of one file is one row,
-                             named after the game with the file beneath. A game's
-                             own page lists only its files, so it names each. --}}
-                        @php($grouped = $gameId === null && $gameSets->count() > 1)
+                        {{-- Every game is a heading with its files under it, one
+                             file or several, so the list reads the same all the
+                             way down. A game's own page lists only its files. --}}
+                        @php($grouped = $gameId === null)
 
                         {{-- Folded until the title is clicked, or open from the
                              start when one of its files is picked. Alpine keeps
@@ -616,7 +657,7 @@ new class extends Component
                             return in_array($set->file->id, $sources, true);
                         }))
 
-                        <li wire:key="{{ $key }}" @if ($grouped) x-data="{ open: @js($holdsPick) }" x-bind:class="open && 'pb-1.5'" @endif>
+                        <li wire:key="{{ $key }}" @if ($grouped) x-data="{ open: @js($holdsPick || $this->searchedIds !== null) }" x-bind:class="open && 'pb-1.5'" @endif>
                             @if ($grouped)
                                 <button
                                     type="button"
@@ -640,7 +681,6 @@ new class extends Component
                                 {{-- Another format than the picks: it cannot join them. --}}
                                 @php($blocked = ! $picked && $pickedFormat !== null && $this->formatOf($set) !== $pickedFormat)
                                 @php($path = $set->directory !== '' ? $set->directory.'/' : '/')
-                                @php($named = $gameId === null && ! $grouped)
 
                                 <button
                                     type="button"
@@ -661,20 +701,11 @@ new class extends Component
                                 >
                                     <x-conversion.check :state="$picked ? 'on' : 'off'" />
 
-                                    {{-- Named after the game, the file goes on a line
-                                         under it; otherwise the file is the one line,
-                                         its folder in front of it. --}}
-                                    @if ($named)
-                                        <span class="min-w-0 flex-1">
-                                            <span @class(['block truncate text-sm', 'text-accent' => $picked, 'text-fg' => ! $picked])>{{ $title }}</span>
-                                            <span class="block truncate font-mono text-xs text-fg-faint">{{ $path.$set->label() }}</span>
-                                        </span>
-                                    @else
-                                        <span class="flex min-w-0 flex-1 items-baseline">
-                                            <span class="max-w-1/2 shrink-0 truncate font-mono text-xs text-fg-faint">{{ $path }}</span>
-                                            <span @class(['truncate text-sm', 'text-accent' => $picked, 'text-fg-soft' => ! $picked])>{{ $set->label() }}</span>
-                                        </span>
-                                    @endif
+                                    {{-- The file on one line, its folder in front of it. --}}
+                                    <span class="flex min-w-0 flex-1 items-baseline">
+                                        <span class="max-w-1/2 shrink-0 truncate font-mono text-xs text-fg-faint">{{ $path }}</span>
+                                        <span @class(['truncate text-sm', 'text-accent' => $picked, 'text-fg-soft' => ! $picked])>{{ $set->label() }}</span>
+                                    </span>
 
                                     @if ($set->isSet())
                                         <span class="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 font-mono text-[10px] tracking-kicker text-fg-muted uppercase">

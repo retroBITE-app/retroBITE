@@ -1,5 +1,6 @@
 <?php
 
+use App\Conversion\Converters;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
@@ -118,6 +119,18 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
      */
     #[Locked]
     public ?string $heroArt = null;
+
+    /** Picking games to convert: each card or row ticks a game instead of opening it. */
+    public bool $picking = false;
+
+    /**
+     * The games ticked for conversion, kept across pages. Locked: only
+     * togglePick() and pickPage() change it, and they check what they add.
+     *
+     * @var list<int>
+     */
+    #[Locked]
+    public array $picks = [];
 
     /** The route's console, when this is one console's shelf rather than the library. */
     public function mount(?string $console = null): void
@@ -533,6 +546,18 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             && ConsoleSourceFolder::has($console);
     }
 
+    /**
+     * Whether the shelf offers picking games to convert: a console in the
+     * library, which the Conversion page has a tab for.
+     */
+    #[Computed]
+    public function canConvert(): bool
+    {
+        $console = $this->lockedTo;
+
+        return $console !== null && ConsoleSourceFolder::has($console) && Converters::offersOn($console);
+    }
+
     /** Whether the toolbox can file this console's loose games into folders of their own. */
     #[Computed]
     public function canOrganize(): bool
@@ -669,6 +694,78 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         ]));
     }
 
+    /** Start ticking games to convert. */
+    public function startPicking(): void
+    {
+        if (! $this->canConvert) {
+            return;
+        }
+
+        $this->picking = true;
+    }
+
+    /** Leave picking, and let go of every tick. */
+    public function stopPicking(): void
+    {
+        $this->picking = false;
+        $this->picks = [];
+    }
+
+    /** Tick a game, or untick it. Only a game on this shelf's console is taken. */
+    public function togglePick(int $id): void
+    {
+        if (! $this->picking) {
+            return;
+        }
+
+        if (in_array($id, $this->picks, true)) {
+            $this->picks = array_values(array_diff($this->picks, [$id]));
+
+            return;
+        }
+
+        if (! Game::query()->forConsole($this->lockedConsole)->whereKey($id)->exists()) {
+            return;
+        }
+
+        $this->picks = [...$this->picks, $id];
+    }
+
+    /** Tick every game on this page, or with all of them ticked, untick them. */
+    public function pickPage(): void
+    {
+        if (! $this->picking) {
+            return;
+        }
+
+        $page = array_values($this->games->getCollection()->pluck('id')->map(function (mixed $id): int {
+            return (int) $id;
+        })->all());
+
+        $this->picks = array_diff($page, $this->picks) === []
+            ? array_values(array_diff($this->picks, $page))
+            : array_values(array_unique([...$this->picks, ...$page]));
+    }
+
+    /** Off to Conversion with the ticked games, which its list then shows alone. */
+    public function convertPicks(): void
+    {
+        $ids = $this->picks === [] ? [] : Game::query()
+            ->forConsole($this->lockedConsole)
+            ->whereKey($this->picks)
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+
+        if (! $this->canConvert || $ids === []) {
+            Flux::toast(variant: 'warning', text: __('Pick a game to convert first.'));
+
+            return;
+        }
+
+        $this->redirectRoute('tools.conversion', ['console' => $this->lockedConsole, 'search' => implode(',', $ids)], navigate: true);
+    }
+
     public function clear(): void
     {
         // Not $sort: it says how to read the library rather than which part of
@@ -802,6 +899,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                             <flux:menu.item icon="arrow-up-tray" x-on:click="$dispatch('send-console')">
                                 {{ __('Send all games to…') }}
                             </flux:menu.item>
+
+                            {{-- Tick games here, then carry them to Conversion,
+                                 whose list shows only them. --}}
+                            @if ($this->canConvert)
+                                <flux:menu.item icon="arrows-right-left" wire:click="startPicking">
+                                    {{ __('Convert games…') }}
+                                </flux:menu.item>
+                            @endif
 
                             <flux:menu.separator />
 
@@ -1092,7 +1197,31 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             @endphp
             <ul class="shelf items-start" style="--shelf-min: {{ $shelfMin }}px">
                 @foreach ($this->games as $game)
-                    <li wire:key="card-{{ $game->id }}" class="w-full">
+                    <li wire:key="card-{{ $game->id }}" class="relative w-full">
+                        {{-- Picking: a button over the whole card, above its link and
+                             its hover actions, so a click ticks rather than opens. --}}
+                        @if ($picking)
+                            @php
+                                $cardPicked = in_array($game->id, $picks, true);
+                            @endphp
+
+                            <button
+                                type="button"
+                                wire:click="togglePick({{ $game->id }})"
+                                aria-pressed="{{ $cardPicked ? 'true' : 'false' }}"
+                                aria-label="{{ $game->title }}"
+                                @class([
+                                    'absolute inset-0 z-30 cursor-pointer rounded-2xl border-3 transition-colors',
+                                    'border-accent-tint/55 bg-accent-tint/10' => $cardPicked,
+                                    'border-transparent hover:border-accent-tint/30' => ! $cardPicked,
+                                ])
+                            >
+                                <span class="absolute top-4 left-4 rounded bg-scrim/80">
+                                    <x-conversion.check :state="$cardPicked ? 'on' : 'off'" />
+                                </span>
+                            </button>
+                        @endif
+
                         <x-game-card :game="$game" :show-console="$this->lockedTo === null">
                             <x-slot:actions>
                                 @if ($game->canBeIdentified())
@@ -1199,9 +1328,28 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 ]));
                             @endphp
 
-                            <tr wire:key="game-{{ $game->id }}" class="border-t border-line hover:bg-hover">
+                            @php
+                                $rowPicked = $picking && in_array($game->id, $picks, true);
+                            @endphp
+
+                            <tr
+                                wire:key="game-{{ $game->id }}"
+                                @if ($picking) wire:click="togglePick({{ $game->id }})" aria-selected="{{ $rowPicked ? 'true' : 'false' }}" @endif
+                                @class([
+                                    'border-t border-line',
+                                    'hover:bg-hover' => ! $rowPicked,
+                                    'cursor-pointer' => $picking,
+                                    'bg-accent-tint/10' => $rowPicked,
+                                ])
+                            >
                                 <td class="py-2 pl-4">
-                                    <div class="flex size-12 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-sunken">
+                                    <div class="relative flex size-12 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-sunken">
+                                        @if ($picking)
+                                            <span class="absolute top-1 left-1 z-10 rounded bg-scrim/80">
+                                                <x-conversion.check :state="$rowPicked ? 'on' : 'off'" />
+                                            </span>
+                                        @endif
+
                                         @if ($rowCover !== null)
                                             <img
                                                 src="{{ $rowCover->url(App\Enums\ThumbnailSize::List) }}"
@@ -1218,9 +1366,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 </td>
 
                                 <td class="px-4 py-2">
-                                    <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="block truncate font-medium text-fg-bright hover:text-accent">
-                                        {{ $game->title }}
-                                    </a>
+                                    {{-- Plain text while picking: the whole row ticks. --}}
+                                    @if ($picking)
+                                        <span @class(['block truncate font-medium', 'text-accent' => $rowPicked, 'text-fg-bright' => ! $rowPicked])>{{ $game->title }}</span>
+                                    @else
+                                        <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="block truncate font-medium text-fg-bright hover:text-accent">
+                                            {{ $game->title }}
+                                        </a>
+                                    @endif
 
                                     {{-- Always rendered, even empty: an absent
                                          second line would make the row half a
@@ -1271,50 +1424,52 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                      the menu holds still between rows and says
                                      why instead of hiding. --}}
                                 <td class="px-4 py-2 text-right">
-                                    <flux:dropdown position="bottom" align="end">
-                                        <flux:button size="xs" variant="ghost" icon="ellipsis-horizontal"
-                                                     :aria-label="__('Actions')" />
+                                    @unless ($picking)
+                                        <flux:dropdown position="bottom" align="end">
+                                            <flux:button size="xs" variant="ghost" icon="ellipsis-horizontal"
+                                                         :aria-label="__('Actions')" />
 
-                                        <flux:menu>
-                                            <flux:menu.item icon="sparkles"
-                                                            :disabled="$rowIdentifyBlocked !== null"
-                                                            :title="$rowIdentifyBlocked"
-                                                            wire:click="identify({{ $game->id }})">
-                                                {{ $game->status === GameStatus::Unmatched ? __('Try identifying again') : __('Identify game') }}
-                                            </flux:menu.item>
+                                            <flux:menu>
+                                                <flux:menu.item icon="sparkles"
+                                                                :disabled="$rowIdentifyBlocked !== null"
+                                                                :title="$rowIdentifyBlocked"
+                                                                wire:click="identify({{ $game->id }})">
+                                                    {{ $game->status === GameStatus::Unmatched ? __('Try identifying again') : __('Identify game') }}
+                                                </flux:menu.item>
 
-                                            <flux:menu.separator />
+                                                <flux:menu.separator />
 
-                                            <flux:menu.item icon="photo"
-                                                            :disabled="$rowMediaBlocked !== null"
-                                                            :title="$rowMediaBlocked"
-                                                            wire:click="fetchMedia({{ $game->id }})">
-                                                {{-- The cover, not the whole
-                                                     relation: this list eager-loads
-                                                     covers alone, so media->isEmpty()
-                                                     here would be a claim about
-                                                     artwork the row never loaded. --}}
-                                                {{ $rowCover === null ? __('Fetch artwork') : __('Fetch artwork again') }}
-                                            </flux:menu.item>
+                                                <flux:menu.item icon="photo"
+                                                                :disabled="$rowMediaBlocked !== null"
+                                                                :title="$rowMediaBlocked"
+                                                                wire:click="fetchMedia({{ $game->id }})">
+                                                    {{-- The cover, not the whole
+                                                         relation: this list eager-loads
+                                                         covers alone, so media->isEmpty()
+                                                         here would be a claim about
+                                                         artwork the row never loaded. --}}
+                                                    {{ $rowCover === null ? __('Fetch artwork') : __('Fetch artwork again') }}
+                                                </flux:menu.item>
 
-                                            <flux:menu.separator />
+                                                <flux:menu.separator />
 
-                                            <flux:menu.item icon="star"
-                                                            :disabled="$rowRatingBlocked !== null"
-                                                            :title="$rowRatingBlocked"
-                                                            wire:click="fetchRating({{ $game->id }})">
-                                                {{ $game->rating === null ? __('Fetch rating') : __('Fetch rating again') }}
-                                            </flux:menu.item>
+                                                <flux:menu.item icon="star"
+                                                                :disabled="$rowRatingBlocked !== null"
+                                                                :title="$rowRatingBlocked"
+                                                                wire:click="fetchRating({{ $game->id }})">
+                                                    {{ $game->rating === null ? __('Fetch rating') : __('Fetch rating again') }}
+                                                </flux:menu.item>
 
-                                            <flux:menu.separator />
+                                                <flux:menu.separator />
 
-                                            <flux:menu.item icon="arrow-top-right-on-square"
-                                                            href="{{ route('games.show', $game->routeParameters()) }}"
-                                                            wire:navigate>
-                                                {{ __('Open game') }}
-                                            </flux:menu.item>
-                                        </flux:menu>
-                                    </flux:dropdown>
+                                                <flux:menu.item icon="arrow-top-right-on-square"
+                                                                href="{{ route('games.show', $game->routeParameters()) }}"
+                                                                wire:navigate>
+                                                    {{ __('Open game') }}
+                                                </flux:menu.item>
+                                            </flux:menu>
+                                        </flux:dropdown>
+                                    @endunless
                                 </td>
                             </tr>
                         @endforeach
@@ -1331,6 +1486,23 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
              so it came out cold blue beside everything else. --}}
             @if ($this->games->isNotEmpty())
                 <flux:pagination :paginator="$this->games" />
+            @endif
+
+            {{-- Stays in view while scrolling and paging: the ticks outlive
+                 the page they were made on. --}}
+            @if ($picking)
+                <div class="sticky bottom-4 z-30 flex flex-wrap items-center gap-3 rounded-xl border border-line-strong bg-raised px-4 py-3 shadow-lift">
+                    <span class="font-mono text-xs text-fg-soft">{{ trans_choice(':count game picked|:count games picked', count($picks), ['count' => count($picks)]) }}</span>
+
+                    <flux:button size="sm" variant="ghost" wire:click="pickPage">{{ __('Select page') }}</flux:button>
+
+                    <div class="ms-auto flex items-center gap-2">
+                        <flux:button size="sm" variant="ghost" wire:click="stopPicking">{{ __('Cancel') }}</flux:button>
+                        <flux:button size="sm" variant="primary" icon="arrows-right-left" wire:click="convertPicks" :disabled="$picks === []">
+                            {{ trans_choice('Convert :count game|Convert :count games', count($picks), ['count' => count($picks)]) }}
+                        </flux:button>
+                    </div>
+                </div>
             @endif
         </div>
     </div>

@@ -500,3 +500,56 @@ it('keeps a conversion\'s log off the page until it is opened', function () {
         ->call('toggleLog', $conversion->id)
         ->assertDontSee('a very particular line');
 });
+
+it('opens with the shelf\'s picks in the search, listing only them and ticking nothing', function () {
+    $okami = pageFile('ps2', 'Okami.iso');
+    pageFile('ps2', 'Gran Turismo 4.iso');
+    $shadow = pageFile('ps2', 'Shadow.iso');
+
+    Livewire::withQueryParams(['console' => 'ps2', 'search' => $okami->game_id.','.$shadow->game_id])
+        ->test('tools.conversion')
+        ->assertSee('Okami.iso')
+        ->assertSee('Shadow.iso')
+        ->assertDontSee('Gran Turismo 4.iso');
+
+    $picker = Livewire::test('conversion.picker', ['consoleKey' => 'ps2', 'search' => $okami->game_id.', '.$shadow->game_id])
+        ->assertSet('sources', []);
+
+    expect($picker->instance()->searchedIds)->toBe([$okami->game_id, $shadow->game_id])
+        ->and($picker->instance()->sets->pluck('file.id')->all())->toBe([$okami->id, $shadow->id]);
+
+    // Cleared, it is the whole console again.
+    $picker->set('search', '')->assertSee('Gran Turismo 4.iso');
+});
+
+it('reads a search of ids as ids, and anything else as text', function () {
+    $okami = pageFile('ps2', 'Okami.iso');
+    pageFile('ps2', '1942.iso');
+
+    $picker = Livewire::test('conversion.picker', ['consoleKey' => 'ps2']);
+
+    expect($picker->set('search', 'oka, 12')->instance()->searchedIds)->toBeNull();
+
+    // A lone number is an id and a title both.
+    $picker->set('search', '1942')->assertSee('1942.iso')->assertDontSee('Okami.iso');
+    $picker->set('search', (string) $okami->game_id)->assertSee('Okami.iso');
+});
+
+it('starts the search on text from the address too', function () {
+    pageFile('ps2', 'Okami.iso');
+    pageFile('ps2', 'Gran Turismo 4.iso');
+
+    Livewire::withQueryParams(['console' => 'ps2', 'search' => 'oka'])
+        ->test('tools.conversion')
+        ->assertSee('Okami.iso')
+        ->assertDontSee('Gran Turismo 4.iso');
+});
+
+it('forgets the shelf\'s picks on another console', function () {
+    $okami = pageFile('ps2', 'Okami.iso');
+
+    Livewire::withQueryParams(['console' => 'ps2', 'search' => (string) $okami->game_id])
+        ->test('tools.conversion')
+        ->call('selectConsole', 'psx')
+        ->assertSet('search', '');
+});

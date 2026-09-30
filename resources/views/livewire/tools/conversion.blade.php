@@ -23,6 +23,10 @@ new #[Title('Conversion')] class extends Component
     #[Url(as: 'console')]
     public string $consoleKey = '';
 
+    /** Where the picker's search starts: text, or comma-separated game ids as a console's shelf sends its picks. */
+    #[Url(as: 'search', except: '')]
+    public string $search = '';
+
     public function mount(): void
     {
         if (! $this->consoles->has($this->consoleKey)) {
@@ -61,6 +65,9 @@ new #[Title('Conversion')] class extends Component
         }
 
         $this->consoleKey = $key;
+
+        // A search is one console's: its ids above all.
+        $this->search = '';
     }
 
     public function refreshTools(): void
@@ -109,7 +116,7 @@ new #[Title('Conversion')] class extends Component
             @endforeach
         </div>
 
-        <livewire:conversion.picker :console-key="$consoleKey" wire:key="picker-{{ $consoleKey }}" />
+        <livewire:conversion.picker :console-key="$consoleKey" :search="$search" wire:key="picker-{{ $consoleKey }}" />
     @endif
 
     <livewire:conversion.queue />
