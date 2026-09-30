@@ -97,8 +97,17 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:work \
     --queue=scraper --sleep=3 --tries=3 --max-time=3600
 
+# Artwork is ScreenScraper traffic too, through the same thread slots as the
+# scraper, so its workers share the account's max_threads with the scraper's.
+# A queue of its own, not shared with default: listening to media,default,
+# a library's worth of artwork held every scan and file count back until the
+# last download was done.
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:work \
-    --queue=media,default --sleep=3 --tries=3 --max-time=3600
+    --queue=media --sleep=3 --tries=3 --max-time=3600
+
+# Scans and file counts, on their own worker so they never wait for artwork.
+workers QUEUE_WORKERS_DEFAULT 1 php /app/artisan queue:work \
+    --queue=default --sleep=3 --tries=3 --max-time=3600
 
 # Cover thumbnails: CPU work, on a queue of its own so a library's backfill
 # runs beside the downloads instead of in front of them.

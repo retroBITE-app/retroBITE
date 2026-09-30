@@ -1,15 +1,24 @@
 <?php
 
 use App\Transfers\BatoceraTarget;
+use App\Transfers\DaijishouTarget;
+use App\Transfers\EsDeTarget;
+use App\Transfers\RecalboxTarget;
+use App\Transfers\RetroPieTarget;
 
 return [
 
     /*
      * The systems a game can be sent to, by key. Each lays out a drive its own
-     * way; see App\Transfers\TransferTarget. Batocera first, others later.
+     * way; see App\Transfers\TransferTarget and docs/adr/0005. The first is
+     * what Send to offers first.
      */
     'targets' => [
         'batocera' => BatoceraTarget::class,
+        'recalbox' => RecalboxTarget::class,
+        'retropie' => RetroPieTarget::class,
+        'es-de' => EsDeTarget::class,
+        'daijishou' => DaijishouTarget::class,
     ],
 
     /*
