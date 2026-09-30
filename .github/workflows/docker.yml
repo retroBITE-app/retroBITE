@@ -1,0 +1,95 @@
+name: docker
+
+# Build both images for amd64 and arm64 and push them to Docker Hub when a
+# release is published on GitHub, through ./build — the same script a person
+# runs by hand. The release's tag is the version, a date with an optional
+# suffix: 20260930, 20260930-ALPHA, 20260930-PREALPHA.
+#
+#   a pre-release    :<tag> and :develop     (./build develop)
+#   a release        :<tag> and :latest      (./build master)
+#   run by hand      either, chosen below
+#
+# Which one is the release's own choice — the pre-release box — never the
+# suffix. Only "published" starts it: a pre-release later turned into a
+# release is not rebuilt; run it by hand as master to move :latest.
+#
+# Needs two repository secrets: DOCKERHUB_USERNAME, and DOCKERHUB_TOKEN — a
+# Docker Hub access token with read and write access to both repositories.
+#
+# arm64 is built under emulation, which is the slow part: the conversion tools
+# compile from source. The :buildcache tag on each repository keeps those
+# layers between runs. Mind the Actions minutes, as tests.yml does.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'develop (:develop), or master (:latest)'
+        type: choice
+        options:
+          - develop
+          - master
+        default: develop
+      version:
+        description: 'The version, e.g. 20260930 or 20260930-ALPHA. Empty reads it off the tag the run is on; master needs one.'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+# One build per ref at a time, so two runs cannot race on one tag.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+
+    # The two images side by side: one failing does not stop or hide the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, share]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Tags too, for ./build to read the version off when none is given.
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        env:
+          IMAGE: ${{ matrix.image }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+          BUILD_CACHE: registry
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            channel=master
+            [ "$PRERELEASE" = true ] && channel=develop
+            set -- "$channel" --version "$RELEASE_TAG"
+          else
+            set -- "$INPUT_CHANNEL" ${INPUT_VERSION:+--version "$INPUT_VERSION"}
+          fi
+
+          ./build "$@" --only "$IMAGE" --yes

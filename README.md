@@ -159,6 +159,44 @@ other.
 ROMs are not served directly over HTTP — the `games` disk sits outside
 `storage/app/public` on purpose, so downloads go through an authenticated route.
 
+### Published images
+
+Both containers are published to Docker Hub, for `linux/amd64` and
+`linux/arm64`:
+
+| Image | Container |
+| --- | --- |
+| `retrobite/retrobite` | The web UI (`Dockerfile.web`) |
+| `retrobite/share` | SMB and FTP (`Dockerfile`) |
+
+| Tag | From |
+| --- | --- |
+| `20260930`, `latest` | A GitHub release tagged `20260930` |
+| `20260930-ALPHA`, `develop` | A GitHub pre-release tagged `20260930-ALPHA` (or `-PREALPHA`) |
+
+A release's tag is its version: a date, with an optional suffix. Whether it
+moves `latest` or `develop` is the release's pre-release box, not the suffix.
+`.github/workflows/docker.yml` builds them with `./build` when a release is
+published, and can be run by hand from the Actions tab. The script can also be
+run on its own:
+
+```bash
+./build develop --version 20260930-ALPHA   # :20260930-ALPHA and :develop
+./build master --version 20260930          # :20260930 and :latest
+./build                                    # a local try: :develop, :develop-<commit>
+./build --only web                         # one of the two
+./build --yes                              # push without asking
+```
+
+Left out, the version is read off the tag the commit carries. The script asks
+before building whether to push. Answer no and it builds for your machine only
+and loads the images locally, to try out. Answer yes and it builds every
+platform and pushes, after a `docker login`.
+
+The workflow needs two repository secrets: `DOCKERHUB_USERNAME`, and
+`DOCKERHUB_TOKEN`, a Docker Hub access token with read and write access to
+both repositories.
+
 ## Credits
 - [Libretro](https://github.com/libretro/retroarch-assets/tree/master/xmb/retrosystem/png): Sourced console iconography.
 - AI/LLM Tools: Assisted in the creation of original project assets.
