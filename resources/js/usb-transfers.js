@@ -14,8 +14,7 @@
  * Nothing on the drive is overwritten or removed, except the game's own entry
  * in the game list: a file already there at the same size is skipped, a
  * target's own file (OPL's config and art) already there is left as it is,
- * and each file is written under a temporary name and renamed when complete,
- * so a half-written ROM never sits on the drive under its real name. See
+ * and every file is written straight to its own name. See
  * docs/adr/0003-transfers-from-the-browser.md.
  */
 
@@ -442,9 +441,7 @@ export default () => ({
         }
 
         const response = await fetchOk(file.url, this.abort.signal);
-        const partName = `.${name}.part`;
-        const handle = await dir.getFileHandle(partName, { create: true });
-        const writable = await handle.createWritable();
+        const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
 
         const counted = new TransformStream({
             transform: (chunk, controller) => {
@@ -454,19 +451,9 @@ export default () => ({
             },
         });
 
-        // Stopped halfway: the part file stays under its temporary name, and
-        // is written again from the start next time.
+        // Stopped halfway: the file is left short of its size, and is written
+        // again from the start next time.
         await response.body.pipeThrough(counted).pipeTo(writable, { signal: this.abort.signal });
-
-        if (typeof handle.move === 'function') {
-            await handle.move(name);
-        } else {
-            // No rename in this browser: write again under the real name.
-            const final = await (await dir.getFileHandle(name, { create: true })).createWritable();
-            await final.write(await handle.getFile());
-            await final.close();
-            await dir.removeEntry(partName);
-        }
     },
 
     /**

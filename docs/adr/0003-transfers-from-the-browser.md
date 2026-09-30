@@ -33,8 +33,8 @@ write.
   `TRANSFER_LOCALHOST_URL`, which compose sets to the published port.
 - Nothing on the drive is overwritten or removed except the game's own entry
   in the game list; a file already there at the same size is skipped, and files
-  are written under a temporary name and renamed when complete, so an
-  interrupted transfer resumes cleanly.
+  are written straight to their own names, so an interrupted transfer resumes
+  by writing again whatever is short of its size.
 - A drive's Batocera tree is recognised, not assumed — `roms/` at the chosen
   folder, or under `batocera/` — because the external-drive layout is not
   documented; otherwise the person is asked before `roms/` is created.
