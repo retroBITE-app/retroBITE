@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Build retroBITE's two images and, when asked, push them to Docker Hub.
+#
+#   ./build develop [--version 20260930-ALPHA]
+#                        a pre-release: :<version> and :develop. With no
+#                        version and no tag on this commit, :develop and
+#                        :develop-<commit>, to try something out
+#   ./build master [--version 20260930]
+#                        a release: :<version> and :latest
+#   ./build --only web|share      one of the two images
+#   ./build -y | --yes            push without asking, as CI does
+#
+# A version is the release's tag, a date with an optional suffix: 20260930,
+# 20260930-ALPHA, 20260930-PREALPHA. Left out, it is read off the tag this
+# commit carries. Whether a release is develop or master is the release's own
+# choice — pre-release or not — never read off the suffix.
+#
+# Pushed, an image is built for every platform in PLATFORMS (amd64 and arm64)
+# in one go, which is why the question comes before the build: a multi-platform
+# image cannot be loaded into the local daemon and pushed afterwards. Not
+# pushed, it is built for this machine only and loaded, to try out locally.
+#
+# The web UI is retrobite/retrobite (Dockerfile.web), the SMB/FTP share
+# retrobite/share (Dockerfile). The CI job is .github/workflows/docker.yml.
+
+set -euo pipefail
+cd "$(dirname "$0")"
+
+YELLOW='\033[1;33m'
+RED='\033[1;31m'
+NC='\033[0m' # No Color
+
+WEB_IMAGE=${WEB_IMAGE:-retrobite/retrobite}
+SHARE_IMAGE=${SHARE_IMAGE:-retrobite/share}
+PLATFORMS=${PLATFORMS:-linux/amd64,linux/arm64}
+# "registry" (as CI sets it): layers kept on Docker Hub as :buildcache between
+# runs, so the tools compiled for arm64 under emulation are not compiled again
+# on every push. Read on every build, written only by a pushed one.
+BUILD_CACHE=${BUILD_CACHE:-}
+SOURCE_URL=${SOURCE_URL:-https://github.com/retroBITE-app/retroBITE}
+
+say() {
+    echo -e "${YELLOW}> $*${NC}"
+}
+
+fail() {
+    echo -e "${RED}$*${NC}" >&2
+    exit 1
+}
+
+usage() {
+    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+channel=develop
+version=""
+only=""
+auto_yes=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        develop | master) channel=$1 ;;
+        --version) version=${2:-}; shift ;;
+        --version=*) version=${1#*=} ;;
+        --only) only=${2:-}; shift ;;
+        --only=*) only=${1#*=} ;;
+        -y | --yes) auto_yes=1 ;;
+        -h | --help) usage; exit 0 ;;
+        *) fail "Unknown argument: $1 (see ./build --help)" ;;
+    esac
+    shift
+done
+
+case "$only" in
+    "" | web | share) ;;
+    *) fail "--only takes web or share, not: $only" ;;
+esac
+
+commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+
+if [ -z "$version" ]; then
+    version=$(git describe --tags --exact-match 2>/dev/null || true)
+fi
+
+if [ -n "$version" ] && ! [[ $version =~ ^[0-9]{8}(-[0-9A-Za-z]+)?$ ]]; then
+    fail "Not a version: $version (expected a date, 20260930, or 20260930-ALPHA)"
+fi
+
+if [ -z "$version" ] && [ "$channel" = master ]; then
+    fail "A master build needs a version: build a release's tag, or pass --version 20260930."
+fi
+
+# Every tag one image gets: the release's own, and the channel's moving one.
+# A develop build of no release is named after its commit instead.
+tags_for() {
+    local image=$1
+    local moving=latest
+
+    [ "$channel" = develop ] && moving=develop
+
+    if [ -n "$version" ]; then
+        echo "$image:$version" "$image:$moving"
+    else
+        echo "$image:develop" "$image:develop-$commit"
+    fi
+}
+
+if [ $auto_yes -eq 1 ]; then
+    REPLY="y"
+elif [ -t 0 ]; then
+    read -p $'\033[1;33mPush to Docker Hub once built? [y/N] \033[0m' -n 1 -r
+    echo # Move to a new line
+else
+    REPLY="n"
+fi
+
+push=0
+[[ $REPLY =~ ^[Yy]$ ]] && push=1
+
+# The plain docker driver builds for one platform only; a pushed build needs
+# one that does several.
+if [ $push -eq 1 ]; then
+    driver=$(docker buildx inspect 2>/dev/null | awk '/^Driver:/ { print $2; exit }')
+
+    if [ "$driver" = docker ]; then
+        say "Setting up a multi-platform builder..."
+        docker buildx use retrobite 2>/dev/null || docker buildx create --name retrobite --use >/dev/null
+    fi
+fi
+
+build_image() {
+    local image=$1 dockerfile=$2
+    local args=(buildx build -f "$dockerfile")
+
+    for tag in $(tags_for "$image"); do
+        args+=(-t "$tag")
+    done
+
+    args+=(
+        --label "org.opencontainers.image.source=$SOURCE_URL"
+        --label "org.opencontainers.image.revision=$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+        --label "org.opencontainers.image.version=${version:-develop-$commit}"
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    )
+
+    if [ "$BUILD_CACHE" = registry ]; then
+        args+=(--cache-from "type=registry,ref=$image:buildcache")
+        [ $push -eq 1 ] && args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
+    fi
+
+    if [ $push -eq 1 ]; then
+        say "Building and pushing $image for $PLATFORMS: $(tags_for "$image")"
+        args+=(--platform "$PLATFORMS" --push)
+    else
+        say "Building $image for this machine: $(tags_for "$image")"
+        args+=(--load)
+    fi
+
+    docker "${args[@]}" .
+}
+
+if [ "$only" != share ]; then
+    build_image "$WEB_IMAGE" Dockerfile.web
+fi
+
+if [ "$only" != web ]; then
+    build_image "$SHARE_IMAGE" Dockerfile
+fi
+
+say "Completed!"
