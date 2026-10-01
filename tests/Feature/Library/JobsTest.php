@@ -2,6 +2,7 @@
 
 use App\Jobs\HashFile;
 use App\Jobs\MatchGame;
+use App\Jobs\PruneGame;
 use App\Jobs\RateGame;
 use App\Jobs\RetroAchievements\HashGame;
 use App\Jobs\RetroAchievements\IdentifyGame;
@@ -56,6 +57,8 @@ it('can be pushed onto a real queue', function (string $job, array $arguments) {
     // On database-long rather than the default connection, which is the
     // same jobs table and so still counts here.
     'conversion' => [RunConversion::class, [1]],
+
+    'prune' => [PruneGame::class, [1, 30]],
 ]);
 
 /*

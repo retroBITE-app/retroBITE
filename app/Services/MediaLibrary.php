@@ -145,6 +145,49 @@ final class MediaLibrary
     }
 
     /**
+     * Remove everything a batch of games holds, and the folders it was kept in.
+     *
+     * For games about to be deleted: one query for their media rows and one
+     * call to the disk for every file, rather than a delete per row. The folders are read off the stored paths rather than
+     * worked out again, since a slug may have changed since they were
+     * written, and each goes only once nothing is left in it.
+     *
+     * @param  list<int>  $gameIds
+     * @return int the media rows removed
+     */
+    public function forgetGames(array $gameIds): int
+    {
+        if ($gameIds === []) {
+            return 0;
+        }
+
+        $media = Media::query()->whereIn('game_id', $gameIds)->get(['id', 'path', 'thumbnail_list_path', 'thumbnail_grid_path']);
+
+        $files = $media->flatMap(function (Media $row): array {
+            return $row->files();
+        });
+
+        $this->disk()->delete($files->all());
+        Media::query()->whereIn('game_id', $gameIds)->delete();
+
+        $files
+            ->map(function (string $path): string {
+                return implode('/', array_slice(explode('/', $path), 0, 2));
+            })
+            ->filter(function (string $folder): bool {
+                return Str::contains($folder, '/');
+            })
+            ->unique()
+            ->each(function (string $folder): void {
+                if ($this->disk()->allFiles($folder) === []) {
+                    $this->disk()->deleteDirectory($folder);
+                }
+            });
+
+        return $media->count();
+    }
+
+    /**
      * Where a file goes.
      *
      * The provider id joins the slug because titles are not unique — remakes

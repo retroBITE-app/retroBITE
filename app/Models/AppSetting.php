@@ -131,6 +131,12 @@ class AppSetting extends Model
      */
     public const RA_HARDCORE_PRIMARY = 'ra_hardcore_primary';
 
+    /** Days every file of a game may be missing before the game is pruned. */
+    public const PRUNE_MISSING_AFTER_DAYS = 'prune_missing_after_days';
+
+    /** Prune those games every night, rather than only from Settings → Library. */
+    public const PRUNE_MISSING_AUTO = 'prune_missing_auto';
+
     /**
      * What a key means before anybody has set it.
      *
@@ -149,6 +155,8 @@ class AppSetting extends Model
         self::UI_COLOR_SCHEME => 'default',
         self::IS_ONBOARDED => false,
         self::RA_HARDCORE_PRIMARY => true,
+        self::PRUNE_MISSING_AFTER_DAYS => 30,
+        self::PRUNE_MISSING_AUTO => true,
     ];
 
     /**

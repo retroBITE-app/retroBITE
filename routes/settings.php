@@ -10,6 +10,7 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('settings/media', 'settings.media')->name('media.edit');
     Route::livewire('settings/interface', 'settings.interface')->name('interface.edit');
     Route::livewire('settings/consoles', 'settings.consoles')->name('console-config.edit');
+    Route::livewire('settings/library', 'settings.library')->name('library.edit');
     Route::livewire('settings/screenscraper', 'settings.screenscraper')->name('screenscraper.edit');
     Route::livewire('settings/retroachievements', 'settings.retroachievements')->name('retroachievements.edit');
     Route::livewire('settings/destinations', 'settings.destinations')->name('destinations.edit');
