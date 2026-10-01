@@ -43,6 +43,30 @@ interface TransferTarget
     public function root(): array;
 
     /**
+     * The artwork this system can be sent, by a name of its own — a tag, a
+     * folder — that one transfer can leave out: what to call it, the provider
+     * media types that can fill it, most preferred first, and whether it is
+     * worth fetching for (a clip is several megabytes a game).
+     *
+     * @return array<string, array{label: string, types: list<string>, recommended?: bool}>
+     */
+    public function artworkSlots(): array;
+
+    /**
+     * What to fetch for this system: the preferred type of each slot worth
+     * fetching for, and not its fallbacks — for the media settings.
+     *
+     * @return list<string>
+     */
+    public function recommendedTypes(): array;
+
+    /** The same target, for one transfer's choices. */
+    public function withOptions(TransferOptions $options): static;
+
+    /** This transfer's choices; none for a target nobody gave any. */
+    public function options(): TransferOptions;
+
+    /**
      * Every file the game needs on the drive, and where the game list goes.
      *
      * @throws TransferRejected when the game cannot be laid out this way

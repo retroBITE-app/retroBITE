@@ -298,6 +298,24 @@ it('marks the missing files among a game\'s own', function () {
     expect(array_column($rows, 'missing', 'filename'))->toEqual(['d1.bin' => false, 'd2.bin' => true]);
 });
 
+it('shows each file\'s own region, as a flag where one depicts it', function () {
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Aerostar', 'slug' => 'aerostar']);
+    GameFile::factory()->for($game)->create(['path' => 'snes/a (Japan).sfc', 'filename' => 'a (Japan).sfc', 'role' => FileRole::Rom, 'region' => 'jp']);
+    GameFile::factory()->for($game)->create(['path' => 'snes/a (Sweden).sfc', 'filename' => 'a (Sweden).sfc', 'role' => FileRole::Rom, 'region' => 'se']);
+    GameFile::factory()->for($game)->create(['path' => 'snes/a.sfc', 'filename' => 'a.sfc', 'role' => FileRole::Rom, 'region' => null]);
+
+    $component = Livewire::test('games.show', ['game' => $game, 'tab' => 'files']);
+    $rows = collect($component->instance()->fileRows)->keyBy('filename');
+
+    expect($rows['a (Japan).sfc'])->toMatchArray(['region' => 'jp', 'regionLabel' => 'Japan', 'regionIcon' => '/images/regions/japan.png'])
+        // No flag depicts Sweden: its code, named.
+        ->and($rows['a (Sweden).sfc'])->toMatchArray(['region' => 'se', 'regionLabel' => 'Sweden', 'regionIcon' => null])
+        ->and($rows['a.sfc'])->toMatchArray(['region' => null, 'regionLabel' => null, 'regionIcon' => null]);
+
+    $component->assertSeeHtml('src="/images/regions/japan.png" alt="Japan"')
+        ->assertSeeHtml('title="Sweden"');
+});
+
 it('puts the panels behind tabs, offering only the ones the game has', function () {
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
     GameFile::factory()->for($game)->create(['path' => 'psx/d1.bin', 'filename' => 'd1.bin']);

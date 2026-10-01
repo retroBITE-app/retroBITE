@@ -41,6 +41,8 @@ use Illuminate\Support\Collection;
  * @property FileRole $role
  * @property int|null $disc_number
  * @property string|null $region
+ * @property int|null $scrapes how many times the provider has had this very dump scraped; null for one it does not know
+ * @property list<string>|null $provider_flags the provider's flags for the dump: beta, demo, proto, trad, hack, unl, alt, best
  * @property string|null $license_id the serial the disc names itself by, e.g. SLES_503.86
  * @property string|null $video_mode PAL or NTSC, as the disc declares it
  * @property int|null $parent_id
@@ -53,7 +55,7 @@ use Illuminate\Support\Collection;
  */
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
-    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'license_id',
+    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'scrapes', 'provider_flags', 'license_id',
     'video_mode', 'parent_id', 'missing_since', 'ra_hash', 'ra_hash_size',
     'ra_hash_mtime', 'ra_hashed_at',
 ])]
@@ -71,6 +73,8 @@ class GameFile extends Model
             'role' => FileRole::class,
             'size_bytes' => 'integer',
             'disc_number' => 'integer',
+            'scrapes' => 'integer',
+            'provider_flags' => 'array',
             'hashed_at' => 'datetime',
             'ra_hash_size' => 'integer',
             'ra_hash_mtime' => 'integer',

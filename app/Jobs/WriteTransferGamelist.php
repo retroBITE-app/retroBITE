@@ -84,7 +84,7 @@ class WriteTransferGamelist implements ShouldQueue
             return;
         }
 
-        $target = TransferTargets::find($first->target);
+        $target = TransferTargets::chosen($first->target, $first->options);
 
         if ($target === null) {
             $this->finish($arrived, TransferFailure::Rejected);
@@ -96,6 +96,7 @@ class WriteTransferGamelist implements ShouldQueue
             $share = $endpoints->resolve(Location::destination($first->destination, '')->endpoint);
 
             $this->writeExtras($share, $target, $arrived);
+            $this->removeReplaced($share, $target, $arrived);
 
             $path = $target->plan($first->game)->gamelist;
 
@@ -192,6 +193,33 @@ class WriteTransferGamelist implements ShouldQueue
                 }
 
                 $share->replace($destination, $bytes);
+            }
+        }
+    }
+
+    /**
+     * The games' other versions, where they are on the share: removed now
+     * that these have arrived, and their entries go from the list in the
+     * merge that follows, so the front-end lists each game once. A path not
+     * there is nothing to do.
+     *
+     * @param  Collection<int, Transfer>  $arrived
+     *
+     * @throws TransferFailed
+     */
+    private function removeReplaced(Endpoint $share, TransferTarget $target, Collection $arrived): void
+    {
+        foreach ($arrived as $transfer) {
+            try {
+                $replaces = $target->plan($transfer->game)->replaces;
+            } catch (TransferRejected) {
+                continue;
+            }
+
+            foreach ($replaces as $path) {
+                if ($share->sizeOf($path) !== null) {
+                    $share->delete($path);
+                }
             }
         }
     }

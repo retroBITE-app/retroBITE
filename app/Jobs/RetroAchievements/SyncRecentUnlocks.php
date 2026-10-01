@@ -24,10 +24,9 @@ use Illuminate\Support\Facades\Log;
 class SyncRecentUnlocks implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
+    use WaitsOutRateLimits;
 
     public int $timeout = 120;
-
-    public int $tries = 3;
 
     public int $uniqueFor = 200;
 

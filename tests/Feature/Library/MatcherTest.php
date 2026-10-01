@@ -354,3 +354,97 @@ it('skips a hand-picked id the provider does not hold', function () {
     expect(matcher()->assign($game, 19256)->outcome)->toBe(MatchOutcome::Skipped)
         ->and($game->refresh()->screenscraper_id)->toBeNull();
 });
+
+it('records each file\'s region: the provider\'s for the dumps it knows, the name\'s for the rest', function () {
+    providerHit([
+        'rom' => ['romfilename' => 'FF9 (Disc 1).bin', 'regions' => ['regions_shortname' => ['us']]],
+        'roms' => [
+            ['romfilename' => 'FF9 (Disc 2).bin', 'romcrc' => 'ABCD1234', 'regions' => ['regions_shortname' => ['fr']]],
+        ],
+    ]);
+
+    $game = psxGame(['filename' => 'FF9 (Disc 1).bin']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/FF9 (Disc 2).bin', 'filename' => 'FF9 (Disc 2).bin', 'extension' => 'bin', 'role' => FileRole::Track, 'crc' => 'abcd1234']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/FF9 (Japan).bin', 'filename' => 'FF9 (Japan).bin', 'extension' => 'bin', 'role' => FileRole::Track]);
+    GameFile::factory()->for($game)->create(['path' => 'psx/FF9.bin', 'filename' => 'FF9.bin', 'extension' => 'bin', 'role' => FileRole::Track, 'region' => 'eu']);
+
+    matcher()->match($game);
+
+    expect($game->files()->pluck('region', 'filename')->all())->toBe([
+        // The dump the lookup matched.
+        'FF9 (Disc 1).bin' => 'us',
+        // Another the provider knows, by checksum.
+        'FF9 (Disc 2).bin' => 'fr',
+        // Unknown to it: read off the name.
+        'FF9 (Japan).bin' => 'jp',
+        // Recorded already, and nothing better came.
+        'FF9.bin' => 'eu',
+    ]);
+});
+
+it('reads a region off the name of a game nobody could identify', function () {
+    providerMiss();
+    $game = psxGame(['filename' => 'Obscure (Europe).bin', 'md5' => str_repeat('a', 32), 'crc' => 'aaaaaaaa', 'sha1' => str_repeat('a', 40)]);
+
+    matcher()->match($game, withChecksums: true);
+
+    expect($game->refresh()->status)->toBe(GameStatus::Unmatched)
+        ->and($game->files()->sole()->region)->toBe('eu');
+});
+
+it('fills the regions of files identified before they were recorded, from their names', function () {
+    $game = psxGame(['filename' => 'Game (USA, Europe).bin']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/Game.bin', 'filename' => 'Game.bin', 'extension' => 'bin', 'role' => FileRole::Track]);
+    GameFile::factory()->for($game)->create(['path' => 'psx/Game (J).bin', 'filename' => 'Game (J).bin', 'extension' => 'bin', 'role' => FileRole::Track, 'region' => 'kr']);
+
+    $this->artisan('retrobite:regions')->expectsOutput('1 of 2 files without a region now have one.')->assertSuccessful();
+
+    expect($game->files()->pluck('region', 'filename')->all())->toBe([
+        'Game (USA, Europe).bin' => 'us',
+        'Game.bin' => null,
+        'Game (J).bin' => 'kr',
+    ]);
+});
+
+it('records how often each dump is played and what the provider flags it as', function () {
+    providerHit([
+        'rom' => ['romfilename' => 'FF9 (Disc 1).bin', 'nbscrap' => '113401', 'best' => '1', 'regions' => ['regions_shortname' => ['us']]],
+        'roms' => [
+            ['romfilename' => 'FF9 (Disc 1) (Traducao).bin', 'nbscrap' => '52', 'trad' => '1', 'hack' => '0'],
+        ],
+    ]);
+
+    $game = psxGame(['filename' => 'FF9 (Disc 1).bin']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/FF9 (Disc 1) (Traducao).bin', 'filename' => 'FF9 (Disc 1) (Traducao).bin', 'extension' => 'bin', 'role' => FileRole::Track]);
+    GameFile::factory()->for($game)->create(['path' => 'psx/FF9 (Disc 1) (Japan).bin', 'filename' => 'FF9 (Disc 1) (Japan).bin', 'extension' => 'bin', 'role' => FileRole::Track]);
+
+    matcher()->match($game);
+
+    $files = $game->files()->get()->keyBy('filename');
+
+    expect($files['FF9 (Disc 1).bin']->scrapes)->toBe(113401)
+        ->and($files['FF9 (Disc 1).bin']->provider_flags)->toBe(['best'])
+        ->and($files['FF9 (Disc 1) (Traducao).bin']->scrapes)->toBe(52)
+        ->and($files['FF9 (Disc 1) (Traducao).bin']->provider_flags)->toBe(['trad'])
+        // Unknown to the provider: nothing claimed for it.
+        ->and($files['FF9 (Disc 1) (Japan).bin']->scrapes)->toBeNull()
+        ->and($game->fresh()->dumps_recorded_at)->not->toBeNull();
+});
+
+it('backfills the dumps of games identified before, by the id they hold, once', function () {
+    providerHit([
+        'roms' => [['romfilename' => 'FF9 (Disc 1).bin', 'nbscrap' => '900', 'regions' => ['regions_shortname' => ['eu']]]],
+    ]);
+
+    $game = psxGame();
+    $game->update(['screenscraper_id' => 19256, 'status' => GameStatus::Matched]);
+
+    $this->artisan('retrobite:dumps')->expectsOutput('1 games to ask about.')->assertSuccessful();
+
+    expect($game->files()->sole()->scrapes)->toBe(900)
+        ->and($game->files()->sole()->region)->toBe('eu');
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'gameid=19256'));
+
+    $this->artisan('retrobite:dumps')->expectsOutput('Every identified game has been asked about already.')->assertSuccessful();
+});

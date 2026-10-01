@@ -38,6 +38,13 @@ class AppSetting extends Model
     /** The provider media types to fetch. Absent means the shipped selection. */
     public const MEDIA_TYPES = 'media_types';
 
+    /**
+     * The regions a transfer sends first, in order, when a game holds several
+     * versions. Absent means the artwork's region order (TransferRegions); a
+     * console can have its own, as a console override.
+     */
+    public const TRANSFER_REGIONS = 'transfer_regions';
+
     /** The CRT scanline overlay over key art and the sign-in backdrop. */
     public const UI_SCANLINES = 'ui_scanlines';
 

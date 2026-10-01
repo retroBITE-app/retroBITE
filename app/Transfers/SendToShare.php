@@ -104,7 +104,7 @@ final class SendToShare
         $transfers = Transfer::query()->with(['game.files', 'game.media', 'destination'])->whereKey($transferIds)->get();
         $first = $transfers->first();
 
-        if ($first === null || $first->destination === null || ($target = TransferTargets::find($first->target)) === null) {
+        if ($first === null || $first->destination === null || ($target = TransferTargets::chosen($first->target, $first->options)) === null) {
             return;
         }
 
@@ -178,6 +178,8 @@ final class SendToShare
             'game_id' => $game->id,
             'destination_id' => $destination->id,
             'target' => $target->key(),
+            // Read back by every job that plans the game again.
+            'options' => $target->options()->toArray(),
             'batch_id' => $sendId,
             'status' => Transfer::QUEUED,
             'files_total' => count($plan->files),

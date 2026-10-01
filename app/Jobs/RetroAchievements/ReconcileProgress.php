@@ -27,10 +27,9 @@ use Illuminate\Support\Facades\Log;
 class ReconcileProgress implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
+    use WaitsOutRateLimits;
 
     public int $timeout = 300;
-
-    public int $tries = 3;
 
     public int $uniqueFor = 400;
 

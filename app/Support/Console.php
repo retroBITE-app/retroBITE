@@ -92,6 +92,14 @@ final class Console
      */
     public readonly ?int $retroachievementsId;
 
+    /**
+     * The regions a transfer sends first, in order, for this console alone;
+     * empty for the library's (TransferRegions). Only ever an override.
+     *
+     * @var list<string>
+     */
+    public readonly array $transferRegions;
+
     public function __construct(string $key)
     {
         $meta = config("consoles.{$key}");
@@ -119,6 +127,7 @@ final class Console
         $this->defaultLayout = (string) Arr::get($meta, 'default_layout', Layouts::FALLBACK);
         $this->converters = array_values(array_filter((array) Arr::get($meta, 'converters', []), 'is_string'));
         $this->retroachievementsId = $raId !== null ? (int) $raId : null;
+        $this->transferRegions = array_values(array_filter((array) Arr::get($meta, 'transfer_regions', []), 'is_string'));
     }
 
     /**

@@ -30,16 +30,35 @@ use Illuminate\Support\Str;
  */
 abstract class GamelistTarget implements TransferTarget
 {
+    use ChoosesOptions;
+
     /**
      * The artwork this target sends, by a name of its own: the provider media
      * types that can fill it, most preferred first, and the gamelist.xml tag
      * that points at it — none for a front-end that finds artwork by its file
      * name. Only artwork already downloaded goes; a type nobody fetched is
-     * simply left out, tag and all.
+     * simply left out, tag and all. `label` is what to call it, when the
+     * name is not; `recommended` false for one not worth fetching for.
      *
-     * @return array<string, array{types: list<string>, tag?: string}>
+     * @return array<string, array{types: list<string>, tag?: string, label?: string, recommended?: bool}>
      */
     abstract protected function artwork(): array;
+
+    public function artworkSlots(): array
+    {
+        $slots = [];
+
+        foreach ($this->artwork() as $slot => $artwork) {
+            $slots[$slot] = [
+                'label' => $artwork['label'] ?? $slot,
+                'types' => $artwork['types'],
+                // Video is no picture, whatever slot a front-end gives it.
+                'recommended' => $artwork['recommended'] ?? ! str_starts_with($artwork['types'][0] ?? '', 'video'),
+            ];
+        }
+
+        return $slots;
+    }
 
     /**
      * Where one piece of artwork goes, from the drive's root.
@@ -140,7 +159,57 @@ abstract class GamelistTarget implements TransferTarget
             );
         }
 
-        return new TransferPlan($files, $this->gamelistFor($game->console));
+        $planned = array_map(fn (PlannedFile $file): string => $file->destination, $files);
+
+        return new TransferPlan($files, $this->gamelistFor($game->console), replaces: $this->replaced($game, $planned));
+    }
+
+    /**
+     * Where the game's other versions would be, laid out the way this one is:
+     * their files and their artwork, named after them. A drive that was sent
+     * the Portuguese translation before the plain copy was the one to send
+     * holds both otherwise, and the front-end lists the game twice. Nothing
+     * this send writes itself is among them.
+     *
+     * @param  list<string>  $planned  the destinations this send writes
+     * @return list<string>
+     */
+    private function replaced(Game $game, array $planned): array
+    {
+        $console = $game->console();
+        $folder = $this->romsFolder().'/'.$this->system($game->console);
+        $paths = [];
+
+        foreach ($this->otherVersions($game) as $version) {
+            foreach ($version as $file) {
+                $relative = $this->relative($game, $file);
+
+                if ($console !== null && $relative !== null) {
+                    $paths[] = $folder.'/'.$relative;
+                }
+            }
+
+            // Every slot, chosen or not: an earlier send may have chosen otherwise.
+            $paths = [...$paths, ...array_keys($this->artworkFiles($game, version: $version, everySlot: true))];
+        }
+
+        return array_values(array_diff(array_unique($paths), $planned));
+    }
+
+    /**
+     * Every version of the game but the one this send chooses.
+     *
+     * @return list<list<GameFile>>
+     */
+    private function otherVersions(Game $game): array
+    {
+        $chosen = $this->filesOf($game);
+        $ids = array_map(fn (GameFile $file): int => $file->id, $chosen);
+
+        return array_values(array_filter(
+            GameVersions::of($game),
+            fn (array $version): bool => ! in_array($version[0]->id, $ids, true),
+        ));
     }
 
     public function mergeGamelist(?string $existing, Game ...$games): string
@@ -176,6 +245,17 @@ abstract class GamelistTarget implements TransferTarget
         }
 
         foreach ($games as $game) {
+            // The game's other versions go from the drive as this one arrives
+            // (plan()'s replaces), and their entries from the list with them.
+            foreach ($this->otherVersions($game) as $version) {
+                $other = $this->primaryPath($game, $version);
+
+                if ($other !== null && isset($byPath['./'.$other])) {
+                    $list->removeChild($byPath['./'.$other]);
+                    unset($byPath['./'.$other]);
+                }
+            }
+
             $entry = $this->entry($document, $game);
             $path = trim((string) $entry->getElementsByTagName('path')->item(0)?->textContent);
 
@@ -235,11 +315,12 @@ abstract class GamelistTarget implements TransferTarget
      * entry and not the others as nameless games of their own. See
      * GameVersions.
      *
+     * @param  list<GameFile>|null  $version  another version's files; none for the one sent
      * @return list<GameFile>
      */
-    private function filesOf(Game $game): array
+    private function filesOf(Game $game, ?array $version = null): array
     {
-        $files = GameVersions::preferred($game);
+        $files = $version ?? GameVersions::preferred($game, chain: $this->regionChain($game->console()));
         usort($files, fn (GameFile $a, GameFile $b): int => $a->path <=> $b->path);
 
         return $files;
@@ -250,9 +331,10 @@ abstract class GamelistTarget implements TransferTarget
      * playlist of a multi-disc set, else the first disc's cuesheet, else the
      * ROM itself.
      */
-    private function primary(Game $game): ?GameFile
+    /** @param  list<GameFile>|null  $version  another version's files; none for the one sent */
+    private function primary(Game $game, ?array $version = null): ?GameFile
     {
-        $files = collect($this->filesOf($game));
+        $files = collect($this->filesOf($game, $version));
 
         return $files->firstWhere('role', FileRole::Playlist)
             ?? $files->where('role', FileRole::Sheet)->sortBy(fn (GameFile $f) => [$f->disc_number ?? PHP_INT_MAX, $f->path])->first()
@@ -260,10 +342,14 @@ abstract class GamelistTarget implements TransferTarget
             ?? $files->first();
     }
 
-    /** The primary file's path inside the system folder, or null for a game with none. */
-    private function primaryPath(Game $game): ?string
+    /**
+     * The primary file's path inside the system folder, or null for a game with none.
+     *
+     * @param  list<GameFile>|null  $version  another version's files; none for the one sent
+     */
+    private function primaryPath(Game $game, ?array $version = null): ?string
     {
-        $primary = $this->primary($game);
+        $primary = $this->primary($game, $version);
 
         return $primary !== null ? ($this->relative($game, $primary) ?? $primary->filename) : null;
     }
@@ -287,11 +373,13 @@ abstract class GamelistTarget implements TransferTarget
      * The artwork this game has for each slot, in slot order, with where it
      * goes. Artwork goes only for a game with a file to name it after.
      *
+     * @param  list<GameFile>|null  $version  another version's files, to name it after; none for the one sent
+     * @param  bool  $everySlot  whatever this transfer chose to send
      * @return array<string, Media> destination => media, keyed by slot when asked
      */
-    private function artworkFiles(Game $game, bool $bySlot = false): array
+    private function artworkFiles(Game $game, bool $bySlot = false, ?array $version = null, bool $everySlot = false): array
     {
-        $primary = $this->primaryPath($game);
+        $primary = $this->primaryPath($game, $version);
 
         if ($primary === null) {
             return [];
@@ -301,6 +389,11 @@ abstract class GamelistTarget implements TransferTarget
         $found = [];
 
         foreach ($this->artwork() as $slot => ['types' => $types]) {
+            // Left out of this transfer: no file, and no tag pointing at one.
+            if (! $everySlot && ! $this->options()->sends($slot)) {
+                continue;
+            }
+
             $media = $game->artworkOfTypes($types);
 
             if ($media !== null) {

@@ -5,6 +5,7 @@ use App\Jobs\DiscoverShares;
 use App\Jobs\ListShares;
 use App\Models\Destination;
 use App\Models\User;
+use App\Support\TransferRegions;
 use App\Transfers\Discovery\FoundHost;
 use App\Transfers\Discovery\Mdns;
 use App\Transfers\Discovery\ShareDiscovery;
@@ -253,4 +254,18 @@ it('resolves an address as it is, and a name by NetBIOS when DNS does not know i
 
 it('is a tab in settings', function () {
     $this->get(route('destinations.edit'))->assertOk();
+});
+
+it('keeps the region order Send to tries, as it is sorted, and never empties it', function () {
+    expect(TransferRegions::order())->toBe(['wor', 'eu', 'us', 'jp']);
+
+    Livewire::test('settings.destinations')
+        ->assertSet('regions', ['wor', 'eu', 'us', 'jp'])
+        ->assertSeeHtml('x-modelable="order"')
+        ->set('regions', ['eu', 'jp', 'us', 'se', 'mars'])
+        ->assertSet('regions', ['eu', 'jp', 'us', 'se'])
+        ->set('regions', [])
+        ->assertSet('regions', ['eu', 'jp', 'us', 'se']);
+
+    expect(TransferRegions::order())->toBe(['eu', 'jp', 'us', 'se']);
 });

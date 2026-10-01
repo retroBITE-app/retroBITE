@@ -1,12 +1,14 @@
 <?php
 
 use App\Enums\AchievementKind;
+use App\Exceptions\RetroAchievements\RateLimited;
 use App\Jobs\RetroAchievements\SyncSet;
 use App\Models\RaAchievement;
 use App\Models\RaGame;
 use App\Models\RaProgress;
 use App\Services\RetroAchievementsProgress;
 use App\Services\RetroAchievementsService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -126,4 +128,25 @@ it('marks existing progress stale when the set changes', function () {
     // points_possible on every existing row is wrong the moment the set
     // changes, and only the progress job may put it right.
     expect($progress->refresh()->stale)->toBeTrue();
+});
+
+it('waits out a rate limit as long as the API says, and asks nothing meanwhile', function () {
+    Cache::flush();
+    Http::fake(['*' => Http::response('error code: 1015', 429, ['Retry-After' => '549'])]);
+
+    $service = app(RetroAchievementsService::class);
+
+    expect(fn () => $service->gameExtended(1))->toThrow(fn (RateLimited $e) => expect($e->retryAfter())->toBe(549));
+
+    // Every other job in every worker is blocked by the same answer: none
+    // of them spends a request finding out.
+    expect(fn () => $service->gameExtended(2))->toThrow(fn (RateLimited $e) => expect($e->retryAfter())->toBeGreaterThan(540));
+    Http::assertSentCount(1);
+});
+
+it('lets a set wait out rate limits for half a day, but fails it on the third thing that goes wrong', function () {
+    $job = new SyncSet(1);
+
+    expect($job->retryUntil()->getTimestamp())->toBeGreaterThan(now()->addHours(11)->getTimestamp())
+        ->and($job->maxExceptions)->toBe(3);
 });

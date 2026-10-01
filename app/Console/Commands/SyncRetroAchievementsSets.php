@@ -32,9 +32,14 @@ class SyncRetroAchievementsSets extends Command
             return self::SUCCESS;
         }
 
-        foreach ($ids as $id) {
+        // Queued a call's pace apart rather than all at once: thousands of
+        // jobs available together were each picked up, found the API's
+        // block, and put back, over and over, for every one that ran.
+        $interval = max(0.0, (float) config('retroachievements.min_interval', 0.5));
+
+        foreach (array_values($ids) as $index => $id) {
             if ($this->option('queue')) {
-                SyncSet::dispatch($id);
+                SyncSet::dispatch($id)->delay(now()->addSeconds((int) floor($index * $interval)));
 
                 continue;
             }

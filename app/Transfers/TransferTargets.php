@@ -6,6 +6,7 @@ namespace App\Transfers;
 
 use App\Models\ConsoleSourceFolder;
 use App\Support\Console;
+use Illuminate\Http\Request;
 
 /** The configured transfer targets, by key. */
 final class TransferTargets
@@ -15,6 +16,26 @@ final class TransferTargets
         $class = config('transfer.targets.'.$key);
 
         return is_string($class) && is_a($class, TransferTarget::class, true) ? app($class) : null;
+    }
+
+    /** A target with the choices a plan's URL carries (TransferOptions). */
+    public static function requested(string $key, Request $request): ?TransferTarget
+    {
+        $target = self::find($key);
+
+        return $target?->withOptions(TransferOptions::fromRequest($request, $target));
+    }
+
+    /**
+     * A target with the choices a Transfer row was given.
+     *
+     * @param  array<string, mixed>|null  $options
+     */
+    public static function chosen(string $key, ?array $options): ?TransferTarget
+    {
+        $target = self::find($key);
+
+        return $target?->withOptions(TransferOptions::fromArray($options, $target));
     }
 
     /** @return list<TransferTarget> */

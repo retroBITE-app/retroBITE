@@ -9,15 +9,16 @@ use App\Models\Game;
 use App\Transfers\TransferRejected;
 use App\Transfers\TransferTargets;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * What a transfer of one game to one target writes, for the browser to copy.
  */
 class TransferPlanController extends Controller
 {
-    public function __invoke(string $target, int $gameId): JsonResponse
+    public function __invoke(Request $request, string $target, int $gameId): JsonResponse
     {
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::requested($target, $request);
         abort_if($transferTarget === null, 404);
 
         $game = Game::query()->findOrFail($gameId);

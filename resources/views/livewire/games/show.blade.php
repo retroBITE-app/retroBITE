@@ -473,11 +473,13 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     /**
      * Copy the game to a saved network share. Queued: a disc image takes
      * minutes, and the banner follows it from here.
+     *
+     * @param  array<string, mixed>  $options  the region and artwork chosen in the modal (TransferOptions)
      */
-    public function sendToShare(int $destinationId, string $target, SendToShare $sender): void
+    public function sendToShare(int $destinationId, string $target, SendToShare $sender, array $options = []): void
     {
         $destination = Destination::query()->find($destinationId);
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::chosen($target, $options);
 
         if ($destination === null || $transferTarget === null) {
             Flux::toast(variant: 'warning', text: __('That destination is no longer there.'));
@@ -651,6 +653,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      *     missing: bool,
      *     md5: string|null,
      *     licenseId: string|null,
+     *     region: string|null,
+     *     regionLabel: string|null,
+     *     regionIcon: string|null,
+     *     scrapes: string|null,
+     *     flags: list<string>,
      * }>
      */
     #[Computed]
@@ -674,6 +681,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 // Read out of the disc rather than from the provider, and the
                 // only name Open PS2 Loader knows this game by.
                 'licenseId' => $file->license_id,
+                // The file's own region, which a game holding several can
+                // differ by (CONTEXT.md: file region) — not the game's.
+                'region' => $file->region,
+                'regionLabel' => MediaRegions::label($file->region) ?? ($file->region !== null ? Str::upper($file->region) : null),
+                'regionIcon' => MediaRegions::icon($file->region),
+                // How many people the provider has seen holding this very
+                // dump; what Send to picks the most scraped version by.
+                'scrapes' => $file->scrapes !== null ? Number::abbreviate($file->scrapes, 1) : null,
+                'flags' => array_values(array_diff($file->provider_flags ?? [], ['best'])),
             ])
             ->values()
             ->all();
@@ -1931,6 +1947,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         <thead>
                             <tr class="border-b border-raised text-left">
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('File') }}</th>
+                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Region') }}</th>
+                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint" title="{{ __('How many times this very dump has been scraped on ScreenScraper. Send to picks the most scraped version of a region.') }}">{{ __('Scrapes') }}</th>
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Role') }}</th>
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Disc') }}</th>
                                 <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Size') }}</th>
@@ -1955,6 +1973,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 'missing' => $missing,
                                 'md5' => $md5,
                                 'licenseId' => $licenseId,
+                                'region' => $region,
+                                'regionLabel' => $regionLabel,
+                                'regionIcon' => $regionIcon,
+                                'scrapes' => $scrapes,
+                                'flags' => $flags,
                             ])
                                 <tr wire:key="file-{{ $id }}" class="border-t border-raised first:border-t-0">
                                     <td class="px-4.5 py-3">
@@ -1980,6 +2003,26 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                                 {{ $licenseId }}
                                             </p>
                                         @endif
+                                    </td>
+                                    <td class="px-4.5 py-3 whitespace-nowrap">
+                                        {{-- A flag where one depicts the region, as on the
+                                             game card; else its code, named on hover. --}}
+                                        @if ($regionIcon !== null)
+                                            <img src="{{ $regionIcon }}" alt="{{ $regionLabel }}" title="{{ $regionLabel }}" class="w-6 border border-line-input" />
+                                        @elseif ($region !== null)
+                                            <span title="{{ $regionLabel }}" class="font-mono text-xs text-fg-muted">{{ Str::upper($region) }}</span>
+                                        @else
+                                            <span class="font-mono text-fg-muted">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="px-4.5 py-3 whitespace-nowrap">
+                                        <span class="font-mono text-fg-muted">{{ $scrapes ?? '—' }}</span>
+                                        {{-- What the provider says the dump is, whatever its
+                                             name does. A beta, a hack or a translation
+                                             is never what Send to picks. --}}
+                                        @foreach ($flags as $flag)
+                                            <span class="ml-1 rounded-md border border-warn/50 px-1.5 py-0.5 font-mono text-xs text-warn">{{ __(Str::headline($flag === 'trad' ? 'translation' : $flag)) }}</span>
+                                        @endforeach
                                     </td>
                                     <td class="px-4.5 py-3 whitespace-nowrap text-fg-soft">{{ $role }}</td>
                                     <td class="px-4.5 py-3 font-mono text-fg-muted">{{ $disc }}</td>

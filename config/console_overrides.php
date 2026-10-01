@@ -19,6 +19,7 @@ declare(strict_types=1);
  *   number — integer, or null when the field is emptied
  *   text[] — comma-separated list, kept as typed
  *   ext[]  — comma-separated list, lowercased; extension matching is case-folded
+ *   region[] — comma-separated list of the provider's region codes, lowercased
  *
  * A field left empty means "whatever the console file says", which is also what
  * a field equal to its shipped value means. Neither is stored.
@@ -79,6 +80,12 @@ return [
         'type' => 'number',
         'label' => 'RetroAchievements id',
         'description' => 'RetroAchievements\' ConsoleID, also RAHasher\'s systemid. Not the ScreenScraper one.',
+    ],
+
+    'transfer_regions' => [
+        'type' => 'region[]',
+        'label' => 'Region order for Send to',
+        'description' => 'Which version Send to sends of a game held in several regions.',
     ],
 
     'cover_aspect' => [

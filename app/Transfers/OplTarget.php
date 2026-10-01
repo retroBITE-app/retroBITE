@@ -28,6 +28,8 @@ use Illuminate\Support\Str;
  */
 final class OplTarget implements TransferTarget
 {
+    use ChoosesOptions;
+
     /** The formats OPL reads a disc in. */
     public const FORMATS = ['iso', 'cso', 'zso'];
 
@@ -59,6 +61,18 @@ final class OplTarget implements TransferTarget
         return null;
     }
 
+    /** OPL's art, by the kind the PS2 toolbox makes each piece from. */
+    public function artworkSlots(): array
+    {
+        $slots = [];
+
+        foreach ($this->ps2->artPieces() as $kind) {
+            $slots[$kind->value] = ['label' => $kind->label(), 'types' => array_values($kind->screenScraperTypes())];
+        }
+
+        return $slots;
+    }
+
     /** The drive's own root: OPL looks for DVD/ and CD/ there and nowhere else. */
     public function root(): array
     {
@@ -73,7 +87,7 @@ final class OplTarget implements TransferTarget
             throw new TransferRejected(__('Open PS2 Loader plays PlayStation 2 games only.'));
         }
 
-        $discs = GameVersions::preferred($game, self::FORMATS);
+        $discs = GameVersions::preferred($game, self::FORMATS, $this->regionChain($console));
 
         if ($discs === []) {
             throw new TransferRejected(__('Open PS2 Loader reads ISO, CSO or ZSO. Convert this game first.'));
@@ -98,12 +112,31 @@ final class OplTarget implements TransferTarget
 
         $extras = array_map(function (string $destination) use ($game): array {
             return [
-                'url' => route('transfers.extra', ['target' => $this->key(), 'gameId' => $game->id, 'path' => $destination]),
+                'url' => route('transfers.extra', ['target' => $this->key(), 'gameId' => $game->id, 'path' => $destination, ...$this->options()->query()]),
                 'destination' => $destination,
             ];
         }, $this->extras($game));
 
-        return new TransferPlan($files, null, extras: $extras);
+        // The game's other discs OPL could read, where this layout would put
+        // them: replaced by this one, or OPL lists the game twice. Its config
+        // and art are named after the serial, and stay.
+        $sent = array_map(fn (GameFile $disc): int => $disc->id, $discs);
+        $planned = array_map(fn (PlannedFile $file): string => $file->destination, $files);
+        $replaces = [];
+
+        foreach (GameVersions::of($game) as $version) {
+            foreach ($version as $disc) {
+                $relative = $this->relative($console, $disc);
+
+                if (in_array($disc->id, $sent, true) || $relative === null || ! in_array(Str::lower((string) $disc->extension), self::FORMATS, true)) {
+                    continue;
+                }
+
+                $replaces[] = $this->folderFor($disc, $relative).'/'.$disc->filename;
+            }
+        }
+
+        return new TransferPlan($files, null, extras: $extras, replaces: array_values(array_diff(array_unique($replaces), $planned)));
     }
 
     /**
@@ -118,7 +151,7 @@ final class OplTarget implements TransferTarget
             return [];
         }
 
-        $art = collect($this->ps2->artPieces())
+        $art = collect($this->sentArtPieces())
             ->filter(function (MediaKind $kind) use ($game): bool {
                 return $game->artwork($kind) !== null;
             })
@@ -144,11 +177,24 @@ final class OplTarget implements TransferTarget
             return $this->ps2->configFor($game);
         }
 
-        $kind = collect($this->ps2->artPieces())->first(function (MediaKind $kind) use ($serial, $destination): bool {
+        $kind = collect($this->sentArtPieces())->first(function (MediaKind $kind) use ($serial, $destination): bool {
             return $this->ps2->artPathFor($serial, $kind) === $destination;
         });
 
         return $kind instanceof MediaKind ? $this->ps2->artFor($game, $kind) : null;
+    }
+
+    /**
+     * The pieces of art this transfer sends.
+     *
+     * @return list<MediaKind>
+     */
+    private function sentArtPieces(): array
+    {
+        return array_values(array_filter(
+            $this->ps2->artPieces(),
+            fn (MediaKind $kind): bool => $this->options()->sends($kind->value),
+        ));
     }
 
     /** None: OPL reads its folders. */

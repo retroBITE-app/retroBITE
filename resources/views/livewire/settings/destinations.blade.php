@@ -4,6 +4,7 @@ use App\Enums\TransferFailure;
 use App\Jobs\DiscoverShares;
 use App\Jobs\ListShares;
 use App\Models\Destination;
+use App\Support\TransferRegions;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -54,6 +55,36 @@ new #[Title('Destinations')] class extends Component
 
     /** @var array{host: string, address: ?string, shares: list<string>, failure: ?string}|null */
     public ?array $listing = null;
+
+    /** @var list<string> the order Send to tries regions in, saved as it changes */
+    public array $regions = [];
+
+    public function mount(): void
+    {
+        $this->regions = TransferRegions::order();
+    }
+
+    /**
+     * Kept as it is sorted. Only regions the app knows, and never none: an
+     * empty order is the artwork's, which would look like nothing was removed.
+     */
+    public function updatedRegions(): void
+    {
+        $known = array_keys(TransferRegions::besides([]));
+        $regions = array_values(array_unique(array_filter(
+            array_map(strval(...), $this->regions),
+            fn (string $code): bool => in_array($code, $known, true),
+        )));
+
+        if ($regions === []) {
+            $this->regions = TransferRegions::order();
+
+            return;
+        }
+
+        TransferRegions::remember($regions);
+        $this->regions = TransferRegions::order();
+    }
 
     /** @return Collection<int, Destination> */
     #[Computed]
@@ -464,6 +495,18 @@ new #[Title('Destinations')] class extends Component
                             @endforeach
                         </ul>
                     @endif
+                </div>
+
+                {{-- Which version goes, for a game that holds several: the
+                     library's order, which a console can have its own of
+                     (Settings → Consoles) and Send to can lead with one. --}}
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <p class="kicker mb-1 text-fg-faint">{{ __('Region order') }}</p>
+                    <p class="mb-4 text-sm text-fg-soft">
+                        {{ __('A game held in several regions sends one version: the first region here it has, else any other. A console can have its own order under Settings → Consoles, and Send to can sort one for a single send.') }}
+                    </p>
+
+                    <x-region-order wire:model.live="regions" keep-one />
                 </div>
 
                 {{-- What people ask before they add one. --}}

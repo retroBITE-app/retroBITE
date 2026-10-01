@@ -193,3 +193,20 @@ it('hands the browser the key at runtime, and only when signed in', function () 
     auth()->logout();
     $this->get(route('login'))->assertDontSee('reverb-key');
 });
+
+it('tells the sidebar once for a burst of jobs queued, and once more after it', function () {
+    // A backfill queuing five thousand lookups was five thousand broadcasts
+    // in two seconds, and Reverb stopped under them.
+    for ($i = 0; $i < 5000; $i++) {
+        dispatch(fn () => null)->onConnection('database');
+    }
+
+    // One a second at most, however long the loop takes.
+    $during = Event::dispatched(SystemUpdated::class)->count();
+    expect($during)->toBeGreaterThanOrEqual(1)->toBeLessThan(10);
+
+    // And the one that counts after the last of them, as the process ends.
+    LiveUpdates::flush();
+
+    Event::assertDispatchedTimes(SystemUpdated::class, $during + 1);
+});

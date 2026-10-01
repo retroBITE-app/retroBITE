@@ -16,12 +16,20 @@ Artisan::command('inspire', function () {
  * rather than a dependency.
  */
 
-// Overnight, because a console's index is megabytes and this is where games
-// that had no set when they were scanned quietly become identified.
-Schedule::command('retrobite:ra:sync-hashes --queue')->dailyAt('03:00');
+// Weekly, overnight: a console's index is megabytes, changes slowly, and this
+// is where games that had no set when they were scanned quietly become
+// identified. Daily was ninety requests a night for an index that had not
+// moved, against an API behind Cloudflare's rate limit.
+Schedule::command('retrobite:ra:sync-hashes --queue')->weeklyOn(0, '03:00');
 
-// Sets for anything identified since the last run.
-Schedule::command('retrobite:ra:sync-sets --missing --queue')->dailyAt('03:30');
+// Sets for anything identified and still without one. Weekly: a game
+// identified in the meantime has its set already — IdentifyGame queues it —
+// so this only catches what that missed.
+Schedule::command('retrobite:ra:sync-sets --missing --queue')->weeklyOn(0, '03:30');
+
+// Every set again, monthly: achievements are added, removed and re-scored,
+// but seldom.
+Schedule::command('retrobite:ra:sync-sets --queue')->monthlyOn(1, '05:00');
 
 // The cheap pulse: one request per person for everything unlocked lately.
 Schedule::command('retrobite:ra:sync-progress')->everyFifteenMinutes()->withoutOverlapping();

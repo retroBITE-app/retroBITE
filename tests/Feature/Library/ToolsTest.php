@@ -66,7 +66,7 @@ it('writes what the script reported onto the file', function () {
 
     expect($file->refresh()->license_id)->toBe('SLES_521.18')
         ->and($file->video_mode)->toBe('PAL')
-        ->and($file->region)->toBe('Europe');
+        ->and($file->region)->toBe('eu');
 });
 
 it('leaves the file alone when the script found nothing', function () {

@@ -35,6 +35,15 @@ class RetroAchievementsService
     private const THROTTLE_KEY = 'retroachievements.last_request_at';
 
     /**
+     * Until when the API has asked to be left alone, as a timestamp.
+     *
+     * Shared, because every RetroAchievements job in every worker is blocked
+     * together: one 429 and the rest would each spend a request learning the
+     * same thing, and each refused request may keep the block going.
+     */
+    private const COOLDOWN_KEY = 'retroachievements.cooldown_until';
+
+    /**
      * Every game on a console, with the hashes that identify each one.
      *
      * f=1 restricts it to games that actually have achievements, h=1 adds the
@@ -227,6 +236,12 @@ class RetroAchievementsService
             throw new BadCredentials('No RetroAchievements API key is set.');
         }
 
+        $until = Cache::get(self::COOLDOWN_KEY);
+
+        if (is_numeric($until) && (int) $until > time()) {
+            throw RateLimited::stillBlocked((int) $until - time());
+        }
+
         $this->throttle();
 
         $url = rtrim((string) config('retroachievements.endpoint'), '/').'/'.$endpoint;
@@ -291,7 +306,13 @@ class RetroAchievementsService
         $status = $response->status();
 
         if ($status >= 400) {
-            throw $this->classify($status, $response->body());
+            $error = $this->classify($status, $response->body(), $response->header('Retry-After'));
+
+            if ($error instanceof RateLimited) {
+                Cache::put(self::COOLDOWN_KEY, time() + $error->retryAfter(), $error->retryAfter());
+            }
+
+            throw $error;
         }
 
         $decoded = json_decode($response->body(), true);
@@ -305,13 +326,13 @@ class RetroAchievementsService
         return $decoded;
     }
 
-    private function classify(int $status, string $body): RetroAchievementsException
+    private function classify(int $status, string $body, string $retryAfter = ''): RetroAchievementsException
     {
         $body = $this->redact($body);
 
         return match (true) {
             $status === 401, $status === 403 => new BadCredentials('Rejected: check the API key.', $status, $body),
-            $status === 429 => new RateLimited('Rate limited.', $status, $body),
+            $status === 429 => new RateLimited('Rate limited.', $status, $body, ctype_digit(trim($retryAfter)) ? (int) trim($retryAfter) : null),
             $status === 400, $status === 422 => new InvalidRequest('Malformed request.', $status, $body),
             $status >= 500 => new ServerError('RetroAchievements returned '.$status.'.', $status, $body),
             default => new ApiUnavailable('RetroAchievements returned '.$status.'.', $status, $body),
@@ -328,7 +349,10 @@ class RetroAchievementsService
      * Wait out the minimum interval since the last request.
      *
      * In the cache and not a property, because consecutive calls are
-     * consecutive queue jobs in separate processes.
+     * consecutive queue jobs in separate processes — and under a lock,
+     * because two workers that both read the last request's time before
+     * either wrote its own sent two at once, and twice the rate meant
+     * Cloudflare's block.
      */
     private function throttle(): void
     {
@@ -338,16 +362,18 @@ class RetroAchievementsService
             return;
         }
 
-        $last = Cache::get(self::THROTTLE_KEY);
+        Cache::lock(self::THROTTLE_KEY.'.lock', (int) ceil($interval) + 10)->block((int) ceil($interval) + 30, function () use ($interval): void {
+            $last = Cache::get(self::THROTTLE_KEY);
 
-        if (is_numeric($last)) {
-            $wait = $interval - (microtime(true) - (float) $last);
+            if (is_numeric($last)) {
+                $wait = $interval - (microtime(true) - (float) $last);
 
-            if ($wait > 0) {
-                usleep((int) round($wait * 1_000_000));
+                if ($wait > 0) {
+                    usleep((int) round($wait * 1_000_000));
+                }
             }
-        }
 
-        Cache::put(self::THROTTLE_KEY, microtime(true), 60);
+            Cache::put(self::THROTTLE_KEY, microtime(true), 60);
+        });
     }
 }

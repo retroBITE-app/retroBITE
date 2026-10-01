@@ -47,6 +47,7 @@ use Illuminate\Support\Collection;
  * @property int|null $rating
  * @property string|null $media_region
  * @property Carbon|null $matched_at
+ * @property Carbon|null $dumps_recorded_at when the provider's word on each of its files' dumps was last recorded (ProviderDumps)
  * @property Carbon|null $retroachievements_matched_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -74,6 +75,7 @@ class Game extends Model
         return [
             'status' => GameStatus::class,
             'matched_at' => 'datetime',
+            'dumps_recorded_at' => 'datetime',
             'rating' => 'integer',
             'retroachievements_status' => RetroAchievementsStatus::class,
             'retroachievements_matched_at' => 'datetime',
@@ -429,6 +431,19 @@ class Game extends Model
     public function scopeAwaitingRating(Builder $query): void
     {
         $query->whereNotNull('games.screenscraper_id')->whereNull('games.rating');
+    }
+
+    /**
+     * Games identified before the provider's word on each dump was recorded.
+     *
+     * Off a timestamp rather than the files' columns: a game none of whose
+     * dumps the provider knows has been asked, and has nothing to show for it.
+     *
+     * @param  Builder<Game>  $query
+     */
+    public function scopeAwaitingDumps(Builder $query): void
+    {
+        $query->whereNotNull('games.screenscraper_id')->whereNull('games.dumps_recorded_at');
     }
 
     /**

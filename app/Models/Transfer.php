@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $game_id
  * @property int|null $destination_id
  * @property string $target
+ * @property array<string, mixed>|null $options what was chosen for it (TransferOptions)
  * @property string|null $batch_id the send a console sent at once shares
  * @property string $status queued | running | done | failed
  * @property int $files_total
@@ -32,7 +33,7 @@ use Illuminate\Support\Carbon;
  * @property-read Game $game
  * @property-read Destination|null $destination
  */
-#[Fillable(['game_id', 'destination_id', 'target', 'batch_id', 'status', 'files_total', 'files_done', 'files_skipped', 'bytes_total', 'failure', 'finished_at'])]
+#[Fillable(['game_id', 'destination_id', 'target', 'options', 'batch_id', 'status', 'files_total', 'files_done', 'files_skipped', 'bytes_total', 'failure', 'finished_at'])]
 class Transfer extends Model
 {
     public const QUEUED = 'queued';
@@ -47,6 +48,7 @@ class Transfer extends Model
     {
         return [
             'failure' => TransferFailure::class,
+            'options' => 'array',
             'finished_at' => 'datetime',
         ];
     }

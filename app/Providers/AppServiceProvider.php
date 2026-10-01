@@ -99,11 +99,17 @@ class AppServiceProvider extends ServiceProvider
      * interface, which the page-side nudges it replaces never could. Every
      * edge the sidebar counts — waiting, running, done, failed, back in the
      * queue — sends one; the browser folds a burst into one re-render a second.
+     *
+     * Except queuing, which comes in loops: a backfill queues thousands in a
+     * second, and each was a broadcast Reverb had to take. Those are one at
+     * the start of the burst and one after it (LiveUpdates::soon()).
      */
     protected function configureLiveUpdates(): void
     {
+        Event::listen(JobQueued::class, fn (): null => LiveUpdates::soon(SystemUpdated::ACTIVITY));
+
         Event::listen(
-            [JobQueued::class, JobProcessing::class, JobProcessed::class, JobFailed::class, JobReleasedAfterException::class],
+            [JobProcessing::class, JobProcessed::class, JobFailed::class, JobReleasedAfterException::class],
             fn (): null => LiveUpdates::system(SystemUpdated::ACTIVITY),
         );
     }

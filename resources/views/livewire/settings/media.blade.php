@@ -4,7 +4,8 @@ use App\Enums\MediaKind;
 use App\Models\AppSetting;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
-use App\Transfers\BatoceraTarget;
+use App\Transfers\TransferTarget;
+use App\Transfers\TransferTargets;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\Computed;
@@ -20,6 +21,9 @@ new #[Title('Media settings')] class extends Component
 
     /** '' means no preference. */
     public string $region = '';
+
+    /** The transfer target the tags speak for, and the recommendation is for. Not persisted. */
+    public string $target = 'batocera';
 
     public function mount(): void
     {
@@ -70,24 +74,56 @@ new #[Title('Media settings')] class extends Component
     }
 
     /**
-     * Where each type ends up on a Batocera box, by the name its game artwork
-     * setting uses — so somebody picking what to fetch sees what it is for.
+     * Every transfer target, for the recommendation's menu.
      *
-     * @return array<string, string>
+     * @return array<string, string> key => label
      */
     #[Computed]
-    public function batocera(): array
+    public function targets(): array
     {
-        return BatoceraTarget::artworkLabels();
+        return collect(TransferTargets::all())
+            ->mapWithKeys(fn (TransferTarget $target): array => [$target->key() => $target->label()])
+            ->all();
     }
 
     /**
-     * Switch on what a Batocera box uses and nothing else. Not saved until
-     * Save, so it can be looked at and changed first.
+     * Where each type ends up when a game is sent laid out for the chosen
+     * target, by the name the target uses — so somebody picking what to
+     * fetch sees what it is for.
+     *
+     * @return array<string, string> type => slot labels
      */
-    public function useBatocera(): void
+    #[Computed]
+    public function targetSlots(): array
     {
-        $recommended = BatoceraTarget::recommendedTypes();
+        $labels = [];
+
+        foreach (TransferTargets::find($this->target)?->artworkSlots() ?? [] as ['label' => $label, 'types' => $types]) {
+            foreach ($types as $type) {
+                $labels[$type][] = $label;
+            }
+        }
+
+        // A title screen can be Batocera's image and its title shot at once.
+        return array_map(fn (array $names): string => implode(', ', array_unique($names)), $labels);
+    }
+
+    /**
+     * Switch on what a target uses and nothing else: the preferred type of
+     * each piece of artwork it shows, not its fallbacks, since every type
+     * switched on is another download for every game. Not saved until Save,
+     * so it can be looked at and changed first.
+     */
+    public function useRecommended(string $target): void
+    {
+        $chosen = TransferTargets::find($target);
+
+        if ($chosen === null) {
+            return;
+        }
+
+        $this->target = $target;
+        $recommended = $chosen->recommendedTypes();
 
         foreach (array_keys($this->enabled) as $type) {
             $this->enabled[$type] = in_array($type, $recommended, true);
@@ -139,13 +175,28 @@ new #[Title('Media settings')] class extends Component
             <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-7">
                 <div class="mb-1 flex items-center justify-between gap-3">
                     <p class="kicker text-fg-faint">{{ __('Types to fetch') }}</p>
-                    <flux:button size="xs" variant="ghost" type="button" wire:click="useBatocera">
-                        {{ __('Recommended for Batocera') }}
-                    </flux:button>
+                    <flux:dropdown position="bottom" align="end">
+                        <flux:button size="xs" variant="ghost" type="button" icon:trailing="chevron-down">
+                            {{ __('Recommended for…') }}
+                        </flux:button>
+
+                        <flux:menu>
+                            @foreach ($this->targets as $key => $label)
+                                <flux:menu.item wire:click="useRecommended('{{ $key }}')">{{ $label }}</flux:menu.item>
+                            @endforeach
+                        </flux:menu>
+                    </flux:dropdown>
                 </div>
                 <p class="mb-4 text-sm text-fg-soft">
-                    {{ __('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account. The first tag says what retroBite shows it as; the second, what it becomes when a game is sent to Batocera.') }}
+                    {{ __('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account. The first tag says what retroBite shows it as; the second, what it becomes when a game is sent to :target.', ['target' => $this->targets[$this->target] ?? $this->target]) }}
                 </p>
+                <div class="mb-4 max-w-xs">
+                    <flux:select wire:model.live="target" size="sm" :label="__('Tags for')">
+                        @foreach ($this->targets as $key => $label)
+                            <flux:select.option value="{{ $key }}">{{ $label }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                </div>
 
                 @foreach ($this->groups as ['label' => $label, 'types' => $types])
                     <p class="kicker mt-5 mb-2 text-fg-dim first:mt-0">{{ __($label) }}</p>
@@ -164,8 +215,8 @@ new #[Title('Media settings')] class extends Component
                                         @if ($this->roles->has($type))
                                             <span class="kicker rounded-md border border-line-input px-1.5 py-0.5 text-fg-dim">{{ $this->roles[$type] }}</span>
                                         @endif
-                                        @if (isset($this->batocera[$type]))
-                                            <span class="kicker rounded-md border border-accent/40 px-1.5 py-0.5 text-accent">{{ __('Batocera: :what', ['what' => $this->batocera[$type]]) }}</span>
+                                        @if (isset($this->targetSlots[$type]))
+                                            <span class="kicker rounded-md border border-accent/40 px-1.5 py-0.5 text-accent">{{ __(':target: :what', ['target' => $this->targets[$this->target] ?? $this->target, 'what' => $this->targetSlots[$type]]) }}</span>
                                         @endif
                                     </span>
                                     @if ($described !== null)
