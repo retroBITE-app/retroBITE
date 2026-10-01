@@ -310,37 +310,41 @@
             </section>
         @endif
 
-        <section>
-            <div class="mb-3.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-                <h2 class="text-lg font-medium text-fg-bright">{{ __('Needs identifying') }}</h2>
-                <p class="text-sm text-fg-dim">
-                    {{ count($unmatched) }} {{ __('files scanned but not matched to a title') }}
-                </p>
-            </div>
+        {{-- Only while something is left to identify: an empty list is a
+             heading with nothing under it. --}}
+        @if (count($unmatched) > 0)
+            <section>
+                <div class="mb-3.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+                    <h2 class="text-lg font-medium text-fg-bright">{{ __('Needs identifying') }}</h2>
+                    <p class="text-sm text-fg-dim">
+                        {{ count($unmatched) }} {{ __('files scanned but not matched to a title') }}
+                    </p>
+                </div>
 
-            <ul class="overflow-hidden rounded-xl border border-line bg-sunken">
-                @foreach ($unmatched as $game)
-                    <li class="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-line/70 px-4 py-3 transition-colors last:border-b-0 hover:bg-hover">
-                        <span class="min-w-0 flex-1">
-                            <span class="block truncate font-mono text-sm text-fg-soft">{{ $game['file'] }}</span>
-                            <span class="mt-1.5 flex items-center gap-2.5">
-                                <span class="kicker rounded border border-line-strong px-1.5 py-0.5 text-accent-muted">{{ $game['console'] }}</span>
-                                <span class="font-mono text-xs text-fg-faint">{{ $game['size'] }} · {{ $game['added'] }}</span>
+                <ul class="overflow-hidden rounded-xl border border-line bg-sunken">
+                    @foreach ($unmatched as $game)
+                        <li class="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-line/70 px-4 py-3 transition-colors last:border-b-0 hover:bg-hover">
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate font-mono text-sm text-fg-soft">{{ $game['file'] }}</span>
+                                <span class="mt-1.5 flex items-center gap-2.5">
+                                    <span class="kicker rounded border border-line-strong px-1.5 py-0.5 text-accent-muted">{{ $game['console'] }}</span>
+                                    <span class="font-mono text-xs text-fg-faint">{{ $game['size'] }} · {{ $game['added'] }}</span>
+                                </span>
                             </span>
-                        </span>
 
-                        <a
-                            href="{{ $game['url'] }}"
-                            wire:navigate
-                            class="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-tint/50 px-2.5 py-1.5 text-sm text-accent transition-colors hover:bg-accent-tint/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                        >
-                            <flux:icon.sparkles variant="micro" />
-                            {{ __('Identify') }}
-                        </a>
-                    </li>
-                @endforeach
-            </ul>
-        </section>
+                            <a
+                                href="{{ $game['url'] }}"
+                                wire:navigate
+                                class="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-tint/50 px-2.5 py-1.5 text-sm text-accent transition-colors hover:bg-accent-tint/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                            >
+                                <flux:icon.sparkles variant="micro" />
+                                {{ __('Identify') }}
+                            </a>
+                        </li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
 
         <livewire:network-shares />
     </div>
