@@ -114,13 +114,19 @@ workers QUEUE_WORKERS_DEFAULT 1 php /app/artisan queue:work \
 workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:work \
     --queue=thumbnails --sleep=3 --tries=3 --max-time=3600
 
-# The console toolbox: loader exports, license ID reading and format
-# conversions, on a queue of their own so pressing Write OPL art never waits
-# behind a library's artwork. On the long connection because a conversion runs
-# for up to CONVERSION_TIMEOUT seconds, past the default connection's half-hour
-# retry_after, after which a second toolbox worker would start it again.
+# The console toolbox: loader exports and license ID reading, on a queue of
+# their own so pressing Write OPL art never waits behind a library's artwork.
+# Still on the long connection, so a conversion queued here before conversions
+# had a queue of their own is not handed out twice while it runs.
 workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:work database-long \
     --queue=toolbox --sleep=3 --tries=3 --max-time=3600
+
+# Format conversions, apart from the toolbox so an hour-long disc never holds
+# an export back. On the long connection because a conversion runs for up to
+# CONVERSION_TIMEOUT seconds, past the default connection's half-hour
+# retry_after, after which a second worker would start it again.
+workers QUEUE_WORKERS_CONVERSION 1 php /app/artisan queue:work database-long \
+    --queue=toolbox-conversion --sleep=3 --tries=3 --max-time=3600
 
 # RetroAchievements: identification and set downloads are HTTP and quick, so
 # one worker keeps up; progress gets its own so a library-wide backfill of the

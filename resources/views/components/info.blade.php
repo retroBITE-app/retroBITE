@@ -1,6 +1,6 @@
 @props(['text'])
 
-{{-- An option's explanation, a hover away rather than a paragraph under it.
+{{-- A field's or an option's explanation, a hover away rather than a paragraph under it.
      A button so it can take focus and show the same text from the keyboard,
      and a label for a screen reader, which cannot hover. --}}
 <flux:tooltip :content="$text" position="top">

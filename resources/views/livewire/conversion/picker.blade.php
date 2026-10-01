@@ -826,14 +826,14 @@ new class extends Component
                             @if (in_array(Converter::VERIFY, $options, true))
                                 <div class="flex items-center gap-2">
                                     <flux:checkbox wire:model="verify" :label="__('Verify checksum')" />
-                                    <x-conversion.info :text="__('Check the written file with :tool\'s own verifier before keeping it.', ['tool' => $this->chosen->tool()])" />
+                                    <x-info :text="__('Check the written file with :tool\'s own verifier before keeping it.', ['tool' => $this->chosen->tool()])" />
                                 </div>
                             @endif
 
                             @if (in_array(Converter::KEEP_SOURCE, $options, true))
                                 <div class="flex items-center gap-2">
                                     <flux:checkbox wire:model="keepSource" :label="__('Keep source')" />
-                                    <x-conversion.info :text="__('Off, the source files are deleted once the output is written and verified.')" />
+                                    <x-info :text="__('Off, the source files are deleted once the output is written and verified.')" />
                                 </div>
                             @endif
 
@@ -867,7 +867,7 @@ new class extends Component
                                         <flux:field wire:key="setting-{{ $setting->key }}">
                                             <div class="flex items-center gap-2">
                                                 <flux:label>{{ $setting->label }}</flux:label>
-                                                <x-conversion.info :text="$setting->description" />
+                                                <x-info :text="$setting->description" />
                                             </div>
 
                                             <flux:select wire:model="advanced.{{ $setting->key }}" size="sm">

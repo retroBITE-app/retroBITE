@@ -449,7 +449,7 @@ it('selects all of one format only, the first row\'s when nothing is picked', fu
         ->and($page->instance()->pickState)->toBe('on');
 });
 
-it('shows the conversion queue on the sidebar\'s Toolbox row as done of total and a percent', function () {
+it('shows the conversion queue on the sidebar\'s Toolbox - Conversion row as the one running of total and a percent', function () {
     $file = pageFile('ps2', 'Okami.iso');
     $row = [
         'console' => 'ps2', 'converter' => 'cso', 'game_id' => $file->game_id, 'game_file_id' => $file->id,
@@ -462,8 +462,8 @@ it('shows the conversion queue on the sidebar\'s Toolbox row as done of total an
     Conversion::query()->create([...$row, 'status' => ConversionStatus::Running, 'progress' => 50]);
     Conversion::query()->create([...$row, 'status' => ConversionStatus::Queued]);
 
-    // One finished, one half way, one to go: (1 + 0.5) / 3.
-    Livewire::test('system-activity')->assertSeeText('1/3 · 50%');
+    // One finished, the second half way, one to go: on 2 of 3, (1 + 0.5) / 3.
+    Livewire::test('system-activity')->assertSeeText('2/3 · 50%');
 });
 
 it('counts a retried conversion in the batch it rejoins, not everything since it was first asked for', function () {

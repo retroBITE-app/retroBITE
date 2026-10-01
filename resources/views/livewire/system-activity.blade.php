@@ -39,15 +39,15 @@ new class extends Component
     }
 
     /**
-     * How far the conversion queue is, for the Toolbox row: one job there can
+     * How far the conversion queue is, for the Toolbox - Conversion row: one job there can
      * be an hour of one disc, and "1" says nothing about it.
      *
      * Counted over the batch — every conversion queued, or queued again by a
-     * retry, since the oldest one still waiting or running — so a queue of five reads 2/5 as it goes,
-     * and the percent is the whole batch's: the finished ones in full, the
+     * retry, since the oldest one still waiting or running — so a queue of five reads 3/5 while
+     * the third runs, and the percent is the whole batch's: the finished ones in full, the
      * running ones as far as they have got. Null when nothing is left to do.
      *
-     * @return array{done: int, total: int, percent: int}|null
+     * @return array{at: int, total: int, percent: int}|null
      */
     private function converting(): ?array
     {
@@ -70,6 +70,7 @@ new class extends Component
             ->where('queued_at', '>=', $since)
             ->selectRaw('count(*) as total')
             ->selectRaw('sum(case when status in ('.implode(', ', array_fill(0, count($finished), '?')).') then 1 else 0 end) as done', $finished)
+            ->selectRaw('sum(case when status in ('.implode(', ', array_fill(0, count($active), '?')).') then 1 else 0 end) as active', $active)
             ->selectRaw('sum(case when status in ('.implode(', ', array_fill(0, count($active), '?')).') then progress else 0 end) as running', $active)
             ->first();
 
@@ -78,7 +79,8 @@ new class extends Component
         $running = (float) data_get($batch, 'running', 0);
 
         return [
-            'done' => $done,
+            // The one being worked on, counted: finished plus running.
+            'at' => min($total, $done + (int) data_get($batch, 'active', 0)),
             'total' => $total,
             'percent' => (int) min(100, round(100 * ($done + $running / 100) / max(1, $total))),
         ];
@@ -187,7 +189,7 @@ new class extends Component
     --}}
     <div x-show="open" x-cloak>
         <div class="mt-2.5 flex flex-col gap-2">
-            @php(['done' => $convertingDone, 'total' => $convertingTotal, 'percent' => $convertingPercent] = $converting ?? ['done' => 0, 'total' => 0, 'percent' => 0])
+            @php(['at' => $convertingAt, 'total' => $convertingTotal, 'percent' => $convertingPercent] = $converting ?? ['at' => 0, 'total' => 0, 'percent' => 0])
 
             @foreach ($activity->all() as $queue)
                 <div wire:key="activity-{{ $queue->key }}">
@@ -195,7 +197,7 @@ new class extends Component
                         <span class="truncate text-fg-faint">{{ __($queue->label) }}</span>
 
                         @php($writing = $queue->key === 'toolbox' && $exports['busy'])
-                        @php($convertingHere = $queue->key === 'toolbox' && ! $writing && $converting !== null)
+                        @php($convertingHere = $queue->key === 'conversion' && $converting !== null)
 
                         {{-- A quiet queue keeps its row but gives up the
                              brighter figure, so the busy ones are still the
@@ -206,10 +208,10 @@ new class extends Component
                                      the other rows count jobs left. --}}
                                 {{ $exports['done'] }}<span class="text-fg-faint">/{{ $exports['total'] }}</span>
                             @elseif ($convertingHere)
-                                {{-- Conversions done out of the batch, and how far the
+                                {{-- The conversion being worked on out of the batch, and how far the
                                      batch is: a running disc moves the percent before
                                      it moves the count. --}}
-                                {{ $convertingDone }}<span class="text-fg-faint">/{{ $convertingTotal }} · </span>{{ $convertingPercent }}<span class="text-fg-faint">%</span>
+                                {{ $convertingAt }}<span class="text-fg-faint">/{{ $convertingTotal }} · </span>{{ $convertingPercent }}<span class="text-fg-faint">%</span>
                             @elseif ($queue->waiting())
                                 {{-- Everything left is scheduled for later: a
                                      spent allowance, not a stuck queue. --}}

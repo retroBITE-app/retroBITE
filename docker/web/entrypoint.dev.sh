@@ -133,7 +133,7 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 # restart loop in queue-workers.sh brings it back, but the job still never
 # finishes. The longest on each: MatchGame 120 (scraper), ScrapeGameMedia 900
 # (media), ScanConsoleFolder 1800 (default), WriteConsoleExports 1800
-# (toolbox), SyncHashIndex 900 (ra),
+# (toolbox), RunConversion 7060 (toolbox-conversion), SyncHashIndex 900 (ra),
 # ReconcileProgress 300 (ra-progress), HashFile 3600 (hash), FileTransferJob
 # 3600 (transfer). Raise the number
 # here when one of those grows.
@@ -155,11 +155,16 @@ workers QUEUE_WORKERS_DEFAULT 1 php /app/artisan queue:listen \
 workers QUEUE_WORKERS_THUMBNAILS 1 php /app/artisan queue:listen \
     --queue=thumbnails --sleep=3 --tries=3
 
-# The console toolbox: a conversion's 7000 (CONVERSION_TIMEOUT) plus the
-# minute RunConversion adds and the margin the others carry. On the long
-# connection, as in production.
+# The console toolbox, on the long connection, as in production. Its
+# --timeout still covers a conversion queued here before conversions had a
+# queue of their own.
 workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:listen database-long \
     --queue=toolbox --sleep=3 --tries=3 --timeout=7090
+
+# Conversions: 7000 (CONVERSION_TIMEOUT) plus the minute RunConversion adds and
+# the margin the others carry.
+workers QUEUE_WORKERS_CONVERSION 1 php /app/artisan queue:listen database-long \
+    --queue=toolbox-conversion --sleep=3 --tries=3 --timeout=7090
 
 # RetroAchievements. Note that queue:listen ignores retry_after entirely — it
 # reboots per job and goes by --timeout — so the long-connection split that

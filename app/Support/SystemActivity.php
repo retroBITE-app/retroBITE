@@ -55,6 +55,7 @@ final class SystemActivity
         'achievements' => ['label' => 'Achievements', 'queues' => ['ra']],
         'progress' => ['label' => 'Progress', 'queues' => ['ra-progress']],
         'toolbox' => ['label' => 'Toolbox', 'queues' => ['toolbox']],
+        'conversion' => ['label' => 'Toolbox - Conversion', 'queues' => ['toolbox-conversion']],
     ];
 
     /** @param  array<string, QueueActivity>  $queues */

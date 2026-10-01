@@ -172,7 +172,7 @@ new #[Title('Destinations')] class extends Component
             'password' => ['nullable', 'string', 'max:255'],
         ], [
             'host.regex' => __('A name or an address, without \\\\ or slashes.'),
-            'share.not_regex' => __('Just the share\'s name; a folder inside it goes below.'),
+            'share.not_regex' => __('Just the share\'s name; a folder inside it goes in Folder.'),
             'folder.not_regex' => str_ends_with(strtolower(rtrim(str_replace('\\', '/', $this->folder), '/')), 'roms')
                 ? __('Send to adds roms/ itself. Leave this empty for Batocera\'s share, or name the folder that holds roms/.')
                 : __('A folder inside the share, without . or .. in it.'),
@@ -260,91 +260,115 @@ new #[Title('Destinations')] class extends Component
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div class="flex flex-col gap-6 lg:col-span-7">
                 <div class="rounded-xl border border-line bg-surface p-5">
-                    <div class="mb-4 flex items-center gap-2.5">
+                    <div class="mb-2 flex items-center gap-2.5">
                         <flux:icon.server-stack class="size-[17px] text-accent" />
                         <p class="flex-1 text-sm text-fg-bright">{{ $editing !== null ? __('Edit :name', ['name' => $name]) : __('Add a share') }}</p>
                     </div>
 
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('A folder on another machine — a Batocera box\'s share, a NAS — that Send to can copy games onto. The library keeps its files; only copies go out.') }}
+                    <p class="mb-6 text-sm text-fg-soft">
+                        {{ __('A shared folder on another machine — a Batocera box, a NAS — that Send to can copy games onto. Four steps, top to bottom.') }}
                     </p>
 
-                    {{-- Step one: find the machine, so nobody has to know its address. --}}
-                    <div class="mb-5">
-                        <flux:button size="sm" variant="filled" icon="magnifying-glass" type="button" wire:click="search" x-bind:disabled="$wire.searchToken !== null">
-                            {{ __('Search the network') }}
-                        </flux:button>
+                    <form wire:submit="save" class="flex flex-col gap-7">
+                        {{-- Step one: find the machine, so nobody has to know its address. --}}
+                        <x-settings.step number="1" :title="__('Find the machine')"
+                                         :hint="__('Search the network for it, or type its name or address.')">
+                            <flux:button size="sm" variant="filled" icon="magnifying-glass" type="button" wire:click="search" x-bind:disabled="$wire.searchToken !== null">
+                                {{ __('Search the network') }}
+                            </flux:button>
 
-                        @if ($searchToken !== null)
-                            <div
-                                wire:key="search-{{ $searchToken }}"
-                                x-data="{
-                                    stop: null, timer: null,
-                                    init() {
-                                        this.stop = live.system('discovery', () => $wire.checkSearch());
-                                        this.timer = setTimeout(() => $wire.checkSearch(), {{ ($this::WAIT_SECONDS + 1) * 1000 }});
-                                    },
-                                    destroy() { this.stop?.(); clearTimeout(this.timer); },
-                                }"
-                                class="mt-3 flex items-center gap-2 text-sm text-fg-soft"
-                            >
-                                <flux:icon.loading class="size-4" />
-                                {{ __('Asking the network who shares files…') }}
-                            </div>
-                        @elseif ($found !== null)
-                            @if ($found === [])
-                                <p class="mt-3 text-sm text-fg-faint">
-                                    {{ __('Nothing answered. Type the machine\'s name or address below instead — for a Batocera box, try batocera.') }}
-                                </p>
-                                @if ($scanned === [])
-                                    {{-- Behind Docker's bridge the container cannot
-                                         see which network is the LAN, so it had
-                                         none to scan. Said, since it is one line
-                                         in .env to fix. --}}
-                                    <p class="mt-2 text-xs text-fg-faint">
-                                        {{ __('retroBite could not tell which network your LAN is, so it only asked by name. Set HOST_IP in .env to this machine\'s LAN address (or TRANSFER_DISCOVERY_SUBNETS to the network) and it will search the whole network.') }}
+                            @if ($searchToken !== null)
+                                <div
+                                    wire:key="search-{{ $searchToken }}"
+                                    x-data="{
+                                        stop: null, timer: null,
+                                        init() {
+                                            this.stop = live.system('discovery', () => $wire.checkSearch());
+                                            this.timer = setTimeout(() => $wire.checkSearch(), {{ ($this::WAIT_SECONDS + 1) * 1000 }});
+                                        },
+                                        destroy() { this.stop?.(); clearTimeout(this.timer); },
+                                    }"
+                                    class="mt-3 flex items-center gap-2 text-sm text-fg-soft"
+                                >
+                                    <flux:icon.loading class="size-4" />
+                                    {{ __('Asking the network who shares files…') }}
+                                </div>
+                            @elseif ($found !== null)
+                                @if ($found === [])
+                                    <p class="mt-3 text-sm text-fg-faint">
+                                        {{ __('Nothing answered. Type the machine\'s name or address below instead — for a Batocera box, try batocera.') }}
                                     </p>
+                                    @if ($scanned === [])
+                                        {{-- Behind Docker's bridge the container cannot
+                                             see which network is the LAN, so it had
+                                             none to scan. Said, since it is one line
+                                             in .env to fix. --}}
+                                        <p class="mt-2 text-xs text-fg-faint">
+                                            {{ __('retroBite could not tell which network your LAN is, so it only asked by name. Set HOST_IP in .env to this machine\'s LAN address (or TRANSFER_DISCOVERY_SUBNETS to the network) and it will search the whole network.') }}
+                                        </p>
+                                    @endif
+                                @else
+                                    <p class="mt-3 text-xs text-fg-faint">{{ __('Pick one to fill in its address and list its shares.') }}</p>
+                                    <ul class="mt-1.5 flex flex-col gap-1.5">
+                                        @foreach ($found as $index => $machine)
+                                            <li wire:key="found-{{ $machine['address'] }}">
+                                                <button
+                                                    type="button"
+                                                    wire:click="pick({{ $index }})"
+                                                    class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-line-input bg-sunken px-3 py-2 text-left text-sm transition-colors hover:border-accent/40"
+                                                >
+                                                    <flux:icon.computer-desktop class="size-4 text-fg-muted" />
+                                                    <span class="font-mono text-fg-bright">{{ $machine['name'] }}</span>
+                                                    @if ($machine['name'] !== $machine['address'])
+                                                        <span class="ml-auto font-mono text-xs text-fg-faint">{{ $machine['address'] }}</span>
+                                                    @endif
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
                                 @endif
-                            @else
-                                <ul class="mt-3 flex flex-col gap-1.5">
-                                    @foreach ($found as $index => $machine)
-                                        <li wire:key="found-{{ $machine['address'] }}">
-                                            <button
-                                                type="button"
-                                                wire:click="pick({{ $index }})"
-                                                class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-line-input bg-sunken px-3 py-2 text-left text-sm transition-colors hover:border-accent/40"
-                                            >
-                                                <flux:icon.computer-desktop class="size-4 text-fg-muted" />
-                                                <span class="font-mono text-fg-bright">{{ $machine['name'] }}</span>
-                                                @if ($machine['name'] !== $machine['address'])
-                                                    <span class="ml-auto font-mono text-xs text-fg-faint">{{ $machine['address'] }}</span>
-                                                @endif
-                                            </button>
-                                        </li>
-                                    @endforeach
-                                </ul>
                             @endif
-                        @endif
-                    </div>
 
-                    <form wire:submit="save" class="flex flex-col gap-4">
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <flux:input wire:model="host" :label="__('Machine')" placeholder="batocera"
-                                        :description="__('Its name or address.')" />
-                            <flux:input wire:model="name" :label="__('Name')" placeholder="Living room Batocera"
-                                        :description="__('What Send to calls it.')" />
-                        </div>
+                            <div class="mt-4">
+                                <flux:field>
+                                    <div class="flex items-center gap-2">
+                                        <flux:label>{{ __('Machine') }}</flux:label>
+                                        <x-info :text="__('A name like batocera, or an address like 192.168.1.20.')" />
+                                    </div>
+                                    <flux:input wire:model="host" placeholder="batocera" />
+                                    <flux:error name="host" />
+                                </flux:field>
+                            </div>
+                        </x-settings.step>
 
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <flux:input wire:model="username" :label="__('Username')" :placeholder="__('Leave empty for a guest share')" autocomplete="off" />
-                            <flux:input wire:model="password" type="password" :label="__('Password')" autocomplete="new-password"
-                                        :placeholder="$editing !== null ? __('Unchanged unless typed') : ''"
-                                        :description="__('Kept encrypted.')" />
-                        </div>
+                        {{-- Step two: only when the share is not open to guests. --}}
+                        <x-settings.step number="2" :title="__('Sign in, if it asks')"
+                                         :hint="__('Batocera shares to guests: leave both empty. A NAS usually wants its own account.')">
+                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <flux:field>
+                                    <div class="flex items-center gap-2">
+                                        <flux:label>{{ __('Username') }}</flux:label>
+                                        <x-info :text="__('Leave empty for a guest share.')" />
+                                    </div>
+                                    <flux:input wire:model="username" :placeholder="__('Optional')" autocomplete="off" />
+                                    <flux:error name="username" />
+                                </flux:field>
+                                <flux:field>
+                                    <div class="flex items-center gap-2">
+                                        <flux:label>{{ __('Password') }}</flux:label>
+                                        <x-info :text="__('Kept encrypted, and never sent back to the browser.')" />
+                                    </div>
+                                    <flux:input wire:model="password" type="password" autocomplete="new-password"
+                                                :placeholder="$editing !== null ? __('Unchanged unless typed') : __('Optional')" />
+                                    <flux:error name="password" />
+                                </flux:field>
+                            </div>
+                        </x-settings.step>
 
-                        {{-- Step two: ask the machine for its shares, and pick one. --}}
-                        <div>
-                            <flux:button size="sm" variant="ghost" icon="folder-open" type="button" wire:click="listShares" x-bind:disabled="$wire.listToken !== null">
+                        {{-- Step three: ask the machine for its shares, and pick one. --}}
+                        <x-settings.step number="3" :title="__('Pick the share')"
+                                         :hint="__('Ask the machine which shares it has, then choose one. Batocera\'s is called share.')">
+                            <flux:button size="sm" variant="filled" icon="folder-open" type="button" wire:click="listShares" x-bind:disabled="$wire.listToken !== null">
                                 {{ __('List its shares') }}
                             </flux:button>
 
@@ -359,39 +383,58 @@ new #[Title('Destinations')] class extends Component
                                         },
                                         destroy() { this.stop?.(); clearTimeout(this.timer); },
                                     }"
-                                    class="mt-2 flex items-center gap-2 text-sm text-fg-soft"
+                                    class="mt-3 flex items-center gap-2 text-sm text-fg-soft"
                                 >
                                     <flux:icon.loading class="size-4" />
                                     {{ __('Asking :host for its shares…', ['host' => $host]) }}
                                 </div>
                             @elseif ($this->listingProblem() !== null)
-                                <p class="mt-2 text-sm text-danger">{{ $this->listingProblem() }}</p>
+                                <p class="mt-3 text-sm text-danger">{{ $this->listingProblem() }}</p>
                             @elseif ($listing !== null && $listing['shares'] === [])
-                                <p class="mt-2 text-sm text-fg-faint">{{ __('It answered, but shares nothing this account can see.') }}</p>
-                            @endif
-                        </div>
-
-                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            @if (($listing['shares'] ?? []) !== [])
-                                <flux:select wire:model="share" :label="__('Share')" :placeholder="__('Choose a share')">
-                                    @foreach ($listing['shares'] as $shareName)
-                                        <flux:select.option value="{{ $shareName }}">{{ $shareName }}</flux:select.option>
-                                    @endforeach
-                                </flux:select>
-                            @else
-                                <flux:input wire:model="share" :label="__('Share')" placeholder="share" />
+                                <p class="mt-3 text-sm text-fg-faint">{{ __('It answered, but shares nothing this account can see.') }}</p>
                             @endif
 
-                            <flux:input wire:model="folder" :label="__('Folder')" :placeholder="__('The share\'s root')"
-                                        :description="__('The folder that holds roms/ — empty for Batocera\'s share. Not roms/ itself.')" />
-                        </div>
+                            <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <flux:field>
+                                    <div class="flex items-center gap-2">
+                                        <flux:label>{{ __('Share') }}</flux:label>
+                                        <x-info :text="__('Just the share\'s name, without slashes. A folder inside it goes in Folder.')" />
+                                    </div>
+                                    @if (($listing['shares'] ?? []) !== [])
+                                        <flux:select wire:model="share" :placeholder="__('Choose a share')">
+                                            @foreach ($listing['shares'] as $shareName)
+                                                <flux:select.option value="{{ $shareName }}">{{ $shareName }}</flux:select.option>
+                                            @endforeach
+                                        </flux:select>
+                                    @else
+                                        <flux:input wire:model="share" placeholder="share" />
+                                    @endif
+                                    <flux:error name="share" />
+                                </flux:field>
 
-                        <div class="flex gap-2">
-                            <flux:button variant="primary" type="submit">{{ $editing !== null ? __('Save changes') : __('Save destination') }}</flux:button>
-                            @if ($editing !== null)
-                                <flux:button variant="ghost" type="button" wire:click="cancelEdit">{{ __('Cancel') }}</flux:button>
-                            @endif
-                        </div>
+                                <flux:field>
+                                    <div class="flex items-center gap-2">
+                                        <flux:label>{{ __('Folder') }}</flux:label>
+                                        <x-info :text="__('Empty for Batocera. Elsewhere, the folder that holds roms/ — not roms/ itself.')" />
+                                    </div>
+                                    <flux:input wire:model="folder" :placeholder="__('Optional — the share\'s root')" />
+                                    <flux:error name="folder" />
+                                </flux:field>
+                            </div>
+                        </x-settings.step>
+
+                        {{-- Step four: what Send to lists it as. --}}
+                        <x-settings.step number="4" :title="__('Name it')"
+                                         :hint="__('What Send to lists it as. Filled in for you when you pick a machine.')">
+                            <flux:input wire:model="name" :label="__('Name')" placeholder="Living room Batocera" />
+
+                            <div class="mt-5 flex gap-2">
+                                <flux:button variant="primary" type="submit">{{ $editing !== null ? __('Save changes') : __('Save destination') }}</flux:button>
+                                @if ($editing !== null)
+                                    <flux:button variant="ghost" type="button" wire:click="cancelEdit">{{ __('Cancel') }}</flux:button>
+                                @endif
+                            </div>
+                        </x-settings.step>
                     </form>
                 </div>
             </div>
@@ -401,7 +444,7 @@ new #[Title('Destinations')] class extends Component
                     <p class="kicker mb-3 text-fg-faint">{{ __('Saved') }}</p>
 
                     @if ($this->destinations->isEmpty())
-                        <p class="text-sm text-fg-faint">{{ __('None yet. A USB drive on this computer needs no setting up: Send to offers it always.') }}</p>
+                        <p class="text-sm text-fg-faint">{{ __('None yet. Add one on the left and it shows up in Send to.') }}</p>
                     @else
                         <ul class="flex flex-col gap-2.5">
                             @foreach ($this->destinations as $destination)
@@ -421,6 +464,26 @@ new #[Title('Destinations')] class extends Component
                             @endforeach
                         </ul>
                     @endif
+                </div>
+
+                {{-- What people ask before they add one. --}}
+                <div class="rounded-xl border border-line bg-surface p-5">
+                    <p class="kicker mb-3 text-fg-faint">{{ __('Good to know') }}</p>
+
+                    <ul class="flex flex-col gap-3 text-sm text-fg-soft">
+                        <li class="flex gap-2.5">
+                            <flux:icon.document-duplicate variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
+                            <span>{{ __('Send to copies. Your library keeps every file.') }}</span>
+                        </li>
+                        <li class="flex gap-2.5">
+                            <flux:icon.computer-desktop variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
+                            <span>{{ __('A USB drive on this computer needs no setting up: Send to always offers it.') }}</span>
+                        </li>
+                        <li class="flex gap-2.5">
+                            <flux:icon.folder variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
+                            <span>{{ __('Send to adds roms/ to every path itself, so point Folder above it, never at it.') }}</span>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </div>

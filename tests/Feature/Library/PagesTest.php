@@ -7,6 +7,7 @@ use App\Jobs\InspectGameFile;
 use App\Jobs\MatchGame;
 use App\Jobs\MeasureLibrary;
 use App\Jobs\RateGame;
+use App\Jobs\RunConversion;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
 use App\Jobs\WriteConsoleExports;
@@ -823,6 +824,31 @@ it('counts a queued export on the Toolbox row, not on Artwork', function () {
 
     expect($activity->queues['toolbox']->remaining())->toBe(1)
         ->and($activity->queues['artwork']->remaining())->toBe(0);
+});
+
+it('runs conversions on a queue of their own, not behind the toolbox', function () {
+    Queue::fake();
+
+    RunConversion::dispatch(1);
+
+    Queue::assertPushedOn('toolbox-conversion', RunConversion::class);
+});
+
+it('counts a queued conversion on the Toolbox - Conversion row, not on Toolbox', function () {
+    DB::table('jobs')->insert([
+        'queue' => 'toolbox-conversion',
+        'payload' => '{}',
+        'attempts' => 0,
+        'available_at' => now()->timestamp,
+        'created_at' => now()->timestamp,
+    ]);
+    SystemActivity::forget();
+
+    $activity = SystemActivity::current();
+
+    expect($activity->queues['conversion']->label)->toBe('Toolbox - Conversion')
+        ->and($activity->queues['conversion']->remaining())->toBe(1)
+        ->and($activity->queues['toolbox']->remaining())->toBe(0);
 });
 
 /**
