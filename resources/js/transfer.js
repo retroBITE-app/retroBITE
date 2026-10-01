@@ -16,19 +16,20 @@ import { fetchOk, recallDrive, rememberDrive, rootOf, size } from './usb-transfe
 
 /**
  * The modal's state. `targets` maps each target's key to its label, what to
- * tell the user, the folders that mark its root, and the URLs for this game:
- * { batocera: { label, hint, roots, confirmRoot, plan, gamelist } }. `shares`
- * maps each saved destination's id to its label and address. `label` is what
- * the tray calls this transfer.
+ * tell the user, the folders that mark its root, the question to ask when
+ * none is there, and the URLs for this game:
+ * { batocera: { label, hint, root, confirm, plan, gamelist } }. `target` is
+ * the one to start on. `shares` maps each saved destination's id to its label
+ * and address. `label` is what the tray calls this transfer.
  *
  * Choosing and checking is done here; the copying is $store.usb's, so it goes
  * on when the modal is closed or the page left.
  */
-export default ({ targets, shares, label }) => ({
+export default ({ targets, target, shares, label }) => ({
     supported: window.isSecureContext && 'showDirectoryPicker' in window,
     targets,
     shares,
-    target: Object.keys(targets)[0],
+    target: target ?? Object.keys(targets)[0],
     destination: 'usb', // 'usb', or a share's id
     plan: null,
     drive: null,
@@ -96,15 +97,15 @@ export default ({ targets, shares, label }) => ({
             return;
         }
 
-        const { roots, confirmRoot, plan, gamelist } = this.targets[this.target];
+        const { root, confirm, plan, gamelist } = this.targets[this.target];
 
-        if (!confirmedRoot && !(await rootOf(this.drive, roots))) {
+        if (!confirmedRoot && !(await rootOf(this.drive, root))) {
             // None of the target's roots: ask before making this the root.
             this.status = 'confirm-root';
             return;
         }
 
-        this.$store.usb.enqueue({ label, plan, gamelist, roots, confirmRoot, confirmed: confirmedRoot }, this.drive);
+        this.$store.usb.enqueue({ label, plan, gamelist, root, confirm, confirmed: confirmedRoot }, this.drive);
         this.status = 'sent';
     },
 });

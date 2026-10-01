@@ -7,6 +7,7 @@ namespace App\Transfers;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\MediaRegions;
+use Illuminate\Support\Str;
 
 /**
  * The versions of a game on disk, and the one to send.
@@ -91,13 +92,21 @@ final class GameVersions
     }
 
     /**
-     * The version to send, or an empty list for a game with nothing on disk.
+     * The version to send, or an empty list for a game with nothing on disk —
+     * or, asked for certain formats, with no version in any of them.
      *
+     * @param  list<string>  $extensions  lower case, e.g. ['iso', 'cso']; none for any
      * @return list<GameFile>
      */
-    public static function preferred(Game $game): array
+    public static function preferred(Game $game, array $extensions = []): array
     {
         $versions = self::of($game);
+
+        if ($extensions !== []) {
+            $versions = array_values(array_filter($versions, function (array $version) use ($extensions): bool {
+                return in_array(Str::lower((string) $version[0]->extension), $extensions, true);
+            }));
+        }
 
         if (count($versions) < 2) {
             return $versions[0] ?? [];

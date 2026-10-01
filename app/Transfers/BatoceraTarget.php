@@ -129,7 +129,7 @@ final class BatoceraTarget extends GamelistTarget
         return 'Batocera';
     }
 
-    public function roots(): array
+    public function root(): array
     {
         return ['roms', 'batocera/roms'];
     }

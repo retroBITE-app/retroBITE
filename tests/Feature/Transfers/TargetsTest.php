@@ -89,7 +89,7 @@ function destinations(TransferTarget $target, Game $game): array
 
 it('offers every front-end, Batocera first', function () {
     expect(array_map(fn (TransferTarget $target) => $target->key(), TransferTargets::all()))
-        ->toBe(['batocera', 'recalbox', 'retropie', 'es-de', 'daijishou']);
+        ->toBe(['batocera', 'recalbox', 'retropie', 'es-de', 'daijishou', 'opl']);
 });
 
 it('lays a game out for Recalbox, the mix as its picture', function () {
@@ -190,8 +190,8 @@ it('uses each front-end\'s name for a system', function () {
 });
 
 it('knows where each layout starts on a drive, and where a console with nothing to send lists it', function () {
-    expect(app(BatoceraTarget::class)->roots())->toBe(['roms', 'batocera/roms'])
-        ->and(app(EsDeTarget::class)->roots())->toBe(['roms'])
+    expect(app(BatoceraTarget::class)->root())->toBe(['roms', 'batocera/roms'])
+        ->and(app(EsDeTarget::class)->root())->toBe(['roms'])
         ->and(ConsoleTransfer::plan(app(EsDeTarget::class), 'snes')['plan']->gamelist)->toBe('roms/gamelists/snes/gamelist.xml');
 });
 

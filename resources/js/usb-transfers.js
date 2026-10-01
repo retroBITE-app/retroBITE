@@ -12,9 +12,13 @@
  * warn before a reload while something is being written.
  *
  * Nothing on the drive is overwritten or removed, except the game's own entry
- * in the game list: a file already there at the same size is skipped, and each
- * file is written under a temporary name and renamed when complete, so a
- * half-written ROM never sits on the drive under its real name. See
+ * in the game list: a file already there at the same size is skipped, a
+ * target's own file (OPL's config and art) already there is left as it is,
+ * and every file is written straight to its own name. The browser already
+ * writes through a swap file (.crswap) and puts the bytes under the name only
+ * on close, so a half-written ROM never sits there; a renamed temporary file
+ * would add nothing, and Chromium refuses the rename once the click that
+ * started it is a few seconds old. See
  * docs/adr/0003-transfers-from-the-browser.md.
  */
 
@@ -112,13 +116,18 @@ function folders(root) {
 }
 
 /**
- * Where the target's tree starts on this drive: the chosen folder, or a
- * folder inside it, holding one of the target's roots — roms/ or
- * batocera/roms/ for Batocera — or null when none does. The layout of an
- * external drive is not documented, so it is recognised rather than assumed.
+ * Where the target's tree starts on this drive: the folder holding the first
+ * of its markers found — roms/ for Batocera, at the top or under batocera/ —
+ * or null when none is, since the layout of an external drive is recognised
+ * rather than assumed. A target with no markers, such as OPL, starts at the
+ * chosen folder itself.
  */
-export async function rootOf(drive, roots) {
-    for (const root of roots) {
+export async function rootOf(drive, markers) {
+    if (markers.length === 0) {
+        return drive;
+    }
+
+    for (const root of markers) {
         const parts = root.split('/');
         let parent = drive;
 
@@ -164,7 +173,7 @@ const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribu
 function savedQueue() {
     try {
         const jobs = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]');
-        return Array.isArray(jobs) ? jobs.filter((job) => job?.plan && job?.gamelist && Array.isArray(job?.roots)) : [];
+        return Array.isArray(jobs) ? jobs.filter((job) => job?.plan && job?.gamelist && Array.isArray(job?.root)) : [];
     } catch {
         return [];
     }
@@ -185,10 +194,10 @@ function saveQueue(jobs) {
 const permission = { mode: 'readwrite' };
 
 /**
- * The store. A job is { label, plan, gamelist, roots, confirmed }: what to
- * call it, the URLs of its plan and its merged game list, the folders that
- * mark its target's root, and whether the person agreed to write it to a
- * drive holding none of them.
+ * The store. A job is { label, plan, gamelist, root, confirm, confirmed }:
+ * what to call it, the URLs of its plan and its merged game list, the folders
+ * that mark its target's root and what to say when the drive has none, and
+ * whether the person agreed to write it to a drive holding none of them.
  */
 export default () => ({
     jobs: [], // the one running first, then those waiting
@@ -320,10 +329,10 @@ export default () => ({
     },
 
     async runOne(job) {
-        const root = (await rootOf(this.drive, job.roots)) ?? (job.confirmed ? this.drive : null);
+        const root = (await rootOf(this.drive, job.root)) ?? (job.confirmed ? this.drive : null);
 
         if (!root) {
-            throw new Error(job.confirmRoot ?? 'The drive is not the one this was started on.');
+            throw new Error(job.confirm || 'The drive is not the one this was started on.');
         }
 
         this.label = job.label;
@@ -342,8 +351,15 @@ export default () => ({
             const plan = await (await fetchOk(job.plan, this.abort.signal)).json();
             this.total = plan.bytes;
 
-            await this.copyAll(root, plan.files);
-            await this.writeGamelist(root, plan.gamelist, job.gamelist);
+            const tree = folders(root);
+
+            await this.copyAll(tree, plan.files);
+            await this.writeExtras(tree, plan.extras ?? []);
+
+            // A system that keeps no list, such as OPL: the files were the send.
+            if (plan.gamelist !== null) {
+                await this.writeGamelist(root, plan.gamelist, job.gamelist);
+            }
         } finally {
             clearInterval(this.ticker);
             this.ticker = null;
@@ -390,9 +406,8 @@ export default () => ({
      * failure stops the rest from starting; the ones already under way finish,
      * and then it is thrown, so the tray says what went wrong.
      */
-    async copyAll(root, files) {
+    async copyAll(tree, files) {
         const queue = [...files];
-        const tree = folders(root);
         let failure = null;
 
         const worker = async () => {
@@ -430,9 +445,7 @@ export default () => ({
         }
 
         const response = await fetchOk(file.url, this.abort.signal);
-        const partName = `.${name}.part`;
-        const handle = await dir.getFileHandle(partName, { create: true });
-        const writable = await handle.createWritable();
+        const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
 
         const counted = new TransformStream({
             transform: (chunk, controller) => {
@@ -442,18 +455,34 @@ export default () => ({
             },
         });
 
-        // Stopped halfway: the part file stays under its temporary name, and
-        // is written again from the start next time.
+        // Stopped halfway: the bytes are in the browser's .crswap beside it,
+        // and the file under the real name, made empty by getFileHandle(), is
+        // left at 0 bytes. Short of its size, it is written again from the
+        // start next time.
         await response.body.pipeThrough(counted).pipeTo(writable, { signal: this.abort.signal });
+    },
 
-        if (typeof handle.move === 'function') {
-            await handle.move(name);
-        } else {
-            // No rename in this browser: write again under the real name.
-            const final = await (await dir.getFileHandle(name, { create: true })).createWritable();
-            await final.write(await handle.getFile());
-            await final.close();
-            await dir.removeEntry(partName);
+    /**
+     * The target's own files, once the game's are on the drive — OPL's config
+     * and art — each fetched as the server makes it and written, unless the
+     * drive has one already: somebody may have tuned it there.
+     */
+    async writeExtras(tree, extras) {
+        for (const extra of extras) {
+            const parts = extra.destination.split('/');
+            const name = parts.pop();
+            const folder = parts.join('/');
+            this.current = extra.destination;
+
+            if ((await tree.names(folder)).has(name)) {
+                this.skipped++;
+                continue;
+            }
+
+            const response = await fetchOk(extra.url, this.abort.signal);
+            const writable = await (await (await tree.handle(folder)).getFileHandle(name, { create: true })).createWritable();
+            await writable.write(await response.blob());
+            await writable.close();
         }
     },
 

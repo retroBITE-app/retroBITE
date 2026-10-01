@@ -12,12 +12,16 @@ final class TransferPlan
 {
     /**
      * @param  list<PlannedFile>  $files
-     * @param  string  $gamelist  relative to the drive's root, e.g. roms/psx/gamelist.xml
+     * @param  string|null  $gamelist  relative to the drive's root, e.g. roms/psx/gamelist.xml;
+     *                                 null for a system that keeps none
+     * @param  list<array{url: string, destination: string}>  $extras  the target's own
+     *                                                                 files, see TransferTarget::extras()
      */
     public function __construct(
         public readonly array $files,
-        public readonly string $gamelist,
+        public readonly ?string $gamelist,
         public readonly int $games = 1,
+        public readonly array $extras = [],
     ) {}
 
     /**
@@ -26,12 +30,15 @@ final class TransferPlan
      *
      * @param  list<TransferPlan>  $plans
      */
-    public static function combine(array $plans, string $gamelist): self
+    public static function combine(array $plans, ?string $gamelist): self
     {
         return new self(
             array_merge(...array_map(fn (TransferPlan $plan): array => $plan->files, $plans)),
             $gamelist,
             count($plans),
+            array_merge(...array_map(function (TransferPlan $plan): array {
+                return $plan->extras;
+            }, $plans)),
         );
     }
 
@@ -40,11 +47,12 @@ final class TransferPlan
         return array_sum(array_map(fn (PlannedFile $file): int => $file->size, $this->files));
     }
 
-    /** @return array{files: list<array{url: string, destination: string, size: int}>, gamelist: string, bytes: int, games: int} */
+    /** @return array{files: list<array{url: string, destination: string, size: int}>, extras: list<array{url: string, destination: string}>, gamelist: string|null, bytes: int, games: int} */
     public function toArray(): array
     {
         return [
             'files' => array_map(fn (PlannedFile $file): array => $file->toArray(), $this->files),
+            'extras' => $this->extras,
             'gamelist' => $this->gamelist,
             'bytes' => $this->bytes(),
             'games' => $this->games,

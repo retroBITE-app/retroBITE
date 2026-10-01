@@ -1766,8 +1766,13 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     ])
                 >
                     <flux:icon :name="$contentTab['icon']" class="size-4" />
-                    {{ $contentTab['label'] }}
-                    <span class="font-mono text-xs text-fg-dim">{{ $contentTab['count'] }}</span>
+
+                    {{-- Label and count on one baseline: the count is mono and
+                         smaller, and centred apart the two sit at two heights. --}}
+                    <span class="flex items-baseline gap-2">
+                        {{ $contentTab['label'] }}
+                        <span class="font-mono text-xs text-fg-dim">{{ $contentTab['count'] }}</span>
+                    </span>
                 </button>
             @endforeach
         </div>

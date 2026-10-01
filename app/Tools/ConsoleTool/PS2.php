@@ -253,6 +253,117 @@ final class PS2 extends ConsoleTools
     }
 
     /**
+     * The art pieces OPL reads, in the order they are written: the cover
+     * (_COV), the disc icon (_ICO), and the info page's in-game and title
+     * screenshots (_SCR, _SCR2).
+     *
+     * @return list<MediaKind>
+     */
+    public function artPieces(): array
+    {
+        return [MediaKind::Cover, MediaKind::Disc, MediaKind::Screenshot, MediaKind::TitleScreen];
+    }
+
+    /** Where a game's config goes, relative to the folder OPL reads: CFG/SLES_503.86.cfg. */
+    public function configPathFor(string $serial): string
+    {
+        return $this->configDir.'/'.$serial.'.cfg';
+    }
+
+    /** Where one piece of a game's art goes, relative to the folder OPL reads: ART/SLES_503.86_COV.png. */
+    public function artPathFor(string $serial, MediaKind $kind): string
+    {
+        [$suffix, $art] = $this->piece($kind);
+
+        return $this->artDir.'/'.$serial.$suffix.'.'.$art->format->value;
+    }
+
+    /**
+     * One piece of a game's art as the bytes OPL reads, re-encoded from the
+     * artwork already downloaded; null when there is none of that kind.
+     * Nothing is fetched. Writes nothing: the library export and a transfer
+     * to a drive both use it.
+     */
+    public function artFor(Game $game, MediaKind $kind): ?string
+    {
+        $artwork = $game->artwork($kind);
+
+        if ($artwork === null) {
+            return null;
+        }
+
+        $source = Storage::disk('media')->get($artwork->path);
+
+        if (! is_string($source) || $source === '') {
+            return null;
+        }
+
+        [, $art] = $this->piece($kind);
+
+        return $art->encode($source);
+    }
+
+    /**
+     * The serial a game's OPL files are named after, or null: a game still
+     * carrying its filename as a title would write that filename back out as
+     * metadata, and a disc whose serial has not been read has nothing to be
+     * named after. How the library itself is arranged is not asked here — a
+     * drive written for OPL is laid out that way whatever the library is.
+     */
+    public function serialFor(Game $game): ?string
+    {
+        return $game->status === GameStatus::Matched ? $game->licenseId() : null;
+    }
+
+    /**
+     * The whole text of a game's config file. Writes nothing: the library
+     * export and a transfer to a drive both use it.
+     *
+     * Any $-prefixed line already in the existing file is carried over. Those
+     * are OPL's own per-game settings — $DMA, $VMC, a compatibility mask
+     * somebody worked out by trial — and dropping them would quietly reset a
+     * game that ran.
+     */
+    public function configFor(Game $game, string $existing = ''): string
+    {
+        $fields = [
+            'Title' => $game->title,
+            'Genre' => (string) $game->genre,
+            // Provider dates arrive as a date or a full timestamp.
+            'Release' => Str::before((string) $game->release_date, 'T'),
+            'Developer' => (string) $game->developer,
+            'Rating' => $this->starsFor($game->rating),
+            'Description' => $this->text->summarise((string) $game->description),
+        ];
+
+        $lines = [];
+
+        foreach ($fields as $key => $value) {
+            $value = $this->text->oneLine($value);
+
+            // An empty field is left out rather than written blank: OPL shows
+            // the key either way, and "Developer=" reads as a missing answer.
+            if ($value !== '') {
+                $lines[] = $key.'='.$value;
+            }
+        }
+
+        $title = $this->text->oneLine($game->title);
+
+        if ($title !== '') {
+            // A comment to OPL. Kept because the files on a working drive have
+            // it, and a diff against one should come back empty.
+            $lines[] = '#LongName='.$title;
+        }
+
+        foreach ($this->userSettings($existing) as $setting) {
+            $lines[] = $setting;
+        }
+
+        return implode("\n", $lines)."\n";
+    }
+
+    /**
      * Run the chosen export over every game on the console, counting as it goes.
      *
      * @return array{written: int, skipped: int, failed: int}
@@ -324,13 +435,14 @@ final class PS2 extends ConsoleTools
     private function writeConfig(): bool
     {
         $serial = $this->serialForCurrentGame();
+        $game = $this->game;
 
-        if ($serial === null) {
+        if ($serial === null || $game === null) {
             return false;
         }
 
         $gate = app(LibraryPath::class);
-        $path = $this->configDir.'/'.$serial.'.cfg';
+        $path = $this->configPathFor($serial);
         $this->existing = $gate->get($this->console, $path);
 
         // Already written. Rerunning is meant to be cheap and is meant not to
@@ -340,7 +452,7 @@ final class PS2 extends ConsoleTools
         }
 
         $gate->ensureDirectory($this->console, $this->configDir);
-        $gate->put($this->console, $path, $this->configForCurrentGame());
+        $gate->put($this->console, $path, $this->configFor($game, $this->existing));
 
         return true;
     }
@@ -365,19 +477,12 @@ final class PS2 extends ConsoleTools
 
         $game->loadMissing('media');
 
-        $pieces = [
-            [MediaKind::Cover, $this->coverSuffix, $this->cover],
-            [MediaKind::Disc, $this->discSuffix, $this->disc],
-            [MediaKind::Screenshot, $this->screenshotSuffix, $this->screen],
-            [MediaKind::TitleScreen, $this->titleScreenSuffix, $this->screen],
-        ];
-
         $written = false;
 
         // Every piece tried, not stopped at the first: each is its own file
         // with its own skip check.
-        foreach ($pieces as [$kind, $suffix, $art]) {
-            $written = $this->writeArtPiece($game, $serial, $kind, $suffix, $art) || $written;
+        foreach ($this->artPieces() as $kind) {
+            $written = $this->writeArtPiece($game, $serial, $kind) || $written;
         }
 
         return $written;
@@ -393,31 +498,44 @@ final class PS2 extends ConsoleTools
      * somebody's drive is not this method's business — and the first run
      * after writes the .png beside each.
      */
-    private function writeArtPiece(Game $game, string $serial, MediaKind $kind, string $suffix, CoverArt $art): bool
+    private function writeArtPiece(Game $game, string $serial, MediaKind $kind): bool
     {
-        $artwork = $game->artwork($kind);
-
-        if ($artwork === null) {
+        if ($game->artwork($kind) === null) {
             return false;
         }
 
         $gate = app(LibraryPath::class);
-        $path = $this->artDir.'/'.$serial.$suffix.'.'.$art->format->value;
+        $path = $this->artPathFor($serial, $kind);
 
         if (! $this->force && $gate->exists($this->console, $path)) {
             return false;
         }
 
-        $source = Storage::disk('media')->get($artwork->path);
+        $bytes = $this->artFor($game, $kind);
 
-        if (! is_string($source) || $source === '') {
+        if ($bytes === null) {
             return false;
         }
 
         $gate->ensureDirectory($this->console, $this->artDir);
-        $gate->put($this->console, $path, $art->encode($source));
+        $gate->put($this->console, $path, $bytes);
 
         return true;
+    }
+
+    /**
+     * The suffix and the encoder of one art piece.
+     *
+     * @return array{0: string, 1: CoverArt}
+     */
+    private function piece(MediaKind $kind): array
+    {
+        return match ($kind) {
+            MediaKind::Disc => [$this->discSuffix, $this->disc],
+            MediaKind::Screenshot => [$this->screenshotSuffix, $this->screen],
+            MediaKind::TitleScreen => [$this->titleScreenSuffix, $this->screen],
+            default => [$this->coverSuffix, $this->cover],
+        };
     }
 
     /**
@@ -434,11 +552,7 @@ final class PS2 extends ConsoleTools
             return null;
         }
 
-        if ($this->game->status !== GameStatus::Matched) {
-            return null;
-        }
-
-        return $this->game->licenseId();
+        return $this->serialFor($this->game);
     }
 
     /** A name with its leading OPL license ID prefix taken off, or as it was. */
@@ -455,58 +569,6 @@ final class PS2 extends ConsoleTools
     private function arrangedForOpl(): bool
     {
         return ConsoleSourceFolder::layoutKeyFor($this->console) === (new OplLayout)->key();
-    }
-
-    /**
-     * The whole text of the current game's config file.
-     *
-     * Any $-prefixed line already in the file is carried over. Those are OPL's
-     * own per-game settings — $DMA, $VMC, a compatibility mask somebody worked
-     * out by trial — and dropping them would quietly reset a game that ran.
-     */
-    private function configForCurrentGame(): string
-    {
-        $game = $this->game;
-
-        if ($game === null) {
-            return '';
-        }
-
-        $fields = [
-            'Title' => $game->title,
-            'Genre' => (string) $game->genre,
-            // Provider dates arrive as a date or a full timestamp.
-            'Release' => Str::before((string) $game->release_date, 'T'),
-            'Developer' => (string) $game->developer,
-            'Rating' => $this->starsFor($game->rating),
-            'Description' => $this->text->summarise((string) $game->description),
-        ];
-
-        $lines = [];
-
-        foreach ($fields as $key => $value) {
-            $value = $this->text->oneLine($value);
-
-            // An empty field is left out rather than written blank: OPL shows
-            // the key either way, and "Developer=" reads as a missing answer.
-            if ($value !== '') {
-                $lines[] = $key.'='.$value;
-            }
-        }
-
-        $title = $this->text->oneLine($game->title);
-
-        if ($title !== '') {
-            // A comment to OPL. Kept because the files on a working drive have
-            // it, and a diff against one should come back empty.
-            $lines[] = '#LongName='.$title;
-        }
-
-        foreach ($this->userSettings() as $setting) {
-            $lines[] = $setting;
-        }
-
-        return implode("\n", $lines)."\n";
     }
 
     /**
@@ -530,11 +592,11 @@ final class PS2 extends ConsoleTools
      *
      * @return string[]
      */
-    private function userSettings(): array
+    private function userSettings(string $existing): array
     {
         $kept = [];
 
-        foreach (preg_split('/\R/', $this->existing) ?: [] as $line) {
+        foreach (preg_split('/\R/', $existing) ?: [] as $line) {
             if (Str::startsWith(trim($line), '$')) {
                 $kept[] = rtrim($line);
             }

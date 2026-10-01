@@ -9,6 +9,7 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
+use App\Support\Console;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
@@ -62,6 +63,12 @@ abstract class GamelistTarget implements TransferTarget
         return [];
     }
 
+    /** Every console: a front-end with no system for one simply never shows it. */
+    public function supports(Console $console): bool
+    {
+        return true;
+    }
+
     public function system(string $console): string
     {
         return $this->systems()[$console] ?? $console;
@@ -72,10 +79,20 @@ abstract class GamelistTarget implements TransferTarget
         return $this->romsFolder().'/'.$this->system($console).'/gamelist.xml';
     }
 
-    /** @return non-empty-list<string> */
-    public function roots(): array
+    public function root(): array
     {
         return [$this->romsFolder()];
+    }
+
+    /** None: everything these front-ends read is copied, and their list is merged. */
+    public function extras(Game $game): array
+    {
+        return [];
+    }
+
+    public function extra(Game $game, string $destination): ?string
+    {
+        return null;
     }
 
     public function hint(): ?string

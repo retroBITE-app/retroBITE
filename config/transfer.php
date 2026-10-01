@@ -3,6 +3,7 @@
 use App\Transfers\BatoceraTarget;
 use App\Transfers\DaijishouTarget;
 use App\Transfers\EsDeTarget;
+use App\Transfers\OplTarget;
 use App\Transfers\RecalboxTarget;
 use App\Transfers\RetroPieTarget;
 
@@ -10,8 +11,9 @@ return [
 
     /*
      * The systems a game can be sent to, by key. Each lays out a drive its own
-     * way; see App\Transfers\TransferTarget and docs/adr/0005. The first is
-     * what Send to offers first.
+     * way; see App\Transfers\TransferTarget and docs/adr/0005. Only those
+     * that play a console's games are offered for it; the first of them is
+     * offered first, unless its library is laid out for another.
      */
     'targets' => [
         'batocera' => BatoceraTarget::class,
@@ -19,6 +21,7 @@ return [
         'retropie' => RetroPieTarget::class,
         'es-de' => EsDeTarget::class,
         'daijishou' => DaijishouTarget::class,
+        'opl' => OplTarget::class,
     ],
 
     /*

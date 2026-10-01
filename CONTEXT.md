@@ -181,12 +181,15 @@ copy the game holds. A whole console can be sent at once — every identified
 game, one version each, one game list. A copy going out: the library
 is read, never changed, and nothing already at the destination is
 overwritten or removed except the game's own entry in the game list. Not an
-OPL export, which writes a loader's files *into* the library.
+OPL export, which writes a loader's files *into* the library — though a
+transfer laid out for OPL makes the same CFG and ART files, for the drive.
 
-**Transfer target** — a front-end a destination can be prepared for, with its
-own folder layout, system names and game list: Batocera, Recalbox, RetroPie,
-ES-DE (as on Android) and Daijishō, one class each (docs/adr/0005). Chosen
-per transfer, not per console — the same game can go to more than one.
+**Transfer target** — a system a destination can be prepared for, with its
+own folder layout, system names and, where it keeps one, its own game list:
+Batocera, Recalbox, RetroPie, ES-DE (as on Android) and Daijishō for every
+console, Open PS2 Loader for PS2 — one class each (docs/adr/0005). Chosen per
+transfer, not per console — the same game can go to more than one — with the
+one the console's library is laid out for offered first.
 
 **Destination** — where a transfer goes. A USB drive on the computer in front
 of the person, written by the browser and never saved; or a **network share**

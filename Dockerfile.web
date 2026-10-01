@@ -84,19 +84,22 @@ RUN apk add --no-cache build-base git cmake meson ninja-build pkgconf python3 li
 # project and asking for the chdman target builds its four libraries and
 # nothing else, in about a minute. The bx patch is Alpine's own
 # (aports testing/mame): bx has no musl branch and assumes glibc's
-# fseeko64/pthread_setname_np otherwise.
+# fseeko64/pthread_setname_np otherwise. The config carries the architecture:
+# `release64` adds -m64, which gcc on arm64 refuses, so ARM builds use
+# `release` as MAME's own makefile does for aarch64.
 ARG MAME_TAG=mame0289
 COPY patches/mame-musl-bx.patch /src/mame-musl-bx.patch
 RUN git clone --depth 1 --branch "$MAME_TAG" https://github.com/mamedev/mame.git /src/mame \
     && cd /src/mame \
     && patch -p1 < /src/mame-musl-bx.patch \
     && export CFLAGS=-DBX_CRT_MUSL CXXFLAGS=-DBX_CRT_MUSL \
+    && case "$(uname -m)" in x86_64) MAME_CONFIG=release64 ;; *) MAME_CONFIG=release ;; esac \
     && make TOOLS=1 EMULATOR=0 NOWERROR=1 REGENIE=1 OSD=sdl NO_X11=1 NO_USE_XINPUT=1 NO_OPENGL=1 \
         NO_USE_MIDI=1 NO_USE_PORTAUDIO=1 NO_USE_PULSEAUDIO=1 NO_USE_PIPEWIRE=1 USE_QTDEBUG=0 \
         USE_SYSTEM_LIB_ZLIB=1 USE_SYSTEM_LIB_FLAC=1 USE_SYSTEM_LIB_ZSTD=1 USE_SYSTEM_LIB_EXPAT=1 USE_SYSTEM_LIB_UTF8PROC=1 \
         generate build/projects/sdl/mame/gmake-linux/Makefile \
-    && make -C build/projects/sdl/mame/gmake-linux config=release64 precompile \
-    && make -C build/projects/sdl/mame/gmake-linux config=release64 -j"$(nproc)" chdman \
+    && make -C build/projects/sdl/mame/gmake-linux config="$MAME_CONFIG" precompile \
+    && make -C build/projects/sdl/mame/gmake-linux config="$MAME_CONFIG" -j"$(nproc)" chdman \
     && install -m755 chdman /usr/local/bin/chdman \
     && rm -rf /src/mame \
     && chdman 2>&1 | grep -q "(${MAME_TAG}"
