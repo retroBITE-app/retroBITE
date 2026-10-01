@@ -9,6 +9,7 @@ use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Matching\MatchResult;
+use App\Support\Matching\ProviderDumps;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -64,7 +65,7 @@ final class GameMatcher
 
         $this->log($game, 'hit', $criteria, ['provider_id' => Arr::get($payload, 'provider_id')]);
 
-        return $this->apply($game, $payload);
+        return $this->apply($game, $payload, $file);
     }
 
     /**
@@ -118,6 +119,9 @@ final class GameMatcher
 
         $game->update(['status' => GameStatus::Unmatched]);
 
+        // Nobody answered for these files, but their names still say where they are from.
+        ProviderDumps::record($game, null);
+
         return MatchResult::unmatched($game);
     }
 
@@ -125,13 +129,15 @@ final class GameMatcher
      * Fold the provider's answer into the library.
      *
      * @param  array<string, mixed>  $payload
+     * @param  GameFile|null  $asked  the file the lookup described; none for a game chosen by id
      */
-    private function apply(Game $game, array $payload): MatchResult
+    private function apply(Game $game, array $payload, ?GameFile $asked = null): MatchResult
     {
         $providerId = (int) Arr::get($payload, 'provider_id');
 
         if ($providerId <= 0) {
             $game->update(['status' => GameStatus::Unmatched]);
+            ProviderDumps::record($game, null);
 
             return MatchResult::unmatched($game);
         }
@@ -145,7 +151,7 @@ final class GameMatcher
         // id is the identity, so these are the same game and the placeholder
         // that was made for this file has no reason to survive.
         if ($existing !== null) {
-            return DB::transaction(function () use ($game, $existing, $payload) {
+            return DB::transaction(function () use ($game, $existing, $payload, $asked) {
                 $game->files()->update(['game_id' => $existing->id]);
 
                 // The files carry their RA hashes across with them, so nothing
@@ -178,6 +184,7 @@ final class GameMatcher
                 $game->delete();
 
                 $this->applyDiscNumbers($existing, $payload);
+                ProviderDumps::record($existing, $payload, $asked);
 
                 // Same provider id, so the list is the surviving game's too,
                 // and fresher than whatever it was holding.
@@ -204,6 +211,7 @@ final class GameMatcher
         ]);
 
         $this->applyDiscNumbers($game, $payload);
+        ProviderDumps::record($game, $payload, $asked);
 
         // Kept as well as handed on: the artwork job that follows uses the copy
         // it is given, and a later "fetch missing artwork" uses this one instead

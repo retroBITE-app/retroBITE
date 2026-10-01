@@ -15,6 +15,21 @@ return [
         'jp' => 'Japan',
         'us' => 'United States',
         'wor' => 'World',
+        // Countries a dump is from as often as its box is: the region a file
+        // is recorded as (App\Support\RomRegions) is one of these too.
+        'asi' => 'Asia',
+        'au' => 'Australia',
+        'br' => 'Brazil',
+        'ca' => 'Canada',
+        'cn' => 'China',
+        'de' => 'Germany',
+        'fr' => 'France',
+        'it' => 'Italy',
+        'kr' => 'Korea',
+        'nl' => 'Netherlands',
+        'se' => 'Sweden',
+        'sp' => 'Spain',
+        'uk' => 'United Kingdom',
     ],
 
     /*

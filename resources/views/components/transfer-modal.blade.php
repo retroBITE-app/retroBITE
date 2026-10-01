@@ -30,6 +30,8 @@
         return [$target->key() => [
             'label' => $target->label(),
             'hint' => $target->hint(),
+            // The artwork it can be sent, that this transfer can leave out.
+            'artwork' => collect($target->artworkSlots())->map(fn (array $slot): string => $slot['label'])->all(),
             'root' => $target->root(),
             // What to ask when the chosen folder has none of the target's own.
             'confirm' => $folders->isEmpty() ? '' : __('This folder has no :folders in it. Use it as the root of the drive and create :first here?', [
@@ -44,6 +46,10 @@
                 : route('transfers.gamelist', ['target' => $target->key(), 'gameId' => $game->id]),
         ]];
     })->all();
+
+    // Where the region order starts, before this browser sorted one: the
+    // console's own, else the library's.
+    $regionOrder = App\Support\TransferRegions::orderFor($sentConsole);
 
     $shares = collect($destinations)->mapWithKeys(fn ($destination) => [(string) $destination->id => [
         'label' => $destination->name,
@@ -61,7 +67,7 @@
 @endphp
 
 <flux:modal name="transfer" class="w-full max-w-xl">
-    <div x-data="transfer(@js(['targets' => $targets, 'target' => $recommended, 'shares' => $shares, 'label' => $console?->name ?? $game?->title]))" class="flex flex-col gap-5">
+    <div x-data="transfer(@js(['targets' => $targets, 'target' => $recommended, 'shares' => $shares, 'regions' => $regionOrder, 'console' => $sentConsole?->key, 'label' => $console?->name ?? $game?->title]))" class="flex flex-col gap-5">
         <div>
             <flux:heading size="lg">{{ __('Send to') }}</flux:heading>
             <flux:text class="mt-1">{{ $subject }}</flux:text>
@@ -84,6 +90,35 @@
 
         <template x-if="targets[target].hint">
             <p class="-mt-2 text-xs text-fg-faint" x-text="targets[target].hint"></p>
+        </template>
+
+        {{-- Which version goes, for a game held in several regions: the
+             first region here it has. Starts on the console's order, and
+             keeps whatever was sorted here for the next send. --}}
+        <div>
+            <p class="kicker mb-1 text-fg-faint">{{ __('Region order') }}</p>
+            <p class="mb-2 text-xs text-fg-faint">
+                {{ $console !== null
+                    ? __('Each game sends its version in the first region here it has.')
+                    : __('The version in the first region here the game has.') }}
+                <button type="button" x-show="!regionsAreDefault" x-on:click="regions = [...defaultRegions]" class="cursor-pointer text-accent hover:underline">{{ __('Use the console\'s order') }}</button>
+            </p>
+            <x-region-order x-model="regions" keep-one />
+        </div>
+
+        {{-- What artwork goes along. Only what is downloaded can: a slot with
+             nothing behind it is simply left out, chosen or not. --}}
+        <template x-if="Object.keys(targets[target].artwork).length > 0">
+            <div>
+                <p class="kicker mb-2 text-fg-faint">{{ __('Artwork') }}</p>
+                <div class="flex flex-wrap gap-1.5">
+                    <template x-for="[slot, slotLabel] in Object.entries(targets[target].artwork)" :key="target + slot">
+                        <button type="button" x-on:click="toggleArtwork(slot)" x-bind:aria-pressed="artwork.includes(slot)"
+                                x-bind:class="artwork.includes(slot) ? 'border-accent/50 bg-accent-tint/15 text-accent' : 'border-line-input text-fg-faint line-through'"
+                                class="cursor-pointer rounded-md border px-2 py-1 text-xs transition-colors" x-text="slotLabel"></button>
+                    </template>
+                </div>
+            </div>
         </template>
 
         @if ($shares === [])
@@ -176,34 +211,44 @@
 
         {{-- The drive's copying is the tab's, not this modal's: it shows
              here while the modal is open and in the tray when it is not. --}}
-        <template x-if="destination === 'usb' && $store.usb.status === 'running'">
+        <template x-if="destination === 'usb' && $store.usb.status === 'running' && $store.usb.active">
             <div>
                 <p class="mb-2 flex justify-between gap-3 text-sm text-fg-soft">
-                    <span class="truncate" x-text="$store.usb.label"></span>
+                    <span class="truncate" x-text="$store.usb.active.label"></span>
                     <template x-if="$store.usb.waiting > 0">
                         <span class="shrink-0 text-xs text-fg-faint" x-text="`+${$store.usb.waiting} ` + @js(__('waiting'))"></span>
                     </template>
                 </p>
                 <div class="h-1.5 overflow-hidden rounded-sm bg-raised">
-                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" x-bind:style="`width: ${$store.usb.percent}%`"></div>
+                    <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" x-bind:style="`width: ${$store.usb.percent($store.usb.active)}%`"></div>
                 </div>
                 <p class="mt-2 flex justify-between gap-3 text-xs text-fg-faint">
-                    <span class="truncate font-mono" x-text="$store.usb.current"></span>
-                    <span class="shrink-0 font-mono" x-text="`${size($store.usb.written)} / ${size($store.usb.total)}` + ($store.usb.left ? ` · ${$store.usb.left}` : '')"></span>
+                    <span class="truncate font-mono" x-text="$store.usb.active.current"></span>
+                    <span class="shrink-0 font-mono" x-text="$store.usb.active.phase === 'checking'
+                        ? @js(__('Checking what the drive has')) + ` · ${$store.usb.active.checked} / ${$store.usb.active.checking}`
+                        : $store.usb.active.phase === 'gamelist'
+                          ? @js(__('Writing the game list')) + '…'
+                          : `${size($store.usb.active.written)} / ${size($store.usb.active.total)}` + ($store.usb.active.left ? ` · ${$store.usb.active.left}` : '')"></span>
                 </p>
                 <p class="mt-1 text-xs text-fg-faint">{{ __('It carries on if you close this or move to another page; keep the tab open until it is done.') }}</p>
             </div>
         </template>
 
-        <template x-if="destination === 'usb' && $store.usb.status === 'done'">
+        <template x-if="destination === 'usb' && $store.usb.status === 'done' && $store.usb.failures.length === 0">
             <p class="rounded-lg border border-line-input bg-sunken px-4 py-3 text-sm text-fg-soft">
                 {{ __('Done.') }}
                 <span x-show="$store.usb.skipped > 0" x-text="`${$store.usb.skipped} ` + @js(__('already on the drive were left as they were.'))"></span>
+                <span x-show="$store.usb.removed > 0" x-text="`${$store.usb.removed} ` + @js(__('files of another version of the game were removed.'))"></span>
             </p>
         </template>
 
-        <template x-if="destination === 'usb' && $store.usb.status === 'error'">
-            <p class="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger" x-text="$store.usb.message"></p>
+        {{-- Those that failed, each with why; the rest of the queue went on. --}}
+        <template x-if="destination === 'usb' && $store.usb.failures.length > 0 && $store.usb.status !== 'running'">
+            <ul class="space-y-1 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+                <template x-for="job in $store.usb.failures" :key="job.id">
+                    <li class="break-words"><span class="font-medium" x-text="job.label"></span>: <span x-text="job.message"></span></li>
+                </template>
+            </ul>
         </template>
 
         <template x-if="status === 'error'">

@@ -172,3 +172,43 @@ it('will not take an icon that is not a path or an http url', function () {
         ->call('save')
         ->assertHasErrors(['fields.icon']);
 });
+
+it('sorts a console\'s own region order, starting from the library\'s, and keeps it on Save', function () {
+    $this->actingAs(User::factory()->create());
+
+    AppSetting::put(AppSetting::TRANSFER_REGIONS, ['eu', 'us']);
+
+    $component = Livewire::test('settings.consoles')
+        ->call('edit', 'snes')
+        ->assertSet('fields.transfer_regions', '')
+        ->assertSee('The library\'s order: Europe, United States')
+        ->call('ownRegionOrder')
+        ->assertSet('regions', ['eu', 'us'])
+        ->assertSet('fields.transfer_regions', 'eu, us')
+        ->set('regions', ['jp', 'eu'])
+        ->assertSet('fields.transfer_regions', 'jp, eu');
+
+    // Nothing is kept until Save, as with every field in the modal.
+    expect(Console::tryFrom('snes')?->transferRegions)->toBe([]);
+
+    $component->call('save')->assertHasNoErrors();
+
+    expect(Console::tryFrom('snes')?->transferRegions)->toBe(['jp', 'eu']);
+
+    // Typed by hand all the same, a region it does not know is refused.
+    Livewire::test('settings.consoles')
+        ->call('edit', 'snes')
+        ->set('fields.transfer_regions', 'eu, mars')
+        ->call('save')
+        ->assertHasErrors(['fields.transfer_regions']);
+
+    // And the library's order again is nothing of its own.
+    Livewire::test('settings.consoles')
+        ->call('edit', 'snes')
+        ->call('libraryRegionOrder')
+        ->call('save');
+
+    expect(Console::tryFrom('snes')?->transferRegions)->toBe([]);
+
+    ConsoleOverrides::forgetAll();
+});

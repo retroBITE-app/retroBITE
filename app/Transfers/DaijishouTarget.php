@@ -28,12 +28,14 @@ final class DaijishouTarget extends GamelistTarget
     /**
      * Import Preview Media's three folders.
      *
-     * @var array<string, array{types: list<string>}>
+     * `label` is what Import Preview Media calls each.
+     *
+     * @var array<string, array{types: list<string>, label: string}>
      */
     private const ARTWORK = [
-        'box2dfront' => ['types' => ['box-2D', 'box-3D']],
-        'screenshottitle' => ['types' => ['sstitle']],
-        'screenshot' => ['types' => ['ss']],
+        'box2dfront' => ['types' => ['box-2D', 'box-3D'], 'label' => 'Box Art'],
+        'screenshottitle' => ['types' => ['sstitle'], 'label' => 'Title'],
+        'screenshot' => ['types' => ['ss'], 'label' => 'Screenshot'],
     ];
 
     public function key(): string

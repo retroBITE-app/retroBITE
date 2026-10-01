@@ -2,6 +2,7 @@
 
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
+use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Destination;
 use App\Models\Game;
@@ -14,6 +15,7 @@ use App\Tools\ConsoleTool\PS2;
 use App\Transfers\OplTarget;
 use App\Transfers\PlannedFile;
 use App\Transfers\Smb\ShareClient;
+use App\Transfers\TransferOptions;
 use App\Transfers\TransferRejected;
 use App\Transfers\TransferTargets;
 use Illuminate\Support\Arr;
@@ -295,4 +297,34 @@ it('still refuses a disc of another size at the same name: only extras are left 
 
     expect(File::get(oplShareFile('DVD/Crash.iso')))->toBe('something else')
         ->and(Transfer::query()->sole()->status)->toBe(Transfer::FAILED);
+});
+
+it('sends only the art chosen for the transfer, and makes no other piece when asked', function () {
+    $game = oplGame();
+    oplDisc($game, 'ps2/DVD/Crash.iso');
+    oplArtwork($game, 'box-2D');
+    oplArtwork($game, 'ss');
+
+    $target = app(OplTarget::class)->withOptions(new TransferOptions(artwork: ['cover']));
+    $plan = $target->plan($game->fresh(['files', 'media']));
+
+    expect(array_keys(app(OplTarget::class)->artworkSlots()))->toBe(['cover', 'disc', 'screenshot', 'title_screen'])
+        ->and(collect($plan->extras)->pluck('destination')->all())->toBe(['CFG/SLES_503.86.cfg', 'ART/SLES_503.86_COV.png'])
+        // The browser asks for each extra by URL, and the URL carries the choice.
+        ->and(Arr::first($plan->extras)['url'])->toContain('artwork=cover')
+        ->and($target->extra($game->fresh(['files', 'media']), 'ART/SLES_503.86_SCR.png'))->toBeNull();
+});
+
+it('replaces another disc of the game OPL could read, and leaves its config and art', function () {
+    $game = oplGame();
+    oplDisc($game, 'ps2/DVD/Crash (Europe).iso');
+    oplDisc($game, 'ps2/DVD/Crash (USA).iso', serial: 'SLUS_203.44');
+    oplDisc($game, 'ps2/Crash (Japan).chd');
+    AppSetting::put(AppSetting::TRANSFER_REGIONS, ['us', 'eu']);
+
+    $plan = app(OplTarget::class)->plan($game->fresh(['files', 'media']));
+
+    expect(array_map(fn (PlannedFile $file): string => $file->destination, $plan->files))->toBe(['DVD/Crash (USA).iso'])
+        // Not the CHD: OPL never read it, so it was never sent.
+        ->and($plan->replaces)->toBe(['DVD/Crash (Europe).iso']);
 });

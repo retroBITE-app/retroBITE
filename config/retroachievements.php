@@ -45,13 +45,16 @@ return [
     'timeout' => (int) (env('RETROACHIEVEMENTS_TIMEOUT') ?: 180),
 
     /*
-     * Seconds to leave between two API calls. RetroAchievements rate-limits
-     * but publishes no number; half a second is polite and still drains a
-     * console index quickly. Set to 0 to disable, which the test suite does.
+     * Seconds to leave between two API calls, across every worker.
+     * RetroAchievements publishes no number, but Cloudflare in front of it
+     * does the counting: on 2026-10-01 about twenty calls in five seconds
+     * met a 429 and two minutes' block, every time — ten sets a minute,
+     * however fast they were asked for. Three seconds is twenty a minute
+     * without ever meeting it. Set to 0 to disable, which the test suite does.
      */
     // Not ?: here — 0 is a legitimate value that means "do not pace at all",
     // and the test suite relies on setting it.
-    'min_interval' => (float) (env('RETROACHIEVEMENTS_MIN_INTERVAL') ?? 0.5),
+    'min_interval' => (float) (env('RETROACHIEVEMENTS_MIN_INTERVAL') ?? 3.0),
 
     /*
      * RAHasher, built into the web image from RALibretro. A bare name is

@@ -73,6 +73,11 @@ region and revision of a title. A transfer sends one of them, chosen from the
 names: no pre-release or hack, the library's region first, the latest
 revision. Not a file: a version of a multi-disc game is several.
 
+**File region** — the region one file is, as the provider's code
+(`game_files.region`): the provider's word for the dumps it knows, else read
+off the name — *(USA, Europe)* is `us`. Not the game's `region`, which is the
+first the provider lists for the title, and not its media region.
+
 ## Metadata and artwork
 
 **Provider** — an outside service consulted about a game. There are two, and
@@ -180,7 +185,10 @@ the way a particular transfer target expects: one version of it, not every
 copy the game holds. A whole console can be sent at once — every identified
 game, one version each, one game list. A copy going out: the library
 is read, never changed, and nothing already at the destination is
-overwritten or removed except the game's own entry in the game list. Not an
+overwritten or removed except the game's own entry in the game list — and
+the game's *other* versions, where an earlier transfer put them: sending the
+American copy takes the European one sent before off the drive, once the new
+one has arrived. Not an
 OPL export, which writes a loader's files *into* the library — though a
 transfer laid out for OPL makes the same CFG and ART files, for the drive.
 
@@ -190,6 +198,16 @@ Batocera, Recalbox, RetroPie, ES-DE (as on Android) and Daijishō for every
 console, Open PS2 Loader for PS2 — one class each (docs/adr/0005). Chosen per
 transfer, not per console — the same game can go to more than one — with the
 one the console's library is laid out for offered first.
+
+**Region order** — the regions a transfer sends a version in first, in order:
+the library's under Settings → Destinations, which a console can override,
+and one transfer can put a region in front of both. Its own, not the media
+region's: the box somebody wants to look at and the copy they want to play are
+different questions.
+
+**Artwork slot** — one piece of artwork a transfer target shows, by its own
+name: Batocera's `thumbnail`, ES-DE's `covers`, OPL's cover. Filled by the
+first downloaded media type that can fill it; one transfer can leave slots out.
 
 **Destination** — where a transfer goes. A USB drive on the computer in front
 of the person, written by the browser and never saved; or a **network share**

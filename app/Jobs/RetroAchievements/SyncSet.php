@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs\RetroAchievements;
 
 use App\Enums\AchievementKind;
+use App\Exceptions\RetroAchievements\RateLimited;
 use App\Exceptions\RetroAchievements\RetroAchievementsException;
 use App\Models\RaAchievement;
 use App\Models\RaGame;
@@ -27,10 +28,9 @@ use Illuminate\Support\Facades\Log;
 class SyncSet implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
+    use WaitsOutRateLimits;
 
     public int $timeout = 120;
-
-    public int $tries = 3;
 
     public int $uniqueFor = 200;
 
@@ -169,6 +169,24 @@ class SyncSet implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $this->release($e->retryAfter() ?? 300);
+        // Said, because three of these and the job is gone: a night's sync
+        // failed by the hundred with nothing in the log but "attempted too
+        // many times", which is the end of it and not the reason.
+        // Not for a job that never asked: the block it waits on was logged
+        // by the one that met it, and a backlog is hundreds of lines a wave.
+        if (! $e instanceof RateLimited || $e->asked) {
+            Log::warning('RetroAchievements set sync put back.', [
+                'ra_game_id' => $this->raGameId,
+                'attempt' => $this->attempts(),
+                'reason' => $e->getMessage(),
+                'retry_in_seconds' => $e->retryAfter() ?? 300,
+            ]);
+        }
+
+        // Spread, for a job that never asked: every set waiting on the same
+        // block would otherwise wake in the same second and start it again.
+        $spread = $e instanceof RateLimited && ! $e->asked ? random_int(0, 120) : 0;
+
+        $this->release(($e->retryAfter() ?? 300) + $spread);
     }
 }

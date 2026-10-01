@@ -124,11 +124,15 @@ new class extends Component
         $this->js("\$flux.modal('transfer').show()");
     }
 
-    /** Start from the modal, for a share: the server copies, and the banner follows it. */
-    public function sendToShare(int $destinationId, string $target, SendToShare $sender): void
+    /**
+     * Start from the modal, for a share: the server copies, and the banner follows it.
+     *
+     * @param  array<string, mixed>  $options  the region and artwork chosen in the modal (TransferOptions)
+     */
+    public function sendToShare(int $destinationId, string $target, SendToShare $sender, array $options = []): void
     {
         $destination = Destination::query()->find($destinationId);
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::chosen($target, $options);
 
         if ($destination === null || $transferTarget === null) {
             Flux::toast(variant: 'warning', text: __('That destination is no longer there.'));

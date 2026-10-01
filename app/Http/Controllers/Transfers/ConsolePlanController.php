@@ -9,6 +9,7 @@ use App\Support\Console;
 use App\Transfers\ConsoleTransfer;
 use App\Transfers\TransferTargets;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * What sending a whole console to one target writes, for the browser to copy
@@ -17,9 +18,9 @@ use Illuminate\Http\JsonResponse;
  */
 class ConsolePlanController extends Controller
 {
-    public function __invoke(string $target, string $console): JsonResponse
+    public function __invoke(Request $request, string $target, string $console): JsonResponse
     {
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::requested($target, $request);
         abort_if($transferTarget === null || Console::tryFrom($console) === null, 404);
 
         ['plan' => $plan, 'rejected' => $rejected] = ConsoleTransfer::plan($transferTarget, $console);

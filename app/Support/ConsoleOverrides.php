@@ -228,6 +228,7 @@ final class ConsoleOverrides
                 $rules = match (Arr::get($field, 'type')) {
                     'number' => ['nullable', 'integer', 'min:0', 'max:999999'],
                     'url' => ['nullable', 'string', 'max:255', 'regex:'.self::URL_PATTERN],
+                    'region[]' => ['nullable', 'string', 'max:255', 'regex:'.self::regionPattern()],
                     default => ['nullable', 'string', 'max:255'],
                 };
 
@@ -260,11 +261,19 @@ final class ConsoleOverrides
     public static function normalize(string $field, mixed $value): mixed
     {
         return match (Arr::get(self::schema(), "{$field}.type")) {
-            'ext[]' => self::asList($value, lowercase: true),
+            'ext[]', 'region[]' => self::asList($value, lowercase: true),
             'text[]' => self::asList($value),
             'number' => self::asInt($value),
             default => self::asText($value),
         };
+    }
+
+    /** A comma-separated list of region codes the app knows, and nothing else. */
+    private static function regionPattern(): string
+    {
+        $codes = implode('|', array_map(fn (string $code): string => preg_quote($code, '/'), array_keys(MediaRegions::labels())));
+
+        return '/^\s*(?:'.$codes.')(?:\s*,\s*(?:'.$codes.'))*\s*$/i';
     }
 
     /**

@@ -32,9 +32,13 @@ write.
   running retroBite. Anywhere else the modal says so and links to
   `TRANSFER_LOCALHOST_URL`, which compose sets to the published port.
 - Nothing on the drive is overwritten or removed except the game's own entry
-  in the game list; a file already there at the same size is skipped, and files
+  in the game list; a file already there and finished is skipped, and files
   are written straight to their own names, so an interrupted transfer resumes
-  by writing again whatever is short of its size. The browser writes through a
+  by writing again whatever was not finished. Finished is told from the
+  folder's listing alone, never by asking each file its size — a memory card
+  answers that slowly, one file at a time: a journal in the browser's
+  IndexedDB holds each file from its first byte to its close, as a `.part`
+  name would, and a `.crswap` in the listing marks one a crash left. The browser writes through a
   swap file and fills the name only on close, so an interrupted file is left
   empty (0 bytes, with a `.crswap` beside it), never half-written. A temporary
   name renamed afterwards was tried and dropped: Chromium allows `move()` on a
@@ -77,3 +81,22 @@ Open PS2 Loader joined Batocera as a target. It changed three assumptions:
   `transfers/{target}/games/{gameId}/extras/{path}` after the game's files,
   and `WriteTransferGamelist` writes them to a share. One already on the
   drive is left alone, since somebody may have tuned it there.
+
+## Amendment: a game's other versions are replaced
+
+A game holds every region and dump of a title, and a transfer sends one
+version of it (`GameVersions`). Which one can change — a region chosen for a
+send, a console's own region order, the provider's word on which dump is
+played — and a drive sent the European copy last time would otherwise end up
+holding both, listed twice.
+
+- A plan carries `replaces`: where the game's *other* versions would be on the
+  drive, laid out the same way — their files, their artwork named after them,
+  for OPL their discs. Nothing the send itself writes is among them.
+- They are removed only after the new version is on the drive: by the browser
+  after its copies and extras, by `WriteTransferGamelist` on a share. A path
+  that is not there is nothing to do.
+- The merge drops their entries from the game list as it adds the new one.
+- That is the one exception to "nothing on the drive is removed". It is
+  narrow on purpose: only paths a transfer of this same game would have
+  written, never anything else in the folder, never another game's.

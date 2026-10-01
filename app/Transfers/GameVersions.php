@@ -6,7 +6,8 @@ namespace App\Transfers;
 
 use App\Models\Game;
 use App\Models\GameFile;
-use App\Support\MediaRegions;
+use App\Support\RomRegions;
+use App\Support\TransferRegions;
 use Illuminate\Support\Str;
 
 /**
@@ -20,48 +21,31 @@ use Illuminate\Support\Str;
  *
  * A version is a file with no parent and everything beneath it: a ROM alone,
  * a cuesheet and its tracks, a playlist and its discs. Which one is chosen is
- * read off the names, the way No-Intro and Redump write them:
+ * read off the names, the way No-Intro and Redump write them, and the region
+ * the file was recorded as (RomRegions):
  *
- * 1. no pre-release, hack or bad dump — (Beta), (Proto), [b];
- * 2. the region highest in the library's region order, then World, Europe,
- *    the United States and Japan, then anywhere else;
- * 3. the latest revision — (Rev 1) over none, (v1.1) over (v1.0);
- * 4. the fewest other tags — (USA, Europe) over (USA, Europe) (Fr);
- * 5. and the path, so the answer never depends on the order rows came back.
+ * 1. no pre-release, hack, translation or bad dump — (Beta), (Proto), [b],
+ *    or a dump the provider flags as one whatever its name says;
+ * 2. the region highest in the region order — the one asked for, then the
+ *    console's or the library's (TransferRegions) — then anywhere else;
+ * 3. the dump most people play: the provider's pick of the dumps, then the
+ *    one scraped most often (ProviderDumps), then one it does not know;
+ * 4. the fewest other tags — (USA, Europe) over (USA, Europe) (Fr), and
+ *    (USA) over (USA) (PtBr) (v1.0), a fan translation's own version number
+ *    being no revision of the game;
+ * 5. the latest revision — (Rev 1) over none, (v1.1) over (v1.0);
+ * 6. and the path, so the answer never depends on the order rows came back.
  */
 final class GameVersions
 {
     /** Pre-release, altered and bad copies, in the tags No-Intro and GoodTools write. */
     private const UNWANTED = '/^(?:beta|proto(?:type)?|demo|sample|preview|kiosk|debug|hack|pirate|bootleg)\b/i';
 
+    /** The provider's flags for a dump nobody sends by choice. */
+    private const UNWANTED_PROVIDER_FLAGS = ['beta', 'demo', 'proto', 'hack', 'trad'];
+
     /** GoodTools' flags for a bad, hacked, fixed, pirated or trained dump. */
     private const UNWANTED_FLAG = '/^(?:b|h|f|p|t)\d*\b/i';
-
-    /** What region names in a filename mean, as the provider's region codes. */
-    private const REGIONS = [
-        'world' => 'wor',
-        'europe' => 'eu',
-        'usa' => 'us',
-        'japan' => 'jp',
-        'australia' => 'au',
-        'brazil' => 'br',
-        'canada' => 'ca',
-        'china' => 'cn',
-        'france' => 'fr',
-        'germany' => 'de',
-        'italy' => 'it',
-        'korea' => 'kr',
-        'netherlands' => 'nl',
-        'spain' => 'sp',
-        'sweden' => 'se',
-        'uk' => 'uk',
-        'asia' => 'asi',
-        // GoodTools' letters.
-        'w' => 'wor',
-        'e' => 'eu',
-        'u' => 'us',
-        'j' => 'jp',
-    ];
 
     /**
      * Every version of the game, each a list of its present files, root first.
@@ -96,9 +80,10 @@ final class GameVersions
      * or, asked for certain formats, with no version in any of them.
      *
      * @param  list<string>  $extensions  lower case, e.g. ['iso', 'cso']; none for any
+     * @param  list<string>|null  $chain  regions in the order wanted; null for the console's region order
      * @return list<GameFile>
      */
-    public static function preferred(Game $game, array $extensions = []): array
+    public static function preferred(Game $game, array $extensions = [], ?array $chain = null): array
     {
         $versions = self::of($game);
 
@@ -112,9 +97,9 @@ final class GameVersions
             return $versions[0] ?? [];
         }
 
-        $chain = array_values(array_filter(MediaRegions::chain(), fn (string $region): bool => $region !== 'ss'));
+        $chain ??= TransferRegions::chainFor($game->console());
 
-        usort($versions, fn (array $a, array $b): int => self::rank($a[0], $chain) <=> self::rank($b[0], $chain));
+        usort($versions, fn (array $a, array $b): int => self::rank($a, $chain) <=> self::rank($b, $chain));
 
         return $versions[0];
     }
@@ -164,18 +149,58 @@ final class GameVersions
     }
 
     /**
+     * The regions a version is, as far as anything can tell: the one recorded
+     * on its root — the provider's, or read off the disc — and the ones its
+     * name gives.
+     *
+     * @param  list<GameFile>  $version
+     * @return list<string>
+     */
+    public static function regionsOf(array $version): array
+    {
+        $root = $version[0] ?? null;
+
+        if ($root === null) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter([
+            $root->region,
+            ...RomRegions::fromFilename((string) $root->filename),
+        ], fn (?string $region): bool => $region !== null && $region !== '')));
+    }
+
+    /**
      * How good a copy the version is, lowest first.
      *
+     * The name is the root's; what the provider says is any file's, since it
+     * knows a cuesheet's tracks or a set's discs more often than the sheet
+     * or the playlist over them.
+     *
+     * @param  list<GameFile>  $version
      * @param  list<string>  $chain
-     * @return array{int, int, int, int, string}
+     * @return array{int, int, int, int, int, int, string}
      */
-    private static function rank(GameFile $root, array $chain): array
+    private static function rank(array $version, array $chain): array
     {
+        $root = $version[0];
+        $flags = array_values(array_unique(array_merge(...array_map(
+            fn (GameFile $file): array => $file->provider_flags ?? [],
+            $version,
+        ))));
+        $known = array_filter(array_map(fn (GameFile $file): ?int => $file->scrapes, $version), fn (?int $scrapes): bool => $scrapes !== null);
+        $scrapes = $known !== [] ? max($known) : -1;
         preg_match_all('/\(([^)]*)\)|\[([^\]]*)\]/', pathinfo($root->filename, PATHINFO_FILENAME), $matches, PREG_SET_ORDER);
 
-        $unwanted = 0;
+        $unwanted = array_intersect($flags, self::UNWANTED_PROVIDER_FLAGS) !== [] ? 1 : 0;
         $regionRank = count($chain) + 1;
         $revision = 0;
+
+        // What the provider said about this very dump counts as much as its name.
+        if ($root->region !== null && $root->region !== '') {
+            $at = array_search($root->region, $chain, true);
+            $regionRank = $at === false ? count($chain) : $at;
+        }
         $others = 0;
 
         foreach ($matches as $match) {
@@ -200,7 +225,7 @@ final class GameVersions
                 continue;
             }
 
-            $regions = self::regions($round);
+            $regions = RomRegions::fromTag($round);
 
             if ($regions !== []) {
                 foreach ($regions as $region) {
@@ -214,28 +239,9 @@ final class GameVersions
             $others++;
         }
 
-        // Negated so that a later revision sorts first.
-        return [$unwanted, $regionRank, -$revision, $others, $root->path];
-    }
-
-    /**
-     * The provider codes a tag names, or none when it is not a region tag.
-     *
-     * @return list<string>
-     */
-    private static function regions(string $tag): array
-    {
-        $codes = [];
-
-        foreach (preg_split('/\s*,\s*/', strtolower($tag)) ?: [] as $word) {
-            if (! isset(self::REGIONS[$word])) {
-                return [];
-            }
-
-            $codes[] = self::REGIONS[$word];
-        }
-
-        return $codes;
+        // Negated so that the provider's pick, the most scraped and a later
+        // revision sort first; a dump the provider does not know, after any it does.
+        return [$unwanted, $regionRank, -(int) in_array('best', $flags, true), -$scrapes, $others, -$revision, $root->path];
     }
 
     /** "Rev 1", "Rev A" or "v1.1" as a comparable number, or null for another tag. */

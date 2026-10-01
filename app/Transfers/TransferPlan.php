@@ -16,12 +16,15 @@ final class TransferPlan
      *                                 null for a system that keeps none
      * @param  list<array{url: string, destination: string}>  $extras  the target's own
      *                                                                 files, see TransferTarget::extras()
+     * @param  list<string>  $replaces  where the game's other versions would be on the drive:
+     *                                  removed, where they are, once this version has arrived
      */
     public function __construct(
         public readonly array $files,
         public readonly ?string $gamelist,
         public readonly int $games = 1,
         public readonly array $extras = [],
+        public readonly array $replaces = [],
     ) {}
 
     /**
@@ -39,6 +42,7 @@ final class TransferPlan
             array_merge(...array_map(function (TransferPlan $plan): array {
                 return $plan->extras;
             }, $plans)),
+            array_merge(...array_map(fn (TransferPlan $plan): array => $plan->replaces, $plans)),
         );
     }
 
@@ -47,12 +51,13 @@ final class TransferPlan
         return array_sum(array_map(fn (PlannedFile $file): int => $file->size, $this->files));
     }
 
-    /** @return array{files: list<array{url: string, destination: string, size: int}>, extras: list<array{url: string, destination: string}>, gamelist: string|null, bytes: int, games: int} */
+    /** @return array{files: list<array{url: string, destination: string, size: int}>, extras: list<array{url: string, destination: string}>, replaces: list<string>, gamelist: string|null, bytes: int, games: int} */
     public function toArray(): array
     {
         return [
             'files' => array_map(fn (PlannedFile $file): array => $file->toArray(), $this->files),
             'extras' => $this->extras,
+            'replaces' => $this->replaces,
             'gamelist' => $this->gamelist,
             'bytes' => $this->bytes(),
             'games' => $this->games,

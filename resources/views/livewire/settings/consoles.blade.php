@@ -2,6 +2,7 @@
 
 use App\Resources\ConsoleResource;
 use App\Support\ConsoleOverrides;
+use App\Support\TransferRegions;
 use Flux\Flux;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -31,6 +32,9 @@ new #[Title('Console settings')] class extends Component
 
     /** @var array<string, string> raw form values, keyed by config key */
     public array $fields = [];
+
+    /** @var list<string> the console's region order, sorted in the modal; empty for the library's */
+    public array $regions = [];
 
     /**
      * Every console in display order, with whether it has been edited.
@@ -146,13 +150,14 @@ new #[Title('Console settings')] class extends Component
         // Seeded from what is in force rather than from the override, so the form
         // shows the console as it actually behaves.
         $this->fields = ConsoleOverrides::toForm($key);
+        $this->regions = $this->listOf('transfer_regions');
 
         Flux::modal(self::MODAL)->show();
     }
 
     public function closeEdit(): void
     {
-        $this->reset('editing', 'fields');
+        $this->reset('editing', 'fields', 'regions');
         $this->resetValidation();
 
         Flux::modal(self::MODAL)->close();
@@ -171,6 +176,43 @@ new #[Title('Console settings')] class extends Component
         unset($this->consoles, $this->editedCount);
 
         Flux::toast(variant: 'success', text: __(':console saved.', ['console' => $name]));
+    }
+
+    /**
+     * The console's region order as the sorting list holds it. The field
+     * itself, in $fields, stays the comma-separated text every list field
+     * is, and is what Save keeps.
+     */
+    public function updatedRegions(): void
+    {
+        $this->fields['transfer_regions'] = implode(', ', array_map(strval(...), $this->regions));
+    }
+
+    /** Give the console an order of its own, starting from the library's. */
+    public function ownRegionOrder(): void
+    {
+        $this->regions = TransferRegions::order();
+        $this->updatedRegions();
+    }
+
+    /** Back to the library's order: nothing of its own. Kept on Save, like any field. */
+    public function libraryRegionOrder(): void
+    {
+        $this->regions = [];
+        $this->updatedRegions();
+    }
+
+    /**
+     * A list field's text as its items, lower case.
+     *
+     * @return list<string>
+     */
+    private function listOf(string $field): array
+    {
+        return array_values(array_filter(array_map(
+            fn (string $code): string => mb_strtolower(trim($code)),
+            explode(',', (string) ($this->fields[$field] ?? '')),
+        ), fn (string $code): bool => $code !== ''));
     }
 
     /** Put every console back, dropping the stored overrides wholesale. */
@@ -286,13 +328,45 @@ new #[Title('Console settings')] class extends Component
                         @foreach ($this->formFields as ['name' => $field, 'label' => $label, 'description' => $description, 'type' => $type, 'placeholder' => $placeholder, 'spans' => $spans])
                             <div wire:key="field-{{ $this->editing }}-{{ $field }}"
                                  @class(['sm:col-span-2' => $spans])>
-                                <flux:input
-                                    wire:model="fields.{{ $field }}"
-                                    :label="__($label)"
-                                    :description="filled($description) ? __($description) : null"
-                                    :placeholder="$placeholder"
-                                    :type="$type === 'number' ? 'number' : 'text'"
-                                />
+                                @if ($type === 'region[]')
+                                    {{-- An order, so sorted rather than typed: the
+                                         same list as the library's, under
+                                         Settings → Destinations. --}}
+                                    <flux:field>
+                                        <flux:label>{{ __($label) }}</flux:label>
+                                        @if (filled($description))
+                                            <flux:description>{{ __($description) }}</flux:description>
+                                        @endif
+
+                                        @if ($regions === [])
+                                            <div class="flex items-center justify-between gap-3 rounded-lg border border-line-input bg-sunken px-3 py-2">
+                                                <p class="min-w-0 text-sm text-fg-soft">
+                                                    {{ __('The library\'s order: :regions', ['regions' => collect(TransferRegions::order())->map(fn (string $code): string => App\Support\MediaRegions::label($code) ?? $code)->join(', ')]) }}
+                                                </p>
+                                                <flux:button size="xs" variant="subtle" type="button" wire:click="ownRegionOrder">
+                                                    {{ __('Set its own') }}
+                                                </flux:button>
+                                            </div>
+                                        @else
+                                            <x-region-order wire:model.live="regions" />
+                                            <div>
+                                                <flux:button size="xs" variant="ghost" type="button" wire:click="libraryRegionOrder" class="mt-1">
+                                                    {{ __('Use the library\'s order') }}
+                                                </flux:button>
+                                            </div>
+                                        @endif
+
+                                        <flux:error name="fields.{{ $field }}" />
+                                    </flux:field>
+                                @else
+                                    <flux:input
+                                        wire:model="fields.{{ $field }}"
+                                        :label="__($label)"
+                                        :description="filled($description) ? __($description) : null"
+                                        :placeholder="$placeholder"
+                                        :type="$type === 'number' ? 'number' : 'text'"
+                                    />
+                                @endif
                             </div>
                         @endforeach
                     </div>

@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\GameFile;
 use App\Support\Console;
+use App\Support\RomRegions;
 use App\Tools\ConsoleTools;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -88,8 +89,9 @@ class InspectGameFile implements ShouldQueue
             'video_mode' => Arr::get($facts, 'video_mode'),
             // Only where nothing knows better already: the provider's region is
             // the more precise of the two, and a serial can only say which of
-            // five territories pressed the disc.
-            'region' => $file->region ?? Arr::get($facts, 'region'),
+            // five territories pressed the disc. Stored as the provider's
+            // code, as every other region on a file is.
+            'region' => $file->region ?? RomRegions::fromName(Arr::get($facts, 'region')),
         ]));
     }
 

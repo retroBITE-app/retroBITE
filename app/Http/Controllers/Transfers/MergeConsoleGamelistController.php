@@ -22,7 +22,7 @@ class MergeConsoleGamelistController extends Controller
 {
     public function __invoke(Request $request, string $target, string $console): Response
     {
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::requested($target, $request);
         abort_if($transferTarget === null || Console::tryFrom($console) === null, 404);
 
         ['games' => $games] = ConsoleTransfer::plan($transferTarget, $console);

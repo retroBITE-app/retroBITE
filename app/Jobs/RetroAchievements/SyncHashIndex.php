@@ -31,11 +31,10 @@ use Illuminate\Support\Facades\Log;
 class SyncHashIndex implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
+    use WaitsOutRateLimits;
 
     /** A console's index is megabytes of JSON and thousands of rows. */
     public int $timeout = 900;
-
-    public int $tries = 3;
 
     public int $uniqueFor = 1000;
 

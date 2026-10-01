@@ -40,7 +40,7 @@ final class BatoceraTarget extends GamelistTarget
      *
      * @var array<string, array{suffix: string, label: string, types: list<string>}>
      */
-    public const ARTWORK = [
+    private const ARTWORK = [
         // The tags are named backwards from what they hold, as EmulationStation
         // has them: <thumbnail> is the box, <image> the screenshot. The files
         // are named for the tag, as Batocera's own scraper names them: with
@@ -62,13 +62,13 @@ final class BatoceraTarget extends GamelistTarget
 
     /**
      * Artwork Batocera shows that is not a picture, so not something the
-     * media settings offer to switch on for it: a clip is several megabytes
+     * media settings recommend fetching for it: a clip is several megabytes
      * a game.
      *
-     * @var array<string, array{suffix: string, types: list<string>}>
+     * @var array<string, array{suffix: string, label: string, types: list<string>}>
      */
     private const EXTRAS = [
-        'video' => ['suffix' => 'video', 'types' => ['video-normalized', 'video']],
+        'video' => ['suffix' => 'video', 'label' => 'video', 'types' => ['video-normalized', 'video']],
     ];
 
     /**
@@ -83,41 +83,6 @@ final class BatoceraTarget extends GamelistTarget
     private const SUFFIX_BY_TYPE = [
         'sstitle' => 'titleshot',
     ];
-
-    /**
-     * Where each provider media type can end up in Batocera, by its setting's
-     * name — for the media settings screen.
-     *
-     * @return array<string, string> type => label
-     */
-    public static function artworkLabels(): array
-    {
-        $labels = [];
-
-        foreach (self::ARTWORK as ['label' => $label, 'types' => $types]) {
-            foreach ($types as $type) {
-                $labels[$type][] = $label;
-            }
-        }
-
-        // A title screen can be the image and the title shot at once.
-        return array_map(fn (array $names): string => implode(', ', $names), $labels);
-    }
-
-    /**
-     * What to fetch for a Batocera box: the preferred type of each tag the
-     * game list writes, and not its fallbacks. Batocera shows one picture per
-     * tag, and every type switched on is another download for every game.
-     *
-     * @return list<string>
-     */
-    public static function recommendedTypes(): array
-    {
-        return array_values(array_unique(array_map(
-            fn (array $artwork): string => $artwork['types'][0],
-            self::ARTWORK,
-        )));
-    }
 
     public function key(): string
     {
@@ -148,8 +113,12 @@ final class BatoceraTarget extends GamelistTarget
     {
         $artwork = [];
 
-        foreach ([...self::ARTWORK, ...self::EXTRAS] as $tag => ['types' => $types]) {
-            $artwork[$tag] = ['types' => $types, 'tag' => $tag];
+        foreach (self::ARTWORK as $tag => ['types' => $types, 'label' => $label]) {
+            $artwork[$tag] = ['types' => $types, 'tag' => $tag, 'label' => $label];
+        }
+
+        foreach (self::EXTRAS as $tag => ['types' => $types, 'label' => $label]) {
+            $artwork[$tag] = ['types' => $types, 'tag' => $tag, 'label' => $label, 'recommended' => false];
         }
 
         return $artwork;

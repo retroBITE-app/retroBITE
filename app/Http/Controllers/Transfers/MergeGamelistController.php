@@ -21,7 +21,7 @@ class MergeGamelistController extends Controller
 {
     public function __invoke(Request $request, string $target, int $gameId): Response
     {
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::requested($target, $request);
         abort_if($transferTarget === null, 404);
 
         $game = Game::query()->findOrFail($gameId);

@@ -1,20 +1,32 @@
 /**
  * Copying onto a USB drive, for the whole tab rather than one page: an Alpine
  * store (`$store.usb`) that holds a queue of transfers and runs them one at a
- * time, whatever page is open. The Send to modal only adds to it; the tray in
- * the layout (components/transfer-tray) shows how it is going.
+ * time, whatever page is open; one that fails does not stop the next. The Send
+ * to modal only adds to it; the tray in the layout (components/transfer-tray)
+ * shows how each of them is going.
  *
  * Moving between pages is wire:navigate, which swaps the page and keeps this
  * running. A reload or a closed tab cannot keep it, so what is left of the
  * queue is kept in localStorage and taken up again on the next page: the plan
- * is asked for afresh and every file already on the drive at its size is
- * skipped, so it goes on in effect where it stopped. The browser is asked to
- * warn before a reload while something is being written.
+ * is asked for afresh and every file already on the drive is skipped, so it
+ * goes on in effect where it stopped. The browser is asked to warn before a
+ * reload while something is being written.
+ *
+ * Whether a file on the drive is whole is not asked of the drive: a memory
+ * card answers a size slowly, one file at a time, and comes in every
+ * formatting there is. A journal in this browser (IndexedDB) holds every file
+ * from the moment its writing starts until it is closed, as a .part name
+ * would; a name the drive's listing has is skipped unless the journal still
+ * holds it, or the listing has the browser's .crswap beside it — what a crash
+ * leaves, journal or not. Each folder is listed once, and nothing else is read.
  *
  * Nothing on the drive is overwritten or removed, except the game's own entry
- * in the game list: a file already there at the same size is skipped, a
- * target's own file (OPL's config and art) already there is left as it is,
- * and every file is written straight to its own name. The browser already
+ * in the game list and the game's other versions: a file already there and
+ * finished is skipped, a target's own file (OPL's config and art) already
+ * there is left as it is, and every file is written straight to its own name.
+ * Another version of the game, sent before — the European copy where the
+ * American one is now chosen — is removed with its artwork and its entry, but
+ * only once this one is on the drive (the plan's `replaces`). The browser already
  * writes through a swap file (.crswap) and puts the bytes under the name only
  * on close, so a half-written ROM never sits there; a renamed temporary file
  * would add nothing, and Chromium refuses the rename once the click that
@@ -26,6 +38,7 @@ import { estimate, roundedMinutes, sample } from './transfer-eta';
 
 const DB = 'retrobite-transfer';
 const STORE = 'drives';
+const JOURNAL = 'unfinished'; // files being written, by drive, root and path
 const DRIVE_KEY = 'drive';
 const QUEUE_KEY = 'retrobite-usb-transfers';
 
@@ -38,14 +51,20 @@ const CONCURRENCY = 4;
 const TICK_MS = 1_000;
 const ETA_EVERY_MS = 5_000;
 
-/** A tiny IndexedDB wrapper: Chrome can keep a directory handle there. */
-function idb(mode, run) {
+/** A tiny IndexedDB wrapper: Chrome can keep a directory handle there, and the journal. */
+function idb(mode, run, name = STORE) {
     return new Promise((resolve, reject) => {
-        const open = indexedDB.open(DB, 1);
-        open.onupgradeneeded = () => open.result.createObjectStore(STORE);
+        const open = indexedDB.open(DB, 2);
+        open.onupgradeneeded = () => {
+            for (const store of [STORE, JOURNAL]) {
+                if (!open.result.objectStoreNames.contains(store)) {
+                    open.result.createObjectStore(store);
+                }
+            }
+        };
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
-            const store = open.result.transaction(STORE, mode).objectStore(STORE);
+            const store = open.result.transaction(name, mode).objectStore(name);
             const request = run(store);
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
@@ -55,6 +74,34 @@ function idb(mode, run) {
 
 export const rememberDrive = (handle) => idb('readwrite', (store) => store.put(handle, DRIVE_KEY));
 export const recallDrive = () => idb('readonly', (store) => store.get(DRIVE_KEY)).catch(() => null);
+
+/**
+ * The files of one root on one drive that were being written and never
+ * closed. Entered before the first byte and left after the close, so a reload,
+ * a crash or a failure in between keeps the file here and the next send
+ * writes it again. Storage can be blocked: then it remembers nothing, and the
+ * .crswap in the listing is what is left to go on.
+ */
+function journal(prefix) {
+    const key = (path) => `${prefix}${path}`;
+
+    return {
+        async held() {
+            try {
+                const keys = await idb('readonly', (store) => store.getAllKeys(), JOURNAL);
+                return new Set(keys.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)));
+            } catch {
+                return new Set();
+            }
+        },
+        start: (path) => idb('readwrite', (store) => store.put(Date.now(), key(path)), JOURNAL).catch(() => null),
+        finish: (path) => idb('readwrite', (store) => store.delete(key(path)), JOURNAL).catch(() => null),
+    };
+}
+
+// Chromium's swap file beside a file being written: `name.crswap`, or
+// `name.1.crswap` when that is taken.
+const SWAP = /(\.\d+)?\.crswap$/;
 
 export async function hasDirectory(parent, name) {
     try {
@@ -74,12 +121,17 @@ async function directoryFor(root, parts) {
     return dir;
 }
 
-async function existingSize(dir, name) {
-    try {
-        return (await (await dir.getFileHandle(name)).getFile()).size;
-    } catch {
-        return null;
+/** The directory for a relative path, or null where any of it is missing: nothing is made. */
+async function existingDirectory(root, parts) {
+    let dir = root;
+    for (const part of parts) {
+        try {
+            dir = await dir.getDirectoryHandle(part);
+        } catch {
+            return null;
+        }
     }
+    return dir;
 }
 
 /**
@@ -98,20 +150,29 @@ function folders(root) {
         return handles.get(path);
     };
 
+    // One listing, read for both: the names there, and the names a swap
+    // file beside them says were left half-written.
+    const listing = (path) => {
+        if (!listings.has(path)) {
+            listings.set(path, (async () => {
+                const names = new Set();
+                const swapped = new Set();
+                for await (const name of (await handle(path)).keys()) {
+                    names.add(name);
+                    if (SWAP.test(name)) {
+                        swapped.add(name.replace(SWAP, ''));
+                    }
+                }
+                return { names, swapped };
+            })());
+        }
+        return listings.get(path);
+    };
+
     return {
         handle,
-        async names(path) {
-            if (!listings.has(path)) {
-                listings.set(path, (async () => {
-                    const names = new Set();
-                    for await (const name of (await handle(path)).keys()) {
-                        names.add(name);
-                    }
-                    return names;
-                })());
-            }
-            return listings.get(path);
-        },
+        names: async (path) => (await listing(path)).names,
+        swapped: async (path) => (await listing(path)).swapped,
     };
 }
 
@@ -167,6 +228,33 @@ export async function fetchOk(url, signal) {
     return response;
 }
 
+/**
+ * Runs `run` over every item, CONCURRENCY at a time, from one shared queue.
+ * The first failure stops the rest from starting; the ones already under way
+ * finish, and then it is thrown, so the tray says what went wrong.
+ */
+async function inParallel(items, run) {
+    const queue = [...items];
+    let failure = null;
+
+    const worker = async () => {
+        while (failure === null && queue.length > 0) {
+            const item = queue.shift();
+            try {
+                await run(item);
+            } catch (error) {
+                failure ??= error;
+            }
+        }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+
+    if (failure !== null) {
+        throw failure;
+    }
+}
+
 const csrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
 /** The queue as it was left, or none: storage can be blocked, or hold junk. */
@@ -193,29 +281,47 @@ function saveQueue(jobs) {
 
 const permission = { mode: 'readwrite' };
 
-/**
- * The store. A job is { label, plan, gamelist, root, confirm, confirmed }:
- * what to call it, the URLs of its plan and its merged game list, the folders
- * that mark its target's root and what to say when the drive has none, and
- * whether the person agreed to write it to a drive holding none of them.
- */
-export default () => ({
-    jobs: [], // the one running first, then those waiting
-    status: 'idle', // idle | running | interrupted | done | error | stopped
-    label: '',
+/** What a job is, without how it is going: what the queue keeps across a reload. */
+const definition = ({ label, plan, gamelist, root, confirm, confirmed }) => ({ label, plan, gamelist, root, confirm, confirmed });
+
+/** A job as it starts: waiting, with nothing written yet. */
+const fresh = (job, id) => ({
+    ...definition(job),
+    id,
+    state: 'waiting', // waiting | running | done | error | stopped
     message: '',
     written: 0,
     total: 0,
     copied: 0, // bytes actually copied, which the time left is worked out from
     skipped: 0,
+    removed: 0, // files of the game's other versions taken off the drive
+    phase: '', // checking | copying | gamelist, while it runs
+    checking: 0, // files to look for on the drive
+    checked: 0,
     current: '',
     left: '',
-    words: { underMinute: '', minutes: '', hours: '', wholeHours: '' },
-    drive: null,
     samples: [],
     leftAt: 0,
+});
+
+/**
+ * The store. A job is { label, plan, gamelist, root, confirm, confirmed }:
+ * what to call it, the URLs of its plan and its merged game list, the folders
+ * that mark its target's root and what to say when the drive has none, and
+ * whether the person agreed to write it to a drive holding none of them. Each
+ * keeps its own progress, and one that fails is marked so and the next one
+ * goes on: a console that cannot be written says why without holding back the
+ * rest of the queue.
+ */
+export default () => ({
+    jobs: [], // every one of this tab's, finished, running and waiting, in order
+    status: 'idle', // idle | running | interrupted | done | stopped
+    words: { underMinute: '', minutes: '', hours: '', wholeHours: '' },
+    drive: null,
     ticker: null,
     abort: null,
+    turn: 0, // which run() is the live one, so a stopped one cannot carry on beside a new one
+    nextId: 1,
 
     async init() {
         window.addEventListener('beforeunload', (event) => {
@@ -231,8 +337,7 @@ export default () => ({
             return;
         }
 
-        this.jobs = jobs;
-        this.label = jobs[0].label;
+        this.jobs = jobs.map((job) => fresh(job, this.nextId++));
         this.status = 'interrupted';
         this.drive = await recallDrive();
 
@@ -252,21 +357,52 @@ export default () => ({
         return this.status !== 'idle';
     },
 
-    get waiting() {
-        return Math.max(0, this.jobs.length - (this.status === 'running' ? 1 : 0));
+    /** The one being written now, if any. */
+    get active() {
+        return this.jobs.find((job) => job.state === 'running') ?? null;
     },
 
-    get percent() {
-        return this.total > 0 ? Math.round((this.written / this.total) * 100) : 0;
+    get waiting() {
+        return this.jobs.filter((job) => job.state === 'waiting').length;
+    },
+
+    get failures() {
+        return this.jobs.filter((job) => job.state === 'error');
+    },
+
+    get finished() {
+        return this.jobs.filter((job) => ['done', 'error', 'stopped'].includes(job.state)).length;
+    },
+
+    get skipped() {
+        return this.jobs.reduce((sum, job) => sum + (job.state === 'done' ? job.skipped : 0), 0);
+    },
+
+    get removed() {
+        return this.jobs.reduce((sum, job) => sum + (job.state === 'done' ? job.removed : 0), 0);
+    },
+
+    /** How far it is: through the checks while they run, then through the bytes left to copy. */
+    percent(job) {
+        if (job.phase === 'checking') {
+            return job.checking > 0 ? Math.round((job.checked / job.checking) * 100) : 0;
+        }
+
+        return job.total > 0 ? Math.round((job.written / job.total) * 100) : 100;
     },
 
     size,
 
+    /** What is still to do, kept for a reload: the running one and those waiting. */
+    save() {
+        saveQueue(this.jobs.filter((job) => ['waiting', 'running'].includes(job.state)).map(definition));
+    },
+
     /** Add a transfer; it starts at once when nothing else is being written. */
     enqueue(job, drive) {
         this.drive = drive;
-        this.jobs.push(job);
-        saveQueue(this.jobs);
+        this.jobs.push(fresh(job, this.nextId++));
+        this.save();
 
         if (this.status !== 'running') {
             this.run();
@@ -284,46 +420,74 @@ export default () => ({
         this.run();
     },
 
+    /** Everything: the one being written stops where it is, and those waiting are dropped. */
     stop() {
-        this.jobs = [];
-        saveQueue(this.jobs);
-        this.abort?.abort();
-        this.status = this.status === 'running' ? 'stopped' : 'idle';
+        const active = this.active;
+        this.jobs = this.jobs.filter((job) => job.state !== 'waiting');
+        this.save();
+
+        if (active) {
+            active.state = 'stopped';
+            this.abort?.abort();
+        }
+
+        this.turn++;
+        this.status = this.status === 'running' ? 'stopped' : this.jobs.length > 0 ? 'done' : 'idle';
     },
 
-    dismiss() {
-        if (this.status !== 'running') {
-            this.status = 'idle';
+    /** One of them: dropped if it is waiting, stopped if it is being written, and the queue goes on. */
+    cancel(job) {
+        if (job.state === 'running') {
+            job.state = 'stopped';
+            this.abort?.abort();
+        } else if (job.state === 'waiting') {
+            this.jobs = this.jobs.filter((other) => other.id !== job.id);
+        }
+
+        this.save();
+
+        if (this.status === 'interrupted' && this.waiting === 0) {
+            this.status = this.jobs.length > 0 ? 'done' : 'idle';
         }
     },
 
-    /** Every job in the queue, one after another, until it is empty or one fails. */
+    /** Clears the finished ones from the list; the tray goes once nothing is left. */
+    dismiss() {
+        this.jobs = this.jobs.filter((job) => ['waiting', 'running'].includes(job.state));
+
+        if (this.status !== 'running' && this.status !== 'interrupted') {
+            this.status = this.jobs.length > 0 ? this.status : 'idle';
+        }
+    },
+
+    /**
+     * Every waiting job, one after another, until none is left. One that fails
+     * is marked with what went wrong, and the next one starts.
+     */
     async run() {
+        const turn = ++this.turn;
         this.status = 'running';
 
-        while (this.jobs.length > 0 && this.status === 'running') {
-            const job = this.jobs[0];
+        let job;
+        while (turn === this.turn && (job = this.jobs.find((waiting) => waiting.state === 'waiting'))) {
+            job.state = 'running';
 
             try {
                 await this.runOne(job);
+                job.state = job.state === 'running' ? 'done' : job.state;
             } catch (error) {
-                if (this.status !== 'running') {
-                    return; // stopped
+                if (job.state === 'running') {
+                    job.state = 'error';
+                    job.message = error?.message ?? String(error);
                 }
-
-                this.jobs = [];
-                saveQueue(this.jobs);
-                this.status = 'error';
-                this.message = error?.message ?? String(error);
-                return;
             }
 
-            this.jobs.shift();
-            saveQueue(this.jobs);
+            job.current = '';
+            job.phase = '';
+            this.save();
         }
 
-        if (this.status === 'running') {
-            this.current = '';
+        if (turn === this.turn) {
             this.status = 'done';
         }
     },
@@ -335,35 +499,37 @@ export default () => ({
             throw new Error(job.confirm || 'The drive is not the one this was started on.');
         }
 
-        this.label = job.label;
-        this.message = '';
-        this.written = 0;
-        this.total = 0;
-        this.skipped = 0;
-        this.copied = 0;
-        this.samples = sample([], 0);
-        this.left = '';
-        this.leftAt = 0;
+        job.samples = sample([], 0);
         this.abort = new AbortController();
-        this.ticker = setInterval(() => this.tick(), TICK_MS);
+        this.ticker = setInterval(() => this.tick(job), TICK_MS);
 
         try {
             const plan = await (await fetchOk(job.plan, this.abort.signal)).json();
-            this.total = plan.bytes;
-
             const tree = folders(root);
+            const log = journal(`${this.drive.name}|${root.name}|`);
 
-            await this.copyAll(tree, plan.files);
-            await this.writeExtras(tree, plan.extras ?? []);
+            // What the drive already has is found before anything is
+            // written, so the copying is only of what is missing and the
+            // bar and the time left count only that.
+            job.phase = 'checking';
+            job.checking = plan.files.length;
+            const missing = await this.missing(job, tree, plan.files, await log.held());
+            job.total = missing.reduce((sum, file) => sum + file.size, 0);
+
+            job.phase = 'copying';
+            await this.copyAll(job, tree, missing, log);
+            await this.writeExtras(job, tree, plan.extras ?? []);
+            await this.removeReplaced(job, root, plan.replaces ?? []);
 
             // A system that keeps no list, such as OPL: the files were the send.
             if (plan.gamelist !== null) {
-                await this.writeGamelist(root, plan.gamelist, job.gamelist);
+                job.phase = 'gamelist';
+                await this.writeGamelist(job, root, plan.gamelist, job.gamelist);
             }
         } finally {
             clearInterval(this.ticker);
             this.ticker = null;
-            this.left = '';
+            job.left = '';
         }
     },
 
@@ -371,17 +537,17 @@ export default () => ({
      * The time left, in words. Changed at most every few seconds, and only
      * when the rounded figure moves, so it counts down rather than flickers.
      */
-    tick() {
-        this.samples = sample(this.samples, this.copied);
-        const seconds = estimate(this.samples, this.total - this.written);
+    tick(job) {
+        job.samples = sample(job.samples, job.copied);
+        const seconds = estimate(job.samples, job.total - job.written);
         const now = Date.now();
 
         if (seconds === null) {
-            this.left = '';
+            job.left = '';
             return;
         }
 
-        if (this.left !== '' && now - this.leftAt < ETA_EVERY_MS) {
+        if (job.left !== '' && now - job.leftAt < ETA_EVERY_MS) {
             return;
         }
 
@@ -395,69 +561,74 @@ export default () => ({
                     ? this.words.wholeHours.replace(':h', minutes / 60)
                     : this.words.hours.replace(':h', Math.floor(minutes / 60)).replace(':m', minutes % 60);
 
-        if (words !== this.left) {
-            this.left = words;
-            this.leftAt = now;
+        if (words !== job.left) {
+            job.left = words;
+            job.leftAt = now;
         }
     },
 
     /**
-     * Every file, CONCURRENCY at a time, from one shared queue. The first
-     * failure stops the rest from starting; the ones already under way finish,
-     * and then it is thrown, so the tray says what went wrong.
+     * The files the drive does not have whole, every one of the plan's looked
+     * at before the first is written, from the folders' listings alone: a
+     * name there is whole unless the journal (`unfinished`) still holds it or
+     * a .crswap sits beside it. Nothing is asked of a file itself. Those
+     * already there are counted as skipped.
      */
-    async copyAll(tree, files) {
-        const queue = [...files];
-        let failure = null;
+    async missing(job, tree, files, unfinished) {
+        const missing = [];
 
-        const worker = async () => {
-            while (failure === null && queue.length > 0) {
-                const file = queue.shift();
-                try {
-                    await this.copy(tree, file);
-                } catch (error) {
-                    failure ??= error;
-                }
+        for (const file of files) {
+            const parts = file.destination.split('/');
+            const name = parts.pop();
+            const folder = parts.join('/');
+
+            const whole =
+                (await tree.names(folder)).has(name) &&
+                !unfinished.has(file.destination) &&
+                !(await tree.swapped(folder)).has(name);
+
+            if (whole) {
+                job.skipped++;
+            } else {
+                missing.push(file);
             }
-        };
 
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
-
-        if (failure !== null) {
-            throw failure;
+            job.checked++;
         }
+
+        return missing;
     },
 
-    async copy(tree, file) {
+    /** Every file the drive is missing, CONCURRENCY at a time, each in the journal while it is written. */
+    async copyAll(job, tree, files, log) {
+        await inParallel(files, async (file) => {
+            await log.start(file.destination);
+            await this.copy(job, tree, file);
+            await log.finish(file.destination);
+        });
+    },
+
+    async copy(job, tree, file) {
         const parts = file.destination.split('/');
         const name = parts.pop();
         const folder = parts.join('/');
         const dir = await tree.handle(folder);
-        this.current = file.destination;
-
-        // Asked of the drive only when the folder's listing has the name: a
-        // file that is not there needs no question, and on a first send that
-        // is every one of them.
-        if ((await tree.names(folder)).has(name) && (await existingSize(dir, name)) === file.size) {
-            this.skipped++;
-            this.written += file.size;
-            return;
-        }
+        job.current = file.destination;
 
         const response = await fetchOk(file.url, this.abort.signal);
         const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
 
         const counted = new TransformStream({
             transform: (chunk, controller) => {
-                this.written += chunk.byteLength;
-                this.copied += chunk.byteLength;
+                job.written += chunk.byteLength;
+                job.copied += chunk.byteLength;
                 controller.enqueue(chunk);
             },
         });
 
         // Stopped halfway: the bytes are in the browser's .crswap beside it,
         // and the file under the real name, made empty by getFileHandle(), is
-        // left at 0 bytes. Short of its size, it is written again from the
+        // left at 0 bytes. Still in the journal, it is written again from the
         // start next time.
         await response.body.pipeThrough(counted).pipeTo(writable, { signal: this.abort.signal });
     },
@@ -467,15 +638,15 @@ export default () => ({
      * and art — each fetched as the server makes it and written, unless the
      * drive has one already: somebody may have tuned it there.
      */
-    async writeExtras(tree, extras) {
+    async writeExtras(job, tree, extras) {
         for (const extra of extras) {
             const parts = extra.destination.split('/');
             const name = parts.pop();
             const folder = parts.join('/');
-            this.current = extra.destination;
+            job.current = extra.destination;
 
             if ((await tree.names(folder)).has(name)) {
-                this.skipped++;
+                job.skipped++;
                 continue;
             }
 
@@ -486,11 +657,39 @@ export default () => ({
         }
     },
 
-    async writeGamelist(root, destination, url) {
+    /**
+     * The game's other versions, where they are on the drive: removed once
+     * this one has arrived, so the front-end lists the game once. A path not
+     * there is nothing to do, and no folder is made looking for it.
+     */
+    async removeReplaced(job, root, paths) {
+        for (const path of paths) {
+            const parts = path.split('/');
+            const name = parts.pop();
+            const dir = await existingDirectory(root, parts);
+
+            if (dir === null) {
+                continue;
+            }
+
+            job.current = path;
+
+            try {
+                await dir.removeEntry(name);
+                job.removed++;
+            } catch (error) {
+                if (error?.name !== 'NotFoundError') {
+                    throw error;
+                }
+            }
+        }
+    },
+
+    async writeGamelist(job, root, destination, url) {
         const parts = destination.split('/');
         const name = parts.pop();
         const dir = await directoryFor(root, parts);
-        this.current = destination;
+        job.current = destination;
 
         let existing = '';
         try {

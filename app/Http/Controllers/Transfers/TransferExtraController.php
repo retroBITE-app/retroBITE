@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Transfers;
 use App\Http\Controllers\Controller;
 use App\Models\Game;
 use App\Transfers\TransferTargets;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -16,9 +17,9 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class TransferExtraController extends Controller
 {
-    public function __invoke(string $target, int $gameId, string $path): Response
+    public function __invoke(Request $request, string $target, int $gameId, string $path): Response
     {
-        $transferTarget = TransferTargets::find($target);
+        $transferTarget = TransferTargets::requested($target, $request);
         abort_if($transferTarget === null, 404);
 
         $game = Game::query()->with(['files', 'media'])->findOrFail($gameId);
