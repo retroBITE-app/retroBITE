@@ -1,3 +1,4 @@
+import globalSearch from './global-search';
 import romUpload from './rom-upload';
 import transfer from './transfer';
 import usbTransfers from './usb-transfers';
@@ -8,6 +9,8 @@ import './echo';
 // the uploader is too much logic to live in an x-data attribute.
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('romUpload', romUpload);
+    // The Ctrl+K box's keyboard; see global-search.js.
+    window.Alpine.data('globalSearch', globalSearch);
     // Copying a game onto a drive; see transfer.js.
     window.Alpine.data('transfer', transfer);
     // The copying itself, for the whole tab: it outlives the modal and the page.

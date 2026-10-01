@@ -475,6 +475,23 @@ class Game extends Model
     }
 
     /**
+     * Games whose title holds the term anywhere, the term taken literally.
+     *
+     * @param  Builder<Game>  $query
+     */
+    public function scopeSearch(Builder $query, string $term): void
+    {
+        // Qualified, for the joined library list, as forConsole below.
+        $query->where('games.title', 'like', '%'.self::escapeLike($term).'%');
+    }
+
+    /** A term for LIKE with its % and _ meaning themselves, not "anything". */
+    public static function escapeLike(string $term): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term);
+    }
+
+    /**
      * @param  Builder<Game>  $query
      */
     public function scopeForConsole(Builder $query, string $console): void
