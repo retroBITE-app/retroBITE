@@ -89,7 +89,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Livewire call. Not behind the UI toggle: that hides the modal, not this.
     Route::post('uploads/{upload}', UploadChunkController::class)->whereUuid('upload')->name('uploads.chunk');
 
-    // Tools → Conversion: format conversions, queued on the toolbox worker.
+    // Tools → Conversion: format conversions, queued on the conversion worker.
     Route::livewire('tools/conversion', 'tools.conversion')->name('tools.conversion');
 
     // Where the page was when it was called the Builder, kept so a bookmark still lands.

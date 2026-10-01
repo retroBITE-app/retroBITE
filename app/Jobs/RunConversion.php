@@ -16,7 +16,8 @@ use Throwable;
 /**
  * Run one conversion; see {@see ConversionRunner} for what that is.
  *
- * On the toolbox worker, beside the loader exports, over database-long: a
+ * On a queue and worker of its own, toolbox-conversion, so a disc that takes
+ * an hour never holds a loader export back; over database-long, because a
  * conversion runs for up to ConversionRunner::timeout() seconds — 7000 by
  * default, and always kept under that connection's retry_after — where the
  * half-hour retry_after of the default connection would hand one still
@@ -24,8 +25,8 @@ use Throwable;
  * to be told which row, and never runs twice beside itself for one row.
  *
  * How many run at once is config('converters.concurrency'), held by one lock
- * per slot rather than by the number of workers, so raising the toolbox
- * workers for exports does not also double the conversions. A conversion that
+ * per slot rather than by the number of workers, so raising the conversion
+ * workers alone does not double the conversions. A conversion that
  * finds every slot taken goes back on the queue for a moment. Released rather
  * than failed, so attempts are unlimited; one exception fails it, though.
  */
@@ -51,7 +52,7 @@ class RunConversion implements ShouldQueue
         // records why before the worker is killed with it still running.
         $this->timeout = ConversionRunner::timeout() + 60;
 
-        $this->onConnection('database-long')->onQueue('toolbox');
+        $this->onConnection('database-long')->onQueue('toolbox-conversion');
     }
 
     /**

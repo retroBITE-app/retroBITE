@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
 /**
  * One conversion in the conversion queue, from the moment it is asked for.
  *
- * Run by RunConversion on the toolbox worker; see App\Conversion for what runs
+ * Run by RunConversion on the conversion worker; see App\Conversion for what runs
  * it. The row outlives the job so the page can show how it went.
  *
  * @property int $id

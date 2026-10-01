@@ -17,7 +17,7 @@ the tests around them stay as they are.
 | Gate | `App\Conversion\Converters::routesFor()` | which converters a source on a console may go through |
 | Source | `App\Conversion\SourceSet`, `App\Conversion\Disc` | one disc, or a multi-disc set, built from the scanner's rows |
 | Queue | `App\Conversion\ConversionQueue`, `App\Models\Conversion` | add, cancel, retry, clear; the persisted state |
-| Runner | `App\Conversion\ConversionRunner`, `App\Jobs\RunConversion` | runs it on the toolbox worker: stage, run, verify, place, clean up |
+| Runner | `App\Conversion\ConversionRunner`, `App\Jobs\RunConversion` | runs it on the conversion worker: stage, run, verify, place, clean up |
 
 **The gate.** A converter is offered for a source only when all of these hold:
 
@@ -180,11 +180,11 @@ docker compose -f docker-compose.dev.yml exec -T -u www-data retrobite-web php a
 
 ## Runtime notes
 
-- **Queue.** Conversions run on the `toolbox` queue, over the `database-long`
+- **Queue.** Conversions run on the `toolbox-conversion` queue, over the `database-long`
   connection (`retry_after` 7200). Each has a time limit of `CONVERSION_TIMEOUT`,
   7000 seconds by default.
 - **Concurrency.** `CONVERSION_CONCURRENCY` (default 1) is enforced with cache
-  locks, one per slot. Raising it also needs `QUEUE_WORKERS_TOOLBOX` raised to
+  locks, one per slot. Raising it also needs `QUEUE_WORKERS_CONVERSION` raised to
   match.
 - **Restart.** `conversion:recover` runs at boot, before the workers start. It
   marks any conversion still running as failed ("Interrupted"), removes its

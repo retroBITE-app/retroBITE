@@ -40,9 +40,9 @@ use App\Conversion\Converters\VcdToCue;
  */
 return [
     /*
-     * How many conversions may run at once. They run on the toolbox worker, so
-     * more than one also needs QUEUE_WORKERS_TOOLBOX raised to match; past the
-     * disk's own speed a second one only makes both slower.
+     * How many conversions may run at once. They run on the conversion worker,
+     * so more than one also needs QUEUE_WORKERS_CONVERSION raised to match;
+     * past the disk's own speed a second one only makes both slower.
      */
     'concurrency' => max(1, (int) (env('CONVERSION_CONCURRENCY') ?: 1)),
 
@@ -51,7 +51,7 @@ return [
      * every disc and every step. A dual-layer PS2 disc read over a network
      * mount is the case to size for. ConversionRunner::timeout() holds it two
      * minutes under the database-long connection's retry_after (7200), which
-     * the toolbox worker runs on, whatever is set here, so a conversion still
+     * the conversion worker runs on, whatever is set here, so a conversion still
      * running is never handed out twice.
      */
     'timeout' => (int) (env('CONVERSION_TIMEOUT') ?: 7000),

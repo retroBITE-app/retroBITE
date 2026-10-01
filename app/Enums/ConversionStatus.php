@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Enums;
 
 /**
- * Where one conversion is: waiting for the toolbox worker, running,
+ * Where one conversion is: waiting for the conversion worker, running,
  * checking what it wrote, or over one of three ways.
  */
 enum ConversionStatus: string
