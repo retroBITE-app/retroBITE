@@ -35,6 +35,7 @@
         ['label' => __('UI'), 'route' => 'interface.edit', 'active' => $routeIs('interface.edit')],
         ['label' => __('Media'), 'route' => 'media.edit', 'active' => $routeIs('media.edit')],
         ['label' => __('Consoles'), 'route' => 'console-config.edit', 'active' => $routeIs('console-config.edit')],
+        ['label' => __('Library'), 'route' => 'library.edit', 'active' => $routeIs('library.edit')],
         ['label' => __('Scraping'), 'route' => 'screenscraper.edit', 'active' => $routeIs('screenscraper.edit')],
         ['label' => __('Achievements'), 'route' => 'retroachievements.edit', 'active' => $routeIs('retroachievements.edit')],
         ['label' => __('Destinations'), 'route' => 'destinations.edit', 'active' => $routeIs('destinations.edit')],

@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\MeasureLibrary;
+use App\Models\AppSetting;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -35,3 +36,9 @@ Schedule::command('retrobite:ra:sync-progress --full')->dailyAt('04:00');
 // page ever reads the disk; this is how files copied in over the share show up
 // without a scan. Unique, so it cannot pile up behind a slow disk.
 Schedule::job(new MeasureLibrary)->everyFifteenMinutes();
+
+// Games whose files have all been gone longer than Settings → Library allows,
+// after the night's RetroAchievements work, when that page has it on.
+Schedule::command('retrobite:library:prune')->dailyAt('04:30')->when(function (): bool {
+    return AppSetting::enabled(AppSetting::PRUNE_MISSING_AUTO);
+});
