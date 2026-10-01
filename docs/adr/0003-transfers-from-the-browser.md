@@ -34,7 +34,13 @@ write.
 - Nothing on the drive is overwritten or removed except the game's own entry
   in the game list; a file already there at the same size is skipped, and files
   are written straight to their own names, so an interrupted transfer resumes
-  by writing again whatever is short of its size.
+  by writing again whatever is short of its size. The browser writes through a
+  swap file and fills the name only on close, so an interrupted file is left
+  empty (0 bytes, with a `.crswap` beside it), never half-written. A temporary
+  name renamed afterwards was tried and dropped: Chromium allows `move()` on a
+  drive only with a write grant on the new name or a click within the last few
+  seconds, and a disc image is renamed minutes after the click, failing with
+  `NotAllowedError`.
 - A drive's Batocera tree is recognised, not assumed — `roms/` at the chosen
   folder, or under `batocera/` — because the external-drive layout is not
   documented; otherwise the person is asked before `roms/` is created.

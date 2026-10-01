@@ -14,7 +14,11 @@
  * Nothing on the drive is overwritten or removed, except the game's own entry
  * in the game list: a file already there at the same size is skipped, a
  * target's own file (OPL's config and art) already there is left as it is,
- * and every file is written straight to its own name. See
+ * and every file is written straight to its own name. The browser already
+ * writes through a swap file (.crswap) and puts the bytes under the name only
+ * on close, so a half-written ROM never sits there; a renamed temporary file
+ * would add nothing, and Chromium refuses the rename once the click that
+ * started it is a few seconds old. See
  * docs/adr/0003-transfers-from-the-browser.md.
  */
 
@@ -451,8 +455,10 @@ export default () => ({
             },
         });
 
-        // Stopped halfway: the file is left short of its size, and is written
-        // again from the start next time.
+        // Stopped halfway: the bytes are in the browser's .crswap beside it,
+        // and the file under the real name, made empty by getFileHandle(), is
+        // left at 0 bytes. Short of its size, it is written again from the
+        // start next time.
         await response.body.pipeThrough(counted).pipeTo(writable, { signal: this.abort.signal });
     },
 
