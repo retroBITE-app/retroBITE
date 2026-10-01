@@ -133,13 +133,8 @@ new #[Title('Consoles')] class extends Component
 
         return Console::all()
             ->reject(fn (Console $console) => ConsoleSourceFolder::has($console))
-            ->filter(function (Console $console) use ($needle) {
-                if ($needle === '') {
-                    return true;
-                }
-
-                // Brand as well as name, so "sega" finds the Mega Drive.
-                return str_contains(mb_strtolower($console->name.' '.$console->brand.' '.$console->key), $needle);
+            ->filter(function (Console $console) use ($needle): bool {
+                return $console->matches($needle);
             })
             ->sortBy('name')
             ->values();

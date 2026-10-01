@@ -23,6 +23,19 @@
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
 
+            {{-- The Ctrl+K box, for somebody who does not know the shortcut. --}}
+            <button
+                type="button"
+                x-data
+                x-on:click="$dispatch('open-global-search')"
+                aria-keyshortcuts="Control+K Meta+K"
+                class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-line-input bg-ground/60 px-2.75 py-1.5 text-sm text-fg-dim transition-colors hover:border-line-bright hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+            >
+                <flux:icon.magnifying-glass class="size-3.5" />
+                <span class="flex-1 text-left">{{ __('Search') }}</span>
+                <kbd aria-hidden="true" class="font-sans text-xs">⌘K</kbd>
+            </button>
+
             @php($installed = App\Models\ConsoleSourceFolder::consoles())
 
             <flux:sidebar.nav>
@@ -173,6 +186,11 @@
             <flux:toast.group>
                 <flux:toast />
             </flux:toast.group>
+        @endpersist
+
+        {{-- Ctrl+K from any page, open at once after a wire:navigate. --}}
+        @persist('global-search')
+            <livewire:global-search />
         @endpersist
 
         {{-- A USB transfer goes on from page to page; see transfer-tray. --}}

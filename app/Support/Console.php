@@ -145,6 +145,15 @@ final class Console
     /**
      * Is this a known console key?
      */
+    /**
+     * Whether a search, already lower-cased, finds this console. Brand as well
+     * as name and key, so "sega" finds the Mega Drive.
+     */
+    public function matches(string $needle): bool
+    {
+        return $needle === '' || str_contains(mb_strtolower($this->name.' '.$this->brand.' '.$this->key), $needle);
+    }
+
     public static function exists(string $key): bool
     {
         return is_array(config("consoles.{$key}"));

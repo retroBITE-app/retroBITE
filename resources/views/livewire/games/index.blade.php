@@ -329,7 +329,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                 ->where('ra_progress.user_id', '=', $userId))
             // Qualified from here down, because the join makes a bare column
             // name one added column away from being ambiguous at runtime.
-            ->when($this->query !== '', fn ($q) => $q->where('games.title', 'like', '%'.$this->query.'%'))
+            ->when($this->query !== '', fn ($q) => $q->search($this->query))
             ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
             // Matched as one of the comma-separated parts rather than with a
             // LIKE, or picking "Action" would also pull in every "Action /
@@ -831,21 +831,16 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                      left-4. The same offsets as the game page's bar, so the
                      Actions button does not move between the two. --}}
                 <div class="relative flex items-center gap-2.5 pt-4 pr-4 pl-18 sm:gap-3.5 lg:px-7.5 lg:pt-5.5">
-                    {{-- The way back up, where the back button used to be. It
-                         gives way before the search does on a phone: the last
-                         step truncates, and the hero below names the console
-                         in full anyway. --}}
+                    {{-- The way back up, where the back button used to be. On
+                         a phone the last step truncates; the hero below names
+                         the console in full anyway. --}}
                     <x-breadcrumbs :items="[
                         [__('Consoles'), route('consoles.index')],
                         [$this->lockedTo->name, null],
                     ]" />
 
-                    {{-- Up here rather than in the filter row, which it used to
-                         fill half of. It pushes Actions to the right edge, and
-                         shrinks before anything else does on a phone. --}}
-                    <x-search-field wire:model.live.debounce.300ms="query" class="ml-auto w-full max-w-64 flex-1" />
-
-                    <flux:dropdown position="bottom" align="end">
+                    {{-- Hard right. Titles are found with Ctrl+K now. --}}
+                    <flux:dropdown position="bottom" align="end" class="ml-auto">
                         <button
                             type="button"
                             class="flex cursor-pointer items-center gap-1.75 rounded-lg border border-line-input bg-scrim/60 px-3 py-1.75 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
