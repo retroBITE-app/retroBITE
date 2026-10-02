@@ -1,11 +1,10 @@
 <?php
 
+use App\Services\DocLibrary;
 use App\Support\DocPath;
 use App\Support\Markdown\VideoEmbed;
 use Flux\Flux;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -42,8 +41,9 @@ new class extends Component
             return VideoEmbed::idFrom($this->url) === null ? '' : '@video['.$this->url.']';
         }
 
+        // The name is the image's hash, known once it is stored.
         return $this->upload instanceof TemporaryUploadedFile
-            ? '!['.$this->caption.']('.DocPath::mediaLink($this->filename()).')'
+            ? '!['.$this->caption.']('.DocPath::mediaLink('…').')'
             : '';
     }
 
@@ -53,7 +53,7 @@ new class extends Component
         return VideoEmbed::idFrom($this->url);
     }
 
-    public function insert(DocPath $paths): void
+    public function insert(DocLibrary $library): void
     {
         if ($this->tab === 'youtube') {
             $this->validate(['url' => ['required', 'url']]);
@@ -74,11 +74,7 @@ new class extends Component
         ]);
 
         try {
-            $filename = $this->filename();
-            Storage::disk('docs')->put(
-                $paths->mediaFor($this->path, $filename),
-                (string) file_get_contents($this->upload->getRealPath()),
-            );
+            $filename = $library->storeMedia($this->path, (string) file_get_contents($this->upload->getRealPath()));
         } catch (\Throwable $e) {
             Log::error('Could not store an attachment', ['path' => $this->path, 'exception' => $e]);
             Flux::toast(variant: 'danger', text: __('Could not store that image.'));
@@ -86,22 +82,13 @@ new class extends Component
             return;
         }
 
-        $this->finish('!['.$this->caption.']('.DocPath::mediaLink($filename).')');
-    }
+        if ($filename === null) {
+            $this->addError('upload', __('That file is not an image this can keep.'));
 
-    /**
-     * A slugged filename, so an upload can never name its own path.
-     */
-    private function filename(): string
-    {
-        if (! $this->upload instanceof TemporaryUploadedFile) {
-            return '';
+            return;
         }
 
-        $extension = Str::lower($this->upload->getClientOriginalExtension());
-        $stem = DocPath::slug((string) Str::of($this->upload->getClientOriginalName())->beforeLast('.'));
-
-        return $stem.'.'.$extension;
+        $this->finish('!['.$this->caption.']('.DocPath::mediaLink($filename).')');
     }
 
     private function finish(string $snippet): void

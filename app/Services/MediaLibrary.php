@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Jobs\MakeThumbnails;
 use App\Models\Game;
 use App\Models\Media;
+use App\Support\ImageType;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -220,13 +221,8 @@ final class MediaLibrary
         }
 
         // The provider omits format on some entries; the bytes still say what
-        // they are.
-        return match (true) {
-            str_starts_with($contents, "\x89PNG") => 'png',
-            str_starts_with($contents, "\xFF\xD8\xFF") => 'jpg',
-            str_starts_with($contents, 'GIF8') => 'gif',
-            str_starts_with($contents, '%PDF') => 'pdf',
-            default => 'bin',
-        };
+        // they are. A manual is a PDF rather than an image.
+        return ImageType::extensionOf($contents)
+            ?? (str_starts_with($contents, '%PDF') ? 'pdf' : 'bin');
     }
 }

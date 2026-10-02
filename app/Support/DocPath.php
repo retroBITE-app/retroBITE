@@ -165,6 +165,15 @@ final class DocPath
     }
 
     /**
+     * Grammar check only: an image path in any folder, for a bundle being
+     * read before its images are given a place of their own.
+     */
+    public static function looksLikeImage(string $relative): bool
+    {
+        return self::isWellFormed($relative, self::MEDIA_EXTENSIONS);
+    }
+
+    /**
      * Grammar check only. An attachment must live directly in a `media` folder.
      */
     public static function looksLikeMedia(string $relative): bool
