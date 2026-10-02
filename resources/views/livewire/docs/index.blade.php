@@ -27,6 +27,13 @@ new #[Title('Docs')] class extends Component
     #[Url(as: 'filter', except: '')]
     public string $filter = '';
 
+    /**
+     * An earlier version being read, named by the moment it was superseded,
+     * in the URL so it can be linked. 0 is the document as it is now.
+     */
+    #[Url(as: 'rev', except: 0)]
+    public int $revision = 0;
+
     /** preview | markdown */
     public string $mode = 'preview';
 
@@ -55,10 +62,31 @@ new #[Title('Docs')] class extends Component
         return app(DocLibrary::class)->search($this->query, $this->filter);
     }
 
+    /** The open document, or the earlier version of it being read. */
     #[Computed]
     public function current(): ?DocResource
     {
-        return app(DocLibrary::class)->find($this->path);
+        $library = app(DocLibrary::class);
+        $doc = $library->find($this->path);
+
+        if ($doc === null || $this->revision === 0) {
+            return $doc;
+        }
+
+        return $library->revision($doc->path, $this->revision) ?? $doc;
+    }
+
+    /**
+     * The open document's earlier versions, newest first, in milliseconds.
+     *
+     * @return Collection<int, int>
+     */
+    #[Computed]
+    public function history(): Collection
+    {
+        $library = app(DocLibrary::class);
+
+        return $library->find($this->path) !== null ? $library->revisions($this->path) : collect();
     }
 
     #[Computed]
@@ -107,6 +135,7 @@ new #[Title('Docs')] class extends Component
     public function select(string $path): void
     {
         $this->path = $path;
+        $this->revision = 0;
         $this->editing = false;
         $this->mode = 'preview';
     }
@@ -115,7 +144,8 @@ new #[Title('Docs')] class extends Component
     {
         $doc = $this->current();
 
-        if (! $doc instanceof DocResource) {
+        // An earlier version is read, not edited: restoring it comes first.
+        if (! $doc instanceof DocResource || $this->revision !== 0) {
             return;
         }
 
@@ -150,6 +180,36 @@ new #[Title('Docs')] class extends Component
         Flux::toast(variant: 'success', text: __('Document saved.'));
     }
 
+    /** Read an earlier version; 0 goes back to the current one. */
+    public function viewRevision(int $timestamp): void
+    {
+        $this->revision = $this->history->contains($timestamp) ? $timestamp : 0;
+        $this->cancel();
+        unset($this->current, $this->html);
+    }
+
+    /** Make the version being read the current one, keeping the current one as a revision. */
+    public function restoreRevision(DocLibrary $library): void
+    {
+        if ($this->revision === 0) {
+            return;
+        }
+
+        try {
+            $library->restore($this->path, $this->revision);
+        } catch (\Throwable $e) {
+            Log::error('Could not restore a document', ['path' => $this->path, 'revision' => $this->revision, 'exception' => $e]);
+            Flux::toast(variant: 'danger', text: __('Could not restore that version.'));
+
+            return;
+        }
+
+        $this->revision = 0;
+        $this->forgetReads();
+
+        Flux::toast(variant: 'success', text: __('Version restored. The one it replaced is in the history.'));
+    }
+
     public function delete(DocLibrary $library): void
     {
         try {
@@ -162,6 +222,7 @@ new #[Title('Docs')] class extends Component
         }
 
         $this->path = '';
+        $this->revision = 0;
         $this->cancel();
         $this->forgetReads();
 
@@ -186,7 +247,7 @@ new #[Title('Docs')] class extends Component
      */
     private function forgetReads(): void
     {
-        unset($this->docs, $this->current, $this->html, $this->chips, $this->mediaDirectory);
+        unset($this->docs, $this->current, $this->history, $this->html, $this->chips, $this->mediaDirectory);
     }
 
     /**
@@ -220,13 +281,7 @@ new #[Title('Docs')] class extends Component
         </div>
 
         <div class="flex items-center gap-2">
-            <flux:input
-                wire:model.live.debounce.300ms="query"
-                type="search"
-                icon="magnifying-glass"
-                class="w-64"
-                :placeholder="__('Search notes')"
-            />
+            <x-search-field wire:model.live.debounce.300ms="query" :placeholder="__('Search notes')" class="w-64" />
 
             <livewire:docs.import-modal />
             <livewire:docs.new-doc-modal />

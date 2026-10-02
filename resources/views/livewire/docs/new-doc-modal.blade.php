@@ -45,9 +45,17 @@ new class extends Component
     public function categories(): array
     {
         return app(DocLibrary::class)
-            ->categories()
+            ->suggestedCategories()
             ->map(fn (string $name): array => ['value' => $name, 'label' => $name])
             ->all();
+    }
+
+    /** A walkthrough is filed under its tag unless another was picked first. */
+    public function updatedTemplate(string $template): void
+    {
+        if ($template === DocTemplate::Walkthrough->value && $this->category === '') {
+            $this->category = 'walkthrough';
+        }
     }
 
     public function create(DocLibrary $library): void
@@ -103,20 +111,7 @@ new class extends Component
             <div>
                 <p class="kicker mb-2 text-fg-faint">{{ __('Console') }}</p>
 
-                <div class="flex flex-wrap gap-1.5">
-                    @foreach (App\Resources\ConsoleResource::all() as $option)
-                        <button
-                            type="button"
-                            wire:key="console-{{ $option->key }}"
-                            wire:click="$set('console', @js($console === $option->key ? '' : $option->key))"
-                            @class([
-                                'cursor-pointer rounded-lg border px-2.5 py-1 font-mono text-xs uppercase transition-colors',
-                                'border-accent-tint/55 bg-accent-tint/10 text-accent' => $console === $option->key,
-                                'border-line-input text-fg-dim hover:bg-hover hover:text-fg' => $console !== $option->key,
-                            ])
-                        >{{ $option->key }}</button>
-                    @endforeach
-                </div>
+                <x-docs.console-picker :selected="$console" />
 
                 <flux:error name="console" />
             </div>

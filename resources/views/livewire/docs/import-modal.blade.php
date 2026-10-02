@@ -197,20 +197,7 @@ new class extends Component
                     <p class="kicker mb-2 text-fg-faint">{{ __('Console') }}</p>
                     <p class="mb-2 text-xs text-fg-faint">{{ __('Decides the folder it is written to, and where its images go.') }}</p>
 
-                    <div class="flex flex-wrap gap-1.5">
-                        @foreach (ConsoleResource::all() as $option)
-                            <button
-                                type="button"
-                                wire:key="import-console-{{ $option->key }}"
-                                wire:click="$set('console', @js($console === $option->key ? '' : $option->key))"
-                                @class([
-                                    'cursor-pointer rounded-lg border px-2.5 py-1 font-mono text-xs uppercase transition-colors',
-                                    'border-accent-tint/55 bg-accent-tint/10 text-accent' => $console === $option->key,
-                                    'border-line-input text-fg-dim hover:bg-hover hover:text-fg' => $console !== $option->key,
-                                ])
-                            >{{ $option->key }}</button>
-                        @endforeach
-                    </div>
+                    <x-docs.console-picker :selected="$console" key-prefix="import-console" />
 
                     <flux:error name="console" />
                 </div>

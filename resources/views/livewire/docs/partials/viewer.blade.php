@@ -41,7 +41,30 @@
                     @endforeach
                 </div>
 
-                <flux:button size="sm" icon="pencil-square" wire:click="edit">{{ __('Edit') }}</flux:button>
+                {{-- Every saved version, newest first, to read and put back. --}}
+                @if ($this->history->isNotEmpty())
+                    <flux:dropdown position="bottom" align="end">
+                        <flux:button size="sm" variant="ghost" icon="clock">{{ __('History') }}</flux:button>
+
+                        <flux:menu class="max-h-80 overflow-y-auto">
+                            <flux:menu.item wire:click="viewRevision(0)" :icon="$revision === 0 ? 'check' : null">
+                                {{ __('Current version') }}
+                            </flux:menu.item>
+                            <flux:menu.separator />
+                            @foreach ($this->history as $timestamp)
+                                @php($at = Illuminate\Support\Carbon::createFromTimestampMs($timestamp)->setTimezone(config('app.timezone')))
+                                <flux:menu.item wire:key="rev-{{ $timestamp }}" wire:click="viewRevision({{ $timestamp }})" :icon="$revision === $timestamp ? 'check' : null">
+                                    <span>{{ $at->isoFormat('D MMM YYYY, HH:mm') }}</span>
+                                    <span class="ml-2 text-xs text-fg-faint">{{ $at->diffForHumans() }}</span>
+                                </flux:menu.item>
+                            @endforeach
+                        </flux:menu>
+                    </flux:dropdown>
+                @endif
+
+                @if ($revision === 0)
+                    <flux:button size="sm" icon="pencil-square" wire:click="edit">{{ __('Edit') }}</flux:button>
+                @endif
             @else
                 <flux:button size="sm" variant="ghost" wire:click="cancel">{{ __('Cancel') }}</flux:button>
                 <flux:button size="sm" variant="primary" wire:click="save">{{ __('Save') }}</flux:button>
@@ -72,6 +95,23 @@
             </flux:dropdown>
         </div>
     </div>
+
+    {{-- An earlier version, read-only until it is put back. --}}
+    @if ($revision !== 0)
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-accent-tint/30 bg-accent-tint/8 px-5 py-3">
+            <p class="text-sm text-fg-soft">
+                {{ __('Viewing the version from :date.', ['date' => Illuminate\Support\Carbon::createFromTimestampMs($revision)->setTimezone(config('app.timezone'))->isoFormat('D MMM YYYY, HH:mm')]) }}
+            </p>
+
+            <div class="flex items-center gap-2">
+                <flux:button size="sm" variant="ghost" wire:click="viewRevision(0)">{{ __('Back to current') }}</flux:button>
+                <flux:button size="sm" variant="primary" icon="arrow-uturn-left" wire:click="restoreRevision"
+                             wire:confirm="{{ __('Make this version the current one? The current one is kept in the history.') }}">
+                    {{ __('Restore this version') }}
+                </flux:button>
+            </div>
+        </div>
+    @endif
 
     @if ($doc->tags !== [])
         <div class="flex flex-wrap gap-1.5 border-b border-line px-5 py-3">

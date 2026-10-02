@@ -32,6 +32,9 @@ class DocLibrary
      */
     private const MAX_REVISIONS = 20;
 
+    /** Categories offered before any document uses them; walkthrough is per game. */
+    public const SUGGESTED_CATEGORIES = ['walkthrough'];
+
     /** Filter tokens the chip row emits, so a console key and a category cannot collide. */
     private const FILTER_CONSOLE = 'console';
 
@@ -154,6 +157,22 @@ class DocLibrary
     }
 
     /**
+     * What the New-doc dialog offers: the categories in use, and the few
+     * worth having before any document uses them. Not the page's filter
+     * chips, which offer only what would return something.
+     *
+     * @return Collection<int, string>
+     */
+    public function suggestedCategories(): Collection
+    {
+        return $this->categories()
+            ->concat(self::SUGGESTED_CATEGORIES)
+            ->unique()
+            ->sort()
+            ->values();
+    }
+
+    /**
      * Write a new document and return it.
      *
      * The path is fixed here and never follows a later title change: renaming
@@ -260,6 +279,21 @@ class DocLibrary
             ->filter(fn (int $timestamp): bool => $timestamp > 0)
             ->sortDesc()
             ->values();
+    }
+
+    /**
+     * One earlier version, to read: its own title and body, under the
+     * document's path so its images still resolve beside it.
+     */
+    public function revision(string $path, int $timestamp): ?DocResource
+    {
+        $revision = $this->paths->revision($path, $timestamp);
+
+        if (! $this->disk()->exists($revision)) {
+            return null;
+        }
+
+        return DocResource::make($this->payload($path, 0, $revision));
     }
 
     /**
@@ -452,20 +486,22 @@ class DocLibrary
     }
 
     /**
-     * One document as the flat array DocResource wraps and the cache stores.
+     * One document as the flat array DocResource wraps and the cache stores,
+     * read from the document itself or, for an earlier version, from $source.
      *
      * @return array<string, mixed>
      */
-    private function payload(string $path, int $revisions): array
+    private function payload(string $path, int $revisions, ?string $source = null): array
     {
         $disk = $this->disk();
-        $parsed = DocFrontMatter::parse((string) $disk->get($path));
+        $source ??= $path;
+        $parsed = DocFrontMatter::parse((string) $disk->get($source));
 
         return [
             'path' => $path,
             'body' => Arr::get($parsed, 'body'),
-            'bytes' => $disk->size($path),
-            'updated' => Arr::get($parsed, 'data.updated', $disk->lastModified($path)),
+            'bytes' => $disk->size($source),
+            'updated' => Arr::get($parsed, 'data.updated', $disk->lastModified($source)),
             'created' => Arr::get($parsed, 'data.created'),
             'revisions' => $revisions,
             'console' => Arr::get($parsed, 'data.console', Str::before($path, '/') === $path ? '' : Str::before($path, '/')),
