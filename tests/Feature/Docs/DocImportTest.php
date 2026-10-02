@@ -64,6 +64,24 @@ function samplePng(): string
     );
 }
 
+/** A one-pixel PNG of one colour, so two images can differ. */
+function colourPng(int $red, int $green, int $blue): string
+{
+    $image = imagecreatetruecolor(1, 1);
+    imagefill($image, 0, 0, (int) imagecolorallocate($image, $red, $green, $blue));
+
+    ob_start();
+    imagepng($image);
+
+    return (string) ob_get_clean();
+}
+
+/** Where storeMedia() puts an image: named for its contents. */
+function hashedPng(string $png): string
+{
+    return md5($png).'.png';
+}
+
 test('a zip imports its document and its images', function () {
     $markdown = "---\ntitle: Laser tuning\ncategory: repair\ntags: [laser]\n---\n\n# Laser tuning\n\n![Pot](media/pot.png)\n";
 
@@ -80,7 +98,8 @@ test('a zip imports its document and its images', function () {
         ->assertDispatched('doc-written');
 
     expect(Storage::disk('docs')->exists('gc/laser-tuning.md'))->toBeTrue()
-        ->and(Storage::disk('docs')->exists('gc/media/pot.png'))->toBeTrue();
+        ->and(Storage::disk('docs')->exists('gc/media/'.hashedPng(samplePng())))->toBeTrue()
+        ->and($this->library->find('gc/laser-tuning.md')->body)->toContain('](media/'.hashedPng(samplePng()).')');
 });
 
 test('an imported file is filed from its own front matter', function () {
@@ -127,8 +146,8 @@ test('an imported image never overwrites one already in the console folder', fun
         ->assertHasNoErrors();
 
     expect(Storage::disk('docs')->get('gc/media/pot.png'))->toBe('the original')
-        ->and(Storage::disk('docs')->exists('gc/media/pot-2.png'))->toBeTrue()
-        ->and($this->library->find('gc/laser.md')->body)->toContain('media/pot-2.png');
+        ->and(Storage::disk('docs')->exists('gc/media/'.hashedPng(samplePng())))->toBeTrue()
+        ->and($this->library->find('gc/laser.md')->body)->toContain('media/'.hashedPng(samplePng()));
 });
 
 test('a zip slip entry is never written', function () {
@@ -201,5 +220,83 @@ test('a round trip through export and import keeps the images', function () {
         ->assertHasNoErrors();
 
     expect(Storage::disk('docs')->exists('gc/laser-calibration.md'))->toBeTrue()
-        ->and(Storage::disk('docs')->exists('gc/media/pot.png'))->toBeTrue();
+        ->and(Storage::disk('docs')->exists('gc/media/'.hashedPng(samplePng())))->toBeTrue()
+        // A fresh library: this test's own read the index before the import.
+        ->and(app(DocLibrary::class)->find('gc/laser-calibration.md')->body)->toContain('media/'.hashedPng(samplePng()));
+});
+
+test('images from any folder in a bundle are stored and their links pointed at them', function () {
+    $forest = colourPng(0, 120, 0);
+    $castle = colourPng(120, 0, 0);
+    $root = colourPng(0, 0, 120);
+
+    $markdown = "# Guide\n\n![Forest](maps/forest.png)\n\n![Castle](./maps/castle.png \"The castle\")\n\n![Cover](cover.png)\n\nThe file maps/forest.png is the first map.\n";
+
+    Livewire::test('docs.import-modal')
+        ->set('upload', zipUpload([
+            'guide.md' => $markdown,
+            'maps/forest.png' => $forest,
+            'maps/castle.png' => $castle,
+            'cover.png' => $root,
+        ]))
+        ->assertSet('attachments', 3)
+        ->set('title', 'Guide')
+        ->call('import')
+        ->assertHasNoErrors();
+
+    $body = $this->library->find('guide.md')->body;
+
+    expect($body)->toContain('![Forest](media/'.hashedPng($forest).')')
+        ->toContain('![Castle](media/'.hashedPng($castle).' "The castle")')
+        ->toContain('![Cover](media/'.hashedPng($root).')')
+        ->toContain('The file maps/forest.png is the first map.')
+        ->and(Storage::disk('docs')->exists('media/'.hashedPng($forest)))->toBeTrue()
+        ->and(Storage::disk('docs')->exists('media/'.hashedPng($castle)))->toBeTrue()
+        ->and(Storage::disk('docs')->exists('media/'.hashedPng($root)))->toBeTrue();
+});
+
+test('two images with one name in different folders stay two images', function () {
+    $day = colourPng(200, 200, 0);
+    $night = colourPng(0, 0, 40);
+
+    Livewire::test('docs.import-modal')
+        ->set('upload', zipUpload([
+            'guide.md' => "# Guide\n\n![Day](day/map.png)\n\n![Night](night/map.png)\n",
+            'day/map.png' => $day,
+            'night/map.png' => $night,
+        ]))
+        ->set('title', 'Guide')
+        ->call('import')
+        ->assertHasNoErrors();
+
+    expect($this->library->find('guide.md')->body)
+        ->toContain('![Day](media/'.hashedPng($day).')')
+        ->toContain('![Night](media/'.hashedPng($night).')');
+});
+
+test('a file named like an image that is not one is left out, and its link as it was', function () {
+    Livewire::test('docs.import-modal')
+        ->set('upload', zipUpload([
+            'guide.md' => "# Guide\n\n![Map](maps/map.png)\n",
+            'maps/map.png' => 'not an image at all',
+        ]))
+        ->set('title', 'Guide')
+        ->call('import')
+        ->assertHasNoErrors();
+
+    expect($this->library->find('guide.md')->body)->toContain('![Map](maps/map.png)')
+        ->and(Storage::disk('docs')->allFiles('media'))->toBe([]);
+});
+
+test('an image path that climbs out of the bundle is never written', function () {
+    Livewire::test('docs.import-modal')
+        ->set('upload', zipUpload([
+            'guide.md' => "# Guide\n",
+            'maps/../../evil.png' => samplePng(),
+        ]))
+        ->set('title', 'Guide')
+        ->call('import');
+
+    expect(Storage::disk('docs')->allFiles())->not->toContain('evil.png')
+        ->and(file_exists(dirname($this->root).'/evil.png'))->toBeFalse();
 });

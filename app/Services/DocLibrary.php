@@ -7,6 +7,7 @@ use App\Resources\ConsoleResource;
 use App\Resources\DocResource;
 use App\Support\DocFrontMatter;
 use App\Support\DocPath;
+use App\Support\ImageType;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
@@ -31,6 +32,9 @@ class DocLibrary
      * Revisions kept per document before the oldest is dropped.
      */
     private const MAX_REVISIONS = 20;
+
+    /** Categories offered before any document uses them; walkthrough is per game. */
+    public const SUGGESTED_CATEGORIES = ['walkthrough'];
 
     /** Filter tokens the chip row emits, so a console key and a category cannot collide. */
     private const FILTER_CONSOLE = 'console';
@@ -154,13 +158,29 @@ class DocLibrary
     }
 
     /**
+     * What the New-doc dialog offers: the categories in use, and the few
+     * worth having before any document uses them. Not the page's filter
+     * chips, which offer only what would return something.
+     *
+     * @return Collection<int, string>
+     */
+    public function suggestedCategories(): Collection
+    {
+        return $this->categories()
+            ->concat(self::SUGGESTED_CATEGORIES)
+            ->unique()
+            ->sort()
+            ->values();
+    }
+
+    /**
      * Write a new document and return it.
      *
      * The path is fixed here and never follows a later title change: renaming
      * the file on every edit would break every link and every bookmark to it.
      *
      * @param  string[]  $tags
-     * @param  array<string, string>  $media  filename => contents
+     * @param  array<string, string>  $media  path in the bundle => contents; see attach()
      */
     public function create(string $console, string $title, string $category, array $tags, string $body, array $media = []): DocResource
     {
@@ -215,6 +235,9 @@ class DocLibrary
         $this->disk()->delete($path);
         $this->disk()->deleteDirectory($this->paths->revisionDirectory($path));
 
+        // Resolved here rather than injected: DocLinks reads through this class.
+        app(DocLinks::class)->forgetDoc($path);
+
         // Before the orphan check, so the index no longer counts this document
         // among the things still referencing its own attachments.
         $this->forget();
@@ -260,6 +283,21 @@ class DocLibrary
             ->filter(fn (int $timestamp): bool => $timestamp > 0)
             ->sortDesc()
             ->values();
+    }
+
+    /**
+     * One earlier version, to read: its own title and body, under the
+     * document's path so its images still resolve beside it.
+     */
+    public function revision(string $path, int $timestamp): ?DocResource
+    {
+        $revision = $this->paths->revision($path, $timestamp);
+
+        if (! $this->disk()->exists($revision)) {
+            return null;
+        }
+
+        return DocResource::make($this->payload($path, 0, $revision));
     }
 
     /**
@@ -338,48 +376,65 @@ class DocLibrary
     }
 
     /**
-     * Write attachments beside a document, renaming on a clash, and return the
-     * body with its links pointed at whatever they were actually stored as.
+     * The one way an image is added to a document, from the editor or from an
+     * import: kept only if the bytes really are an image, named for what they
+     * hold, and written beside the document unless it is there already.
      *
-     * @param  array<string, string>  $media  filename => contents
+     * The name is a hash of the contents, so an upload can never choose its
+     * own path, two images can never clash, and the same image uploaded twice
+     * is one file. The extension is the one the bytes are (ImageType), not the
+     * one they arrived with.
+     *
+     * @return string|null the filename to link as DocPath::mediaLink(), or null for something that is not an image
      */
-    private function attach(string $document, array $media, string $body): string
+    public function storeMedia(string $document, string $contents): ?string
     {
-        foreach ($media as $filename => $contents) {
-            $stored = $this->vacantMedia($document, (string) $filename);
+        $extension = ImageType::extensionOf($contents);
 
-            $this->disk()->put($this->paths->mediaFor($document, $stored), $contents);
-
-            if ($stored !== $filename) {
-                $body = str_replace(
-                    DocPath::mediaLink((string) $filename),
-                    DocPath::mediaLink($stored),
-                    $body,
-                );
-            }
+        if ($extension === null || ! in_array($extension, DocPath::MEDIA_EXTENSIONS, true)) {
+            return null;
         }
 
-        return $body;
+        // md5, as artwork is named: one way to name an image by what it holds.
+        $filename = md5($contents).'.'.$extension;
+        $relative = $this->paths->mediaFor($document, $filename);
+
+        if (! $this->disk()->exists($relative)) {
+            $this->disk()->put($relative, $contents);
+        }
+
+        return $filename;
     }
 
     /**
-     * An attachment filename in this console's media folder that is not taken.
+     * Store a document's images through storeMedia() and point its links at
+     * what they were stored as.
      *
-     * The name is slugged first, both so it survives the path grammar and so a
-     * file named from a phone or a zip cannot dictate its own path.
+     * Keyed by where each image sat in the bundle — maps/forest.png, or
+     * media/pot.png from an export — which is what the markdown links to.
+     * An image that is not one is left out, and its link as it was.
+     *
+     * @param  array<string, string>  $media  path in the bundle => contents
      */
-    private function vacantMedia(string $document, string $filename): string
+    private function attach(string $document, array $media, string $body): string
     {
-        $extension = Str::lower((string) Str::afterLast($filename, '.'));
-        $stem = DocPath::slug((string) Str::beforeLast($filename, '.'));
+        foreach ($media as $source => $contents) {
+            $filename = $this->storeMedia($document, $contents);
 
-        $candidate = $stem.'.'.$extension;
+            if ($filename === null) {
+                continue;
+            }
 
-        for ($suffix = 2; $this->disk()->exists($this->paths->mediaFor($document, $candidate)); $suffix++) {
-            $candidate = $stem.'-'.$suffix.'.'.$extension;
+            // The link targets only, with or without a leading ./ — never prose
+            // that happens to name the same path.
+            $body = str_replace(
+                ['](./'.$source, ']('.$source],
+                ']('.DocPath::mediaLink($filename),
+                $body,
+            );
         }
 
-        return $candidate;
+        return $body;
     }
 
     /**
@@ -452,20 +507,22 @@ class DocLibrary
     }
 
     /**
-     * One document as the flat array DocResource wraps and the cache stores.
+     * One document as the flat array DocResource wraps and the cache stores,
+     * read from the document itself or, for an earlier version, from $source.
      *
      * @return array<string, mixed>
      */
-    private function payload(string $path, int $revisions): array
+    private function payload(string $path, int $revisions, ?string $source = null): array
     {
         $disk = $this->disk();
-        $parsed = DocFrontMatter::parse((string) $disk->get($path));
+        $source ??= $path;
+        $parsed = DocFrontMatter::parse((string) $disk->get($source));
 
         return [
             'path' => $path,
             'body' => Arr::get($parsed, 'body'),
-            'bytes' => $disk->size($path),
-            'updated' => Arr::get($parsed, 'data.updated', $disk->lastModified($path)),
+            'bytes' => $disk->size($source),
+            'updated' => Arr::get($parsed, 'data.updated', $disk->lastModified($source)),
             'created' => Arr::get($parsed, 'data.created'),
             'revisions' => $revisions,
             'console' => Arr::get($parsed, 'data.console', Str::before($path, '/') === $path ? '' : Str::before($path, '/')),

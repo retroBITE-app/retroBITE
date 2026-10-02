@@ -41,7 +41,30 @@
                     @endforeach
                 </div>
 
-                <flux:button size="sm" icon="pencil-square" wire:click="edit">{{ __('Edit') }}</flux:button>
+                {{-- Every saved version, newest first, to read and put back. --}}
+                @if ($this->history->isNotEmpty())
+                    <flux:dropdown position="bottom" align="end">
+                        <flux:button size="sm" variant="ghost" icon="clock">{{ __('History') }}</flux:button>
+
+                        <flux:menu class="max-h-80 overflow-y-auto">
+                            <flux:menu.item wire:click="viewRevision(0)" :icon="$revision === 0 ? 'check' : null">
+                                {{ __('Current version') }}
+                            </flux:menu.item>
+                            <flux:menu.separator />
+                            @foreach ($this->history as $timestamp)
+                                @php($at = Illuminate\Support\Carbon::createFromTimestampMs($timestamp)->setTimezone(config('app.timezone')))
+                                <flux:menu.item wire:key="rev-{{ $timestamp }}" wire:click="viewRevision({{ $timestamp }})" :icon="$revision === $timestamp ? 'check' : null">
+                                    <span>{{ $at->isoFormat('D MMM YYYY, HH:mm') }}</span>
+                                    <span class="ml-2 text-xs text-fg-faint">{{ $at->diffForHumans() }}</span>
+                                </flux:menu.item>
+                            @endforeach
+                        </flux:menu>
+                    </flux:dropdown>
+                @endif
+
+                @if ($revision === 0)
+                    <flux:button size="sm" icon="pencil-square" wire:click="edit">{{ __('Edit') }}</flux:button>
+                @endif
             @else
                 <flux:button size="sm" variant="ghost" wire:click="cancel">{{ __('Cancel') }}</flux:button>
                 <flux:button size="sm" variant="primary" wire:click="save">{{ __('Save') }}</flux:button>
@@ -73,6 +96,23 @@
         </div>
     </div>
 
+    {{-- An earlier version, read-only until it is put back. --}}
+    @if ($revision !== 0)
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-accent-tint/30 bg-accent-tint/8 px-5 py-3">
+            <p class="text-sm text-fg-soft">
+                {{ __('Viewing the version from :date.', ['date' => Illuminate\Support\Carbon::createFromTimestampMs($revision)->setTimezone(config('app.timezone'))->isoFormat('D MMM YYYY, HH:mm')]) }}
+            </p>
+
+            <div class="flex items-center gap-2">
+                <flux:button size="sm" variant="ghost" wire:click="viewRevision(0)">{{ __('Back to current') }}</flux:button>
+                <flux:button size="sm" variant="primary" icon="arrow-uturn-left" wire:click="restoreRevision"
+                             wire:confirm="{{ __('Make this version the current one? The current one is kept in the history.') }}">
+                    {{ __('Restore this version') }}
+                </flux:button>
+            </div>
+        </div>
+    @endif
+
     @if ($doc->tags !== [])
         <div class="flex flex-wrap gap-1.5 border-b border-line px-5 py-3">
             @foreach ($doc->tags as $tag)
@@ -81,6 +121,27 @@
                     class="rounded-md border border-line-input bg-sunken px-2 py-0.5 font-mono text-xs text-fg-dim"
                 >{{ $tag }}</span>
             @endforeach
+        </div>
+    @endif
+
+    {{-- The games this doc is about; each one's page shows it under Docs. --}}
+    @if ($revision === 0)
+        <div class="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-3">
+            <span class="kicker mr-1 text-fg-faint">{{ __('Games') }}</span>
+
+            @foreach ($this->linkedGames as $game)
+                <span wire:key="linked-game-{{ $game->id }}" class="flex h-7 items-center gap-1.5 rounded-md border border-line-input bg-sunken pr-1 pl-2.5 text-xs text-fg-soft">
+                    <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="hover:text-accent">{{ $game->title }}</a>
+                    <button
+                        type="button"
+                        wire:click="unlinkGame({{ $game->id }})"
+                        aria-label="{{ __('Unlink :title', ['title' => $game->title]) }}"
+                        class="grid size-5 cursor-pointer place-items-center rounded text-fg-dim hover:bg-hover hover:text-fg"
+                    ><flux:icon.x-mark variant="micro" class="size-3.5" /></button>
+                </span>
+            @endforeach
+
+            <livewire:docs.link-game-modal :path="$doc->path" wire:key="link-game-{{ $doc->path }}" />
         </div>
     @endif
 

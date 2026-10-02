@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\Game;
 use App\Resources\ConsoleResource;
 use App\Resources\DocResource;
 use App\Services\DocLibrary;
+use App\Services\DocLinks;
 use App\Services\DocRenderer;
 use App\Support\DocPath;
 use Flux\Flux;
@@ -15,7 +17,7 @@ use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
-new #[Title('Docs')] class extends Component
+new #[Title('Documents')] class extends Component
 {
     /** Relative path of the open document, in the URL so a doc can be linked. */
     #[Url(as: 'doc', except: '')]
@@ -26,6 +28,13 @@ new #[Title('Docs')] class extends Component
 
     #[Url(as: 'filter', except: '')]
     public string $filter = '';
+
+    /**
+     * An earlier version being read, named by the moment it was superseded,
+     * in the URL so it can be linked. 0 is the document as it is now.
+     */
+    #[Url(as: 'rev', except: 0)]
+    public int $revision = 0;
 
     /** preview | markdown */
     public string $mode = 'preview';
@@ -44,6 +53,11 @@ new #[Title('Docs')] class extends Component
         if ($this->current() === null) {
             $this->path = (string) $library->search($this->query, $this->filter)->value('path', '');
         }
+
+        // ?edit=1, from a game page's Edit or a doc just written about a game.
+        if (request()->boolean('edit')) {
+            $this->edit();
+        }
     }
 
     /**
@@ -55,10 +69,42 @@ new #[Title('Docs')] class extends Component
         return app(DocLibrary::class)->search($this->query, $this->filter);
     }
 
+    /** The open document, or the earlier version of it being read. */
     #[Computed]
     public function current(): ?DocResource
     {
-        return app(DocLibrary::class)->find($this->path);
+        $library = app(DocLibrary::class);
+        $doc = $library->find($this->path);
+
+        if ($doc === null || $this->revision === 0) {
+            return $doc;
+        }
+
+        return $library->revision($doc->path, $this->revision) ?? $doc;
+    }
+
+    /**
+     * The games the open document is about.
+     *
+     * @return Collection<int, Game>
+     */
+    #[Computed]
+    public function linkedGames(): Collection
+    {
+        return $this->current() !== null ? app(DocLinks::class)->gamesFor($this->path) : collect();
+    }
+
+    /**
+     * The open document's earlier versions, newest first, in milliseconds.
+     *
+     * @return Collection<int, int>
+     */
+    #[Computed]
+    public function history(): Collection
+    {
+        $library = app(DocLibrary::class);
+
+        return $library->find($this->path) !== null ? $library->revisions($this->path) : collect();
     }
 
     #[Computed]
@@ -107,6 +153,7 @@ new #[Title('Docs')] class extends Component
     public function select(string $path): void
     {
         $this->path = $path;
+        $this->revision = 0;
         $this->editing = false;
         $this->mode = 'preview';
     }
@@ -115,7 +162,8 @@ new #[Title('Docs')] class extends Component
     {
         $doc = $this->current();
 
-        if (! $doc instanceof DocResource) {
+        // An earlier version is read, not edited: restoring it comes first.
+        if (! $doc instanceof DocResource || $this->revision !== 0) {
             return;
         }
 
@@ -150,6 +198,54 @@ new #[Title('Docs')] class extends Component
         Flux::toast(variant: 'success', text: __('Document saved.'));
     }
 
+    public function unlinkGame(int $gameId): void
+    {
+        $game = Game::query()->find($gameId);
+
+        if ($game !== null) {
+            app(DocLinks::class)->unlink($this->path, $game);
+        }
+
+        unset($this->linkedGames);
+    }
+
+    /** A game was linked from the dialog: show it in the row. */
+    #[On('doc-linked')]
+    public function refreshLinks(): void
+    {
+        unset($this->linkedGames);
+    }
+
+    /** Read an earlier version; 0 goes back to the current one. */
+    public function viewRevision(int $timestamp): void
+    {
+        $this->revision = $this->history->contains($timestamp) ? $timestamp : 0;
+        $this->cancel();
+        unset($this->current, $this->html);
+    }
+
+    /** Make the version being read the current one, keeping the current one as a revision. */
+    public function restoreRevision(DocLibrary $library): void
+    {
+        if ($this->revision === 0) {
+            return;
+        }
+
+        try {
+            $library->restore($this->path, $this->revision);
+        } catch (\Throwable $e) {
+            Log::error('Could not restore a document', ['path' => $this->path, 'revision' => $this->revision, 'exception' => $e]);
+            Flux::toast(variant: 'danger', text: __('Could not restore that version.'));
+
+            return;
+        }
+
+        $this->revision = 0;
+        $this->forgetReads();
+
+        Flux::toast(variant: 'success', text: __('Version restored. The one it replaced is in the history.'));
+    }
+
     public function delete(DocLibrary $library): void
     {
         try {
@@ -162,6 +258,7 @@ new #[Title('Docs')] class extends Component
         }
 
         $this->path = '';
+        $this->revision = 0;
         $this->cancel();
         $this->forgetReads();
 
@@ -186,7 +283,7 @@ new #[Title('Docs')] class extends Component
      */
     private function forgetReads(): void
     {
-        unset($this->docs, $this->current, $this->html, $this->chips, $this->mediaDirectory);
+        unset($this->docs, $this->current, $this->history, $this->linkedGames, $this->html, $this->chips, $this->mediaDirectory);
     }
 
     /**
@@ -210,23 +307,20 @@ new #[Title('Docs')] class extends Component
 };
 ?>
 
-<section class="w-full" x-data>
+{{-- docsRail: whether the list beside the open document is shown. --}}
+<section class="w-full" x-data="docsRail">
     <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="kicker mb-1.5 text-fg-faint">
                 {{ __('Knowledge base') }} · {{ trans_choice(':count doc|:count docs', $this->docs->count(), ['count' => $this->docs->count()]) }}
             </p>
-            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Docs') }}</h1>
+            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Documents') }}</h1>
         </div>
 
         <div class="flex items-center gap-2">
-            <flux:input
-                wire:model.live.debounce.300ms="query"
-                type="search"
-                icon="magnifying-glass"
-                class="w-64"
-                :placeholder="__('Search notes')"
-            />
+            <x-search-field wire:model.live.debounce.300ms="query" :placeholder="__('Search notes')" class="w-64" />
+
+            <x-docs.rail-toggle />
 
             <livewire:docs.import-modal />
             <livewire:docs.new-doc-modal />
@@ -265,7 +359,7 @@ new #[Title('Docs')] class extends Component
             @include('livewire.docs.partials.viewer')
         </div>
 
-        <aside class="w-full shrink-0 lg:w-[19rem]">
+        <aside x-show="rail" class="w-full shrink-0 lg:w-[19rem]">
             @include('livewire.docs.partials.rail')
         </aside>
     </div>

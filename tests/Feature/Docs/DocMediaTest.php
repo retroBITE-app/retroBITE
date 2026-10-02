@@ -41,15 +41,29 @@ afterEach(function () {
     exec('rm -rf '.escapeshellarg($this->root));
 });
 
-test('an uploaded image lands in the media folder beside the doc', function () {
+test('an uploaded image lands in the media folder beside the doc, named for its contents', function () {
+    $upload = fakePng('SCPH 39001 pot.png');
+    $stored = md5((string) file_get_contents($upload->getRealPath())).'.png';
+
     Livewire::test('docs.media-modal', ['path' => $this->doc->path])
-        ->set('upload', fakePng('SCPH 39001 pot.png'))
+        ->set('upload', $upload)
         ->set('caption', 'Pot location')
         ->call('insert')
         ->assertHasNoErrors()
-        ->assertDispatched('doc-insert', snippet: '![Pot location](media/scph-39001-pot.png)');
+        ->assertDispatched('doc-insert', snippet: '![Pot location](media/'.$stored.')');
 
-    expect(Storage::disk('docs')->exists('ps2/media/scph-39001-pot.png'))->toBeTrue();
+    expect(Storage::disk('docs')->exists('ps2/media/'.$stored))->toBeTrue();
+});
+
+test('the same image uploaded twice is one file', function () {
+    foreach (['first.png', 'second.png'] as $name) {
+        Livewire::test('docs.media-modal', ['path' => $this->doc->path])
+            ->set('upload', fakePng($name))
+            ->call('insert')
+            ->assertHasNoErrors();
+    }
+
+    expect(Storage::disk('docs')->allFiles('ps2/media'))->toHaveCount(1);
 });
 
 test('a non image upload is refused', function () {

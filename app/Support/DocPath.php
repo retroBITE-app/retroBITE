@@ -31,13 +31,16 @@ final class DocPath
     }
 
     /**
-     * Relative path of the document a console key and slug name.
+     * Relative path of the document a console key and slug name. No console
+     * files it at the root, beside the console folders.
      *
      * @throws DocPathException
      */
     public function document(string $console, string $slug): string
     {
-        return $this->assertDocument($console.'/'.$slug.'.'.self::DOC_EXTENSION);
+        $filename = $slug.'.'.self::DOC_EXTENSION;
+
+        return $this->assertDocument($console === '' ? $filename : $console.'/'.$filename);
     }
 
     /**
@@ -159,6 +162,15 @@ final class DocPath
         // Keep the two trees disjoint: a .md sitting in an attachments folder is
         // not a document, whatever it contains.
         return ! in_array(self::MEDIA_DIR, self::parents($relative), true);
+    }
+
+    /**
+     * Grammar check only: an image path in any folder, for a bundle being
+     * read before its images are given a place of their own.
+     */
+    public static function looksLikeImage(string $relative): bool
+    {
+        return self::isWellFormed($relative, self::MEDIA_EXTENSIONS);
     }
 
     /**

@@ -38,6 +38,11 @@ test('builds a document path from a console and a slug', function () {
         ->toBe('gc/dol-001-vs-dol-101.md');
 });
 
+test('files a document with no console at the root', function () {
+    expect($this->path->document('', 'controller-pinouts'))->toBe('controller-pinouts.md')
+        ->and($this->path->mediaDirectory('controller-pinouts.md'))->toBe('media');
+});
+
 test('refuses a path a request could craft', function (string $gate, string $path) {
     $this->path->{$gate}($path);
 })->with([

@@ -20,6 +20,9 @@ use App\Models\RaGame;
 use App\Models\RaProgress;
 use App\Models\RaUnlock;
 use App\Models\Transfer;
+use App\Resources\DocResource;
+use App\Services\DocLinks;
+use App\Services\DocRenderer;
 use App\Services\LibraryFiles;
 use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
@@ -81,6 +84,10 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      */
     #[Url(as: 'tab')]
     public string $tab = '';
+
+    /** The linked doc open under the Docs tab, or '' for the newest. */
+    #[Url(as: 'doc', except: '')]
+    public string $doc = '';
 
     /** The transfer to a network share this page is waiting on, if any. */
     public ?int $watchingTransfer = null;
@@ -1324,6 +1331,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 'icon' => 'photo',
                 'count' => count($this->gallery),
             ] : null,
+            $this->docs->isNotEmpty() ? [
+                'key' => 'docs',
+                'label' => __('Documents'),
+                'icon' => 'book-open',
+                'count' => $this->docs->count(),
+            ] : null,
             $this->convertible !== null ? [
                 'key' => 'conversion',
                 'label' => __('Conversion'),
@@ -1377,6 +1390,48 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         $this->tab = $tab;
 
         unset($this->activeTab);
+    }
+
+    /**
+     * The docs linked to this game, newest first, for the Docs tab.
+     *
+     * @return Collection<int, DocResource>
+     */
+    #[Computed]
+    public function docs(): Collection
+    {
+        return app(DocLinks::class)->docsFor($this->game);
+    }
+
+    /** The doc the Docs tab is reading: the one named, else the newest. */
+    #[Computed]
+    public function openDoc(): ?DocResource
+    {
+        return $this->docs->firstWhere('path', $this->doc) ?? $this->docs->first();
+    }
+
+    /** The open doc rendered, as the Docs page renders it. */
+    #[Computed]
+    public function openDocHtml(): string
+    {
+        return $this->openDoc !== null ? app(DocRenderer::class)->render($this->openDoc) : '';
+    }
+
+    public function readDoc(string $path): void
+    {
+        $this->doc = $path;
+
+        unset($this->openDoc, $this->openDocHtml);
+    }
+
+    /** A doc was linked from the dialog: open the Docs tab on it. */
+    #[On('doc-linked')]
+    public function docLinked(?string $path = null): void
+    {
+        unset($this->docs, $this->openDoc, $this->openDocHtml, $this->contentTabs);
+
+        $this->doc = $path ?? '';
+        $this->selectTab('docs');
     }
 
     /**
@@ -1514,6 +1569,29 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     >
                         <flux:icon.magnifying-glass class="size-[15px] text-fg-muted" />
                         {{ __('Identify manually') }}
+                    </button>
+
+                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+
+                    {{-- A walkthrough, a repair note: shown under this game's Docs tab. --}}
+                    <button
+                        type="button"
+                        role="menuitem"
+                        x-on:click="open = false; $flux.modal('new-doc').show()"
+                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                    >
+                        <flux:icon.pencil-square class="size-[15px] text-fg-muted" />
+                        {{ __('Write a doc about it') }}
+                    </button>
+
+                    <button
+                        type="button"
+                        role="menuitem"
+                        x-on:click="open = false; $flux.modal('link-doc').show()"
+                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                    >
+                        <flux:icon.link class="size-[15px] text-fg-muted" />
+                        {{ __('Link a doc') }}
                     </button>
 
                     <div class="my-1.25 mx-2 h-px bg-line"></div>
@@ -2086,6 +2164,74 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             </div>
         </section>
     @endif
+
+    {{-- The docs about this game, read here and written on the Docs page.
+         Rendered as the Docs page renders them; no lightbox of their own, as
+         this page has one already and two cannot nest. --}}
+    @if ($this->activeTab === 'docs' && $this->openDoc !== null)
+        @php($reading = $this->openDoc)
+        <section class="relative z-1 px-4 pt-4.5 lg:px-8">
+            {{-- The list sits right on a wide screen, and above the doc on a
+                 narrow one, where it is the first thing to choose from; hidden
+                 with the same toggle, and the same remembered choice, as the
+                 Documents page. --}}
+            @php($hasList = $this->docs->count() > 1)
+            <div
+                x-data="docsRail"
+                class="grid gap-4"
+                @if ($hasList) x-bind:class="rail && 'lg:grid-cols-[minmax(0,1fr)_280px]'" @endif
+            >
+                @if ($hasList)
+                    <nav x-show="rail" class="flex flex-col gap-1 lg:order-last" aria-label="{{ __('Docs about this game') }}">
+                        @foreach ($this->docs as $listed)
+                            <button
+                                type="button"
+                                wire:key="game-doc-{{ md5($listed->path) }}"
+                                wire:click="readDoc(@js($listed->path))"
+                                @class([
+                                    'cursor-pointer rounded-lg px-3 py-2 text-left transition-colors',
+                                    'bg-accent-tint/13 text-accent shadow-rail' => $listed->path === $reading->path,
+                                    'text-fg-cool hover:bg-hover hover:text-fg' => $listed->path !== $reading->path,
+                                ])
+                            >
+                                <span class="block truncate text-sm">{{ $listed->title }}</span>
+                                <span class="mt-0.5 block truncate text-xs text-fg-faint">{{ $listed->updatedAt->diffForHumans() }}</span>
+                            </button>
+                        @endforeach
+                    </nav>
+                @endif
+
+                <article class="overflow-hidden rounded-xl border border-line bg-sunken">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+                        <div class="min-w-0">
+                            <p class="truncate text-base text-fg-bright">{{ $reading->title }}</p>
+                            <p class="mt-0.5 text-xs text-fg-faint">
+                                @if ($reading->category !== '')
+                                    {{ Str::headline($reading->category) }} ·
+                                @endif
+                                {{ __('Edited :when', ['when' => $reading->updatedAt->diffForHumans()]) }}
+                            </p>
+                        </div>
+
+                        <div class="flex shrink-0 items-center gap-2">
+                            @if ($hasList)
+                                <x-docs.rail-toggle class="size-8" />
+                            @endif
+                            <flux:button size="sm" variant="ghost" icon="book-open" :href="route('docs.index', ['doc' => $reading->path])" wire:navigate>
+                                {{ __('Open in Documents') }}
+                            </flux:button>
+                        </div>
+                    </div>
+
+                    <div data-doc-body class="px-5 py-4">{!! $this->openDocHtml !!}</div>
+                </article>
+            </div>
+        </section>
+    @endif
+
+    {{-- Opened from the Actions menu; neither draws a trigger here. --}}
+    <livewire:docs.new-doc-modal :game-id="$game->id" :trigger="false" wire:key="new-doc-for-{{ $game->id }}" />
+    <livewire:docs.link-doc-modal :game-id="$game->id" wire:key="link-doc-for-{{ $game->id }}" />
 
     @if ($this->activeTab === 'artwork')
         <section class="relative z-1 px-4 pt-4.5 lg:px-8">

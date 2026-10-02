@@ -8,6 +8,7 @@ enum DocTemplate: string
     case RepairLog = 'repair-log';
     case Calibration = 'calibration';
     case CompatibilityMatrix = 'compatibility-matrix';
+    case Walkthrough = 'walkthrough';
 
     /**
      * Human-readable name for the UI.
@@ -19,6 +20,7 @@ enum DocTemplate: string
             self::RepairLog => __('Repair log'),
             self::Calibration => __('Calibration'),
             self::CompatibilityMatrix => __('Compatibility matrix'),
+            self::Walkthrough => __('Walkthrough'),
         };
     }
 
@@ -32,6 +34,7 @@ enum DocTemplate: string
             self::RepairLog => __('Symptom, diagnosis, parts, result — one entry per visit.'),
             self::Calibration => __('Pre-checks, procedure steps, reference table, verify block.'),
             self::CompatibilityMatrix => __('A table of models against revisions and known results.'),
+            self::Walkthrough => __('Overview, then chapter by chapter, collectibles and tips.'),
         };
     }
 
@@ -115,6 +118,30 @@ enum DocTemplate: string
                 | Model | Revision | Result | Notes |
                 | ----- | -------- | ------ | ----- |
                 |       |          |        |       |
+
+                ## References
+
+                MARKDOWN,
+
+            self::Walkthrough => <<<'MARKDOWN'
+
+                ## Overview
+
+                What the game is, how long it runs, and what to know before starting.
+
+                ## Chapters
+
+                ### Chapter 1
+
+                Where it starts, what to do, and the way through.
+
+                ## Collectibles
+
+                | Item | Where | Notes |
+                | ---- | ----- | ----- |
+                |      |       |       |
+
+                ## Tips
 
                 ## References
 

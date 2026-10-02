@@ -78,8 +78,8 @@ class DocArchive
     }
 
     /**
-     * Read a bundle of the shape write() produces: one markdown file at the
-     * root, and the media folder beside it.
+     * Read a bundle: one markdown file at the root, and its images beside it
+     * or in one folder — the media folder write() makes, or any other.
      *
      * @return array{name: string, markdown: string, media: array<string, string>}
      *
@@ -146,8 +146,9 @@ class DocArchive
                 continue;
             }
 
+            // By where it sat, which is what the markdown links to.
             if (self::isAttachment($entry)) {
-                $media[(string) Str::afterLast($entry, '/')] = (string) $zip->getFromIndex($index);
+                $media[$entry] = (string) $zip->getFromIndex($index);
             }
         }
 
@@ -178,11 +179,13 @@ class DocArchive
     }
 
     /**
-     * An attachment: directly inside the one media folder, nothing nested.
+     * An image beside the document or one folder down — media/ in a bundle
+     * of ours, maps/ or images/ in somebody else's. Nothing nested deeper, and
+     * the path grammar refuses .. and the rest a crafted archive might try.
      */
     private static function isAttachment(string $entry): bool
     {
-        return substr_count($entry, '/') === 1 && DocPath::looksLikeMedia($entry);
+        return substr_count($entry, '/') <= 1 && DocPath::looksLikeImage($entry);
     }
 
     /**
