@@ -85,7 +85,7 @@ test('a game with no linked docs has no Docs tab', function () {
     expect($tabs)->not->toContain('docs');
 });
 
-test('a linked doc gets a Docs tab that reads it, opens it and edits it on the Docs page', function () {
+test('a linked doc gets a Docs tab that reads it and opens it on the Documents page', function () {
     $doc = $this->library->create('gc', 'Chapter guide', 'walkthrough', [], "# Chapter guide\n\nTalk to Goombella first.\n");
     $this->links->link($doc->path, $this->game);
 
@@ -98,17 +98,7 @@ test('a linked doc gets a Docs tab that reads it, opens it and edits it on the D
 
     // Escaped as the page prints them: the & of the edit link is &amp; there.
     $page->assertSee(route('docs.index', ['doc' => $doc->path]))
-        ->assertSee(route('docs.index', ['doc' => $doc->path, 'edit' => 1]));
-});
-
-test('unlinking from the game page empties its Docs tab and keeps the doc', function () {
-    $doc = $this->library->create('gc', 'Chapter guide', '', [], "# C\n");
-    $this->links->link($doc->path, $this->game);
-
-    $page = Livewire::test('games.show', ['game' => $this->game])->call('unlinkDoc', $doc->path);
-
-    expect(array_column($page->instance()->contentTabs, 'key'))->not->toContain('docs')
-        ->and(app(DocLibrary::class)->find($doc->path))->not->toBeNull();
+        ->assertDontSee(route('docs.index', ['doc' => $doc->path, 'edit' => 1]));
 });
 
 test('a doc written about a game from its page is linked and opened in the editor', function () {

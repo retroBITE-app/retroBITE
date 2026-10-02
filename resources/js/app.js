@@ -1,3 +1,4 @@
+import docsRail from './docs-rail';
 import globalSearch from './global-search';
 import romUpload from './rom-upload';
 import transfer from './transfer';
@@ -9,6 +10,8 @@ import './echo';
 // the uploader is too much logic to live in an x-data attribute.
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('romUpload', romUpload);
+    // The documents list beside an open document; see docs-rail.js.
+    window.Alpine.data('docsRail', docsRail);
     // The Ctrl+K box's keyboard; see global-search.js.
     window.Alpine.data('globalSearch', globalSearch);
     // Copying a game onto a drive; see transfer.js.

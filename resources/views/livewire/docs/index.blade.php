@@ -307,7 +307,8 @@ new #[Title('Documents')] class extends Component
 };
 ?>
 
-<section class="w-full" x-data>
+{{-- docsRail: whether the list beside the open document is shown. --}}
+<section class="w-full" x-data="docsRail">
     <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="kicker mb-1.5 text-fg-faint">
@@ -318,6 +319,8 @@ new #[Title('Documents')] class extends Component
 
         <div class="flex items-center gap-2">
             <x-search-field wire:model.live.debounce.300ms="query" :placeholder="__('Search notes')" class="w-64" />
+
+            <x-docs.rail-toggle />
 
             <livewire:docs.import-modal />
             <livewire:docs.new-doc-modal />
@@ -356,7 +359,7 @@ new #[Title('Documents')] class extends Component
             @include('livewire.docs.partials.viewer')
         </div>
 
-        <aside class="w-full shrink-0 lg:w-[19rem]">
+        <aside x-show="rail" class="w-full shrink-0 lg:w-[19rem]">
             @include('livewire.docs.partials.rail')
         </aside>
     </div>

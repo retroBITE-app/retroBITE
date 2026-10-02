@@ -1424,16 +1424,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         unset($this->openDoc, $this->openDocHtml);
     }
 
-    public function unlinkDoc(string $path): void
-    {
-        app(DocLinks::class)->unlink($path, $this->game);
-
-        $this->doc = '';
-        unset($this->docs, $this->openDoc, $this->openDocHtml, $this->contentTabs, $this->activeTab);
-
-        Flux::toast(variant: 'success', text: __('Doc unlinked. It is still on the Documents page.'));
-    }
-
     /** A doc was linked from the dialog: open the Docs tab on it. */
     #[On('doc-linked')]
     public function docLinked(?string $path = null): void
@@ -2182,10 +2172,17 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         @php($reading = $this->openDoc)
         <section class="relative z-1 px-4 pt-4.5 lg:px-8">
             {{-- The list sits right on a wide screen, and above the doc on a
-                 narrow one, where it is the first thing to choose from. --}}
-            <div @class(['grid gap-4', 'lg:grid-cols-[minmax(0,1fr)_280px]' => $this->docs->count() > 1])>
-                @if ($this->docs->count() > 1)
-                    <nav class="flex flex-col gap-1 lg:order-last" aria-label="{{ __('Docs about this game') }}">
+                 narrow one, where it is the first thing to choose from; hidden
+                 with the same toggle, and the same remembered choice, as the
+                 Documents page. --}}
+            @php($hasList = $this->docs->count() > 1)
+            <div
+                x-data="docsRail"
+                class="grid gap-4"
+                @if ($hasList) x-bind:class="rail && 'lg:grid-cols-[minmax(0,1fr)_280px]'" @endif
+            >
+                @if ($hasList)
+                    <nav x-show="rail" class="flex flex-col gap-1 lg:order-last" aria-label="{{ __('Docs about this game') }}">
                         @foreach ($this->docs as $listed)
                             <button
                                 type="button"
@@ -2217,15 +2214,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         </div>
 
                         <div class="flex shrink-0 items-center gap-2">
-                            <flux:button size="sm" variant="ghost" icon="link-slash" wire:click="unlinkDoc(@js($reading->path))"
-                                         wire:confirm="{{ __('Unlink this doc from :title? The doc itself stays on the Documents page.', ['title' => $game->title]) }}">
-                                {{ __('Unlink') }}
-                            </flux:button>
+                            @if ($hasList)
+                                <x-docs.rail-toggle class="size-8" />
+                            @endif
                             <flux:button size="sm" variant="ghost" icon="book-open" :href="route('docs.index', ['doc' => $reading->path])" wire:navigate>
                                 {{ __('Open in Documents') }}
-                            </flux:button>
-                            <flux:button size="sm" icon="pencil-square" :href="route('docs.index', ['doc' => $reading->path, 'edit' => 1])" wire:navigate>
-                                {{ __('Edit') }}
                             </flux:button>
                         </div>
                     </div>
