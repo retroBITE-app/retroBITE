@@ -1,14 +1,17 @@
 <?php
 
 use App\Enums\DocTemplate;
+use App\Models\Game;
 use App\Resources\ConsoleResource;
 use App\Services\DocLibrary;
+use App\Services\DocLinks;
 use App\Support\DocPath;
 use Flux\Flux;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 new class extends Component
@@ -25,6 +28,31 @@ new class extends Component
     public bool $coiningCategory = false;
 
     public string $template = 'blank';
+
+    /**
+     * The game this doc is being written about, from that game's page: it
+     * presets the title and console, and the doc is linked to it on create.
+     */
+    #[Locked]
+    public ?int $gameId = null;
+
+    /** Off where something else opens the modal — the game page's Actions menu. */
+    #[Locked]
+    public bool $trigger = true;
+
+    public function mount(?int $gameId = null, bool $trigger = true): void
+    {
+        $this->trigger = $trigger;
+        $game = $gameId !== null ? Game::query()->find($gameId) : null;
+
+        if ($game === null) {
+            return;
+        }
+
+        $this->gameId = $game->id;
+        $this->title = $game->title;
+        $this->console = ConsoleResource::exists($game->console) ? $game->console : '';
+    }
 
     /**
      * Where this would be written, shown live under the form so the filename
@@ -84,6 +112,17 @@ new class extends Component
             return;
         }
 
+        $game = $this->gameId !== null ? Game::query()->find($this->gameId) : null;
+
+        // Written about a game: linked to it, and straight into the editor, as
+        // nothing on the game page could show an empty doc being written.
+        if ($game !== null) {
+            app(DocLinks::class)->link($doc->path, $game);
+            $this->redirectRoute('docs.index', ['doc' => $doc->path, 'edit' => 1], navigate: true);
+
+            return;
+        }
+
         $this->reset('title', 'category', 'coiningCategory');
 
         Flux::modal(self::MODAL)->close();
@@ -95,9 +134,11 @@ new class extends Component
 ?>
 
 <div>
-    <flux:modal.trigger :name="$this::MODAL">
-        <flux:button size="sm" icon="plus">{{ __('New doc') }}</flux:button>
-    </flux:modal.trigger>
+    @if ($trigger)
+        <flux:modal.trigger :name="$this::MODAL">
+            <flux:button size="sm" icon="plus">{{ __('New doc') }}</flux:button>
+        </flux:modal.trigger>
+    @endif
 
     <flux:modal :name="$this::MODAL" class="w-full max-w-lg">
         <form wire:submit="create" class="space-y-5">

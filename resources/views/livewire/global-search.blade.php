@@ -64,30 +64,20 @@ new class extends Component
                         <p class="kicker px-2 pt-2 pb-1.5 text-fg-faint">{{ $label }}</p>
 
                         @foreach ($items as ['label' => $itemLabel, 'detail' => $detail, 'url' => $url, 'icon' => $icon, 'image' => $image])
-                            <a
-                                href="{{ $url }}"
+                            <x-search-row
+                                :href="$url"
+                                :label="$itemLabel"
+                                :detail="$detail"
+                                :image="$image"
+                                :icon="$icon"
                                 wire:navigate
                                 wire:key="item-{{ $key }}-{{ $loop->index }}"
                                 data-search-item
                                 x-bind:data-active="active === {{ $index }}"
                                 x-on:mouseenter="active = {{ $index }}"
                                 x-on:click="close()"
-                                class="flex items-center gap-3 rounded-lg px-2 py-1.75 text-sm text-fg-soft transition-colors data-[active=true]:bg-accent-tint/13 data-[active=true]:text-accent"
-                            >
-                                <span class="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border border-line-strong bg-sunken">
-                                    @if ($image !== null && $image !== '')
-                                        <img src="{{ $image }}" alt="" loading="lazy" class="size-full object-contain" />
-                                    @elseif ($icon !== null)
-                                        <flux:icon :icon="$icon" variant="micro" class="size-4 text-fg-muted" />
-                                    @endif
-                                </span>
-
-                                <span class="min-w-0 flex-1 truncate">{{ $itemLabel }}</span>
-
-                                @if ($detail !== null)
-                                    <span class="shrink-0 truncate text-xs text-fg-faint">{{ $detail }}</span>
-                                @endif
-                            </a>
+                                class="data-[active=true]:bg-accent-tint/13 data-[active=true]:text-accent"
+                            />
 
                             @php($index++)
                         @endforeach

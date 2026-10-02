@@ -234,6 +234,9 @@ class DocLibrary
         $this->disk()->delete($path);
         $this->disk()->deleteDirectory($this->paths->revisionDirectory($path));
 
+        // Resolved here rather than injected: DocLinks reads through this class.
+        app(DocLinks::class)->forgetDoc($path);
+
         // Before the orphan check, so the index no longer counts this document
         // among the things still referencing its own attachments.
         $this->forget();

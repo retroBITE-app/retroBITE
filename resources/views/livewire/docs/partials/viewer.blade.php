@@ -124,6 +124,27 @@
         </div>
     @endif
 
+    {{-- The games this doc is about; each one's page shows it under Docs. --}}
+    @if ($revision === 0)
+        <div class="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-3">
+            <span class="kicker mr-1 text-fg-faint">{{ __('Games') }}</span>
+
+            @foreach ($this->linkedGames as $game)
+                <span wire:key="linked-game-{{ $game->id }}" class="flex h-7 items-center gap-1.5 rounded-md border border-line-input bg-sunken pr-1 pl-2.5 text-xs text-fg-soft">
+                    <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="hover:text-accent">{{ $game->title }}</a>
+                    <button
+                        type="button"
+                        wire:click="unlinkGame({{ $game->id }})"
+                        aria-label="{{ __('Unlink :title', ['title' => $game->title]) }}"
+                        class="grid size-5 cursor-pointer place-items-center rounded text-fg-dim hover:bg-hover hover:text-fg"
+                    ><flux:icon.x-mark variant="micro" class="size-3.5" /></button>
+                </span>
+            @endforeach
+
+            <livewire:docs.link-game-modal :path="$doc->path" wire:key="link-game-{{ $doc->path }}" />
+        </div>
+    @endif
+
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-2.5">
         <p class="min-w-0 truncate font-mono text-xs text-fg-faint">
             {{ $doc->path }}

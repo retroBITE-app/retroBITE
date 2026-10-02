@@ -37,6 +37,7 @@ final class GameMatcher
     public function __construct(
         private readonly ScreenScraperService $provider,
         private readonly MediaLibrary $media,
+        private readonly DocLinks $docLinks,
     ) {}
 
     /**
@@ -181,6 +182,10 @@ final class GameMatcher
                 // game is identified, which is after this point — but a merge
                 // done by hand months later is a different story.
                 $this->media->forgetAll($game);
+
+                // The docs about it are about the surviving game too; the
+                // cascade on delete would otherwise drop the links unsaid.
+                $this->docLinks->repoint($game, $existing);
                 $game->delete();
 
                 $this->applyDiscNumbers($existing, $payload);

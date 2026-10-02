@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\Game;
 use App\Resources\ConsoleResource;
 use App\Resources\DocResource;
 use App\Services\DocLibrary;
+use App\Services\DocLinks;
 use App\Services\DocRenderer;
 use App\Support\DocPath;
 use Flux\Flux;
@@ -15,7 +17,7 @@ use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 
-new #[Title('Docs')] class extends Component
+new #[Title('Documents')] class extends Component
 {
     /** Relative path of the open document, in the URL so a doc can be linked. */
     #[Url(as: 'doc', except: '')]
@@ -51,6 +53,11 @@ new #[Title('Docs')] class extends Component
         if ($this->current() === null) {
             $this->path = (string) $library->search($this->query, $this->filter)->value('path', '');
         }
+
+        // ?edit=1, from a game page's Edit or a doc just written about a game.
+        if (request()->boolean('edit')) {
+            $this->edit();
+        }
     }
 
     /**
@@ -74,6 +81,17 @@ new #[Title('Docs')] class extends Component
         }
 
         return $library->revision($doc->path, $this->revision) ?? $doc;
+    }
+
+    /**
+     * The games the open document is about.
+     *
+     * @return Collection<int, Game>
+     */
+    #[Computed]
+    public function linkedGames(): Collection
+    {
+        return $this->current() !== null ? app(DocLinks::class)->gamesFor($this->path) : collect();
     }
 
     /**
@@ -180,6 +198,24 @@ new #[Title('Docs')] class extends Component
         Flux::toast(variant: 'success', text: __('Document saved.'));
     }
 
+    public function unlinkGame(int $gameId): void
+    {
+        $game = Game::query()->find($gameId);
+
+        if ($game !== null) {
+            app(DocLinks::class)->unlink($this->path, $game);
+        }
+
+        unset($this->linkedGames);
+    }
+
+    /** A game was linked from the dialog: show it in the row. */
+    #[On('doc-linked')]
+    public function refreshLinks(): void
+    {
+        unset($this->linkedGames);
+    }
+
     /** Read an earlier version; 0 goes back to the current one. */
     public function viewRevision(int $timestamp): void
     {
@@ -247,7 +283,7 @@ new #[Title('Docs')] class extends Component
      */
     private function forgetReads(): void
     {
-        unset($this->docs, $this->current, $this->history, $this->html, $this->chips, $this->mediaDirectory);
+        unset($this->docs, $this->current, $this->history, $this->linkedGames, $this->html, $this->chips, $this->mediaDirectory);
     }
 
     /**
@@ -277,7 +313,7 @@ new #[Title('Docs')] class extends Component
             <p class="kicker mb-1.5 text-fg-faint">
                 {{ __('Knowledge base') }} · {{ trans_choice(':count doc|:count docs', $this->docs->count(), ['count' => $this->docs->count()]) }}
             </p>
-            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Docs') }}</h1>
+            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Documents') }}</h1>
         </div>
 
         <div class="flex items-center gap-2">

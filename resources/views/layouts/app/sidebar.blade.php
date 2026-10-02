@@ -112,7 +112,7 @@
                 </flux:sidebar.group>
 
                 <flux:sidebar.item icon="book-open" :href="route('docs.index')" :current="request()->routeIs('docs.*')" wire:navigate>
-                    {{ __('Docs') }}
+                    {{ __('Documents') }}
                 </flux:sidebar.item>
 
                 <flux:sidebar.item icon="adjustments-horizontal" :href="route('user.edit')" :current="request()->routeIs('user.*') || request()->routeIs('media.edit') || request()->routeIs('interface.edit')" wire:navigate>

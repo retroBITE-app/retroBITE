@@ -104,3 +104,11 @@ test('the console and category chips filter the list', function () {
     expect($component->set('filter', DocLibrary::consoleFilter('gc'))->get('docs')->pluck('console')->all())->toBe(['gc'])
         ->and($component->set('filter', DocLibrary::categoryFilter('laser'))->get('docs')->pluck('console')->all())->toBe(['ps2']);
 });
+
+test('the old /docs address lands on Documents, the open document with it', function () {
+    $this->get('/docs?doc=ps2/laser.md')
+        ->assertMovedPermanently()
+        ->assertRedirect(route('docs.index', ['doc' => 'ps2/laser.md']));
+
+    expect(route('docs.index'))->toEndWith('/documents');
+});

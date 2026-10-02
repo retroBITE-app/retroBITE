@@ -6,6 +6,7 @@ use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Enums\RetroAchievementsStatus;
+use App\Enums\ThumbnailSize;
 use App\Support\Console;
 use App\Support\MediaRegions;
 use App\Support\MediaTypes;
@@ -151,6 +152,16 @@ class Game extends Model
     public function artwork(MediaKind $kind): ?Media
     {
         return $this->artworkOfTypes($kind->screenScraperTypes());
+    }
+
+    /**
+     * What a one-line result row shows beside the title: the cover at list
+     * size, else the console's file icon, else nothing. Eager-load the cover
+     * media first, or this is a query per row.
+     */
+    public function listThumbnail(): ?string
+    {
+        return $this->artwork(MediaKind::Cover)?->url(ThumbnailSize::List) ?: ($this->console()?->fileIcon ?: null);
     }
 
     /**

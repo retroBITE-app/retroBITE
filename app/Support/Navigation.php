@@ -27,7 +27,7 @@ final class Navigation
             ['label' => 'Consoles', 'route' => 'consoles.index', 'icon' => 'puzzle-piece', 'keywords' => 'systems platforms library'],
             ['label' => 'Games', 'route' => 'games.index', 'icon' => 'rectangle-stack', 'keywords' => 'library roms titles'],
             ['label' => 'Conversion', 'route' => 'tools.conversion', 'icon' => 'arrows-right-left', 'keywords' => 'tools convert chd cso rvz iso compress'],
-            ['label' => 'Docs', 'route' => 'docs.index', 'icon' => 'book-open', 'keywords' => 'documentation help guides manual'],
+            ['label' => 'Documents', 'route' => 'docs.index', 'icon' => 'book-open', 'keywords' => 'docs documentation help guides manual notes'],
             ['label' => 'Settings', 'route' => 'user.edit', 'icon' => 'adjustments-horizontal', 'keywords' => 'preferences options configuration'],
         ];
     }

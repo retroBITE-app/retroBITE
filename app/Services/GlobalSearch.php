@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\MediaKind;
-use App\Enums\ThumbnailSize;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Resources\ConsoleResource;
@@ -53,7 +52,7 @@ final class GlobalSearch
 
         $groups = [
             ['key' => 'games', 'label' => (string) __('Games'), 'items' => $this->games($term)],
-            ['key' => 'docs', 'label' => (string) __('Docs'), 'items' => $this->docs($term)],
+            ['key' => 'docs', 'label' => (string) __('Documents'), 'items' => $this->docs($term)],
             ['key' => 'consoles', 'label' => (string) __('Consoles'), 'items' => $term === '' ? [] : $this->consoles($needle)],
             ['key' => 'pages', 'label' => (string) __('Pages'), 'items' => $this->places(Navigation::pages(), $needle, null)],
             ['key' => 'settings', 'label' => (string) __('Settings'), 'items' => $this->places(Navigation::settings(), $needle, (string) __('Settings'))],
@@ -96,7 +95,7 @@ final class GlobalSearch
                 'detail' => $console?->name,
                 'url' => route('games.show', $game->routeParameters()),
                 'icon' => null,
-                'image' => $game->artwork(MediaKind::Cover)?->url(ThumbnailSize::List) ?? $console?->fileIcon,
+                'image' => $game->listThumbnail(),
             ];
         })->all());
 

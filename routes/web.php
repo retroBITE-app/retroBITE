@@ -14,6 +14,7 @@ use App\Http\Controllers\Transfers\ServeGameFileController;
 use App\Http\Controllers\Transfers\TransferExtraController;
 use App\Http\Controllers\Transfers\TransferPlanController;
 use App\Models\Game;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public on purpose, and the only artwork outside the authed route: the
@@ -97,11 +98,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return redirect()->route('tools.conversion', status: 301);
     });
 
-    // Docs
-    Route::livewire('docs', 'docs.index')->name('docs.index');
-    Route::get('docs/file/{path}', ServeDocMediaController::class)->where('path', '.*')->name('docs.media');
-    Route::get('docs/download/{path}', DownloadDocController::class)->where('path', '.*')->name('docs.download');
-    Route::get('docs/archive/{path}', ArchiveDocController::class)->where('path', '.*')->name('docs.archive');
+    // Documents. Still named docs.*: the names are the code's, the address the page's.
+    Route::livewire('documents', 'docs.index')->name('docs.index');
+    Route::get('documents/file/{path}', ServeDocMediaController::class)->where('path', '.*')->name('docs.media');
+    Route::get('documents/download/{path}', DownloadDocController::class)->where('path', '.*')->name('docs.download');
+    Route::get('documents/archive/{path}', ArchiveDocController::class)->where('path', '.*')->name('docs.archive');
+
+    // The page's address before it was Documents, kept with its ?doc= so a
+    // bookmark or a link to one document still lands on it.
+    Route::get('docs', function (Request $request) {
+        return redirect()->route('docs.index', $request->query(), 301);
+    });
 
     // The shelf's old address. Last in the group on purpose: it claims a
     // top-level segment, so any new fixed route has to be declared above it.

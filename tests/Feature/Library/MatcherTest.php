@@ -3,6 +3,7 @@
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Exceptions\ScreenScraper\QuotaExhausted;
+use App\Models\DocLink;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
@@ -186,6 +187,25 @@ it('folds a second dump of the same game into the one already identified', funct
         ->and($first->refresh()->files()->count())->toBe(2)
         // The placeholder is gone, but neither file was lost with it.
         ->and(GameFile::count())->toBe(2);
+});
+
+it('hands the docs of a folded-in game to the one it joins, without doubling any', function () {
+    providerHit();
+    $first = psxGame();
+    matcher()->match($first);
+
+    $second = Game::factory()->forConsole('psx')->create(['title' => 'FF9 (USA)', 'slug' => 'ff9-usa']);
+    GameFile::factory()->for($second)->create(['path' => 'psx/FF9 (USA).bin', 'filename' => 'FF9 (USA).bin', 'extension' => 'bin', 'role' => FileRole::Track]);
+
+    DocLink::query()->create(['doc_path' => 'psx/walkthrough.md', 'game_id' => $second->id]);
+    DocLink::query()->create(['doc_path' => 'psx/shared.md', 'game_id' => $second->id]);
+    DocLink::query()->create(['doc_path' => 'psx/shared.md', 'game_id' => $first->id]);
+
+    matcher()->match($second);
+
+    expect(DocLink::query()->where('game_id', $first->id)->orderBy('doc_path')->pluck('doc_path')->all())
+        ->toBe(['psx/shared.md', 'psx/walkthrough.md'])
+        ->and(DocLink::query()->count())->toBe(2);
 });
 
 it('reads disc numbers off the provider rom list by checksum', function () {
