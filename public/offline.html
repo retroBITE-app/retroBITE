@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0c0c0d">
+    <title>retroBITE</title>
+    <!-- Shown by sw.js when a page load cannot reach the server. Static and
+         self-contained: no app CSS or fonts, which are not cached. -->
+    <style>
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+            padding: 1rem; box-sizing: border-box; text-align: center;
+            background: #0c0c0d; color: #e6e6e8;
+            font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+        img { width: 96px; height: 96px; image-rendering: pixelated; }
+        h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+        p { margin: 0; max-width: 28rem; color: #a1a1a6; }
+        a {
+            margin-top: .5rem; padding: .5rem 1rem; border-radius: .5rem;
+            background: #d0202a; color: #fff; text-decoration: none; font-weight: 600;
+        }
+        a:hover { background: #b51b24; }
+    </style>
+</head>
+<body>
+    <img src="/icons/icon-192.png" alt="">
+    <h1>Cannot reach retroBITE</h1>
+    <p>The server is not answering. Check that it is running and that this computer is on the same network.</p>
+    <a href="/">Try again</a>
+</body>
+</html>
