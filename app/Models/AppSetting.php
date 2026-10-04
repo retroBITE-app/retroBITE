@@ -134,7 +134,11 @@ class AppSetting extends Model
     /** Days every file of a game may be missing before the game is pruned. */
     public const PRUNE_MISSING_AFTER_DAYS = 'prune_missing_after_days';
 
-    /** Prune those games every night, rather than only from Settings → Library. */
+    /**
+     * Prune those games every night, rather than only from Settings → Library.
+     * Off until someone turns it on: it deletes, and nobody should find that out
+     * from a library that has shrunk overnight.
+     */
     public const PRUNE_MISSING_AUTO = 'prune_missing_auto';
 
     /**
@@ -156,7 +160,7 @@ class AppSetting extends Model
         self::IS_ONBOARDED => false,
         self::RA_HARDCORE_PRIMARY => true,
         self::PRUNE_MISSING_AFTER_DAYS => 30,
-        self::PRUNE_MISSING_AUTO => true,
+        self::PRUNE_MISSING_AUTO => false,
     ];
 
     /**

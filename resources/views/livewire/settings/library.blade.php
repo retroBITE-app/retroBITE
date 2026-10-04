@@ -13,7 +13,7 @@ new #[Title('Library settings')] class extends Component
     /** Days every file of a game may be missing before the game is pruned. */
     public string $days = '30';
 
-    public bool $auto = true;
+    public bool $auto = false;
 
     public function mount(): void
     {

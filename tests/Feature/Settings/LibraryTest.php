@@ -23,17 +23,23 @@ it('shows the page under its own tab', function () {
         ->assertSee(__('Remove games whose ROMs are gone'));
 });
 
+it('leaves the nightly prune off until someone turns it on', function () {
+    expect(AppSetting::enabled(AppSetting::PRUNE_MISSING_AUTO))->toBeFalse();
+
+    Livewire::test('settings.library')->assertSet('auto', false);
+});
+
 it('saves the days and the nightly switch', function () {
     Livewire::test('settings.library')
         ->set('days', '14')
-        ->set('auto', false)
+        ->set('auto', true)
         ->call('save')
         ->assertHasNoErrors();
 
     AppSetting::flush();
 
     expect(AppSetting::get(AppSetting::PRUNE_MISSING_AFTER_DAYS))->toBe(14)
-        ->and(AppSetting::enabled(AppSetting::PRUNE_MISSING_AUTO))->toBeFalse();
+        ->and(AppSetting::enabled(AppSetting::PRUNE_MISSING_AUTO))->toBeTrue();
 });
 
 it('refuses no days, and anything that is not a number of them', function (mixed $days) {
