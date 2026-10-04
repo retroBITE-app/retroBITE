@@ -118,9 +118,10 @@ push=0
 [[ $REPLY =~ ^[Yy]$ ]] && push=1
 
 # The plain docker driver builds for one platform only; a pushed build needs
-# one that does several.
+# one that does several. awk reads to the end: quitting at the first match
+# breaks the pipe under buildx, which exits 255 and, with pipefail, the script.
 if [ $push -eq 1 ]; then
-    driver=$(docker buildx inspect 2>/dev/null | awk '/^Driver:/ { print $2; exit }')
+    driver=$(docker buildx inspect 2>/dev/null | awk '/^Driver:/ && !found { print $2; found = 1 }')
 
     if [ "$driver" = docker ]; then
         say "Setting up a multi-platform builder..."
