@@ -2,9 +2,20 @@
 
 use App\Support\Obfuscated;
 
+/*
+ * The developer account names the software, not the person: retroBITE's own
+ * ships with the source, obfuscated (App\Support\Obfuscated), as every open
+ * client of ScreenScraper does. A fork, or a developer with a key of their
+ * own, sets both of these in .env instead. Both or neither: one of each would
+ * pair an id with a password that is not its own and fail every request.
+ */
+$devId = (string) env('SCREENSCRAPER_DEV_ID');
+$devPassword = (string) env('SCREENSCRAPER_DEV_PASSWORD');
+$ownDevAccount = $devId !== '' && $devPassword !== '';
+
 return [
-    'dev_id' => Obfuscated::reveal('AAQfHw4='),
-    'dev_password' => Obfuscated::reveal('ICkQAFwOCCY9KDw='),
+    'dev_id' => $ownDevAccount ? $devId : Obfuscated::reveal('AAQfHw4='),
+    'dev_password' => $ownDevAccount ? $devPassword : Obfuscated::reveal('ICkQAFwOCCY9KDw='),
     /*
      * Empty on purpose. The account lives in the settings table, read through
      * App\Support\ScreenScraperCredentials — these two remain only so a test
