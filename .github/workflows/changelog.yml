@@ -1,0 +1,97 @@
+name: changelog
+
+# Write a release's notes from the commits since the release before it, when
+# a release is published on GitHub. Every commit is a Conventional Commit (the
+# commit hook refuses anything else), so its prefix says which section it goes
+# under: feat → Features, fix → Bug fixes, and so on. A scope or a breaking
+# mark — feat(docs): or feat!: — counts the same; merge commits are left out.
+#
+# Notes already typed on the release are kept, with the generated list below
+# them. Runs beside docker.yml, which builds the images for the same release.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every tag and commit, to find the previous release and what came since.
+          fetch-depth: 0
+
+      - name: Generate the notes from commits
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          # The nearest tag before this one, whatever order the tags were made
+          # in; none means the first release, which gets every commit.
+          if previous=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null); then
+            range="${previous}..${TAG}"
+            echo "Commits from ${previous} to ${TAG}"
+          else
+            range="${TAG}"
+            echo "First release: every commit up to ${TAG}"
+          fi
+
+          : > release_notes.md
+
+          # One section, written only when it has commits: the subject without
+          # its prefix, and the short hash, which GitHub links to the commit.
+          section() {
+            local title="$1" type="$2" lines
+            lines=$(git log "${range}" --no-merges --format='%s (%h)' -E --grep="^${type}(\([^)]*\))?!?: " \
+              | sed -E "s/^${type}(\([^)]*\))?!?: /- /")
+
+            if [ -n "${lines}" ]; then
+              printf '## %s\n\n%s\n\n' "${title}" "${lines}" >> release_notes.md
+            fi
+          }
+
+          section "Features" "feat"
+          section "Bug fixes" "fix"
+          section "Performance" "perf"
+          section "Refactoring" "refactor"
+          section "Documentation" "docs"
+          section "Styles" "style"
+          section "Tests" "test"
+          section "Build system" "build"
+          section "Continuous integration" "ci"
+          section "Chores" "chore"
+          section "Reverts" "revert"
+
+          cat release_notes.md
+
+      - name: Write the notes onto the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -s release_notes.md ]; then
+            echo "No conventional commits since the previous release; the notes are left as they are."
+            exit 0
+          fi
+
+          # Whatever was typed on the release stays, above the generated list.
+          gh release view "${TAG}" --json body --jq .body > typed.md
+
+          if [ -s typed.md ] && [ -n "$(tr -d '[:space:]' < typed.md)" ]; then
+            printf '\n\n' >> typed.md
+            cat typed.md release_notes.md > notes.md
+          else
+            cp release_notes.md notes.md
+          fi
+
+          gh release edit "${TAG}" --notes-file notes.md
