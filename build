@@ -9,6 +9,10 @@
 #                        a release: :<version> and :latest
 #   ./build --only web|share      one of the two images
 #   ./build -y | --yes            push without asking, as CI does
+#   ./build --digest-dir DIR      CI: push one platform untagged, by digest,
+#                                 and note the digest in DIR
+#   ./build --merge DIR           CI: tag the digests noted in DIR as one
+#                                 multi-platform image, building nothing
 #
 # A version is the release's tag, a date with an optional suffix: 20260930,
 # 20260930-ALPHA, 20260930-PREALPHA. Left out, it is read off the tag this
@@ -19,6 +23,8 @@
 # in one go, which is why the question comes before the build: a multi-platform
 # image cannot be loaded into the local daemon and pushed afterwards. Not
 # pushed, it is built for this machine only and loaded, to try out locally.
+# CI builds each platform on a runner of its own (PLATFORMS=linux/arm64
+# --digest-dir), then joins them with --merge, so nothing runs under emulation.
 #
 # The web UI is retrobite/retrobite (Dockerfile.web), the SMB/FTP share
 # retrobite/share (Dockerfile). The CI job is .github/workflows/docker.yml.
@@ -49,13 +55,15 @@ fail() {
 }
 
 usage() {
-    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 channel=develop
 version=""
 only=""
 auto_yes=0
+digest_dir=""
+merge_dir=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -65,6 +73,10 @@ while [ $# -gt 0 ]; do
         --only) only=${2:-}; shift ;;
         --only=*) only=${1#*=} ;;
         -y | --yes) auto_yes=1 ;;
+        --digest-dir) digest_dir=${2:-}; shift ;;
+        --digest-dir=*) digest_dir=${1#*=} ;;
+        --merge) merge_dir=${2:-}; shift ;;
+        --merge=*) merge_dir=${1#*=} ;;
         -h | --help) usage; exit 0 ;;
         *) fail "Unknown argument: $1 (see ./build --help)" ;;
     esac
@@ -75,6 +87,10 @@ case "$only" in
     "" | web | share) ;;
     *) fail "--only takes web or share, not: $only" ;;
 esac
+
+if [ -n "$digest_dir" ] && { [[ $PLATFORMS == *,* ]] || [ $auto_yes -ne 1 ]; }; then
+    fail "--digest-dir pushes one platform: pass --yes and set PLATFORMS to one, not $PLATFORMS"
+fi
 
 commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
@@ -105,6 +121,41 @@ tags_for() {
     fi
 }
 
+# Join the per-platform digests noted in $merge_dir into one tagged image. Every
+# platform in PLATFORMS must have one: a missing build fails here, not later.
+merge_image() {
+    local image=$1 name=${1##*/}
+    local args=(buildx imagetools create)
+    local digests=("$merge_dir/$name"-*)
+    local expected found=0
+
+    expected=$(tr ',' '\n' <<< "$PLATFORMS" | wc -l)
+    [ -e "${digests[0]}" ] && found=${#digests[@]}
+
+    if [ "$found" -ne "$expected" ]; then
+        fail "$image: expected $expected digests in $merge_dir, found $found"
+    fi
+
+    for tag in $(tags_for "$image"); do
+        args+=(-t "$tag")
+    done
+
+    for file in "${digests[@]}"; do
+        args+=("$image@$(cat "$file")")
+    done
+
+    say "Tagging $image: $(tags_for "$image")"
+    docker "${args[@]}"
+}
+
+if [ -n "$merge_dir" ]; then
+    [ "$only" != share ] && merge_image "$WEB_IMAGE"
+    [ "$only" != web ] && merge_image "$SHARE_IMAGE"
+
+    say "Completed!"
+    exit 0
+fi
+
 if [ $auto_yes -eq 1 ]; then
     REPLY="y"
 elif [ -t 0 ]; then
@@ -132,10 +183,14 @@ fi
 build_image() {
     local image=$1 dockerfile=$2
     local args=(buildx build -f "$dockerfile")
+    local cache=$image:buildcache
 
-    for tag in $(tags_for "$image"); do
-        args+=(-t "$tag")
-    done
+    # A digest build is untagged: --merge tags it once every platform is in.
+    if [ -z "$digest_dir" ]; then
+        for tag in $(tags_for "$image"); do
+            args+=(-t "$tag")
+        done
+    fi
 
     args+=(
         --label "org.opencontainers.image.source=$SOURCE_URL"
@@ -144,9 +199,23 @@ build_image() {
         --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     )
 
+    # A platform built alone (as CI does) keeps a cache of its own, or each run
+    # would overwrite the other platform's layers. It still reads the shared
+    # one, which a multi-platform build writes with both platforms in it.
     if [ "$BUILD_CACHE" = registry ]; then
-        args+=(--cache-from "type=registry,ref=$image:buildcache")
-        [ $push -eq 1 ] && args+=(--cache-to "type=registry,ref=$image:buildcache,mode=max")
+        args+=(--cache-from "type=registry,ref=$cache")
+
+        if [[ $PLATFORMS != *,* ]]; then
+            cache=$cache-${PLATFORMS##*/}
+            args+=(--cache-from "type=registry,ref=$cache")
+        fi
+
+        [ $push -eq 1 ] && args+=(--cache-to "type=registry,ref=$cache,mode=max")
+    fi
+
+    if [ -n "$digest_dir" ]; then
+        build_digest "$image" "${args[@]}"
+        return
     fi
 
     if [ $push -eq 1 ]; then
@@ -158,6 +227,27 @@ build_image() {
     fi
 
     docker "${args[@]}" .
+}
+
+# Push one platform by digest alone and note it as $digest_dir/<name>-<arch>,
+# the file --merge reads.
+build_digest() {
+    local image=$1 name=${1##*/}
+    shift
+    local metadata digest
+
+    metadata=$(mktemp)
+    mkdir -p "$digest_dir"
+
+    say "Building and pushing $image for $PLATFORMS, by digest"
+    docker "$@" --platform "$PLATFORMS" --metadata-file "$metadata" \
+        --output "type=image,name=$image,push-by-digest=true,name-canonical=true,push=true" .
+
+    digest=$(jq -r '."containerimage.digest"' "$metadata")
+    rm -f "$metadata"
+
+    [[ $digest == sha256:* ]] || fail "$image: no digest in the build's metadata"
+    echo "$digest" > "$digest_dir/$name-${PLATFORMS##*/}"
 }
 
 if [ "$only" != share ]; then

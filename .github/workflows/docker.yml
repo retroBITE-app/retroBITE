@@ -16,9 +16,16 @@ name: docker
 # Needs two repository secrets: DOCKERHUB_USERNAME, and DOCKERHUB_TOKEN — a
 # Docker Hub access token with read and write access to both repositories.
 #
-# arm64 is built under emulation, which is the slow part: the conversion tools
-# compile from source. The :buildcache tag on each repository keeps those
-# layers between runs. Mind the Actions minutes, as tests.yml does.
+# Each platform builds on a runner of its own architecture, so nothing runs
+# under emulation: the conversion tools compile from source, which under QEMU
+# took hours. Each pushes its image untagged, by digest; a merge job per image
+# then tags both digests as one multi-platform image. The
+# :buildcache-amd64 / :buildcache-arm64 tags keep the layers between runs.
+# Mind the Actions minutes, as tests.yml does.
+#
+# GitHub's arm64 runners are free for public repositories only, so while this
+# one is private arm64 builds on an amd64 runner under QEMU, as slow as ever.
+# Read off the repository on every run: making it public needs no change here.
 
 on:
   release:
@@ -46,24 +53,71 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  image:
-    runs-on: ubuntu-latest
+  # The channel and version, worked out once for the build and merge jobs.
+  meta:
+    runs-on: ubuntu-24.04
 
-    # The two images side by side: one failing does not stop or hide the other.
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [web, share]
+    outputs:
+      channel: ${{ steps.meta.outputs.channel }}
+      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Tags too, for ./build to read the version off when none is given.
+          # Tags too, to read the version off when none is given.
           fetch-depth: 0
 
+      - name: Work out the channel and version
+        id: meta
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            channel=master
+            [ "$PRERELEASE" = true ] && channel=develop
+            version=$RELEASE_TAG
+          else
+            channel=$INPUT_CHANNEL
+            version=${INPUT_VERSION:-$(git describe --tags --exact-match 2>/dev/null || true)}
+          fi
+
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+
+    # Every image and platform side by side: one failing does not stop or hide
+    # the others.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, share]
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ${{ github.event.repository.private && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # Only when no runner of the platform's own architecture was to be had.
       - name: Set up QEMU
+        if: ${{ matrix.arch == 'arm64' && runner.arch != 'ARM64' }}
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Docker Buildx
@@ -75,27 +129,71 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push by digest
         env:
           IMAGE: ${{ matrix.image }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          PRERELEASE: ${{ github.event.release.prerelease }}
-          INPUT_CHANNEL: ${{ inputs.channel }}
-          INPUT_VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ needs.meta.outputs.channel }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          PLATFORMS: ${{ matrix.platform }}
           BUILD_CACHE: registry
         run: |
-          if [ "$GITHUB_EVENT_NAME" = release ]; then
-            channel=master
-            [ "$PRERELEASE" = true ] && channel=develop
-            version=$RELEASE_TAG
-          else
-            channel=$INPUT_CHANNEL
-            version=${INPUT_VERSION:-$(git describe --tags --exact-match 2>/dev/null || true)}
-          fi
-
           # Baked into the web image by COPY . ., read by config/app.php. An
           # untagged develop build is named after its commit, as ./build names
           # its image.
-          echo "${version:-develop-$(git rev-parse --short HEAD)}" > version.txt
+          echo "${VERSION:-develop-$(git rev-parse --short HEAD)}" > version.txt
 
-          ./build "$channel" ${version:+--version "$version"} --only "$IMAGE" --yes
+          ./build "$CHANNEL" ${VERSION:+--version "$VERSION"} --only "$IMAGE" --yes \
+            --digest-dir "$RUNNER_TEMP/digests"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Tag one image's digests as a multi-platform image. Runs for an image whose
+  # builds both passed even when the other image's failed; ./build --merge
+  # refuses when a platform's digest is missing.
+  merge:
+    needs: [meta, build]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, share]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Download the digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag the multi-platform image
+        env:
+          IMAGE: ${{ matrix.image }}
+          CHANNEL: ${{ needs.meta.outputs.channel }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          ./build "$CHANNEL" ${VERSION:+--version "$VERSION"} --only "$IMAGE" --yes \
+            --merge "$RUNNER_TEMP/digests"
