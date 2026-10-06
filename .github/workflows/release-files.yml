@@ -1,0 +1,71 @@
+name: release-files
+
+# What a person installs from, attached to every published release:
+# docker-compose.yml, docker-compose.macvlan.yml and .env.example, from the
+# release's own tag. docs/installing.md fetches them from
+# releases/latest/download/, so they always match the :latest images.
+#
+# A full release (not a pre-release) also updates the Docker Hub pages from
+# docs/dockerhub/. That needs DOCKERHUB_TOKEN to have Read, Write and Delete
+# access; with less, that job fails and the files are attached regardless.
+#
+# Builds nothing: the images are pushed with ./build before the release is
+# published (docker.yml is the fallback), so this runs in seconds.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  attach:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Attach the compose files and settings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" --clobber --repo "$GITHUB_REPOSITORY" \
+            docker-compose.yml docker-compose.macvlan.yml .env.example
+
+  describe:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: retrobite/retrobite
+            readme: docs/dockerhub/web.md
+            summary: Self-hosted collection manager for retro games — the web interface.
+          - repository: retrobite/share
+            readme: docs/dockerhub/share.md
+            summary: retroBITE's SMB and FTP server, serving a ROM library to consoles.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Update the Docker Hub page
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ matrix.repository }}
+          readme-filepath: ${{ matrix.readme }}
+          short-description: ${{ matrix.summary }}

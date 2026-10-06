@@ -48,7 +48,7 @@ retroBITE runs only in Docker, in development too. Nothing has to be installed
 on the host: PHP, Composer and Node all run inside the web container.
 
 ```bash
-cp .env.example .env
+cp .env.dev.example .env
 ./retrobite up --dev
 ```
 
@@ -298,30 +298,118 @@ Both containers are published to Docker Hub, for `linux/amd64` and
 | `retrobite/retrobite` | The web UI (`Dockerfile.web`) |
 | `retrobite/share` | SMB and FTP (`Dockerfile`) |
 
-Versions are dates. A GitHub release's tag is the version, and its pre-release
-box picks the channel — never the suffix:
+Versions are dates. A release's tag is the version, and whether it is a
+pre-release picks the channel, never the suffix:
 
 | GitHub release | Tags pushed |
 | --- | --- |
 | Release `20260930` | `:20260930`, `:latest` |
 | Pre-release `20260930-ALPHA` (or `-PREALPHA`) | `:20260930-ALPHA`, `:develop` |
 
-`.github/workflows/docker.yml` builds them with `./build` when a release is
-published; the founders can also run it by hand from the Actions tab. The
-script works on its own too:
+Releases are built and pushed by a founder from their own Mac with `./build`.
+That takes about ten minutes on Apple silicon (arm64 natively, amd64 through
+Rosetta), where GitHub Actions took two hours. `.github/workflows/docker.yml`
+is kept as a fallback to run by hand from the Actions tab.
+
+### Publishing a release
+
+You need, once:
+
+- Docker with buildx: OrbStack or Docker Desktop, with Rosetta on for amd64
+- `docker login` as an account that can push to `retrobite/retrobite` and
+  `retrobite/share`
+- `gh auth login`, for the GitHub release
+- `jq`, which `./build` reads the build's metadata with
+
+Then, for each release:
+
+1. **Start from a clean, tested `develop`.** `./build` builds what is
+   committed, never the working tree.
+
+   ```bash
+   git switch develop && git pull
+   git status                      # nothing to commit
+   ./retrobite up --dev && ./retrobite test
+   ```
+
+2. **Tag it with the version.** A version is today's date; a pre-release adds
+   a suffix.
+
+   ```bash
+   git tag 20261010                # a release
+   git tag 20261010-BETA           # or a pre-release
+   git push origin develop --tags
+   ```
+
+3. **Build, test and push both images.** The version is read off the tag.
+
+   ```bash
+   ./build master                  # a release: :20261010 and :latest
+   ./build develop                 # a pre-release: :20261010-BETA and :develop
+   ```
+
+   Answer `y` to push. `./build` first builds the web image for this Mac and
+   starts it with `./smoke`, the way an install starts it. **Nothing is pushed
+   unless it starts**: it must come up healthy, serve its first page, generate
+   its application key and keep that key when recreated. Then both images are
+   built for amd64 and arm64 and pushed.
+
+4. **Check what Docker Hub has.** Both platforms should be listed under each
+   tag.
+
+   ```bash
+   docker buildx imagetools inspect retrobite/retrobite:20261010
+   docker buildx imagetools inspect retrobite/share:20261010
+   ```
+
+5. **Publish the release on GitHub,** from the same tag.
+
+   ```bash
+   gh release create 20261010 --title 20261010 --notes ""
+   gh release create 20261010-BETA --title 20261010-BETA --notes "" --prerelease
+   ```
+
+   Publishing it runs two workflows:
+
+   - **changelog.yml** writes the notes from the commits since the previous
+     tag. Anything typed in `--notes` is kept above them.
+   - **release-files.yml** does two things:
+     - It attaches `docker-compose.yml`, `docker-compose.macvlan.yml` and
+       `.env.example`. `releases/latest/download/` is what
+       [docs/installing.md](docs/installing.md) tells people to fetch, so these
+       three files *are* the installation, and a change to them belongs in the
+       notes.
+     - For a release, not a pre-release, it updates the Docker Hub pages from
+       `docs/dockerhub/`. This needs `DOCKERHUB_TOKEN` to have Read, Write and
+       Delete access.
+
+6. **Check it as an installer would**, on another machine or in an empty
+   folder:
+
+   ```bash
+   curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.yml
+   docker compose up -d
+   ```
+
+`./build` also works outside a release:
 
 ```bash
-./build develop --version 20260930-ALPHA   # :20260930-ALPHA and :develop
-./build master --version 20260930          # :20260930 and :latest
-./build                                    # a local try: :develop, :develop-<commit>
-./build --only web                         # one of the two images
-./build --yes                              # push without asking (CI and founders only)
+./build                            # this Mac only, loaded: :develop, :develop-<commit>
+./smoke develop                    # start that as an install would
+./build --only web                 # one of the two images
+./build master --version 20261010  # a version without its tag on this commit
+./build --no-smoke                 # push without starting the web image first
 ```
 
-Left out, the version is read off the tag the commit carries.
+A new environment variable goes in three places:
+
+- in `docs/configuration.md`, always
+- in `.env.example`, when most installs should set it
+- under `environment:` in `docker-compose.yml`, when a container manager's
+  variable editor must reach it
 
 **Contributors never push images.** Publishing to Docker Hub is done only by
-the CI job, when a founder publishes a release, or by the founders by hand.
+the founders, as above.
 When the script asks whether to push, answer no: it builds for your machine
 only and loads the images locally, which is all you need to try a change to a
 Dockerfile.

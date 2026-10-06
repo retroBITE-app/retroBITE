@@ -9,6 +9,7 @@
 #                        a release: :<version> and :latest
 #   ./build --only web|share      one of the two images
 #   ./build -y | --yes            push without asking, as CI does
+#   ./build --no-smoke            push without starting the web image first
 #   ./build --digest-dir DIR      CI: push one platform untagged, by digest,
 #                                 and note the digest in DIR
 #   ./build --merge DIR           CI: tag the digests noted in DIR as one
@@ -25,6 +26,19 @@
 # pushed, it is built for this machine only and loaded, to try out locally.
 # CI builds each platform on a runner of its own (PLATFORMS=linux/arm64
 # --digest-dir), then joins them with --merge, so nothing runs under emulation.
+#
+# A pushed build is built from a clean export of HEAD, never the working tree:
+# uncommitted changes and untracked files cannot reach Docker Hub. Commit (and
+# tag) first. The export also gets version.txt, which config/app.php reads.
+# A local build for this machine uses the working tree as it is.
+#
+# Before a push, the web image is built for this machine first and started
+# with ./smoke, the way an install starts it; nothing is pushed unless it
+# comes up. The layers are cached by then, so the push costs no second build.
+#
+# Releases are built here, not on GitHub: a Mac's own arm64 build and Rosetta
+# for amd64 take minutes where Actions took hours. Tag, ./build, then publish
+# the release on GitHub for its notes (changelog.yml).
 #
 # The web UI is retrobite/retrobite (Dockerfile.web), the SMB/FTP share
 # retrobite/share (Dockerfile). The CI job is .github/workflows/docker.yml.
@@ -55,13 +69,14 @@ fail() {
 }
 
 usage() {
-    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 channel=develop
 version=""
 only=""
 auto_yes=0
+smoke=1
 digest_dir=""
 merge_dir=""
 
@@ -73,6 +88,7 @@ while [ $# -gt 0 ]; do
         --only) only=${2:-}; shift ;;
         --only=*) only=${1#*=} ;;
         -y | --yes) auto_yes=1 ;;
+        --no-smoke) smoke=0 ;;
         --digest-dir) digest_dir=${2:-}; shift ;;
         --digest-dir=*) digest_dir=${1#*=} ;;
         --merge) merge_dir=${2:-}; shift ;;
@@ -180,9 +196,25 @@ if [ $push -eq 1 ]; then
     fi
 fi
 
+# What a pushed build reads: HEAD exported to a directory of its own, with
+# version.txt beside it. Removed when the script ends, however it ends.
+context=.
+
+if [ $push -eq 1 ]; then
+    context=$(mktemp -d)
+    trap 'rm -rf "$context"' EXIT
+
+    if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+        say "Uncommitted changes are left out: building $commit as committed."
+    fi
+
+    git archive HEAD | tar -x -C "$context"
+    echo "${version:-develop-$commit}" > "$context/version.txt"
+fi
+
 build_image() {
-    local image=$1 dockerfile=$2
-    local args=(buildx build -f "$dockerfile")
+    local image=$1 dockerfile=$2 description=$3
+    local args=(buildx build -f "$context/$dockerfile")
     local cache=$image:buildcache
 
     # A digest build is untagged: --merge tags it once every platform is in.
@@ -193,6 +225,11 @@ build_image() {
     fi
 
     args+=(
+        --label "org.opencontainers.image.title=${image##*/}"
+        --label "org.opencontainers.image.description=$description"
+        --label "org.opencontainers.image.url=$SOURCE_URL"
+        --label "org.opencontainers.image.documentation=$SOURCE_URL/blob/develop/docs/installing.md"
+        --label "org.opencontainers.image.licenses=$(license)"
         --label "org.opencontainers.image.source=$SOURCE_URL"
         --label "org.opencontainers.image.revision=$(git rev-parse HEAD 2>/dev/null || echo unknown)"
         --label "org.opencontainers.image.version=${version:-develop-$commit}"
@@ -226,7 +263,12 @@ build_image() {
         args+=(--load)
     fi
 
-    docker "${args[@]}" .
+    docker "${args[@]}" "$context"
+}
+
+# The licence's SPDX id, read off composer.json so it has one home.
+license() {
+    jq -r '.license // empty' composer.json 2>/dev/null || true
 }
 
 # Push one platform by digest alone and note it as $digest_dir/<name>-<arch>,
@@ -241,7 +283,7 @@ build_digest() {
 
     say "Building and pushing $image for $PLATFORMS, by digest"
     docker "$@" --platform "$PLATFORMS" --metadata-file "$metadata" \
-        --output "type=image,name=$image,push-by-digest=true,name-canonical=true,push=true" .
+        --output "type=image,name=$image,push-by-digest=true,name-canonical=true,push=true" "$context"
 
     digest=$(jq -r '."containerimage.digest"' "$metadata")
     rm -f "$metadata"
@@ -250,12 +292,29 @@ build_digest() {
     echo "$digest" > "$digest_dir/$name-${PLATFORMS##*/}"
 }
 
+# The web image for this machine, from the same context, started as an install
+# would before anything is pushed. Not for a digest build: CI's smoke job runs
+# ./smoke on the pushed digest instead.
+smoke_test() {
+    local image=$WEB_IMAGE:smoke
+
+    say "Building $image for this machine, to start it before pushing"
+    docker buildx build -f "$context/Dockerfile.web" -t "$image" --load "$context"
+
+    [ -x "$context/smoke" ] || fail "No ./smoke in $commit: commit it first, or pass --no-smoke."
+    "$context/smoke" smoke || fail "The web image did not start; nothing was pushed."
+}
+
+if [ $push -eq 1 ] && [ $smoke -eq 1 ] && [ -z "$digest_dir" ] && [ "$only" != share ]; then
+    smoke_test
+fi
+
 if [ "$only" != share ]; then
-    build_image "$WEB_IMAGE" Dockerfile.web
+    build_image "$WEB_IMAGE" Dockerfile.web "retroBITE, a self-hosted collection manager for retro games: the web interface"
 fi
 
 if [ "$only" != web ]; then
-    build_image "$SHARE_IMAGE" Dockerfile
+    build_image "$SHARE_IMAGE" Dockerfile "retroBITE's SMB and FTP server, serving a ROM library to consoles"
 fi
 
 say "Completed!"

@@ -7,7 +7,8 @@ name: changelog
 # mark — feat(docs): or feat!: — counts the same; merge commits are left out.
 #
 # Notes already typed on the release are kept, with the generated list below
-# them. Runs beside docker.yml, which builds the images for the same release.
+# them. The images are built and pushed with ./build before publishing (docker.yml
+# is the manual fallback).
 
 on:
   release:
