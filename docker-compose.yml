@@ -1,5 +1,6 @@
 services:
   retrobite-web:
+    # image: retrobite/retrobite:develop | 20261004-BETA
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -63,6 +64,7 @@ services:
     restart: on-failure
 
   retrobite-share:
+    # image: retrobite/share:latest | develop | 20261004-BETA
     build:
       context: .
       dockerfile: Dockerfile

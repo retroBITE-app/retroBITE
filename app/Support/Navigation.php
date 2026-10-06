@@ -49,6 +49,7 @@ final class Navigation
             ['label' => 'Scraping', 'route' => 'screenscraper.edit', 'active' => 'screenscraper.edit', 'icon' => 'magnifying-glass', 'keywords' => 'screenscraper metadata identify account quota'],
             ['label' => 'Achievements', 'route' => 'retroachievements.edit', 'active' => 'retroachievements.edit', 'icon' => 'trophy', 'keywords' => 'retroachievements ra api key hardcore progress'],
             ['label' => 'Destinations', 'route' => 'destinations.edit', 'active' => 'destinations.edit', 'icon' => 'server-stack', 'keywords' => 'network share smb nas batocera send transfer'],
+            ['label' => 'About', 'route' => 'about.show', 'active' => 'about.show', 'icon' => 'information-circle', 'keywords' => 'version credits licence license github source build'],
         ];
     }
 }
