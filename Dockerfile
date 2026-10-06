@@ -41,4 +41,9 @@ EXPOSE 139 445
 # FTP ports
 EXPOSE 20 21 21100-21110
 
+# smbd answering on 445. FTP is left out: vsftpd is restarted by the
+# entrypoint when it dies, and SMB is what consoles mostly use.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD bash -c '</dev/tcp/127.0.0.1/445' || exit 1
+
 ENTRYPOINT ["/entrypoint.sh"]

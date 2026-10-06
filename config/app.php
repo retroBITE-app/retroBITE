@@ -120,7 +120,13 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
-    'key' => env('APP_KEY'),
+    // The container generates one at start when the environment sets none, and
+    // keeps it in storage/state; see docker/web/app-key.sh.
+    'key' => env('APP_KEY') ?: (static function (): ?string {
+        $file = storage_path('state/app.key');
+
+        return is_file($file) ? trim((string) file_get_contents($file)) : null;
+    })(),
 
     'previous_keys' => [
         ...array_filter(

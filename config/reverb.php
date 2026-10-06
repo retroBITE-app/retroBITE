@@ -3,8 +3,12 @@
 // Keys the container generated at start when .env sets none; see
 // docker/web/reverb.sh. The environment wins when it has them.
 $generatedReverbKeys = (static function (): array {
-    $file = storage_path('framework/reverb.json');
-    $keys = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+    // storage/state, a volume; storage/framework before it was one.
+    $file = current(array_filter(
+        [storage_path('state/reverb.json'), storage_path('framework/reverb.json')],
+        is_file(...),
+    ));
+    $keys = $file !== false ? json_decode((string) file_get_contents($file), true) : null;
 
     return is_array($keys) ? $keys : [];
 })();

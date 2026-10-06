@@ -20,7 +20,7 @@ class NetworkService
      */
     public function status(): array
     {
-        $host = (string) config('settings.network.host_ip');
+        $host = (string) config('settings.network.status_host');
         $result = [];
 
         foreach (ShareProtocol::cases() as $protocol) {

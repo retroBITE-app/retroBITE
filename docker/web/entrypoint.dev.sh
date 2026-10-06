@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# The application key, then Reverb's, before any artisan command.
+. /usr/local/bin/app-key.sh
+
 # Reverb's keys, before any artisan command: the broadcast channels are built
 # when the app boots, so every PHP process from here on must see the same keys.
 . /usr/local/bin/reverb.sh
@@ -125,7 +128,7 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 # the right trade while the source is bind-mounted.
 #
 # How many of each comes from the same variables as the production
-# entrypoint — see there, and .env.example, for why each has its default.
+# entrypoint — see there, and docs/configuration.md, for why each has its default.
 #
 # Every listener carries --timeout, a little over the longest job on its
 # queues, because listen kills its child after 60 seconds whatever the job's

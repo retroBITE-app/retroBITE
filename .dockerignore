@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.dev.example
 C*E.md
 
 # Rebuilt inside the image
@@ -20,6 +21,7 @@ storage/framework/views/*
 storage/framework/testing/*
 storage/app/games/*
 storage/app/docs/*
+storage/state/*
 localtest/
 
 # Not needed at runtime

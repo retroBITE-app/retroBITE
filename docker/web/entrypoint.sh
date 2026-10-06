@@ -1,11 +1,17 @@
 #!/bin/sh
 set -e
 
+# The application key, then Reverb's, before any artisan command. Both are
+# generated once into storage/state when the environment sets none.
+. /usr/local/bin/app-key.sh
+
 # Reverb's keys, before any artisan command: the broadcast channels are built
 # when the app boots, so every PHP process from here on must see the same keys.
 . /usr/local/bin/reverb.sh
 
 GAMES_DIR=/app/storage/app/games
+
+. /usr/local/bin/warnings.sh
 
 # Ensure storage subdirs exist. The framework dirs are in .dockerignore, so the
 # image ships the tree empty — Laravel does not create them itself and throws on
@@ -72,7 +78,7 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
     || echo "WARNING: could not check the conversion tools; carrying on." >&2
 
 # Queue workers, split by what actually limits them. One per queue unless
-# .env says otherwise (see .env.example): the smallest footprint that still
+# .env says otherwise (see docs/configuration.md): the smallest footprint that still
 # works every queue, on hardware nobody here has measured.
 #
 # More scraper workers add speed up to the threads the ScreenScraper account

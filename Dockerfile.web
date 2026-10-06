@@ -261,9 +261,18 @@ COPY docker/web/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
 COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
 COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
+COPY docker/web/app-key.sh /usr/local/bin/app-key.sh
+COPY docker/web/warnings.sh /usr/local/bin/warnings.sh
 COPY docker/web/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh /usr/local/bin/warnings.sh
 
 EXPOSE 80
+
+# Laravel's /up, through nginx and php-fpm: healthy means a page would load.
+# The start period covers a first boot's migrations. Portainer, Dockhand and
+# the NAS container managers show this state; compose's depends_on can wait
+# on it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/up || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

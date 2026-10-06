@@ -190,6 +190,7 @@ COPY docker/web/opcache.dev.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
 COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
 COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
+COPY docker/web/app-key.sh /usr/local/bin/app-key.sh
 COPY docker/web/entrypoint.dev.sh /entrypoint.sh
 COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/RAHasher
 # The conversion tools, on PATH, which is where config/converters.php
@@ -205,7 +206,7 @@ RUN chdman 2>&1 | grep -q "CHD) manager" \
     && cue2pops 2>&1 | grep -q "conversion tool v" \
     && { pops2cue 2>&1 || true; } | grep -q "POPS2CUE v" \
     && nodtool -V | grep -q "nodtool "
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh
 
 EXPOSE 80
 

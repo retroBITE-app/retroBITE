@@ -10,6 +10,13 @@ echo "===================================="
 echo "======  retroBITE Starting..  ======"
 echo "===================================="
 
+# The compose default, or .env.example's placeholder.
+case "$PASS" in
+    retrobite | change-me*)
+        echo "WARNING: AUTH_PASS is the default. Anyone on the network can read and write the library over SMB and FTP; set AUTH_PASS." >&2
+        ;;
+esac
+
 # One account serves both protocols. It needs a real shell: vsftpd's PAM stack
 # ends with pam_shells.so, which refuses any user whose shell is not in
 # /etc/shells — and /sbin/nologin never is.

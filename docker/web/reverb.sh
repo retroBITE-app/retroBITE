@@ -6,7 +6,7 @@
 # environment set here (php-fpm through clear_env = no in zz-env.conf).
 #
 # Keys. Taken from .env when it sets them; otherwise generated once and kept in
-# storage/framework/reverb.json, which config/broadcasting.php and
+# storage/state/reverb.json (a volume, beside app.key), which config/broadcasting.php and
 # config/reverb.php read when the environment has none. A file rather than only
 # an export, because `docker exec … php artisan` starts outside this process
 # tree and would otherwise see no keys and send nothing. Kept across restarts,
@@ -27,10 +27,18 @@ _random() {
 export BROADCAST_CONNECTION
 
 if [ -z "$REVERB_APP_KEY" ]; then
-    _keys=/app/storage/framework/reverb.json
+    _keys=/app/storage/state/reverb.json
+    _old_keys=/app/storage/framework/reverb.json
+
+    mkdir -p /app/storage/state
+
+    # Kept in storage/framework before storage/state was a volume: moved, so a
+    # tab open across the upgrade reconnects with the key it already holds.
+    if [ ! -s "$_keys" ] && [ -s "$_old_keys" ]; then
+        mv "$_old_keys" "$_keys"
+    fi
 
     if [ ! -s "$_keys" ]; then
-        mkdir -p /app/storage/framework
         printf '{"app_id":"%s","key":"%s","secret":"%s"}\n' \
             "$(od -An -N3 -tu4 /dev/urandom | tr -d ' ')" "$(_random 20)" "$(_random 32)" > "$_keys"
         chmod 640 "$_keys"

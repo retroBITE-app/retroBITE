@@ -15,10 +15,15 @@ return [
     | for passive mode, so "localhost" is wrong here whenever a console is
     | expected to connect.
     |
+    | SHARE_HOST, when set, is where the status check connects instead. With
+    | the share on a macvlan address (docker-compose.macvlan.yml) this host
+    | cannot reach that address, but it can reach the container by name.
+    |
     */
 
     'network' => [
         'host_ip' => env('HOST_IP', '127.0.0.1'),
+        'status_host' => env('SHARE_HOST') ?: env('HOST_IP', '127.0.0.1'),
         'username' => env('AUTH_USER', 'retrobite'),
     ],
 
