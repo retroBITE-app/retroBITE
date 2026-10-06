@@ -317,8 +317,9 @@ it('shows each file\'s own region, as a flag where one depicts it', function () 
 });
 
 it('puts the panels behind tabs, offering only the ones the game has', function () {
-    $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
-    GameFile::factory()->for($game)->create(['path' => 'psx/d1.bin', 'filename' => 'd1.bin']);
+    // A console that lists no converters, so no Conversion tab either.
+    $game = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Super Metroid', 'slug' => 'super-metroid']);
+    GameFile::factory()->for($game)->create(['path' => 'snes/Super Metroid.sfc', 'filename' => 'Super Metroid.sfc']);
 
     $tabs = fn (Testable $component): array => array_column($component->instance()->contentTabs, 'key');
 

@@ -108,7 +108,7 @@ it('offers every page and settings tab before anything is typed, without asking 
     });
 
     expect(array_keys($results))->toBe(['pages', 'settings'])
-        ->and($results['settings'])->toHaveCount(8)
+        ->and($results['settings'])->toHaveCount(9)
         ->and($gameQueries)->toBeEmpty();
 });
 
