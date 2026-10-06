@@ -1,0 +1,23 @@
+# Builds the two images from this checkout instead of pulling them, on top of
+# docker-compose.yml. ./retrobite up adds it:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# The tag is only the name the local build is given.
+
+services:
+  retrobite-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: retrobite/retrobite:local
+    volumes:
+      # A checkout keeps the knowledge base in the repository's storage, as
+      # it always has, rather than in a volume.
+      - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
+
+  retrobite-share:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: retrobite/share:local

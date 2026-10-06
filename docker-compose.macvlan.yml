@@ -1,0 +1,58 @@
+# The share container on an address of its own, on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.macvlan.yml up -d
+#
+# For a machine whose own file sharing already holds ports 445, 139 and 21 —
+# every NAS, and Windows and macOS with file sharing on. retrobite-share gets
+# its own IP on the LAN, as if it were another computer, and consoles connect
+# to that address on the ordinary ports.
+#
+# Set in .env, or in the stack's variables:
+#
+#   SHARE_IP=192.168.1.250        a free address on the LAN, outside the
+#                                 router's DHCP range so nothing else gets it
+#   SHARE_SUBNET=192.168.1.0/24   the LAN
+#   SHARE_GATEWAY=192.168.1.1     the router
+#   SHARE_PARENT=eth0             the host's LAN interface (Synology: eth0
+#                                 or ovs_eth0; Unraid: br0; `ip route` shows it)
+#
+# HOST_IP is set to SHARE_IP here: it is the address consoles are told to use.
+#
+# macvlan keeps the host and its address apart — the host cannot reach
+# SHARE_IP, nor can containers on its bridge. The web container is joined to
+# the share by a network of their own for the status check (SHARE_HOST), and
+# both see the same library through their mounts, so nothing else needs to.
+# Docker Desktop on Windows and macOS does not support macvlan; there, see
+# docs/installing.md.
+
+services:
+  retrobite-web:
+    environment:
+      HOST_IP: ${SHARE_IP:?set SHARE_IP to the address the share should have}
+      SHARE_HOST: retrobite-share
+    networks:
+      - default
+      - share
+
+  retrobite-share:
+    network_mode: !reset null
+    environment:
+      HOST_IP: ${SHARE_IP:?set SHARE_IP to the address the share should have}
+    networks:
+      lan:
+        ipv4_address: ${SHARE_IP}
+        # Listed first, so the share's default route is the LAN.
+        priority: 100
+      share:
+        priority: 10
+
+networks:
+  lan:
+    driver: macvlan
+    driver_opts:
+      parent: ${SHARE_PARENT:-eth0}
+    ipam:
+      config:
+        - subnet: ${SHARE_SUBNET:?set SHARE_SUBNET, e.g. 192.168.1.0/24}
+          gateway: ${SHARE_GATEWAY:?set SHARE_GATEWAY, e.g. 192.168.1.1}
+  share:

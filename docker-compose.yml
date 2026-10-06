@@ -1,56 +1,91 @@
+# retroBITE, on the images published to Docker Hub.
+#
+#   docker compose up -d          start it, then open http://<this machine>:81
+#   docker compose pull && docker compose up -d     update it
+#
+# Everything is set below with a default, so this file runs as it is: from
+# the command line beside an optional .env, or pasted into Portainer,
+# Dockhand, Synology Container Manager, Unraid or TrueNAS with the variables
+# filled in their editor. docs/installing.md walks through each platform and
+# docs/configuration.md lists every variable; .env.example holds the few worth
+# changing.
+#
+# Needs Docker Compose 2.24 or newer (for the optional env_file).
+#
+# Building the images from this repository instead: ./retrobite up, which adds
+# docker-compose.build.yml. A NAS whose own file sharing already holds ports
+# 445, 139 and 21: add docker-compose.macvlan.yml.
+
 services:
   retrobite-web:
-    # image: retrobite/retrobite:develop | 20261004-BETA
-    build:
-      context: .
-      dockerfile: Dockerfile.web
+    image: retrobite/retrobite:${RETROBITE_TAG:-latest}
     container_name: retrobite-web
+    # Anything not listed under environment below — queue workers,
+    # ScreenScraper and RetroAchievements timeouts, conversion tools — is read
+    # from .env when there is one. See docs/configuration.md.
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_URL: ${APP_URL:-http://localhost:${WEB_PORT:-81}}
+      APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+      # Left empty, a key is generated on first start and kept in the state
+      # volume below. It encrypts the passwords retroBITE stores, so set it
+      # only to keep one you already have.
+      APP_KEY: ${APP_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-warning}
       DB_CONNECTION: mariadb
       DB_HOST: retrobite-db
       DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-retrobite}
       DB_USERNAME: ${DB_USERNAME:-retrobite}
       DB_PASSWORD: ${DB_PASSWORD:-retrobite}
-      # Transfers write to a drive from the browser, which Chrome allows only
-      # on https or localhost; a page opened another way links here. The same
-      # port as published below.
-      TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:81}
+      # This machine's LAN address: shown as the address consoles connect to,
+      # used to check SMB and FTP are up, and the network Settings →
+      # Destinations searches. The web container is behind Docker's bridge and
+      # cannot work it out itself.
+      HOST_IP: ${HOST_IP:-}
+      # The SMB and FTP account, shown on the Network page.
+      AUTH_USER: ${AUTH_USER:-retrobite}
+      # Transfers write to a USB drive from the browser, which Chrome allows
+      # only on https or localhost; a page opened another way links here.
+      TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:${WEB_PORT:-81}}
       # nginx is in front, so game files and artwork are sent by it rather
       # than streamed by PHP (App\Support\NginxFile).
       SERVE_WITH_NGINX: "true"
     ports:
-      - "81:80"
-    # Settings → Destinations searches the LAN for network shares. mDNS and
-    # NetBIOS cannot cross Docker's bridge; a scan of the SMB port can, on the
-    # network HOST_IP in .env is on — so set HOST_IP for the search to work.
-    # Copying to a share works either way.
+      - "${WEB_PORT:-81}:80"
     volumes:
+      # The ROM library, shared with retrobite-share below.
       - ${GAMES_PATH:-./games}:/app/storage/app/games
-      - ${DOCS_PATH:-./storage/app/docs}:/app/storage/app/docs
-      # Artwork and other media retroBite downloads itself. Unlike the games
-      # mount this one is written to, and it is kept out of the games tree so a
+      # The markdown knowledge base, a folder beside this file.
+      - ${DOCS_PATH:-./docs}:/app/storage/app/docs
+      # Artwork retroBITE downloads itself, kept out of the games tree so a
       # console browsing the share never sees it.
-      - retrobite-media:/app/storage/app/media
+      - ${MEDIA_PATH:-retrobite-media}:/app/storage/app/media
+      # The application key and Reverb's keys. Back it up with the database.
+      - ${STATE_PATH:-retrobite-state}:/app/storage/state
     depends_on:
       retrobite-db:
         condition: service_healthy
-    restart: on-failure
+    restart: unless-stopped
 
   retrobite-db:
     image: mariadb:11.4
     container_name: retrobite-mariadb
     environment:
+      # Read once, when the database is first created: change them before the
+      # first start, or change them inside MariaDB afterwards as well.
       MARIADB_DATABASE: ${DB_DATABASE:-retrobite}
       MARIADB_USER: ${DB_USERNAME:-retrobite}
       MARIADB_PASSWORD: ${DB_PASSWORD:-retrobite}
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-retrobite}
     volumes:
-      - retrobite-db:/var/lib/mysql
-    # Not published to the host by default: nothing outside the compose network
-    # needs it, and this box sits on a LAN with consoles on it.
+      - ${DB_PATH:-retrobite-db}:/var/lib/mysql
+    # Not published to the host: nothing outside the compose network needs it,
+    # and this box sits on a LAN with consoles on it.
     expose:
       - "3306"
     healthcheck:
@@ -61,17 +96,27 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-    restart: on-failure
+    restart: unless-stopped
 
   retrobite-share:
-    # image: retrobite/share:latest | develop | 20261004-BETA
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: retrobite/share:${RETROBITE_TAG:-latest}
     container_name: retrobite-share
     env_file:
-      - .env
-    restart: on-failure
+      - path: .env
+        required: false
+    environment:
+      AUTH_USER: ${AUTH_USER:-retrobite}
+      AUTH_PASS: ${AUTH_PASS:-retrobite}
+      # Advertised to FTP clients for passive mode. Empty, it is read off the
+      # default route on every start.
+      HOST_IP: ${HOST_IP:-}
+      # The console folders created in the library, and those that also get
+      # an SMB share of their own (what Open PS2 Loader connects to).
+      GAME_FOLDERS: ${GAME_FOLDERS:-}
+      SMB_SHARES: ${SMB_SHARES:-}
+    # On the host's network, so consoles find it by NetBIOS and passive FTP
+    # works without a port range published. Ports 445, 139 and 21 must be free:
+    # on a NAS they are its own file sharing — see docker-compose.macvlan.yml.
     network_mode: host
     volumes:
       - ${GAMES_PATH:-./games}:/games
@@ -79,15 +124,9 @@ services:
       - NET_ADMIN
       - SYS_ADMIN
     init: true
-    # Optional: if you prefer bridge network instead of host, drop
-    # network_mode above and uncomment these.
-    # ports:
-    #   - "139:139"     # SMB
-    #   - "445:445"     # SMB
-    #   - "20:20"       # FTP data
-    #   - "21:21"       # FTP control
-    #   - "21100-21110:21100-21110"  # FTP passive ports
+    restart: unless-stopped
 
 volumes:
   retrobite-db:
   retrobite-media:
+  retrobite-state:

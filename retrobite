@@ -2,6 +2,7 @@
 # retroBITE's one command for working with the containers, run on the host.
 #
 #   ./retrobite up            build and start the stack, and wait until it is ready
+#   ./retrobite up --hub [tag]  start it on the Docker Hub images instead (latest)
 #   ./retrobite down          stop it
 #   ./retrobite restart       restart the web container
 #   ./retrobite logs [-f]     the web container's log
@@ -12,7 +13,8 @@
 #   ./retrobite shell         a shell in the web container
 #
 # The dev stack (docker-compose.dev.yml) when it is running, or with --dev;
-# otherwise the production stack. Nothing needs installing on the host: PHP,
+# otherwise the production stack, docker-compose.yml, built from this checkout
+# by docker-compose.build.yml (or pulled, with up --hub). Nothing needs installing on the host: PHP,
 # Composer and node all run in the container, which installs its own
 # dependencies when it starts — the dev container whenever composer.lock or
 # package-lock.json has changed, the production image when it is built.
@@ -25,7 +27,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 DEV=(docker compose -f docker-compose.dev.yml)
-PROD=(docker compose -f docker-compose.yml)
+PROD=(docker compose -f docker-compose.yml -f docker-compose.build.yml)
+HUB=(docker compose -f docker-compose.yml)
 SERVICE=retrobite-web
 
 running() {
@@ -72,13 +75,37 @@ command=${1:-help}
 
 case "$command" in
     up)
-        # up takes --dev/--prod after it too: ./retrobite up --dev
+        # up takes --dev/--prod/--hub after it too: ./retrobite up --dev
+        hub=0
         case "${1:-}" in
             --dev) stack=("${DEV[@]}"); shift ;;
             --prod) stack=("${PROD[@]}"); shift ;;
+            --hub)
+                # The same project as --prod, on pulled images: the tag is
+                # the release (latest), develop, or a version, 20260930.
+                hub=1
+                stack=("${HUB[@]}")
+                shift
+                if [ $# -gt 0 ] && [[ $1 != -* ]]; then
+                    export RETROBITE_TAG=$1
+                    shift
+                fi
+                ;;
         esac
-        "${stack[@]}" up -d --build "$@"
-        port=$(is_dev && echo 82 || echo 81)
+        if [ $hub -eq 1 ]; then
+            "${stack[@]}" pull
+            "${stack[@]}" up -d "$@"
+        else
+            "${stack[@]}" up -d --build "$@"
+        fi
+        # The published port: WEB_PORT from the environment or .env, else the
+        # compose file's default.
+        if is_dev; then
+            port=82
+        else
+            port=${WEB_PORT:-$(sed -n 's/^WEB_PORT=//p' .env 2>/dev/null | tail -n 1)}
+            port=${port:-81}
+        fi
         echo -n "Waiting for retroBITE on http://localhost:$port (installing dependencies on a first start) "
         for _ in $(seq 1 300); do
             if curl -fs -o /dev/null --max-time 2 "http://localhost:$port/up"; then
@@ -112,11 +139,11 @@ case "$command" in
         ;;
     shell) in_web sh ;;
     help | -h | --help)
-        sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
         echo "Unknown command: $command" >&2
-        sed -n '4,12p' "$0" | sed 's/^# \{0,1\}//' >&2
+        sed -n '4,13p' "$0" | sed 's/^# \{0,1\}//' >&2
         exit 1
         ;;
 esac
