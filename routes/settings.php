@@ -15,4 +15,5 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('settings/retroachievements', 'settings.retroachievements')->name('retroachievements.edit');
     Route::livewire('settings/destinations', 'settings.destinations')->name('destinations.edit');
     Route::redirect('settings/integrations', '/settings/retroachievements');
+    Route::livewire('settings/about', 'settings.about')->name('about.show');
 });
