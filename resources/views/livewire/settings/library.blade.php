@@ -59,6 +59,14 @@ new #[Title('Library settings')] class extends Component
         Flux::toast(variant: 'success', text: __('Queued. ROMs missing for more than :days days, and the games left without any, will be removed.', ['days' => (int) $this->days]));
     }
 
+    /** Queue a prune of every missing ROM whatever the days, for straight after tidying the library by hand. */
+    public function pruneAllMissing(): void
+    {
+        Artisan::call('retrobite:library:prune', ['--days' => 0]);
+
+        Flux::toast(variant: 'success', text: __('Queued. Every missing ROM, and the games left without any, will be removed.'));
+    }
+
     private function validateDays(): void
     {
         $this->validate(['days' => ['required', 'integer', 'min:1', 'max:3650']]);
@@ -106,6 +114,11 @@ new #[Title('Library settings')] class extends Component
                         <flux:button size="sm" variant="filled" icon="trash" type="button" wire:click="pruneNow"
                                      wire:confirm="{{ __('Are you sure? ROMs missing for longer than the days above, and every game left without ROMs, will be removed with their details and artwork. This cannot be undone.') }}">
                             {{ __('Prune now') }}
+                        </flux:button>
+
+                        <flux:button size="sm" variant="danger" icon="trash" type="button" wire:click="pruneAllMissing"
+                                     wire:confirm="{{ __('Are you sure? Every ROM marked missing, however recently, and every game left without ROMs, will be removed with their details and artwork. This cannot be undone.') }}">
+                            {{ __('Prune all missing') }}
                         </flux:button>
 
                         @php(['games' => $games, 'files' => $files] = $this->wouldGo)
