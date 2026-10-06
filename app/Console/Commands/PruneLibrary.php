@@ -16,13 +16,13 @@ use Illuminate\Database\Eloquent\Builder;
  * A game with every file still on the disk is never queued, which is nearly
  * all of a healthy library. The games are read a page at a time, so a
  * library of many thousands is never held in memory at once. Run every night
- * by the schedule when Settings → Library has it on, and by the Prune now
- * button there.
+ * by the schedule when Settings → Library has it on, and by the Prune now and
+ * Prune all missing buttons there.
  */
 class PruneLibrary extends Command
 {
     protected $signature = 'retrobite:library:prune
-                            {--days= : Days a ROM must have been missing. Defaults to the Settings → Library value.}';
+                            {--days= : Days a ROM must have been missing; 0 for every missing ROM. Defaults to the Settings → Library value.}';
 
     protected $description = 'Queue a prune for every game with no ROMs, or with ROMs marked missing';
 
@@ -31,7 +31,7 @@ class PruneLibrary extends Command
 
     public function handle(): int
     {
-        $days = $this->option('days') !== null ? max(1, (int) $this->option('days')) : PruneGame::savedDays();
+        $days = $this->option('days') !== null ? max(0, (int) $this->option('days')) : PruneGame::savedDays();
 
         $withoutFiles = $this->queue(PruneGame::withoutFiles(), $days);
         $withMissing = $this->queue(PruneGame::withMissingFiles(), $days);
