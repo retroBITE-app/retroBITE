@@ -62,6 +62,19 @@ it('queues a prune at the days typed when Prune now is pressed', function () {
     });
 });
 
+it('queues a prune of every missing ROM when Prune all missing is pressed, whatever the days say', function () {
+    $game = Game::factory()->forConsole('snes')->create();
+    Queue::fake();
+
+    Livewire::test('settings.library')
+        ->set('days', '30')
+        ->call('pruneAllMissing');
+
+    Queue::assertPushed(PruneGame::class, function (PruneGame $job) use ($game): bool {
+        return $job->gameId === $game->id && $job->days === 0;
+    });
+});
+
 it('counts the games and the missing ROMs a prune would remove now', function () {
     $gone = Game::factory()->forConsole('snes')->create();
     GameFile::factory()->for($gone)->create(['missing_since' => now()->subDays(40)]);

@@ -88,6 +88,14 @@ it('keeps a ROM gone only lately, and the game it belongs to', function () {
         ->and(Game::query()->find($game->id))->not->toBeNull();
 });
 
+it('removes a ROM missing only moments ago at 0 days, and the game left without any', function () {
+    $game = gameMissingFor([0]);
+
+    pruneGame($game, 0);
+
+    expect(Game::query()->find($game->id))->toBeNull();
+});
+
 it('removes a game that never had a ROM, whatever the days', function () {
     $empty = Game::factory()->forConsole('snes')->create();
 
@@ -150,6 +158,17 @@ it('queues a prune for games with no ROMs and games with ROMs missing, and none 
     });
     Queue::assertNotPushed(PruneGame::class, function (PruneGame $job) use ($healthy): bool {
         return $job->gameId === $healthy->id;
+    });
+});
+
+it('queues at 0 days when asked, rather than raising it to one', function () {
+    gameMissingFor([0]);
+    Queue::fake();
+
+    $this->artisan('retrobite:library:prune', ['--days' => 0])->assertSuccessful();
+
+    Queue::assertPushed(PruneGame::class, function (PruneGame $job): bool {
+        return $job->days === 0;
     });
 });
 
