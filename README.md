@@ -77,6 +77,11 @@ You need Docker with Compose 2.24 or newer, on Linux, a NAS or Docker Desktop.
    curl -L -o .env https://github.com/retroBITE-app/retroBITE/releases/latest/download/.env.example
    ```
 
+   While retroBITE is in beta there is no full release yet, so `latest` finds
+   nothing. Take the files from the newest pre-release on the
+   [releases page](https://github.com/retroBITE-app/retroBITE/releases)
+   instead, such as `releases/download/20261006-BETA/docker-compose.yml`.
+
 2. **Edit `.env`.** It holds only what is worth changing:
 
    | Setting | What it is |
@@ -103,8 +108,9 @@ You need Docker with Compose 2.24 or newer, on Linux, a NAS or Docker Desktop.
 NAS whose own file sharing already uses the SMB and FTP ports, updating, and
 backups.
 
-`latest` is the newest release. Set `RETROBITE_TAG=develop` for the newest
-pre-release, or a date such as `20260930` to stay on one version.
+The compose file runs the version it came with. To follow every release, set
+`RETROBITE_TAG=latest` (or `develop` for pre-releases); then
+`docker compose pull && docker compose up -d` updates it.
 
 ## Where your data lives
 

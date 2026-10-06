@@ -28,6 +28,11 @@ first start retroBITE:
 
 Every setting is described in [configuration.md](configuration.md).
 
+While retroBITE is in beta there is no full release yet, so the
+`releases/latest/download/` links below find nothing. Use the newest
+pre-release's files instead, such as
+`https://github.com/retroBITE-app/retroBITE/releases/download/20261006-BETA/docker-compose.yml`.
+
 **Before the first start**, always change `AUTH_PASS`, `DB_PASSWORD` and
 `DB_ROOT_PASSWORD`, and set `GAMES_PATH` to your library. The database
 passwords are read only once, when the database is created.
@@ -75,7 +80,8 @@ their own editor, so no `.env` file is needed.
    - **Web editor**: paste the contents of `docker-compose.yml`.
    - **Repository**: `https://github.com/retroBITE-app/retroBITE`, compose
      path `docker-compose.yml`. For the reference, use a release's tag, such as
-     `refs/tags/20260930`, so the file matches the images.
+     `refs/tags/20260930`, and set `RETROBITE_TAG` to the same version below: the
+     file in the repository defaults to `latest`.
 3. Under **Environment variables**, add at least:
    - `AUTH_PASS`, `DB_PASSWORD` and `DB_ROOT_PASSWORD`
    - `GAMES_PATH`, as an absolute path on the Docker host
@@ -227,18 +233,27 @@ network of its own.
 
 ## Updating
 
+A compose file from a release runs that release's images. Updating means
+moving to the next version, in one of two ways.
+
+**Follow every release.** Set `RETROBITE_TAG=latest` once (`develop` to
+follow pre-releases). From then on, an update is:
+
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
 In Portainer and Dockhand, use **Pull and redeploy**; in Container Manager,
-**Action → Build**. The database is brought up to date on start. Your
-library, database, artwork and keys are kept: they are in the volumes or
-folders above, not in the containers.
+**Action → Build**.
 
-To stay on one version, set `RETROBITE_TAG` to it, such as `20260930`.
-`latest` follows releases and `develop` follows pre-releases.
+**Choose each version.** Set `RETROBITE_TAG` to the version, such as
+`RETROBITE_TAG=20261010`, or download the new release's `docker-compose.yml`.
+Then pull and start it as above.
+
+The database is brought up to date on start. Your library, database, artwork
+and keys are kept: they are in the volumes or folders above, not in the
+containers.
 
 ## Backing up
 

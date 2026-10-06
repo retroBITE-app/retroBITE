@@ -2,8 +2,10 @@ name: release-files
 
 # What a person installs from, attached to every published release:
 # docker-compose.yml, docker-compose.macvlan.yml and .env.example, from the
-# release's own tag. docs/installing.md fetches them from
-# releases/latest/download/, so they always match the :latest images.
+# release's own tag. The attached docker-compose.yml defaults to that release's
+# own images (RETROBITE_TAG still overrides it), so the file from any release,
+# pre-releases included, runs the version it came with. docs/installing.md
+# fetches them from releases/latest/download/.
 #
 # A full release (not a pre-release) also updates the Docker Hub pages from
 # docs/dockerhub/. That needs DOCKERHUB_TOKEN to have Read, Write and Delete
@@ -37,8 +39,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
+          mkdir -p "$RUNNER_TEMP/files"
+          sed "s/\${RETROBITE_TAG:-latest}/\${RETROBITE_TAG:-$TAG}/" docker-compose.yml \
+            > "$RUNNER_TEMP/files/docker-compose.yml"
+          grep -q "RETROBITE_TAG:-$TAG}" "$RUNNER_TEMP/files/docker-compose.yml" \
+            || { echo "docker-compose.yml no longer reads \${RETROBITE_TAG:-latest}." >&2; exit 1; }
+          cp docker-compose.macvlan.yml .env.example "$RUNNER_TEMP/files/"
+
           gh release upload "$TAG" --clobber --repo "$GITHUB_REPOSITORY" \
-            docker-compose.yml docker-compose.macvlan.yml .env.example
+            "$RUNNER_TEMP"/files/docker-compose.yml \
+            "$RUNNER_TEMP"/files/docker-compose.macvlan.yml \
+            "$RUNNER_TEMP"/files/.env.example
 
   describe:
     if: ${{ !github.event.release.prerelease }}
