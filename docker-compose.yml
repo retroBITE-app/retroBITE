@@ -12,13 +12,17 @@
 #
 # Needs Docker Compose 2.24 or newer (for the optional env_file).
 #
+# Runs develop, the newest pre-release, while retroBITE is in beta: there is
+# no :latest until the first full release. RETROBITE_TAG picks another, such
+# as a version, 20261006-BETA, to stay on.
+#
 # Building the images from this repository instead: ./retrobite up, which adds
 # docker-compose.build.yml. A NAS whose own file sharing already holds ports
 # 445, 139 and 21: add docker-compose.macvlan.yml.
 
 services:
   retrobite-web:
-    image: retrobite/retrobite:${RETROBITE_TAG:-latest}
+    image: retrobite/retrobite:${RETROBITE_TAG:-develop}
     container_name: retrobite-web
     # Anything not listed under environment below — queue workers,
     # ScreenScraper and RetroAchievements timeouts, conversion tools — is read
@@ -99,7 +103,7 @@ services:
     restart: unless-stopped
 
   retrobite-share:
-    image: retrobite/share:${RETROBITE_TAG:-latest}
+    image: retrobite/share:${RETROBITE_TAG:-develop}
     container_name: retrobite-share
     env_file:
       - path: .env

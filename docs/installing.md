@@ -11,8 +11,7 @@ retroBITE is three containers started from one compose file:
 Both images are published for `amd64` and `arm64`, so they run on an Intel or
 AMD NAS, a Raspberry Pi 4 or 5, and Apple silicon alike.
 
-You need two files from the
-[latest release](https://github.com/retroBITE-app/retroBITE/releases/latest):
+You need two files from the repository:
 
 - **`docker-compose.yml`**, the stack. It runs as it is; every setting has a
   default.
@@ -27,11 +26,6 @@ first start retroBITE:
 - opens a four-step setup in the browser
 
 Every setting is described in [configuration.md](configuration.md).
-
-While retroBITE is in beta there is no full release yet, so the
-`releases/latest/download/` links below find nothing. Use the newest
-pre-release's files instead, such as
-`https://github.com/retroBITE-app/retroBITE/releases/download/20261006-BETA/docker-compose.yml`.
 
 **Before the first start**, always change `AUTH_PASS`, `DB_PASSWORD` and
 `DB_ROOT_PASSWORD`, and set `GAMES_PATH` to your library. The database
@@ -56,8 +50,8 @@ You need Docker Engine with Compose 2.24 or newer (`docker compose version`).
 
 ```bash
 mkdir retrobite && cd retrobite
-curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.yml
-curl -L -o .env https://github.com/retroBITE-app/retroBITE/releases/latest/download/.env.example
+curl -LO https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/docker-compose.yml
+curl -L -o .env https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/.env.example
 nano .env            # passwords, GAMES_PATH, HOST_IP, APP_TIMEZONE
 docker compose up -d
 ```
@@ -80,8 +74,8 @@ their own editor, so no `.env` file is needed.
    - **Web editor**: paste the contents of `docker-compose.yml`.
    - **Repository**: `https://github.com/retroBITE-app/retroBITE`, compose
      path `docker-compose.yml`. For the reference, use a release's tag, such as
-     `refs/tags/20260930`, and set `RETROBITE_TAG` to the same version below: the
-     file in the repository defaults to `latest`.
+     `refs/tags/20261006-BETA`, and set `RETROBITE_TAG` to the same version below,
+     so the file and the images match.
 3. Under **Environment variables**, add at least:
    - `AUTH_PASS`, `DB_PASSWORD` and `DB_ROOT_PASSWORD`
    - `GAMES_PATH`, as an absolute path on the Docker host
@@ -219,7 +213,7 @@ another computer, and leaves the NAS's sharing alone.
 3. **Start it with both files:**
 
    ```bash
-   curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.macvlan.yml
+   curl -LO https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/docker-compose.macvlan.yml
    docker compose -f docker-compose.yml -f docker-compose.macvlan.yml up -d
    ```
 
@@ -233,11 +227,8 @@ network of its own.
 
 ## Updating
 
-A compose file from a release runs that release's images. Updating means
-moving to the next version, in one of two ways.
-
-**Follow every release.** Set `RETROBITE_TAG=latest` once (`develop` to
-follow pre-releases). From then on, an update is:
+While retroBITE is in beta the compose file runs `develop`, the newest
+pre-release, so an update is:
 
 ```bash
 docker compose pull
@@ -245,11 +236,8 @@ docker compose up -d
 ```
 
 In Portainer and Dockhand, use **Pull and redeploy**; in Container Manager,
-**Action → Build**.
-
-**Choose each version.** Set `RETROBITE_TAG` to the version, such as
-`RETROBITE_TAG=20261010`, or download the new release's `docker-compose.yml`.
-Then pull and start it as above.
+**Action → Build**. If you set `RETROBITE_TAG` to one version, change it to
+the next first.
 
 The database is brought up to date on start. Your library, database, artwork
 and keys are kept: they are in the volumes or folders above, not in the

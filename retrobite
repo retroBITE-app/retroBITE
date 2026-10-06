@@ -2,7 +2,7 @@
 # retroBITE's one command for working with the containers, run on the host.
 #
 #   ./retrobite up            build and start the stack, and wait until it is ready
-#   ./retrobite up --hub [tag]  start it on the Docker Hub images instead (latest)
+#   ./retrobite up --hub [tag]  start it on the Docker Hub images instead (develop)
 #   ./retrobite down          stop it
 #   ./retrobite restart       restart the web container
 #   ./retrobite logs [-f]     the web container's log
@@ -82,7 +82,7 @@ case "$command" in
             --prod) stack=("${PROD[@]}"); shift ;;
             --hub)
                 # The same project as --prod, on pulled images: the tag is
-                # the release (latest), develop, or a version, 20260930.
+                # develop (the default), latest, or a version, 20261006-BETA.
                 hub=1
                 stack=("${HUB[@]}")
                 shift

@@ -69,18 +69,13 @@ retroBITE runs only in Docker. We do not support installing it any other way.
 
 You need Docker with Compose 2.24 or newer, on Linux, a NAS or Docker Desktop.
 
-1. **Get the compose file and the settings**, from the latest release:
+1. **Get the compose file and the settings:**
 
    ```bash
    mkdir retrobite && cd retrobite
-   curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.yml
-   curl -L -o .env https://github.com/retroBITE-app/retroBITE/releases/latest/download/.env.example
+   curl -LO https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/docker-compose.yml
+   curl -L -o .env https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/.env.example
    ```
-
-   While retroBITE is in beta there is no full release yet, so `latest` finds
-   nothing. Take the files from the newest pre-release on the
-   [releases page](https://github.com/retroBITE-app/retroBITE/releases)
-   instead, such as `releases/download/20261006-BETA/docker-compose.yml`.
 
 2. **Edit `.env`.** It holds only what is worth changing:
 
@@ -108,9 +103,9 @@ You need Docker with Compose 2.24 or newer, on Linux, a NAS or Docker Desktop.
 NAS whose own file sharing already uses the SMB and FTP ports, updating, and
 backups.
 
-The compose file runs the version it came with. To follow every release, set
-`RETROBITE_TAG=latest` (or `develop` for pre-releases); then
-`docker compose pull && docker compose up -d` updates it.
+The compose file runs `develop`, the newest pre-release, while retroBITE is in
+beta, so `docker compose pull && docker compose up -d` updates it. Set
+`RETROBITE_TAG` to a version, such as `20261006-BETA`, to stay on one.
 
 ## Where your data lives
 

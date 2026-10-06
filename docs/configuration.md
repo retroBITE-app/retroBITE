@@ -37,7 +37,7 @@ interface under Settings, and kept in the database.
 | `HOST_IP` | empty | This machine's LAN address. It is shown as the address consoles connect to, it is what the dashboard checks SMB and FTP against, and it decides which network Settings → Destinations searches. The share container works it out when this is empty; the web container cannot, from behind Docker's bridge. |
 | `APP_TIMEZONE` | `UTC` | A PHP zone name such as `Europe/Stockholm`. It sets the times shown and when the nightly jobs run. Timestamps are stored without an offset, so changing it later shifts the dates already written. |
 | `WEB_PORT` | `81` | The host port the web interface answers on. |
-| `RETROBITE_TAG` | the release's version | The image tag to run. A compose file from a release runs that release's images. `latest` follows releases, `develop` pre-releases, and a version such as `20260930` stays on that version. In a checkout, `docker-compose.yml` defaults to `latest`. |
+| `RETROBITE_TAG` | `develop` | The image tag to run. `develop` is the newest pre-release, and a version such as `20261006-BETA` stays on that version. `latest`, the newest full release, exists from the first one on. A compose file attached to a release defaults to that release's version instead. |
 
 ## Where data is kept
 

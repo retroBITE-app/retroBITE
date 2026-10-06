@@ -15,8 +15,8 @@ server, all from one compose file.
 
 ```bash
 mkdir retrobite && cd retrobite
-curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.yml
-curl -L -o .env https://github.com/retroBITE-app/retroBITE/releases/latest/download/.env.example
+curl -LO https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/docker-compose.yml
+curl -L -o .env https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/.env.example
 # change the passwords and GAMES_PATH in .env
 docker compose up -d
 ```
@@ -32,8 +32,8 @@ its own on the first start.
 
 | Tag | What |
 | --- | --- |
-| `latest` | The newest release. |
-| `develop` | The newest pre-release. |
+| `develop` | The newest pre-release. What the compose file runs during the beta. |
+| `latest` | The newest full release, from the first one on. |
 | `20260930`, `20261004-BETA`, … | One version, to stay on. |
 
 `linux/amd64` and `linux/arm64`.

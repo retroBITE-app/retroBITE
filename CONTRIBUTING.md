@@ -375,10 +375,11 @@ Then, for each release:
      tag. Anything typed in `--notes` is kept above them.
    - **release-files.yml** does two things:
      - It attaches `docker-compose.yml`, `docker-compose.macvlan.yml` and
-       `.env.example`. `releases/latest/download/` is what
-       [docs/installing.md](docs/installing.md) tells people to fetch, so these
-       three files *are* the installation, and a change to them belongs in the
-       notes.
+       `.env.example`. The attached compose file defaults to that release's
+       version, so anyone can install one version and stay on it.
+       [docs/installing.md](docs/installing.md) and the site fetch the
+       `develop` branch's files instead. Either way these files *are* the
+       installation, and a change to them belongs in the notes.
      - For a release, not a pre-release, it updates the Docker Hub pages from
        `docs/dockerhub/`. This needs `DOCKERHUB_TOKEN` to have Read, Write and
        Delete access.
@@ -387,8 +388,8 @@ Then, for each release:
    folder:
 
    ```bash
-   curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.yml
-   docker compose up -d
+   curl -LO https://github.com/retroBITE-app/retroBITE/releases/download/20261010/docker-compose.yml
+   docker compose up -d                # runs exactly the version just released
    ```
 
 `./build` also works outside a release:
@@ -400,6 +401,13 @@ Then, for each release:
 ./build master --version 20261010  # a version without its tag on this commit
 ./build --no-smoke                 # push without starting the web image first
 ```
+
+**The first full release** creates `:latest`. Until then, every compose file
+defaults to `develop`, because `:latest` does not exist. Once `:latest` is on
+Docker Hub, change the default to `latest` in two places:
+
+- `${RETROBITE_TAG:-develop}` in `docker-compose.yml` and in `release-files.yml`'s `sed`
+- the site's `docs/public/docker-compose.yml`
 
 A new environment variable goes in three places:
 
