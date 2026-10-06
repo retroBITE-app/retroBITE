@@ -375,7 +375,8 @@ Then, for each release:
      tag. Anything typed in `--notes` is kept above them.
    - **release-files.yml** does two things:
      - It attaches `docker-compose.yml`, `docker-compose.macvlan.yml` and
-       `.env.example`. The attached compose file defaults to that release's
+       `.env.example`, the last as `env.example` because GitHub renames an
+       asset whose name starts with a dot. The attached compose file defaults to that release's
        version, so anyone can install one version and stay on it.
        [docs/installing.md](docs/installing.md) and the site fetch the
        `develop` branch's files instead. Either way these files *are* the

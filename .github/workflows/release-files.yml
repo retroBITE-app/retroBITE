@@ -1,7 +1,8 @@
 name: release-files
 
 # What a person installs from, attached to every published release:
-# docker-compose.yml, docker-compose.macvlan.yml and .env.example, from the
+# docker-compose.yml, docker-compose.macvlan.yml and .env.example (as
+# env.example), from the
 # release's own tag. The attached docker-compose.yml defaults to that release's
 # own images (RETROBITE_TAG still overrides it), so the file from any release,
 # pre-releases included, runs the version it came with: the way to install one
@@ -45,12 +46,15 @@ jobs:
             > "$RUNNER_TEMP/files/docker-compose.yml"
           grep -q "RETROBITE_TAG:-$TAG}" "$RUNNER_TEMP/files/docker-compose.yml" \
             || { echo "docker-compose.yml no longer reads \${RETROBITE_TAG:-develop}." >&2; exit 1; }
-          cp docker-compose.macvlan.yml .env.example "$RUNNER_TEMP/files/"
+          cp docker-compose.macvlan.yml "$RUNNER_TEMP/files/"
+          # GitHub renames an asset that starts with a dot (default.env.example),
+          # so it goes up as env.example; save it as .env.
+          cp .env.example "$RUNNER_TEMP/files/env.example"
 
           gh release upload "$TAG" --clobber --repo "$GITHUB_REPOSITORY" \
             "$RUNNER_TEMP"/files/docker-compose.yml \
             "$RUNNER_TEMP"/files/docker-compose.macvlan.yml \
-            "$RUNNER_TEMP"/files/.env.example
+            "$RUNNER_TEMP"/files/env.example
 
   describe:
     if: ${{ !github.event.release.prerelease }}
