@@ -127,7 +127,7 @@ musl, so a glibc release binary will not run.
 3. Add a check to the `RUN` smoke test after that line.
 4. Add any shared libraries it links to the runtime `apk add` list. Check with
    `ldd` in the stage.
-5. Add the path variable to `.env.example`, commented.
+5. Add the path variable to `.env.dev.example`, commented, and to `docs/configuration.md`.
 
 A tool that is not found only turns its converters off. The page shows them
 greyed out with "<tool> is not installed", and `conversion:tools` names them at

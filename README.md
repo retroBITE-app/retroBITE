@@ -13,8 +13,8 @@
     <img alt="GitHub forks" src="https://img.shields.io/github/forks/retroBITE-app/retroBITE?style=for-the-badge&logo=github&label=Forks&color=e8b44a">
   </a>
   <br>
-  <a href="https://github.com/retroBITE-app/retroBITE/actions/workflows/docker.yml" target="_new">
-    <img alt="Docker build" src="https://img.shields.io/github/actions/workflow/status/retroBITE-app/retroBITE/docker.yml?style=for-the-badge&logo=docker&label=Docker&color=e8b44a">
+  <a href="https://hub.docker.com/r/retrobite/retrobite/tags" target="_new">
+    <img alt="Docker image version" src="https://img.shields.io/docker/v/retrobite/retrobite?sort=date&style=for-the-badge&logo=docker&label=Docker&color=e8b44a">
   </a>
   <a href="https://github.com/retroBITE-app/retroBITE/actions/workflows/tests.yml" target="_new">
     <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/retroBITE-app/retroBITE/tests.yml?style=for-the-badge&logo=github&label=Tests&color=e8b44a">
@@ -67,101 +67,44 @@ retroBITE runs only in Docker. We do not support installing it any other way.
 
 ### With the Docker Hub images
 
-1. **Make a folder for retroBITE** and move into it.
+You need Docker with Compose 2.24 or newer, on Linux, a NAS or Docker Desktop.
+
+1. **Get the compose file and the settings**, from the latest release:
 
    ```bash
    mkdir retrobite && cd retrobite
+   curl -LO https://github.com/retroBITE-app/retroBITE/releases/latest/download/docker-compose.yml
+   curl -L -o .env https://github.com/retroBITE-app/retroBITE/releases/latest/download/.env.example
    ```
 
-2. **Create `docker-compose.yml`** in it:
-
-   ```yaml
-   services:
-     retrobite-web:
-       image: retrobite/retrobite:latest
-       container_name: retrobite-web
-       env_file: .env
-       environment:
-         DB_CONNECTION: mariadb
-         DB_HOST: retrobite-db
-         DB_PORT: 3306
-         TRANSFER_LOCALHOST_URL: http://localhost:81
-         SERVE_WITH_NGINX: "true"
-       ports:
-         - "81:80"
-       volumes:
-         - ${GAMES_PATH:-./games}:/app/storage/app/games
-         - ${DOCS_PATH:-./docs}:/app/storage/app/docs
-         - retrobite-media:/app/storage/app/media
-       depends_on:
-         retrobite-db:
-           condition: service_healthy
-       restart: unless-stopped
-
-     retrobite-db:
-       image: mariadb:11.4
-       container_name: retrobite-mariadb
-       environment:
-         MARIADB_DATABASE: ${DB_DATABASE:-retrobite}
-         MARIADB_USER: ${DB_USERNAME:-retrobite}
-         MARIADB_PASSWORD: ${DB_PASSWORD:-retrobite}
-         MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-retrobite}
-       volumes:
-         - retrobite-db:/var/lib/mysql
-       healthcheck:
-         test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-         interval: 5s
-         timeout: 5s
-         retries: 20
-         start_period: 30s
-       restart: unless-stopped
-
-     retrobite-share:
-       image: retrobite/share:latest
-       container_name: retrobite-share
-       env_file: .env
-       network_mode: host
-       volumes:
-         - ${GAMES_PATH:-./games}:/games
-       cap_add:
-         - NET_ADMIN
-         - SYS_ADMIN
-       init: true
-       restart: unless-stopped
-
-   volumes:
-     retrobite-db:
-     retrobite-media:
-   ```
-
-   `latest` is the newest release. Use `develop` for the newest pre-release, or
-   a date tag such as `20260930` to stay on one version.
-
-3. **Create `.env`** from the example, and give it an application key:
-
-   ```bash
-   curl -o .env https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/.env.example
-   key=$(docker run --rm --entrypoint php retrobite/retrobite:latest artisan key:generate --show)
-   sed -i.bak "s|^APP_KEY=.*|APP_KEY=$key|" .env && rm .env.bak
-   ```
-
-   Then set at least:
+2. **Edit `.env`.** It holds only what is worth changing:
 
    | Setting | What it is |
    | --- | --- |
    | `AUTH_USER` / `AUTH_PASS` | The account consoles use for SMB and FTP. **Change the password.** |
-   | `HOST_IP` | This machine's LAN address. FTP passive mode hands it to consoles, so `localhost` will not do. |
-   | `GAMES_PATH` | Where your library is on this machine. Defaults to `./games`. |
    | `DB_PASSWORD` / `DB_ROOT_PASSWORD` | The database's passwords. Change them before the first start: they are set when the database is created. |
+   | `GAMES_PATH` | Where your library is on this machine. Defaults to `./games`. |
+   | `HOST_IP` | This machine's LAN address: the address consoles connect to. |
+   | `APP_TIMEZONE` | Your time zone, such as `Europe/Stockholm`. |
 
-4. **Start it.**
+   Every other setting is in [docs/configuration.md](docs/configuration.md).
+   There is no key to generate: retroBITE makes its own on the first start.
+
+3. **Start it.**
 
    ```bash
    docker compose up -d
    ```
 
-5. Open http://localhost:81 and follow the four-step setup.
+4. **Open http://localhost:81** and follow the four-step setup.
 
+**Using Portainer, Dockhand, Synology, QNAP, Unraid or TrueNAS?**
+[docs/installing.md](docs/installing.md) has steps for each. It also covers a
+NAS whose own file sharing already uses the SMB and FTP ports, updating, and
+backups.
+
+`latest` is the newest release. Set `RETROBITE_TAG=develop` for the newest
+pre-release, or a date such as `20260930` to stay on one version.
 
 ## Where your data lives
 
@@ -169,10 +112,14 @@ retroBITE runs only in Docker. We do not support installing it any other way.
 | --- | --- |
 | `GAMES_PATH` (default `./games`) | Your ROM library, one folder per console. Shared as `/games` over SMB and FTP. |
 | `retrobite-db` volume | The MariaDB database: your games, their metadata, your settings. |
+| `retrobite-state` volume | The application key. Back it up with the database: stored passwords cannot be read without it. |
 | `retrobite-media` volume | The artwork and media retroBITE downloads. |
+| `./docs` | The markdown knowledge base. |
 
-The volumes survive `docker compose down` and updates. ROMs are never served
-straight over the web: downloads go through a signed-in route only.
+Each can be a folder of your own instead: see `DB_PATH`, `STATE_PATH`,
+`MEDIA_PATH` and `DOCS_PATH` in [docs/configuration.md](docs/configuration.md).
+They survive `docker compose down` and updates. ROMs are never served straight
+over the web: downloads go through a signed-in route only.
 
 ## Built With
 

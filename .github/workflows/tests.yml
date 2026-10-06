@@ -33,7 +33,7 @@ jobs:
 
     env:
       # Real environment variables win over .env, which composer setup copies
-      # from .env.example and which points at a hostname only the compose
+      # from .env.dev.example and which points at a hostname only the compose
       # network has.
       DB_CONNECTION: mariadb
       DB_HOST: 127.0.0.1
