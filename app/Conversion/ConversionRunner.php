@@ -152,6 +152,13 @@ final class ConversionRunner
             Log::warning('A conversion failed.', ['conversion' => $conversion->id, 'reason' => $e->reason->value, 'detail' => $e->detail]);
             $this->finish($conversion, ConversionStatus::Failed, $e->reason);
 
+            // A source gone from disk means the record is behind the folder —
+            // renamed or removed over the share — so scan it and the picker
+            // offers what is really there.
+            if ($e->reason === ConversionFailure::SourceMissing) {
+                ScanConsoleFolder::dispatch($conversion->console);
+            }
+
             return;
         } catch (Throwable $e) {
             $this->removeStaging($staging);

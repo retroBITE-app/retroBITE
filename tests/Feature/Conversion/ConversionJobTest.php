@@ -314,6 +314,24 @@ it('deletes the source only once the output is in, when keep-source is off', fun
         ->and($game->files()->count())->toBe(0);
 });
 
+it('fails a source renamed behind the library\'s back, and rescans the console', function () {
+    fakeTools();
+    $game = convertibleGame('ps2', ['CD/SLES_503.86.Game.iso' => 4096]);
+    $conversion = queueConversion($game, 'zso', [Converter::KEEP_SOURCE => false]);
+    File::move($this->root.'/ps2/CD/SLES_503.86.Game.iso', $this->root.'/ps2/CD/Game.iso');
+
+    $conversion = runConversion($conversion);
+
+    expect($conversion->status)->toBe(ConversionStatus::Failed)
+        ->and($conversion->failure)->toBe(ConversionFailure::SourceMissing)
+        ->and(File::exists($this->root.'/ps2/CD/Game.iso'))->toBeTrue();
+
+    Process::assertNothingRan();
+    Queue::assertPushed(ScanConsoleFolder::class, function (ScanConsoleFolder $job): bool {
+        return $job->console === 'ps2';
+    });
+});
+
 it('stops a running conversion that is cancelled, and cleans up after it', function () {
     fakeTools();
     $conversion = queueConversion(convertibleGame('ps2', ['Game.iso' => 4096]), 'chd-dvd');
