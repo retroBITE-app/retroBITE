@@ -11,8 +11,9 @@
     <h2 class="text-lg font-medium text-fg-bright">{{ __('Network shares') }}</h2>
 
     <div class="grid gap-4 lg:grid-cols-2">
-        @foreach (ShareProtocol::cases() as $protocol)
+        @foreach (ShareProtocol::enabled() as $protocol)
             @php($online = $status === null ? null : ($status[$protocol->value] ?? false))
+            @php($served = $protocol->serves($shares))
 
             <div class="flex flex-col overflow-hidden rounded-xl border border-line bg-sunken">
                 <div class="flex items-center justify-between border-b border-line/70 px-3.5 py-3">
@@ -46,20 +47,20 @@
                         </div>
                         <div>
                             <dt class="text-fg-faint">{{ __('Credentials') }}</dt>
-                            <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ $shareUser }} / ******</dd>
+                            <dd class="mt-0.5 font-mono text-sm text-fg-soft">{{ $protocol->authenticated() ? $shareUser.' / ******' : __('None') }}</dd>
                         </div>
                     </dl>
 
                     <div>
                         <p class="kicker mb-2 text-fg-faint">{{ __('Shares') }}</p>
 
-                        @if ($shares->isEmpty())
+                        @if ($served->isEmpty())
                             <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
-                                <p class="text-sm text-fg-soft">{{ __('No consoles installed yet.') }}</p>
+                                <p class="text-sm text-fg-soft">{{ $shares->isEmpty() ? __('No consoles installed yet.') : __('None of the consoles it serves is installed.') }}</p>
                             </div>
                         @else
                             <ul class="space-y-1">
-                                @foreach ($shares as $share)
+                                @foreach ($served as $share)
                                     <li class="flex items-center gap-2 rounded-md border border-line/70 bg-surface px-3 py-2">
                                         <img src="{{ $share->icon }}" alt="" class="h-4 w-4 shrink-0 object-contain" />
                                         <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ $share->name }}</span>

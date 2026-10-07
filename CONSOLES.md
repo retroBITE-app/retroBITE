@@ -7,7 +7,7 @@ Instructions for setting up network connectivity for various retro gaming consol
 | [PlayStation 2](#playstation-2-smb) | `ps2` | SMB | /games/ps2 | FMCB, OPL | ✅ |
 | [GameCube](#gamecube-smb) | `gc` | SMB | /games/gc | Homebrew + Swiss or Nintendont | ❌ |
 | [Wii](#nintendo-wii-smb) | `wii` | SMB | /games/wii | Homebrew + USB Loader GX or WiiFlow | ❌ |
-| [PlayStation 3](#playstation-3-ftp) | N/A | FTP | /games/ps3 | CFW, Multiman or Webman | ❌ |
+| [PlayStation 3](#playstation-3-ps3netsrv) | N/A | ps3netsrv, FTP | /games/ps3 | CFW, webMAN MOD (or Multiman for FTP) | ❌ |
 | [Xbox](#xbox-ftp) | N/A | FTP | /games/xbox | Softmod or modchip | ❌ |
 | [Dreamcast](#dreamcast-ftp) | N/A | FTP | /games/dreamcast | DreamShell or dc-load | ❌ |
 
@@ -57,6 +57,20 @@ Instructions for setting up network connectivity for various retro gaming consol
    - Username: `retrobite`  (your username)
    - Password: `retrobite` (your password)
 5. Scan for games
+
+## PlayStation 3 (ps3netsrv)
+
+webMAN MOD streams games straight from retroBITE over ps3netsrv, without copying them to the PS3.
+
+1. Install CFW (Custom Firmware) and webMAN MOD on your PS3
+2. Put your PS3 disc images (`.iso`) in the library's `ps3` folder — upload them in retroBITE, or copy them over SMB or FTP. webMAN sees that folder as `PS3ISO`.
+3. On the PS3, open webMAN MOD's setup page (`http://<ps3 ip>/setup.ps3` in a browser)
+4. Under the network servers, enable one and set:
+   - IP: `192.168.50.250` (your retroBite server)
+   - Port: `38008`
+5. Save, then refresh the XMB: the games appear under webMAN's PS3 ISO list
+
+ps3netsrv has no username or password. Set `PS3NETSRV_WHITELIST` to your PS3's address (or your network, e.g. `192.168.50.*`) so nobody else can reach the library through it, or `PS3NETSRV=false` to turn it off.
 
 ## PlayStation 3 (FTP)
 

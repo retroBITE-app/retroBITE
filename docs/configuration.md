@@ -66,8 +66,10 @@ it with the rest of a NAS's backed-up shares. Volumes and folders survive
 | --- | --- | --- |
 | `GAME_FOLDERS` | `ps2 ps3 gc wii xbox dreamcast` | The console folders created in the library on start. |
 | `SMB_SHARES` | `ps2 gc wii` | Folders that also get an SMB share of their own. Open PS2 Loader, for one, connects to a share named after the console. |
+| `PS3NETSRV` | `true` | Runs ps3netsrv on port 38008, serving the `ps3` folder to webMAN MOD as its `PS3ISO` folder. Set on both containers: the web one shows its status card from it. `false` turns it off. |
+| `PS3NETSRV_WHITELIST` | none | Who may connect to ps3netsrv, such as `192.168.1.*` or one PS3's address. It has no login of its own, so anyone else on the network can read and write the `ps3` folder through it. |
 | `SHARE_IP`, `SHARE_SUBNET`, `SHARE_GATEWAY`, `SHARE_PARENT` | none | Only with `docker-compose.macvlan.yml`. They give the share container its own LAN address; see [installing.md](installing.md#when-ports-445-139-and-21-are-taken). |
-| `SHARE_HOST` | `HOST_IP` | Where the web container checks SMB and FTP. The macvlan file sets it; nothing else needs to. |
+| `SHARE_HOST` | `HOST_IP` | Where the web container checks SMB, FTP and ps3netsrv. The macvlan file sets it; nothing else needs to. |
 
 ## Web and reverse proxies
 

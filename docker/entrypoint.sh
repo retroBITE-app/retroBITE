@@ -5,6 +5,8 @@ set -e
 USER=${AUTH_USER:-retrobite}
 PASS=${AUTH_PASS:-retrobite}
 HOST_IP=${HOST_IP:-}
+PS3NETSRV=${PS3NETSRV:-true}
+PS3NETSRV_WHITELIST=${PS3NETSRV_WHITELIST:-}
 
 echo "===================================="
 echo "======  retroBITE Starting..  ======"
@@ -120,6 +122,15 @@ for share in $SMB_SHARES; do
 SHARE
 done
 
+case "$PS3NETSRV" in
+    true | 1 | yes | on) PS3NETSRV=true ;;
+    *) PS3NETSRV=false ;;
+esac
+
+if [ "$PS3NETSRV" = true ] && [ -z "$PS3NETSRV_WHITELIST" ]; then
+    echo "WARNING: ps3netsrv has no authentication, and anyone on the network can read and write /games/ps3 through it. Set PS3NETSRV_WHITELIST (e.g. 192.168.1.*) to limit who connects." >&2
+fi
+
 # Only when the share account cannot already write to the library, and never
 # fatally. With the ids matched above this is skipped outright — which is also
 # what keeps a boot from walking every file of a remote library over the
@@ -133,8 +144,8 @@ else
     echo "WARNING: /games is not writable as $USER, and its ownership cannot be changed from here (a network mount?). Uploads over SMB and FTP will fail until its owner allows them." >&2
 fi
 
-# Three daemons, kept alive. supervisord did this before, but it is a Python
-# program and pulled a CPython runtime in purely to run three execs. Docker's own
+# The daemons, kept alive. supervisord did this before, but it is a Python
+# program and pulled a CPython runtime in purely to run a few execs. Docker's own
 # init (`init: true` in compose) reaps zombies and forwards signals, so all this
 # has to do is start them and put back whichever one dies.
 declare -A COMMANDS=(
@@ -143,6 +154,27 @@ declare -A COMMANDS=(
     [vsftpd]="/usr/sbin/vsftpd /etc/vsftpd.conf"
 )
 declare -A PIDS=()
+
+# ps3netsrv as the share account rather than root: the protocol has no login
+# and lets a client create and delete files, so it gets no more than SMB and
+# FTP do. Its root is the image's /srv/ps3netsrv, where PS3ISO links to
+# /games/ps3 (see the Dockerfile). A function, not a COMMANDS string, because those are word-split
+# unquoted and a whitelist such as 192.168.1.* would be globbed. exec keeps
+# the pid start_service records on ps3netsrv itself.
+run_ps3netsrv() {
+    local args=(/srv/ps3netsrv 38008)
+
+    if [ -n "$PS3NETSRV_WHITELIST" ]; then
+        args+=("$PS3NETSRV_WHITELIST")
+    fi
+
+    exec setpriv --reuid="$USER" --regid="$(id -g "$USER")" --init-groups \
+        /usr/local/bin/ps3netsrv "${args[@]}"
+}
+
+if [ "$PS3NETSRV" = true ]; then
+    COMMANDS[ps3netsrv]="run_ps3netsrv"
+fi
 
 # Launch one daemon and remember its pid.
 start_service() {

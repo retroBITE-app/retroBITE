@@ -1,3 +1,24 @@
+# ps3netsrv, what webMAN MOD on a PS3 streams ISOs and game folders from.
+# Built from a pinned tag rather than taken from a release, because the
+# releases carry no arm64 Linux binary. Makefile.linux links it statically
+# against the PolarSSL it bundles — upstream's own recommendation over the
+# meson build — so the runtime stage needs no libraries for it.
+FROM debian:bookworm-slim AS ps3netsrv
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    g++ \
+    git \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG PS3NETSRV_TAG=20260913
+RUN git clone --depth 1 --branch "$PS3NETSRV_TAG" https://github.com/aldostools/ps3netsrv.git /src/ps3netsrv \
+    && make -C /src/ps3netsrv -f Makefile.linux BUILD_DATE="$PS3NETSRV_TAG" \
+    && strip /src/ps3netsrv/ps3netsrv
+
 FROM debian:bookworm-slim
 
 # Prevent interactive prompts during package installation
@@ -32,14 +53,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY docker/smb.conf /etc/samba/smb.conf
 COPY docker/vsftpd.conf /etc/vsftpd.conf
 COPY docker/entrypoint.sh /entrypoint.sh
+COPY --from=ps3netsrv /src/ps3netsrv/ps3netsrv /usr/local/bin/ps3netsrv
 
-RUN chmod +x /entrypoint.sh
+# A dynamic ps3netsrv would start here and fail at runtime on a missing
+# library, so refuse the build instead.
+#
+# webMAN MOD looks for disc images in a PS3ISO folder under ps3netsrv's root.
+# The library's ps3 folder is that folder, as the web container lays it out,
+# so the root is a directory of the image's own holding one link to it —
+# nothing is created inside /games for webMAN's sake.
+RUN chmod +x /entrypoint.sh \
+    && ldd /usr/local/bin/ps3netsrv 2>&1 | grep -q 'not a dynamic executable' \
+    && mkdir -p /srv/ps3netsrv \
+    && ln -s /games/ps3 /srv/ps3netsrv/PS3ISO
 
 # Expose ports
 # SMB ports
 EXPOSE 139 445
 # FTP ports
 EXPOSE 20 21 21100-21110
+# ps3netsrv
+EXPOSE 38008
 
 # smbd answering on 445. FTP is left out: vsftpd is restarted by the
 # entrypoint when it dies, and SMB is what consoles mostly use.

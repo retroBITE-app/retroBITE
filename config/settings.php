@@ -19,12 +19,16 @@ return [
     | the share on a macvlan address (docker-compose.macvlan.yml) this host
     | cannot reach that address, but it can reach the container by name.
     |
+    | PS3NETSRV mirrors the share container's own switch, so a ps3netsrv that
+    | was turned off is left off the panel rather than reported offline.
+    |
     */
 
     'network' => [
         'host_ip' => env('HOST_IP', '127.0.0.1'),
         'status_host' => env('SHARE_HOST') ?: env('HOST_IP', '127.0.0.1'),
         'username' => env('AUTH_USER', 'retrobite'),
+        'ps3netsrv' => filter_var(env('PS3NETSRV', true), FILTER_VALIDATE_BOOL),
     ],
 
     /*
