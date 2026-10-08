@@ -11,6 +11,7 @@ use App\Exceptions\RetroAchievements\RetroAchievementsException;
 use App\Models\Game;
 use App\Services\RetroAchievementsHasher;
 use App\Support\RetroAchievements\FileFingerprint;
+use App\Support\Scanning\LibraryFolders;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -83,7 +84,7 @@ class HashGame implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $path = rtrim((string) config('settings.games_path'), '/').'/'.$file->path;
+        $path = LibraryFolders::pathOf($file);
 
         try {
             $hash = $hasher->hash($console->retroachievementsId, $path);

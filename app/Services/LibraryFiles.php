@@ -17,6 +17,7 @@ use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\Scanning\FolderCounts;
+use App\Support\Scanning\LibraryFolders;
 use App\Transfers\FileTransfer;
 use App\Transfers\Location;
 use Illuminate\Support\Arr;
@@ -53,7 +54,7 @@ final class LibraryFiles
 
         $folders = $game->files
             ->map(function (GameFile $file) use ($console): ?string {
-                $relative = $this->consoleRelative($console, $file);
+                $relative = $this->paths->consoleRelative($console, $file->path);
 
                 if ($relative === null) {
                     return null;
@@ -161,7 +162,7 @@ final class LibraryFiles
         }
 
         $console = $game->console();
-        $absolute = rtrim((string) config('settings.games_path'), '/').'/'.$file->path;
+        $absolute = LibraryFolders::pathOf($file);
 
         if (file_exists($absolute) || is_link($absolute)) {
             $this->deleteFromDisk($console, $file);
@@ -307,7 +308,7 @@ final class LibraryFiles
         $entries = [];
 
         foreach ($game->files as $file) {
-            $from = $this->consoleRelative($console, $file);
+            $from = $this->paths->consoleRelative($console, $file->path);
 
             // Loose at the top only: a game already in a folder is filed.
             if ($from === null || Str::contains($from, '/')) {
@@ -350,7 +351,7 @@ final class LibraryFiles
         $taken = [];
 
         foreach ($game->files as $file) {
-            $from = $this->consoleRelative($console, $file);
+            $from = $this->paths->consoleRelative($console, $file->path);
 
             if ($from === null) {
                 throw LibraryFileRejected::because(LibraryFileRejection::OutsideConsole);
@@ -397,7 +398,7 @@ final class LibraryFiles
         $taken = [];
 
         foreach ($renames as ['file' => $file, 'to' => $name]) {
-            $from = $this->consoleRelative($console, $file);
+            $from = $this->paths->consoleRelative($console, $file->path);
 
             // A new name, not a path: anything carrying a separator is refused
             // here, so a rename can never be a move out of the folder.
@@ -487,7 +488,7 @@ final class LibraryFiles
      */
     private function deleteFromDisk(?Console $console, GameFile $file): void
     {
-        $relative = $console !== null ? $this->consoleRelative($console, $file) : null;
+        $relative = $console !== null ? $this->paths->consoleRelative($console, $file->path) : null;
 
         if ($console === null || $relative === null) {
             throw LibraryFileRejected::because(LibraryFileRejection::OutsideConsole);
@@ -518,19 +519,5 @@ final class LibraryFiles
 
             throw LibraryFileRejected::because(LibraryFileRejection::Unwritable);
         }
-    }
-
-    /**
-     * A file's path as the console's folder sees it, or null when it is outside it.
-     */
-    private function consoleRelative(Console $console, GameFile $file): ?string
-    {
-        $root = ConsoleSourceFolder::pathFor($console);
-
-        if ($root === null || ! Str::startsWith($file->path, $root.'/')) {
-            return null;
-        }
-
-        return Str::after($file->path, $root.'/');
     }
 }

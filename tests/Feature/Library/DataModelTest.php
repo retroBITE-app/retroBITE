@@ -10,6 +10,7 @@ use App\Models\GameFile;
 use App\Models\Media;
 use App\Support\Console;
 use App\Support\MediaTypes;
+use App\Support\Scanning\LibraryFolders;
 use Illuminate\Database\QueryException;
 
 it('refuses two games with the same provider id', function () {
@@ -167,4 +168,13 @@ it('fetches the shipped selection until somebody chooses otherwise', function ()
     AppSetting::put(AppSetting::MEDIA_TYPES, []);
 
     expect(MediaTypes::enabled())->toBe([]);
+});
+
+it('finds a console\'s files, and where a file is on disk', function () {
+    config()->set('settings.games_path', '/library/');
+    $file = GameFile::factory()->for(Game::factory()->forConsole('ps3')->create())->create(['path' => 'ps3/Game (USA).iso']);
+    GameFile::factory()->for(Game::factory()->forConsole('ps2')->create())->create(['path' => 'ps2/Other.iso']);
+
+    expect(GameFile::query()->onConsole('ps3')->pluck('id')->all())->toBe([$file->id])
+        ->and(LibraryFolders::pathOf($file))->toBe('/library/ps3/Game (USA).iso');
 });

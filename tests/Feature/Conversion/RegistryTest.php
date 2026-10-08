@@ -101,7 +101,7 @@ it('makes a converter by key, and nothing for a key it does not carry', function
         ->and(Converters::make('nope'))->toBeNull()
         ->and(Converters::make('bogus'))->toBeNull()
         ->and(Converters::make(null))->toBeNull()
-        ->and(Converters::all()->count())->toBe(14);
+        ->and(Converters::all()->count())->toBe(15);
 });
 
 it('offers a PS2 DVD image CHD, CSO and ZSO', function () {
@@ -270,8 +270,9 @@ it('treats a console with no DVD conversion as all CDs', function () {
     Process::assertNothingRan();
 });
 
-it('has every console declare its conversions, each one registered', function () {
-    $registered = array_keys((array) config('converters.converters'));
+it('has every console declare its conversions, each one registered, and its decrypters likewise', function () {
+    $converters = array_keys((array) config('converters.converters'));
+    $decrypters = array_keys((array) config('decrypters.decrypters'));
 
     foreach (glob(config_path('consoles/*.php')) as $file) {
         $meta = require $file;
@@ -279,7 +280,11 @@ it('has every console declare its conversions, each one registered', function ()
         expect(Arr::has($meta, 'converters'))->toBeTrue(basename($file).' declares no converters');
 
         foreach ((array) Arr::get($meta, 'converters') as $key) {
-            expect($registered)->toContain($key);
+            expect($converters)->toContain($key);
+        }
+
+        foreach ((array) Arr::get($meta, 'decrypters', []) as $key) {
+            expect($decrypters)->toContain($key);
         }
     }
 });
@@ -303,4 +308,11 @@ it('offers GameCube and Wii nothing without nodtool', function () {
 
     expect(routesOf(registryGame('gc', ['Melee.iso' => 2048 * 100])))->toBe([])
         ->and(routesOf(registryGame('wii', ['Zelda.wbfs' => 5000])))->toBe([]);
+});
+
+it('keeps the picker\'s converters and a page\'s apart, null being the picker', function () {
+    expect(Converters::onPage(new Console('ps3'), null)->all())->toBe([])
+        ->and(Converters::onPage(new Console('ps3'), Converter::PAGE_DECRYPT)->map->key()->all())->toBe(['ps3-decrypt'])
+        ->and(Converters::onPage(new Console('psx'), null)->map->key()->all())->toBe(['chd-cd', 'chd-to-cue', 'ecm', 'unecm', 'vcd', 'vcd-to-cue'])
+        ->and(Converters::offersOn(new Console('psx')))->toBeTrue();
 });

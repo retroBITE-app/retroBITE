@@ -48,7 +48,7 @@ final class SourceSet
     {
         $files = GameFile::query()
             ->present()
-            ->whereIn('game_id', Game::query()->forConsole($console->key)->select('id'))
+            ->onConsole($console->key)
             ->with('game')
             ->orderBy('path')
             ->get();

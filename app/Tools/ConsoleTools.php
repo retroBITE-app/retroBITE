@@ -200,7 +200,7 @@ abstract class ConsoleTools
      * because it is a public entry point and its caller has just asked
      * handles() about the same file.
      *
-     * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string}
+     * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string, encrypted?: bool, disc_key?: string}
      */
     abstract public function inspect(GameFile $file): array;
 
@@ -309,7 +309,7 @@ abstract class ConsoleTools
      */
     protected function absolutePath(): string
     {
-        return LibraryFolders::root().'/'.($this->file->path ?? '');
+        return $this->file !== null ? LibraryFolders::pathOf($this->file) : LibraryFolders::root().'/';
     }
 
     /**

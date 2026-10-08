@@ -1,0 +1,255 @@
+<?php
+
+use App\Conversion\ConversionQueue;
+use App\Conversion\ConversionRunner;
+use App\Conversion\Converters;
+use App\Conversion\SourceSet;
+use App\Conversion\Tools;
+use App\Decryption\DiscKeys;
+use App\Decryption\Ps3Disc;
+use App\Enums\ConversionFailure;
+use App\Enums\ConversionStatus;
+use App\Jobs\InspectGameFile;
+use App\Jobs\RunConversion;
+use App\Models\ConsoleSourceFolder;
+use App\Models\Conversion;
+use App\Models\Game;
+use App\Models\GameFile;
+use App\Support\Console;
+use Illuminate\Process\FakeProcessDescription;
+use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
+use Tests\Fakes\Ps3Image;
+
+/**
+ * PS3 decryption, end to end: reading a Redump image, keeping its key beside
+ * it, the toolbox's inspection, the gate, and the conversion that swaps the
+ * decrypted image in for the encrypted one — with ps3dec faked, and once for
+ * real where it is installed.
+ */
+beforeEach(function () {
+    $this->root = sys_get_temp_dir().'/retrobite-ps3-'.Str::random(8);
+    File::ensureDirectoryExists($this->root.'/ps3');
+    config()->set('settings.games_path', $this->root);
+
+    ConsoleSourceFolder::add(new Console('ps3'));
+
+    Queue::fake();
+});
+
+afterEach(function () {
+    File::deleteDirectory($this->root);
+});
+
+/** A PS3 game of one image on disk and on record, with its key beside it unless told otherwise. */
+function ps3Game(string $name = 'Game (USA).iso', ?bool $encrypted = true, bool $key = true): GameFile
+{
+    return Ps3Image::fileRow(test()->root, $name, $encrypted, $key, ['md5' => str_repeat('a', 32), 'license_id' => 'BLUS30538']);
+}
+
+/** ps3dec as it behaves: writes `-o`/`-n`.iso, decrypted unless told the key was wrong. */
+function fakePs3dec(bool $wrongKey = false): void
+{
+    Process::fake(function (PendingProcess $process) use ($wrongKey): FakeProcessDescription {
+        $command = array_values((array) $process->command);
+        $directory = (string) Arr::get($command, (int) array_search('-o', $command, true) + 1);
+        $name = (string) Arr::get($command, (int) array_search('-n', $command, true) + 1);
+
+        Ps3Image::write($directory.'/'.$name.'.iso', $wrongKey ? Ps3Image::KEY : null);
+
+        return Process::describe()->exitCode(0);
+    });
+}
+
+/** Queue a file's decryption and run it here, as the worker would. */
+function decryptPs3(GameFile $file): Conversion
+{
+    $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
+    (new RunConversion($conversion->id))->handle(app(ConversionRunner::class));
+
+    return $conversion->fresh();
+}
+
+it('reads the title ID and whether the image is still encrypted', function () {
+    $encrypted = Ps3Disc::open(Ps3Image::write($this->root.'/a.iso'));
+    $decrypted = Ps3Disc::open(Ps3Image::write($this->root.'/b.iso', null));
+
+    expect($encrypted?->titleId())->toBe('BLUS30538')
+        ->and($encrypted?->encryptedRanges())->toBe([['start' => 32, 'end' => 34]])
+        ->and($encrypted?->encrypted())->toBeTrue()
+        ->and($decrypted?->titleId())->toBe('BLUS30538')
+        ->and($decrypted?->encrypted())->toBeFalse();
+});
+
+it('proves a key against the disc, and refuses one that does not fit', function () {
+    $disc = Ps3Disc::open(Ps3Image::write($this->root.'/a.iso'));
+
+    expect($disc?->keyMatches(Ps3Image::KEY))->toBeTrue()
+        ->and($disc?->keyMatches(Str::lower(Ps3Image::KEY)))->toBeTrue()
+        ->and($disc?->keyMatches(str_repeat('0', 32)))->toBeFalse()
+        ->and($disc?->keyMatches('not a key'))->toBeFalse();
+});
+
+it('cannot tell anything from what is not a PS3 disc', function () {
+    File::put($this->root.'/noise.iso', random_bytes(64 * 2048));
+    $noEboot = Ps3Disc::open(Ps3Image::write($this->root.'/c.iso', eboot: false));
+
+    expect(Ps3Disc::open($this->root.'/noise.iso')?->encrypted())->toBeNull()
+        ->and(Ps3Disc::open($this->root.'/noise.iso')?->titleId())->toBeNull()
+        ->and($noEboot?->encrypted())->toBeNull()
+        ->and(Ps3Disc::open($this->root.'/missing.iso'))->toBeNull();
+});
+
+it('reads a key as hex text or raw bytes, .dkey before .key', function () {
+    $image = Ps3Image::write($this->root.'/ps3/Game.iso');
+    $keys = app(DiscKeys::class);
+
+    expect(DiscKeys::normalise(" 00112233 44556677\n8899aabbccddeeff\r\n"))->toBe(Ps3Image::KEY)
+        ->and(DiscKeys::normalise((string) hex2bin(Ps3Image::KEY)))->toBe(Ps3Image::KEY)
+        ->and(DiscKeys::normalise('xyz'))->toBeNull()
+        ->and($keys->read($image))->toBeNull();
+
+    File::put($this->root.'/ps3/Game.key', str_repeat('1', 32));
+    expect($keys->read($image))->toBe(str_repeat('1', 32));
+
+    File::put($this->root.'/ps3/Game.dkey', Ps3Image::KEY);
+    expect($keys->read($image))->toBe(Ps3Image::KEY)
+        ->and($keys->keyFiles($image))->toBe([$this->root.'/ps3/Game.dkey', $this->root.'/ps3/Game.key']);
+});
+
+it('saves a key beside its image as a .dkey', function () {
+    $file = ps3Game(key: false);
+
+    app(DiscKeys::class)->save(new Console('ps3'), $file, Str::lower(Ps3Image::KEY));
+
+    expect(File::get($this->root.'/ps3/Game (USA).dkey'))->toBe(Ps3Image::KEY."\n")
+        ->and($file->fresh()?->disc_key)->toBe(Ps3Image::KEY);
+});
+
+it('has the PS3 toolbox record the title ID and the encryption', function () {
+    $file = ps3Game();
+    $file->update(['license_id' => null, 'encrypted' => null]);
+
+    (new InspectGameFile($file->id))->handle();
+
+    expect($file->fresh()?->license_id)->toBe('BLUS30538')
+        ->and($file->fresh()?->encrypted)->toBeTrue()
+        ->and($file->fresh()?->disc_key)->toBe(Ps3Image::KEY);
+});
+
+it('leaves a key beside the image off the record when it does not fit the disc', function () {
+    $file = ps3Game(key: false);
+    $file->update(['license_id' => null, 'encrypted' => null]);
+    File::put($this->root.'/ps3/Game (USA).dkey', str_repeat('0', 32));
+
+    (new InspectGameFile($file->id))->handle();
+
+    expect($file->fresh()?->encrypted)->toBeTrue()
+        ->and($file->fresh()?->disc_key)->toBeNull();
+});
+
+it('records a decrypted image as not encrypted, false kept rather than dropped', function () {
+    $file = ps3Game(encrypted: false, key: false);
+    $file->update(['license_id' => null, 'encrypted' => null]);
+
+    (new InspectGameFile($file->id))->handle();
+
+    expect($file->fresh()?->encrypted)->toBeFalse();
+});
+
+it('offers decryption only for an encrypted image with its key, and never in the Conversion picker', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+
+    $ready = SourceSet::fromFile(ps3Game('Ready.iso')->load('game'));
+    $keyless = SourceSet::fromFile(ps3Game('Keyless.iso', key: false)->load('game'));
+    $done = SourceSet::fromFile(ps3Game('Done.iso', encrypted: false)->load('game'));
+
+    $keys = function (SourceSet $set): array {
+        return Converters::routesFor($set)->map->key()->all();
+    };
+
+    expect($keys($ready))->toBe(['ps3-decrypt'])
+        ->and($keys($keyless))->toBe([])
+        ->and($keys($done))->toBe([])
+        ->and(Converters::pickableFor($ready)->all())->toBe([])
+        ->and(Converters::offersOn(new Console('ps3')))->toBeFalse()
+        ->and(Converters::onPage(new Console('ps3'), 'decrypt')->map->key()->all())->toBe(['ps3-decrypt'])
+        ->and(Converters::onPage(new Console('ps2'), 'decrypt')->all())->toBe([]);
+});
+
+it('swaps the decrypted image in under the same name, keeps the row and drops the key', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    fakePs3dec();
+    $file = ps3Game();
+    $file->update(['disc_key' => Ps3Image::KEY]);
+
+    $conversion = decryptPs3($file);
+
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and($conversion->outputs)->toBe(['Game (USA).iso'])
+        ->and(Ps3Disc::open($this->root.'/ps3/Game (USA).iso')?->encrypted())->toBeFalse()
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeFalse()
+        ->and(File::glob($this->root.'/ps3/.*retrobite-replacing'))->toBe([])
+        ->and(GameFile::query()->count())->toBe(1)
+        ->and($file->fresh()?->md5)->toBeNull()
+        ->and($file->fresh()?->license_id)->toBeNull()
+        ->and($file->fresh()?->encrypted)->toBeNull()
+        ->and($file->fresh()?->disc_key)->toBe(Ps3Image::KEY)
+        ->and($conversion->log)->toContain('Replaced Game (USA).iso')
+        ->and($conversion->log)->toContain('Deleted Game (USA).dkey');
+
+    Process::assertRan(function (PendingProcess $process) use ($conversion): bool {
+        $command = (array) $process->command;
+
+        return in_array('--skip', $command, true)
+            && Arr::get($command, (int) array_search('--dk', $command, true) + 1) === Ps3Image::KEY
+            && Str::endsWith((string) $process->path, $conversion->stagingFolder());
+    });
+});
+
+it('keeps the encrypted image and its key when the output is still encrypted', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    fakePs3dec(wrongKey: true);
+    $file = ps3Game();
+    $before = md5_file($this->root.'/ps3/Game (USA).iso');
+
+    $conversion = decryptPs3($file);
+
+    expect($conversion->status)->toBe(ConversionStatus::Failed)
+        ->and($conversion->failure)->toBe(ConversionFailure::VerifyFailed)
+        ->and($conversion->log)->toContain('still reads as encrypted')
+        ->and(md5_file($this->root.'/ps3/Game (USA).iso'))->toBe($before)
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeTrue()
+        ->and($file->fresh()?->md5)->toBe(str_repeat('a', 32));
+});
+
+it('decrypts for real with ps3dec, back to the plain image byte for byte', function () {
+    if (! Tools::available('ps3dec')) {
+        $this->markTestSkipped('ps3dec is not installed');
+    }
+
+    $file = ps3Game();
+    $plain = md5_file(Ps3Image::write($this->root.'/plain.iso', null));
+
+    $conversion = decryptPs3($file);
+
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and(md5_file($this->root.'/ps3/Game (USA).iso'))->toBe($plain)
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeFalse();
+});
+
+it('knows what decrypts a file: the console\'s converter on Tools → Decrypt that reads its format', function () {
+    $iso = ps3Game();
+    $pkg = GameFile::factory()->for($iso->game)->create(['path' => 'ps3/Game.pkg', 'filename' => 'Game.pkg', 'extension' => 'pkg']);
+    $keys = app(DiscKeys::class);
+
+    expect($keys->decrypterFor(new Console('ps3'), $iso)?->key())->toBe('ps3-decrypt')
+        ->and($keys->decrypterFor(new Console('ps3'), $pkg))->toBeNull()
+        ->and($keys->decrypterFor(new Console('ps2'), $iso))->toBeNull()
+        ->and($keys->fits($iso, Ps3Image::KEY))->toBeTrue()
+        ->and($keys->fits($iso, str_repeat('0', 32)))->toBeFalse();
+});

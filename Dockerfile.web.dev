@@ -112,6 +112,25 @@ RUN arch="$(uname -m)" \
     && install -m755 /tmp/nodtool /usr/local/bin/nodtool \
     && nodtool -V | grep -q "nodtool ${NODTOOL_VERSION#v}"
 
+# ps3dec (Redrrx/ps3dec): decrypts Redump PS3 ISOs with their disc key, for
+# Tools → Decrypt. Rust with no C dependencies; its releases are glibc only,
+# so it is built here and linked statically (crt-static), which needs the
+# target named or the proc-macro crates refuse to build. The pinned
+# rust-toolchain.toml asks for rustup, which Alpine's cargo is not.
+FROM alpine:3.24 AS ps3dec
+
+RUN apk add --no-cache cargo git
+
+ARG PS3DEC_TAG=v3.0.0
+RUN git clone --depth 1 --branch "$PS3DEC_TAG" https://github.com/Redrrx/ps3dec.git /src/ps3dec \
+    && cd /src/ps3dec \
+    && rm -f rust-toolchain.toml \
+    && target="$(uname -m)-alpine-linux-musl" \
+    && RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --locked --bin ps3dec --target "$target" \
+    && install -m755 "target/$target/release/ps3dec" /usr/local/bin/ps3dec \
+    && rm -rf /src/ps3dec /root/.cargo/registry \
+    && ps3dec --version | grep -q "${PS3DEC_TAG#v}"
+
 FROM php:8.5-fpm-alpine
 
 # php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
@@ -206,6 +225,8 @@ RUN chdman 2>&1 | grep -q "CHD) manager" \
     && cue2pops 2>&1 | grep -q "conversion tool v" \
     && { pops2cue 2>&1 || true; } | grep -q "POPS2CUE v" \
     && nodtool -V | grep -q "nodtool "
+COPY --from=ps3dec /usr/local/bin/ps3dec /usr/local/bin/ps3dec
+RUN ps3dec --version | grep -q "ps3decrs "
 RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh
 
 EXPOSE 80

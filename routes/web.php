@@ -93,6 +93,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Tools → Conversion: format conversions, queued on the conversion worker.
     Route::livewire('tools/conversion', 'tools.conversion')->name('tools.conversion');
 
+    // Tools → Decrypt: PS3 disc keys, and decrypting Redump images with them.
+    Route::livewire('tools/decrypt', 'tools.decrypt')->name('tools.decrypt');
+
     // Where the page was when it was called the Builder, kept so a bookmark still lands.
     Route::get('builder', function () {
         return redirect()->route('tools.conversion', status: 301);

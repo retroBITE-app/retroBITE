@@ -133,4 +133,4 @@ Every tool ships in the web image, on `PATH`.
 | --- | --- | --- |
 | `CONVERSION_CONCURRENCY` | `1` | Conversions at once. Raise `QUEUE_WORKERS_CONVERSION` to match. |
 | `CONVERSION_TIMEOUT` | `7000` | Seconds one conversion may take. |
-| `CHDMAN_PATH`, `MAXCSO_PATH`, `ECM_PATH`, `UNECM_PATH`, `EXTRACT_XISO_PATH`, `CUE2POPS_PATH`, `POPS2CUE_PATH`, `NODTOOL_PATH` | `/usr/local/bin/…` | Point one at another build of that tool. |
+| `CHDMAN_PATH`, `MAXCSO_PATH`, `ECM_PATH`, `UNECM_PATH`, `EXTRACT_XISO_PATH`, `CUE2POPS_PATH`, `POPS2CUE_PATH`, `NODTOOL_PATH`, `PS3DEC_PATH` | `/usr/local/bin/…` | Point one at another build of that tool. |

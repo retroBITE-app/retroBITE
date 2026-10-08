@@ -8,6 +8,7 @@ use App\Events\GameUpdated;
 use App\Models\GameFile;
 use App\Support\LiveUpdates;
 use App\Support\Scanning\Checksums;
+use App\Support\Scanning\LibraryFolders;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -49,7 +50,7 @@ class HashFile implements ShouldQueue
             return;
         }
 
-        $path = rtrim((string) config('settings.games_path'), '/').'/'.$file->path;
+        $path = LibraryFolders::pathOf($file);
 
         if (! is_file($path)) {
             // Gone since the last scan. The next scan will mark it missing;

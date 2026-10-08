@@ -5,6 +5,7 @@ use App\Conversion\Converters;
 use App\Enums\ConversionStatus;
 use App\Models\Conversion;
 use App\Support\Console;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Number;
@@ -15,7 +16,8 @@ use Livewire\Component;
 
 /*
  * The conversion queue: what is waiting, running and done, with the tool's
- * own log a click away. Every conversion, on every console.
+ * own log a click away. Every conversion, on every console — or one
+ * converter's alone, for a tool with a page of its own such as Decrypt.
  *
  * What the worker is doing arrives as a `conversion` signal, and a picker
  * beside it that queued something says so; either re-renders it.
@@ -32,6 +34,10 @@ new class extends Component
     #[Locked]
     public array $openLogs = [];
 
+    /** One converter's conversions only, by key; null for every one. */
+    #[Locked]
+    public ?string $converter = null;
+
     /**
      * The newest conversions first, the running ones above everything —
      * without their logs, only whether each has one.
@@ -42,6 +48,9 @@ new class extends Component
     public function queue(): Collection
     {
         return Conversion::query()
+            ->when($this->converter !== null, function (Builder $query): void {
+                $query->where('converter', $this->converter);
+            })
             ->select([
                 'id', 'console', 'converter', 'label', 'status', 'progress', 'eta_at', 'source_bytes', 'output_bytes',
                 'failure', 'cancel_requested_at', 'started_at', 'finished_at',
@@ -117,7 +126,7 @@ new class extends Component
 
     public function clearFinished(ConversionQueue $queue): void
     {
-        $queue->clearFinished();
+        $queue->clearFinished($this->converter);
 
         unset($this->queue);
     }

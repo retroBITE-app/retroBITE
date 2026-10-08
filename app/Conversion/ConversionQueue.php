@@ -11,6 +11,7 @@ use App\Exceptions\ConversionFailed;
 use App\Jobs\RunConversion;
 use App\Models\Conversion;
 use App\Support\LiveUpdates;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 
 /**
@@ -130,10 +131,15 @@ final class ConversionQueue
         $this->signal();
     }
 
-    /** Take every finished row off the list. Returns how many went. */
-    public function clearFinished(): int
+    /** Take every finished row off the list, or one converter's. Returns how many went. */
+    public function clearFinished(?string $converter = null): int
     {
-        $cleared = Conversion::query()->finished()->delete();
+        $cleared = Conversion::query()
+            ->finished()
+            ->when($converter !== null, function (Builder $query) use ($converter): void {
+                $query->where('converter', $converter);
+            })
+            ->delete();
 
         $this->signal();
 

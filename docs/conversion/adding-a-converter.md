@@ -72,6 +72,11 @@ Override only what differs from the defaults:
 | `verifyFailed(string $output)` | false | the verifier exits 0 whatever it finds. nodtool prints `❌ (expected: …)` for a hash off and still exits 0, so `NodtoolConverter` looks for that. |
 | `verifyArguments(string $output)` | null | the tool can check its own output. Verify runs only if `VERIFY` is also in `options()`. |
 | `playlistEntry(outputs)` | the first output | a set's `.m3u` should list a different one of a disc's outputs. |
+| `confirm(string $output)` | null | the tool can write a wrong file and exit 0. Return why the output is wrong, or null. Asked of every output, always — verify on or off — before anything reaches the library. `Ps3Decrypt` checks the image no longer reads as encrypted, which is what a wrong key leaves. |
+| `workingDirectory(string $staging)` | null | the tool writes beside itself, such as ps3dec's `log/` folder. Return `$staging` and it runs there. |
+| `replacesSource()` | false | the output should take its source's place under the source's own name. Single-file discs only. The output is parked beside the source under a hidden name, the source deleted, the output renamed into its place, and the source's `game_files` row kept with its hashes and toolbox facts cleared, so the game keeps its file. Keep-source does not apply. |
+| `companions(Disc, root)` | none | files beside the source belong to it and should go with it when it is replaced (paths relative to the library root). `Ps3Decrypt` returns the `.dkey`/`.key`. |
+| `page()` | null | it lives on a Tools page of its own, not in the Conversion picker: return the page's name. That page gets a tab for every console with a converter on it (`Converters::onPage()`). It still passes the same gate (`routesFor()`) and queue. `Ps3Decrypt` returns `'decrypt'`, for Tools → Decrypt. |
 
 Rules the runner relies on:
 
@@ -98,6 +103,18 @@ In `config/converters.php`, under `converters`:
 ```
 
 The order there is the order formats are offered in.
+
+### Decrypters
+
+A decrypter writes the same format back, readable without a key, so it is not
+a conversion and does not live with them — but it runs on this same engine.
+It goes in `app/Decryption/`, extends `Converter` all the same, returns
+`Converter::PAGE_DECRYPT` from `page()`, and is registered in
+`config/decrypters.php` under `decrypters`, with its tool under that file's
+`tools`. A console offers it by listing its key under `decrypters` (not
+`converters`) in its `config/consoles/` file. `Converters` and `Tools` read
+both config files, and the concurrency and timeout in `config/converters.php`
+cover both. `Ps3Decrypt` is the example.
 
 ## 3. A new tool
 

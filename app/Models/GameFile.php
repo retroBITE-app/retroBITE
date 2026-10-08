@@ -45,6 +45,8 @@ use Illuminate\Support\Collection;
  * @property list<string>|null $provider_flags the provider's flags for the dump: beta, demo, proto, trad, hack, unl, alt, best
  * @property string|null $license_id the serial the disc names itself by, e.g. SLES_503.86
  * @property string|null $video_mode PAL or NTSC, as the disc declares it
+ * @property bool|null $encrypted whether the image is still encrypted (a PS3 Redump dump); null until read
+ * @property string|null $disc_key a PS3 disc's key once one has been seen to fit it, 32 upper-case hex digits; kept after decrypting
  * @property int|null $parent_id
  * @property Carbon|null $missing_since
  * @property Carbon|null $created_at
@@ -56,7 +58,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
     'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'scrapes', 'provider_flags', 'license_id',
-    'video_mode', 'parent_id', 'missing_since', 'ra_hash', 'ra_hash_size',
+    'video_mode', 'encrypted', 'disc_key', 'parent_id', 'missing_since', 'ra_hash', 'ra_hash_size',
     'ra_hash_mtime', 'ra_hashed_at',
 ])]
 class GameFile extends Model
@@ -73,6 +75,7 @@ class GameFile extends Model
             'role' => FileRole::class,
             'size_bytes' => 'integer',
             'disc_number' => 'integer',
+            'encrypted' => 'boolean',
             'scrapes' => 'integer',
             'provider_flags' => 'array',
             'hashed_at' => 'datetime',
@@ -169,5 +172,15 @@ class GameFile extends Model
     public function scopeUninspected(Builder $query): void
     {
         $query->whereNull('license_id');
+    }
+
+    /**
+     * The files of one console's games, by its key.
+     *
+     * @param  Builder<GameFile>  $query
+     */
+    public function scopeOnConsole(Builder $query, string $console): void
+    {
+        $query->whereIn('game_id', Game::query()->forConsole($console)->select('id'));
     }
 }
