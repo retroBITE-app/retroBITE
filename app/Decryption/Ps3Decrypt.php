@@ -65,7 +65,7 @@ final class Ps3Decrypt extends Converter
     /** One image, read as encrypted, with its key beside it. */
     public function supports(SourceSet $set): bool
     {
-        if ($set->isSet() || $set->file->encrypted !== true) {
+        if ($set->isSet() || $set->file->meta?->encrypted !== true) {
             return false;
         }
 

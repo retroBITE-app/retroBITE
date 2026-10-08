@@ -56,7 +56,7 @@ class InspectGameFile implements ShouldQueue
 
         // Already read, and a disc's serial does not change. Re-reading every
         // scan would put the whole library through the disk again for nothing.
-        if ($file->license_id !== null && ! $this->force) {
+        if ($file->meta?->license_id !== null && ! $this->force) {
             return;
         }
 
@@ -84,20 +84,25 @@ class InspectGameFile implements ShouldQueue
             return;
         }
 
-        $file->update([
+        $file->rememberMeta([
             ...array_filter([
                 'license_id' => Arr::get($facts, 'license_id'),
                 'video_mode' => Arr::get($facts, 'video_mode'),
                 'disc_key' => Arr::get($facts, 'disc_key'),
-                // Only where nothing knows better already: the provider's region is
-                // the more precise of the two, and a serial can only say which of
-                // five territories pressed the disc. Stored as the provider's
-                // code, as every other region on a file is.
-                'region' => $file->region ?? RomRegions::fromName(Arr::get($facts, 'region')),
             ]),
             // Outside the filter: false is the answer worth keeping.
             ...(Arr::has($facts, 'encrypted') ? ['encrypted' => (bool) Arr::get($facts, 'encrypted')] : []),
         ]);
+
+        // Only where nothing knows better already: the provider's region is
+        // the more precise of the two, and a serial can only say which of
+        // five territories pressed the disc. Stored as the provider's code,
+        // as every other region on a file is.
+        $region = $file->region ?? RomRegions::fromName(Arr::get($facts, 'region'));
+
+        if ($region !== null && $region !== $file->region) {
+            $file->update(['region' => $region]);
+        }
     }
 
     /**

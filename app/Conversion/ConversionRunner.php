@@ -83,16 +83,18 @@ final class ConversionRunner
 
     /**
      * What a file row knows about the bytes in it, and no longer knows once
-     * they are replaced: hashes, the provider's word on the dump, and what
-     * the toolbox read. The next scan works them out again. A PS3 disc key
-     * (disc_key) is not among them: it is the disc's, not the bytes', and is
-     * kept on purpose once decrypting has deleted the file it came from.
+     * they are replaced: hashes and the provider's word on the dump.
      */
     private const CONTENT_FACTS = [
         'crc', 'md5', 'sha1', 'hashed_at', 'scrapes', 'provider_flags',
         'ra_hash', 'ra_hash_size', 'ra_hash_mtime', 'ra_hashed_at',
-        'license_id', 'video_mode', 'encrypted',
     ];
+
+    /**
+     * What the toolbox read off the replaced bytes, for the next scan to read again.
+     * Not disc_key: it is the disc's, and kept once decrypting has deleted its file.
+     */
+    private const META_FACTS = ['license_id', 'video_mode', 'encrypted'];
 
     private string $log = '';
 
@@ -567,6 +569,7 @@ final class ConversionRunner
                 'size_bytes' => (int) filesize($this->paths->absolute($console, $final)),
                 ...array_fill_keys(self::CONTENT_FACTS, null),
             ]);
+            $disc->file->meta()->update(array_fill_keys(self::META_FACTS, null));
             $this->line(__('Replaced :path', ['path' => $final]));
 
             foreach ($converter->companions($disc, $this->paths->root()) as $companion) {

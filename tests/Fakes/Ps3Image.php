@@ -75,8 +75,9 @@ final class Ps3Image
      * @param  string  $root  the test's library root
      * @param  array<string, mixed>  $file  more columns for the file row
      * @param  array<string, mixed>  $game  more columns for the game row
+     * @param  array{license_id?: string|null, video_mode?: string|null, disc_key?: string|null}  $meta  more disc facts
      */
-    public static function fileRow(string $root, string $name, ?bool $encrypted = true, bool $key = true, array $file = [], array $game = []): GameFile
+    public static function fileRow(string $root, string $name, ?bool $encrypted = true, bool $key = true, array $file = [], array $game = [], array $meta = []): GameFile
     {
         $path = self::write($root.'/ps3/'.$name, $encrypted === false ? null : self::KEY);
 
@@ -86,13 +87,13 @@ final class Ps3Image
 
         return GameFile::factory()
             ->for(Game::factory()->forConsole('ps3')->create(['title' => Str::beforeLast($name, ' ('), ...$game]))
+            ->withMeta(['encrypted' => $encrypted, ...$meta])
             ->create([
                 'path' => 'ps3/'.$name,
                 'filename' => $name,
                 'extension' => 'iso',
                 'size_bytes' => filesize($path),
                 'role' => FileRole::Rom,
-                'encrypted' => $encrypted,
                 ...$file,
             ]);
     }

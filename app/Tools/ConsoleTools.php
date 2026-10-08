@@ -194,7 +194,8 @@ abstract class ConsoleTools
     /**
      * Everything this toolbox can read out of one file.
      *
-     * Keys map onto game_files columns. An empty array means nothing was
+     * Keys map onto game_file_meta columns (GameFile::rememberMeta()), but
+     * region, which is game_files'. An empty array means nothing was
      * learned, which is an ordinary answer for a file that is not what it
      * looked like. Takes the file rather than reading one off the chain
      * because it is a public entry point and its caller has just asked

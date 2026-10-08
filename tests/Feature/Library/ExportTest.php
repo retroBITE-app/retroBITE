@@ -60,11 +60,10 @@ function exportGame(array $attributes = [], string $serial = 'SLES_503.86'): Gam
         'description' => 'Crash Bandicoot: The Wrath of Cortex is the first Crash Bandicoot game for a system other than the original PlayStation.',
     ], $attributes));
 
-    GameFile::factory()->for($game)->create([
+    GameFile::factory()->for($game)->withMeta(['license_id' => $serial])->create([
         'path' => 'ps2/DVD/'.$serial.'.Game.iso',
         'filename' => $serial.'.Game.iso',
         'extension' => 'iso',
-        'license_id' => $serial,
     ]);
 
     return $game;
@@ -237,8 +236,8 @@ it('skips a game with nothing to name a file by', function () {
     // Not identified: its title is still its filename, and writing that back
     // out as metadata would be worse than writing nothing.
     $placeholder = Game::factory()->create(['console' => 'ps2', 'status' => GameStatus::Placeholder]);
-    GameFile::factory()->for($placeholder)->create([
-        'path' => 'ps2/DVD/Unknown.iso', 'extension' => 'iso', 'license_id' => 'SLES_111.11',
+    GameFile::factory()->for($placeholder)->withMeta(['license_id' => 'SLES_111.11'])->create([
+        'path' => 'ps2/DVD/Unknown.iso', 'extension' => 'iso',
     ]);
 
     // Identified, but its serial has never been read off the disc.

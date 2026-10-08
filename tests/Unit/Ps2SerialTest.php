@@ -2,6 +2,7 @@
 
 use App\Enums\FileRole;
 use App\Models\GameFile;
+use App\Models\GameFileMeta;
 use App\Support\Layouts\CustomLayout;
 use App\Support\Layouts\OplLayout;
 use App\Support\Layouts\RetroArchLayout;
@@ -75,8 +76,9 @@ it('keeps a disc named after nothing but its serial', function () {
 /** A single-file game's disc image, as the rename asks about it: no sheet, no tracks. */
 function ps2Iso(string $filename, ?string $licenseId = 'SLES_503.86', FileRole $role = FileRole::Rom): GameFile
 {
-    $file = new GameFile(['filename' => $filename, 'license_id' => $licenseId, 'role' => $role]);
+    $file = new GameFile(['filename' => $filename, 'role' => $role]);
     $file->setRelation('children', new EloquentCollection);
+    $file->setRelation('meta', new GameFileMeta(['license_id' => $licenseId]));
 
     return $file;
 }

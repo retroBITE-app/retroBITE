@@ -193,7 +193,9 @@ final class PS2 extends ConsoleTools
         if ($withLicenseId) {
             // Already there, or not read off the disc yet — the name cannot
             // be made up from anything else.
-            return $carries || $file->license_id === null ? null : $file->license_id.'.'.$file->filename;
+            $serial = $file->meta?->license_id;
+
+            return $carries || $serial === null ? null : $serial.'.'.$file->filename;
         }
 
         if (! $carries) {

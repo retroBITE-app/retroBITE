@@ -127,7 +127,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     private function loadRelations(): void
     {
         $this->game->load([
-            'files' => fn ($query) => $query->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
+            'files' => fn ($query) => $query->with('meta')->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
             // Ordered because the strip, the viewer's set and its "3 / 12"
             // counter are one list, and they have to agree on it. gallery()
             // puts it in slot order from here.
@@ -718,7 +718,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     'md5' => $file->md5,
                     // Read out of the disc rather than from the provider, and the
                     // only name Open PS2 Loader knows this game by.
-                    'licenseId' => $file->license_id,
+                    'licenseId' => $file->meta?->license_id,
                     // The file's own region, which a game holding several can
                     // differ by (CONTEXT.md: file region) — not the game's.
                     'region' => $file->region,

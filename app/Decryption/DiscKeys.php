@@ -161,7 +161,7 @@ final class DiscKeys
      */
     public function known(GameFile $file): ?string
     {
-        return $file->disc_key ?? $this->onDisk($file);
+        return $file->meta->disc_key ?? $this->onDisk($file);
     }
 
     /**
@@ -172,8 +172,8 @@ final class DiscKeys
     {
         $key = $this->onDisk($file);
 
-        if ($key !== null && $key !== $file->disc_key) {
-            $file->update(['disc_key' => $key]);
+        if ($key !== null && $key !== $file->meta?->disc_key) {
+            $file->rememberMeta(['disc_key' => $key]);
         }
 
         return $key;
@@ -182,7 +182,9 @@ final class DiscKeys
     /** Where a library file stands: what the toolbox read of it, and whether its key is here. */
     public function state(GameFile $file): DecryptState
     {
-        return DecryptState::for($file->encrypted, $file->encrypted === true && $this->onDisk($file) !== null);
+        $encrypted = $file->meta?->encrypted;
+
+        return DecryptState::for($encrypted, $encrypted === true && $this->onDisk($file) !== null);
     }
 
     /**
@@ -206,6 +208,6 @@ final class DiscKeys
         }
 
         $this->paths->put($console, Str::beforeLast($relative, '.').'.dkey', $normalised."\n");
-        $file->update(['disc_key' => $normalised]);
+        $file->rememberMeta(['disc_key' => $normalised]);
     }
 }

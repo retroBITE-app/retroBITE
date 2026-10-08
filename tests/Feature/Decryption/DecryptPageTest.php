@@ -98,8 +98,8 @@ it('reads an unread image on the spot', function () {
         ->call('check', $file->id)
         ->assertSee('Needs key');
 
-    expect($file->fresh()?->encrypted)->toBeTrue()
-        ->and($file->fresh()?->license_id)->toBe('BLUS30538');
+    expect($file->fresh()?->meta?->encrypted)->toBeTrue()
+        ->and($file->fresh()?->meta?->license_id)->toBe('BLUS30538');
 });
 
 it('queues the picked images, and only ones with their key', function () {
@@ -116,7 +116,7 @@ it('queues the picked images, and only ones with their key', function () {
         ->assertDispatched('conversion-queued');
 
     // On record before decrypting deletes the .dkey.
-    expect($ready->fresh()?->disc_key)->toBe(Ps3Image::KEY);
+    expect($ready->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY);
 
     expect(Conversion::query()->pluck('converter', 'game_file_id')->all())->toBe([$ready->id => 'ps3-decrypt']);
     Queue::assertPushed(RunConversion::class);
@@ -175,7 +175,7 @@ it('shows a PS3 image\'s state on its game page, and decrypts it from there', fu
 
 it('shows a disc key on the game page, still there once the .dkey has gone', function () {
     $file = ps3Image('Done', DecryptState::Decrypted);
-    $file->update(['disc_key' => Ps3Image::KEY]);
+    $file->rememberMeta(['disc_key' => Ps3Image::KEY]);
 
     Livewire::test('games.show', ['game' => $file->game])
         ->assertSee('Disc key')

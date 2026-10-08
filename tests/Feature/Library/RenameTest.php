@@ -43,12 +43,11 @@ function renamableGame(string $filename, ?string $licenseId = 'SLES_503.86', str
 
     File::put(test()->root.'/'.$path, 'disc image');
 
-    GameFile::factory()->for($game)->create([
+    GameFile::factory()->for($game)->withMeta(['license_id' => $licenseId])->create([
         'path' => $path,
         'filename' => $filename,
         'extension' => 'iso',
         'role' => FileRole::Rom,
-        'license_id' => $licenseId,
         'md5' => md5('disc image'),
     ]);
 
@@ -101,7 +100,7 @@ it('leaves a cue/bin set alone, since its sheet names the files', function () {
     File::put($this->root.'/ps2/DVD/Game.cue', 'FILE "Game.bin" BINARY');
     File::put($this->root.'/ps2/DVD/Game.bin', 'track');
     $sheet = GameFile::factory()->for($game)->create(['path' => 'ps2/DVD/Game.cue', 'filename' => 'Game.cue', 'extension' => 'cue', 'role' => FileRole::Sheet]);
-    GameFile::factory()->for($game)->create(['path' => 'ps2/DVD/Game.bin', 'filename' => 'Game.bin', 'extension' => 'bin', 'role' => FileRole::Track, 'parent_id' => $sheet->id, 'license_id' => 'SLES_503.86']);
+    GameFile::factory()->for($game)->withMeta(['license_id' => 'SLES_503.86'])->create(['path' => 'ps2/DVD/Game.bin', 'filename' => 'Game.bin', 'extension' => 'bin', 'role' => FileRole::Track, 'parent_id' => $sheet->id]);
 
     $plan = renameModal()->set('mode', 'add')->instance()->plan;
 

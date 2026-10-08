@@ -93,7 +93,7 @@ new #[Title('Decrypt')] class extends Component
             ->present()
             ->onConsole($this->console->key)
             ->whereIn('extension', $this->converter->from())
-            ->with('game')
+            ->with(['game', 'meta'])
             ->orderBy('path')
             ->get()
             ->map(function (GameFile $file) use ($keys): array {
@@ -155,7 +155,7 @@ new #[Title('Decrypt')] class extends Component
                 return $needle === ''
                     || Str::contains(Str::lower($file->filename), $needle)
                     || Str::contains(Str::lower((string) $file->game->title), $needle)
-                    || Str::contains(Str::lower((string) $file->license_id), $needle);
+                    || Str::contains(Str::lower((string) $file->meta?->license_id), $needle);
             })
             ->values();
     }
@@ -407,8 +407,8 @@ new #[Title('Decrypt')] class extends Component
                             <p class="truncate font-mono text-xs text-fg-faint">{{ $file->filename }}</p>
                         </div>
 
-                        @if ($file->license_id)
-                            <span class="hidden shrink-0 font-mono text-xs text-fg-muted sm:inline">{{ $file->license_id }}</span>
+                        @if ($file->meta?->license_id)
+                            <span class="hidden shrink-0 font-mono text-xs text-fg-muted sm:inline">{{ $file->meta->license_id }}</span>
                         @endif
 
                         <span class="hidden w-16 shrink-0 text-right font-mono text-xs text-fg-faint sm:inline">{{ Number::fileSize((int) $file->size_bytes, 1) }}</span>

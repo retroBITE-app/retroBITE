@@ -48,7 +48,7 @@ afterEach(function () {
 /** A PS3 game of one image on disk and on record, with its key beside it unless told otherwise. */
 function ps3Game(string $name = 'Game (USA).iso', ?bool $encrypted = true, bool $key = true): GameFile
 {
-    return Ps3Image::fileRow(test()->root, $name, $encrypted, $key, ['md5' => str_repeat('a', 32), 'license_id' => 'BLUS30538']);
+    return Ps3Image::fileRow(test()->root, $name, $encrypted, $key, ['md5' => str_repeat('a', 32)], meta: ['license_id' => 'BLUS30538']);
 }
 
 /** ps3dec as it behaves: writes `-o`/`-n`.iso, decrypted unless told the key was wrong. */
@@ -127,38 +127,38 @@ it('saves a key beside its image as a .dkey', function () {
     app(DiscKeys::class)->save(new Console('ps3'), $file, Str::lower(Ps3Image::KEY));
 
     expect(File::get($this->root.'/ps3/Game (USA).dkey'))->toBe(Ps3Image::KEY."\n")
-        ->and($file->fresh()?->disc_key)->toBe(Ps3Image::KEY);
+        ->and($file->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY);
 });
 
 it('has the PS3 toolbox record the title ID and the encryption', function () {
     $file = ps3Game();
-    $file->update(['license_id' => null, 'encrypted' => null]);
+    $file->rememberMeta(['license_id' => null, 'encrypted' => null]);
 
     (new InspectGameFile($file->id))->handle();
 
-    expect($file->fresh()?->license_id)->toBe('BLUS30538')
-        ->and($file->fresh()?->encrypted)->toBeTrue()
-        ->and($file->fresh()?->disc_key)->toBe(Ps3Image::KEY);
+    expect($file->fresh()?->meta?->license_id)->toBe('BLUS30538')
+        ->and($file->fresh()?->meta?->encrypted)->toBeTrue()
+        ->and($file->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY);
 });
 
 it('leaves a key beside the image off the record when it does not fit the disc', function () {
     $file = ps3Game(key: false);
-    $file->update(['license_id' => null, 'encrypted' => null]);
+    $file->rememberMeta(['license_id' => null, 'encrypted' => null]);
     File::put($this->root.'/ps3/Game (USA).dkey', str_repeat('0', 32));
 
     (new InspectGameFile($file->id))->handle();
 
-    expect($file->fresh()?->encrypted)->toBeTrue()
-        ->and($file->fresh()?->disc_key)->toBeNull();
+    expect($file->fresh()?->meta?->encrypted)->toBeTrue()
+        ->and($file->fresh()?->meta?->disc_key)->toBeNull();
 });
 
 it('records a decrypted image as not encrypted, false kept rather than dropped', function () {
     $file = ps3Game(encrypted: false, key: false);
-    $file->update(['license_id' => null, 'encrypted' => null]);
+    $file->rememberMeta(['license_id' => null, 'encrypted' => null]);
 
     (new InspectGameFile($file->id))->handle();
 
-    expect($file->fresh()?->encrypted)->toBeFalse();
+    expect($file->fresh()?->meta?->encrypted)->toBeFalse();
 });
 
 it('offers decryption only for an encrypted image with its key, and never in the Conversion picker', function () {
@@ -185,7 +185,7 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
     config()->set('decrypters.tools.ps3dec.path', '/bin/true');
     fakePs3dec();
     $file = ps3Game();
-    $file->update(['disc_key' => Ps3Image::KEY]);
+    $file->rememberMeta(['disc_key' => Ps3Image::KEY]);
 
     $conversion = decryptPs3($file);
 
@@ -196,9 +196,9 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
         ->and(File::glob($this->root.'/ps3/.*retrobite-replacing'))->toBe([])
         ->and(GameFile::query()->count())->toBe(1)
         ->and($file->fresh()?->md5)->toBeNull()
-        ->and($file->fresh()?->license_id)->toBeNull()
-        ->and($file->fresh()?->encrypted)->toBeNull()
-        ->and($file->fresh()?->disc_key)->toBe(Ps3Image::KEY)
+        ->and($file->fresh()?->meta?->license_id)->toBeNull()
+        ->and($file->fresh()?->meta?->encrypted)->toBeNull()
+        ->and($file->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY)
         ->and($conversion->log)->toContain('Replaced Game (USA).iso')
         ->and($conversion->log)->toContain('Deleted Game (USA).dkey');
 

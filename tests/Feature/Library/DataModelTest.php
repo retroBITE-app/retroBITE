@@ -7,6 +7,7 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameCollection;
 use App\Models\GameFile;
+use App\Models\GameFileMeta;
 use App\Models\Media;
 use App\Support\Console;
 use App\Support\MediaTypes;
@@ -177,4 +178,34 @@ it('finds a console\'s files, and where a file is on disk', function () {
 
     expect(GameFile::query()->onConsole('ps3')->pluck('id')->all())->toBe([$file->id])
         ->and(LibraryFolders::pathOf($file))->toBe('/library/ps3/Game (USA).iso');
+});
+
+it('keeps disc facts beside a file, merging what is read later into what is there', function () {
+    $file = GameFile::factory()->withMeta(['license_id' => 'SLES_503.86', 'video_mode' => 'PAL'])->create();
+
+    $file->rememberMeta(['disc_key' => str_repeat('A', 32)]);
+
+    expect($file->fresh()?->meta?->only(['license_id', 'video_mode', 'disc_key']))->toBe([
+        'license_id' => 'SLES_503.86',
+        'video_mode' => 'PAL',
+        'disc_key' => str_repeat('A', 32),
+    ])
+        ->and(GameFileMeta::query()->count())->toBe(1);
+});
+
+it('counts a file as uninspected until its facts hold a serial', function () {
+    $unread = GameFile::factory()->create();
+    $keyOnly = GameFile::factory()->withMeta(['disc_key' => str_repeat('A', 32)])->create();
+    GameFile::factory()->withMeta(['license_id' => 'SLES_503.86'])->create();
+
+    expect(GameFile::query()->uninspected()->orderBy('id')->pluck('id')->all())->toBe([$unread->id, $keyOnly->id]);
+});
+
+it('drops a file\'s facts with it, however the file goes', function () {
+    $file = GameFile::factory()->withMeta(['license_id' => 'SLES_503.86'])->create();
+
+    // A bulk delete, as PruneGame's: no model events, only the database's cascade.
+    GameFile::query()->whereKey($file->id)->delete();
+
+    expect(GameFileMeta::query()->count())->toBe(0);
 });
