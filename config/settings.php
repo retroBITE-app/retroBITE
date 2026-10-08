@@ -1,5 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
+use App\Enums\ShareProtocol;
+
 return [
 
     /*
@@ -20,7 +24,9 @@ return [
     | cannot reach that address, but it can reach the container by name.
     |
     | PS3NETSRV mirrors the share container's own switch, so a ps3netsrv that
-    | was turned off is left off the panel rather than reported offline.
+    | was turned off is left off the panel rather than reported offline, and
+    | PS3NETSRV_FOLDERS its map of webMAN's folders to the library's, so the
+    | panel lists the consoles ps3netsrv really serves.
     |
     */
 
@@ -29,6 +35,7 @@ return [
         'status_host' => env('SHARE_HOST') ?: env('HOST_IP', '127.0.0.1'),
         'username' => env('AUTH_USER', 'retrobite'),
         'ps3netsrv' => filter_var(env('PS3NETSRV', true), FILTER_VALIDATE_BOOL),
+        'ps3netsrv_folders' => ShareProtocol::ps3netsrvFolders((string) env('PS3NETSRV_FOLDERS', 'PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx')),
     ],
 
     /*

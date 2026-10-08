@@ -6,6 +6,7 @@ namespace App\Enums;
 
 use App\Support\Console;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * The protocols retroBITE exposes the library over. Owns their port numbers so
@@ -88,23 +89,52 @@ enum ShareProtocol: string
             return $consoles;
         }
 
+        $folders = (array) config('settings.network.ps3netsrv_folders', []);
+
         return $consoles
-            ->filter(function (Console $console): bool {
-                return $console->key === 'ps3';
+            ->filter(function (Console $console) use ($folders): bool {
+                return in_array($console->folder, $folders, true);
             })
             ->values();
     }
 
     /**
      * A connection string for one share folder. ps3netsrv serves one root, so
-     * webMAN is given the address and port, not a path.
+     * webMAN is given the address and port, and the list the folder is in.
      */
     public function connectionString(string $hostIp, string $folder): string
     {
         return match ($this) {
             self::Smb => '\\\\'.$hostIp.'\\'.$folder,
             self::Ftp => 'ftp://'.$hostIp.'/'.$folder,
-            self::Ps3netsrv => $hostIp.':'.$this->port(),
+            self::Ps3netsrv => $hostIp.':'.$this->port().self::webmanList($folder),
         };
+    }
+
+    /** " · PS2ISO" for a library folder ps3netsrv serves; '' for one it does not. */
+    private static function webmanList(string $folder): string
+    {
+        $name = array_search($folder, (array) config('settings.network.ps3netsrv_folders', []), true);
+
+        return is_string($name) ? ' · '.$name : '';
+    }
+
+    /**
+     * webMAN's folder names and the library folders behind them, from PS3NETSRV_FOLDERS
+     * ("PS3ISO=ps3 PS2ISO=ps2"), refusing what the share container refuses.
+     *
+     * @return array<string, string> webMAN name => library folder
+     */
+    public static function ps3netsrvFolders(string $spec): array
+    {
+        return Str::of(trim($spec))
+            ->split('/\s+/')
+            ->filter(function (string $pair): bool {
+                return Str::isMatch('/^(PS3ISO|PS2ISO|PSXISO|PSPISO|BDISO|DVDISO|GAMES|PKG)=[^.\/][^\/]*$/', $pair);
+            })
+            ->mapWithKeys(function (string $pair): array {
+                return [Str::before($pair, '=') => Str::after($pair, '=')];
+            })
+            ->all();
     }
 }

@@ -7,6 +7,7 @@ PASS=${AUTH_PASS:-retrobite}
 HOST_IP=${HOST_IP:-}
 PS3NETSRV=${PS3NETSRV:-true}
 PS3NETSRV_WHITELIST=${PS3NETSRV_WHITELIST:-}
+PS3NETSRV_FOLDERS=${PS3NETSRV_FOLDERS:-PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx}
 
 echo "===================================="
 echo "======  retroBITE Starting..  ======"
@@ -127,8 +128,42 @@ case "$PS3NETSRV" in
     *) PS3NETSRV=false ;;
 esac
 
-if [ "$PS3NETSRV" = true ] && [ -z "$PS3NETSRV_WHITELIST" ]; then
-    echo "WARNING: ps3netsrv has no authentication, and anyone on the network can read and write /games/ps3 through it. Set PS3NETSRV_WHITELIST (e.g. 192.168.1.*) to limit who connects." >&2
+# webMAN's folder names under ps3netsrv's root, each linked to a console folder
+# of the library: PS3NETSRV_FOLDERS="PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx". Made
+# fresh each boot, so a changed list never leaves a stale link. Only names
+# webMAN reads, and only one plain folder name each: a link must not lead out
+# of /games. A folder the library does not have yet simply lists empty.
+PS3NETSRV_SERVES=""
+
+if [ "$PS3NETSRV" = true ]; then
+    find /srv/ps3netsrv -mindepth 1 -maxdepth 1 -type l -delete
+
+    for pair in $PS3NETSRV_FOLDERS; do
+        name=${pair%%=*}
+        folder=${pair#*=}
+
+        case "$name" in
+            PS3ISO | PS2ISO | PSXISO | PSPISO | BDISO | DVDISO | GAMES | PKG) ;;
+            *)
+                echo "WARNING: PS3NETSRV_FOLDERS: $name is not a folder webMAN MOD reads; skipped." >&2
+                continue
+                ;;
+        esac
+
+        # No path, and nothing hidden: .retrobite-uploads is upload staging.
+        if [ "$pair" = "$name" ] || [ -z "$folder" ] || [[ "$folder" == .* ]] || [[ "$folder" == */* ]]; then
+            echo "WARNING: PS3NETSRV_FOLDERS: $pair does not name one library folder; skipped." >&2
+            continue
+        fi
+
+        ln -sfn "/games/$folder" "/srv/ps3netsrv/$name"
+        PS3NETSRV_SERVES="$PS3NETSRV_SERVES /games/$folder"
+        echo "→ ps3netsrv: $name is /games/$folder"
+    done
+
+    if [ -z "$PS3NETSRV_WHITELIST" ]; then
+        echo "WARNING: ps3netsrv has no authentication, and anyone on the network can read and write${PS3NETSRV_SERVES:- nothing} through it. Set PS3NETSRV_WHITELIST (e.g. 192.168.1.*) to limit who connects." >&2
+    fi
 fi
 
 # Only when the share account cannot already write to the library, and never
@@ -157,8 +192,8 @@ declare -A PIDS=()
 
 # ps3netsrv as the share account rather than root: the protocol has no login
 # and lets a client create and delete files, so it gets no more than SMB and
-# FTP do. Its root is the image's /srv/ps3netsrv, where PS3ISO links to
-# /games/ps3 (see the Dockerfile). A function, not a COMMANDS string, because those are word-split
+# FTP do. Its root is the image's /srv/ps3netsrv, holding the links made
+# above. A function, not a COMMANDS string, because those are word-split
 # unquoted and a whitelist such as 192.168.1.* would be globbed. exec keeps
 # the pid start_service records on ps3netsrv itself.
 run_ps3netsrv() {

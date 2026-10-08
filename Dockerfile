@@ -58,14 +58,13 @@ COPY --from=ps3netsrv /src/ps3netsrv/ps3netsrv /usr/local/bin/ps3netsrv
 # A dynamic ps3netsrv would start here and fail at runtime on a missing
 # library, so refuse the build instead.
 #
-# webMAN MOD looks for disc images in a PS3ISO folder under ps3netsrv's root.
-# The library's ps3 folder is that folder, as the web container lays it out,
-# so the root is a directory of the image's own holding one link to it —
+# ps3netsrv's root is a directory of the image's own. webMAN MOD looks for
+# fixed folder names under it — PS3ISO, PS2ISO, PSXISO — and the entrypoint
+# links each to a console folder of the library (PS3NETSRV_FOLDERS), so
 # nothing is created inside /games for webMAN's sake.
 RUN chmod +x /entrypoint.sh \
     && ldd /usr/local/bin/ps3netsrv 2>&1 | grep -q 'not a dynamic executable' \
-    && mkdir -p /srv/ps3netsrv \
-    && ln -s /games/ps3 /srv/ps3netsrv/PS3ISO
+    && mkdir -p /srv/ps3netsrv
 
 # Expose ports
 # SMB ports

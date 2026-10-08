@@ -72,6 +72,12 @@ webMAN MOD streams games straight from retroBITE over ps3netsrv, without copying
 
 ps3netsrv has no username or password. Set `PS3NETSRV_WHITELIST` to your PS3's address (or your network, e.g. `192.168.50.*`) so nobody else can reach the library through it, or `PS3NETSRV=false` to turn it off.
 
+### PS2 and PS1 games
+
+ps3netsrv serves the library's `ps2` and `psx` folders too, as webMAN's **PS2ISO** and **PSXISO** lists, so the same server setup plays them. webMAN mounts PS1 games as `.bin`/`.cue`, `.iso` or `.img`, and PS2 games as `.iso` — not `.chd`, `.cso`, `.zso` or `.ecm`, which **Tools → Conversion** can turn back into ISO or BIN. PS2 games run through the PS3's own PS2 emulation, so compatibility depends on the PS3 model.
+
+To serve other folders, or PSP games too, set `PS3NETSRV_FOLDERS` (see [configuration](docs/configuration.md)).
+
 ## PlayStation 3 (FTP)
 
 1. Install CFW (Custom Firmware) on your PS3

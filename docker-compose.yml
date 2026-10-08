@@ -53,8 +53,10 @@ services:
       HOST_IP: ${HOST_IP:-}
       # The SMB and FTP account, shown on the Network page.
       AUTH_USER: ${AUTH_USER:-retrobite}
-      # Whether retrobite-share runs ps3netsrv, so its card is shown.
+      # Whether retrobite-share runs ps3netsrv, and what it serves, so its
+      # card is shown with the right consoles.
       PS3NETSRV: ${PS3NETSRV:-true}
+      PS3NETSRV_FOLDERS: ${PS3NETSRV_FOLDERS:-PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx}
       # Transfers write to a USB drive from the browser, which Chrome allows
       # only on https or localhost; a page opened another way links here.
       TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:${WEB_PORT:-81}}
@@ -120,10 +122,12 @@ services:
       # an SMB share of their own (what Open PS2 Loader connects to).
       GAME_FOLDERS: ${GAME_FOLDERS:-}
       SMB_SHARES: ${SMB_SHARES:-}
-      # ps3netsrv on port 38008, serving the ps3 folder to webMAN MOD. It has
-      # no login: the whitelist (such as 192.168.1.*) limits who connects.
+      # ps3netsrv on port 38008, serving the PS3, PS2 and PS1 folders to
+      # webMAN MOD as its PS3ISO, PS2ISO and PSXISO lists. It has no login:
+      # the whitelist (such as 192.168.1.*) limits who connects.
       PS3NETSRV: ${PS3NETSRV:-true}
       PS3NETSRV_WHITELIST: ${PS3NETSRV_WHITELIST:-}
+      PS3NETSRV_FOLDERS: ${PS3NETSRV_FOLDERS:-PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx}
     # On the host's network, so consoles find it by NetBIOS and passive FTP
     # works without a port range published. Ports 445, 139, 21 and 38008 must be free:
     # on a NAS they are its own file sharing — see docker-compose.macvlan.yml.

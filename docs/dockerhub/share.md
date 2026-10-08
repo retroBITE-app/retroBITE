@@ -16,7 +16,8 @@ file. See
 | `HOST_IP` | from the default route | The address FTP passive mode hands to clients. |
 | `GAME_FOLDERS` | `ps2 ps3 gc wii xbox dreamcast` | Console folders created in `/games`. |
 | `SMB_SHARES` | `ps2 gc wii` | Folders with an SMB share of their own. |
-| `PS3NETSRV` | `true` | ps3netsrv on port 38008, serving `/games/ps3` to webMAN MOD as its `PS3ISO` folder. `false` turns it off. |
+| `PS3NETSRV` | `true` | ps3netsrv on port 38008, for webMAN MOD. `false` turns it off. |
+| `PS3NETSRV_FOLDERS` | `PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx` | webMAN's lists and the folders of `/games` behind them. Add `PSPISO=psp` for PSP. |
 | `PS3NETSRV_WHITELIST` | none | Addresses allowed to connect to ps3netsrv, such as `192.168.1.*`. It has no login. |
 
 It mounts the library at `/games`, runs as the owner of that folder, and
