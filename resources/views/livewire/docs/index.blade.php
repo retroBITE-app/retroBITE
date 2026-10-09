@@ -50,6 +50,10 @@ new #[Title('Documents')] class extends Component
      */
     public function mount(DocLibrary $library): void
     {
+        // The one page that checks the docs folder itself: a document edited
+        // in an editor on the host shows here as soon as the page is opened.
+        $library->verify();
+
         if ($this->current() === null) {
             $this->path = (string) $library->search($this->query, $this->filter)->value('path', '');
         }

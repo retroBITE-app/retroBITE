@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\DocTemplate;
+use App\Jobs\MeasureLibrary;
 use App\Models\User;
 use App\Services\DocLibrary;
 use App\Support\DocPath;
@@ -111,4 +112,27 @@ test('the old /docs address lands on Documents, the open document with it', func
         ->assertRedirect(route('docs.index', ['doc' => 'ps2/laser.md']));
 
     expect(route('docs.index'))->toEndWith('/documents');
+});
+
+test('a document written into the folder outside the app shows once the documents page opens', function () {
+    $this->library->create('gc', 'Walkthrough', '', [], "# W\n");
+    expect(app(DocLibrary::class)->index())->toHaveCount(1);
+
+    Storage::disk('docs')->put('gc/from-the-host.md', "---\ntitle: From the host\n---\n# Hello\n");
+
+    // Every other page reads the index as it was, without looking at the disk.
+    expect(app(DocLibrary::class)->index())->toHaveCount(1);
+
+    Livewire::test('docs.index');
+
+    expect(app(DocLibrary::class)->index()->pluck('title')->all())->toContain('From the host');
+});
+
+test('MeasureLibrary checks the documents index against the folder', function () {
+    $this->library->create('gc', 'Walkthrough', '', [], "# W\n");
+    Storage::disk('docs')->put('gc/from-the-host.md', "---\ntitle: From the host\n---\n# Hello\n");
+
+    (new MeasureLibrary)->handle();
+
+    expect(app(DocLibrary::class)->index())->toHaveCount(2);
 });
