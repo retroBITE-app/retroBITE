@@ -98,6 +98,31 @@ it('proves a key against the disc, and refuses one that does not fit', function 
         ->and($disc?->keyMatches('not a key'))->toBeFalse();
 });
 
+it('will not read a PARAM.SFO that claims to be enormous', function () {
+    $path = Ps3Image::write($this->root.'/huge.iso', null);
+    $image = (string) file_get_contents($path);
+    // PARAM.SFO's size, 10 bytes into its directory record (the name starts at 33).
+    $record = (int) strpos($image, 'PARAM.SFO;1') - 33;
+    file_put_contents($path, substr_replace($image, pack('V', 0xFFFFFFFF), $record + 10, 4));
+
+    expect(Ps3Disc::open($path)?->titleId())->toBeNull();
+});
+
+it('stops at a directory record that runs past the end of the directory', function () {
+    $path = Ps3Image::write($this->root.'/damaged.iso', null);
+    $image = (string) file_get_contents($path);
+    $record = (int) strpos($image, 'PARAM.SFO;1') - 33;
+    $sector = $record - $record % 2048;
+    // PARAM.SFO renamed and stretched to end 8 bytes short of the sector, where
+    // a record begins that has no room for its name.
+    $image = substr_replace($image, 'PARAM.SFX;1', $record + 33, 11);
+    $image = substr_replace($image, chr($sector + 2040 - $record), $record, 1);
+    $image = substr_replace($image, chr(0x40), $sector + 2040, 1);
+    file_put_contents($path, $image);
+
+    expect(Ps3Disc::open($path)?->titleId())->toBeNull();
+});
+
 it('cannot tell anything from what is not a PS3 disc', function () {
     File::put($this->root.'/noise.iso', random_bytes(64 * 2048));
     $noEboot = Ps3Disc::open(Ps3Image::write($this->root.'/c.iso', eboot: false));

@@ -31,6 +31,13 @@ final class Ps3Disc
 
     private const PARAM_SFO = 'PS3_GAME/PARAM.SFO';
 
+    /**
+     * The most of a PARAM.SFO read. A real one is a kilobyte or two; its size
+     * comes off the disc, and a damaged or made-up image could declare 4 GB
+     * and have the worker that inspects it read until it runs out of memory.
+     */
+    private const MAX_SFO = 65536;
+
     /** @var resource */
     private $handle;
 
@@ -99,7 +106,7 @@ final class Ps3Disc
 
         $size = (int) Arr::get($entry ?? [], 'size', 0);
 
-        if ($entry === null || $size < 20) {
+        if ($entry === null || $size < 20 || $size > self::MAX_SFO) {
             return null;
         }
 
@@ -216,6 +223,12 @@ final class Ps3Disc
                 $offset = (intdiv($offset, self::SECTOR) + 1) * self::SECTOR;
 
                 continue;
+            }
+
+            // A record is at least 34 bytes, its name after them; one that would
+            // run past what was read is a damaged directory, not a name to match.
+            if ($length < 34 || $offset + 33 > strlen($data)) {
+                return null;
             }
 
             $id = substr($data, $offset + 33, ord($data[$offset + 32]));
