@@ -6,13 +6,20 @@ namespace App\Enums;
 
 /**
  * Where one conversion is: waiting for the conversion worker, running,
- * checking what it wrote, or over one of three ways.
+ * checking what it wrote, putting it in its source's place, or over one of
+ * three ways.
+ *
+ * Swapping is the record that a replacing conversion got as far as the
+ * swap: everything it wrote was verified and placed, and the renames over
+ * the sources have begun. Recovery after a restart finishes only a swap in
+ * this state; any other, it puts back as it was.
  */
 enum ConversionStatus: string
 {
     case Queued = 'queued';
     case Running = 'running';
     case Verifying = 'verifying';
+    case Swapping = 'swapping';
     case Done = 'done';
     case Failed = 'failed';
     case Cancelled = 'cancelled';
@@ -23,6 +30,7 @@ enum ConversionStatus: string
             self::Queued => __('Queued'),
             self::Running => __('Running'),
             self::Verifying => __('Verifying'),
+            self::Swapping => __('Replacing'),
             self::Done => __('Done'),
             self::Failed => __('Failed'),
             self::Cancelled => __('Cancelled'),
@@ -38,13 +46,16 @@ enum ConversionStatus: string
     /** A worker holds it right now. */
     public function active(): bool
     {
-        return in_array($this, [self::Running, self::Verifying], true);
+        return in_array($this, [self::Running, self::Verifying, self::Swapping], true);
     }
 
-    /** Whether asking it to stop still means anything. */
+    /**
+     * Whether asking it to stop still means anything. Not mid-swap: a few
+     * renames, no tool to stop, and half a set swapped is worse than all of it.
+     */
     public function cancellable(): bool
     {
-        return ! $this->finished();
+        return ! $this->finished() && $this !== self::Swapping;
     }
 
     /**

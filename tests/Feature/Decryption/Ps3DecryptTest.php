@@ -308,7 +308,7 @@ it('after a restart, finishes a swap whose rename had already landed', function 
     config()->set('decrypters.tools.ps3dec.path', '/bin/true');
     $file = ps3Game();
     $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
-    $conversion->update(['status' => ConversionStatus::Running]);
+    $conversion->update(['status' => ConversionStatus::Swapping]);
     // The rename landed, then the worker died: decrypted image in place, row and key not yet seen to.
     Ps3Image::write($this->root.'/ps3/Game (USA).iso', null);
 
@@ -318,6 +318,44 @@ it('after a restart, finishes a swap whose rename had already landed', function 
         ->and($conversion->fresh()?->log)->toContain('Finished after a restart')
         ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeFalse()
         ->and($file->fresh()?->meta?->encrypted)->toBeNull();
+});
+
+it('after a restart, renames in a disc still parked when the swap had begun', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $file = ps3Game();
+    $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
+    $conversion->update(['status' => ConversionStatus::Swapping]);
+    // Verified and placed, then the worker died before the rename.
+    Ps3Image::write($this->root.'/ps3/.Game (USA).iso.retrobite-replacing', null);
+
+    app(ConversionRunner::class)->abandon($conversion);
+
+    expect($conversion->fresh()?->status)->toBe(ConversionStatus::Done)
+        ->and(File::glob($this->root.'/ps3/.*retrobite-replacing'))->toBe([])
+        ->and(Ps3Disc::open($this->root.'/ps3/Game (USA).iso')?->encrypted())->toBeFalse()
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeFalse();
+});
+
+it('after a restart before the swap, never takes a source that reads as decrypted for one that was swapped', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $file = ps3Game();
+    $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
+    $conversion->update(['status' => ConversionStatus::Running]);
+    // Decrypted some other way while it waited; nothing of this run was placed.
+    Ps3Image::write($this->root.'/ps3/Game (USA).iso', null);
+
+    app(ConversionRunner::class)->abandon($conversion);
+
+    expect($conversion->fresh()?->status)->toBe(ConversionStatus::Failed)
+        ->and($conversion->fresh()?->failure)->toBe(ConversionFailure::Interrupted)
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeTrue()
+        ->and($file->fresh()?->meta?->license_id)->toBe('BLUS30538');
+});
+
+it('cannot be cancelled in the middle of a swap', function () {
+    expect(ConversionStatus::Swapping->cancellable())->toBeFalse()
+        ->and(ConversionStatus::Swapping->active())->toBeTrue()
+        ->and(ConversionStatus::Running->cancellable())->toBeTrue();
 });
 
 it('refuses to queue a file that already has a conversion waiting or running', function () {

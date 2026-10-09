@@ -540,6 +540,8 @@ final class ConversionRunner
         }
 
         if ($converter->replacesSource()) {
+            // On record before the first rename, so recovery knows a swap began.
+            $conversion->update(['status' => ConversionStatus::Swapping]);
             $this->swap($console, $converter, $set, $plan);
         }
 
@@ -607,8 +609,15 @@ final class ConversionRunner
     }
 
     /**
-     * A replacing conversion the worker died in: a parked output is removed (the
-     * source never moved), a landed rename is finished. Whether it is now done.
+     * A replacing conversion the worker died in. Whether it is now done.
+     *
+     * Only a conversion that reached the swap (ConversionStatus::Swapping) is
+     * finished: everything it wrote had been verified and placed, so a disc
+     * still parked is renamed in, and one whose rename had landed is brought
+     * up to date. Any earlier, nothing had touched the sources; parked outputs
+     * are removed and the sources, their facts and their key files are left
+     * as they were — a source that merely reads as converted must not be taken
+     * for a swap that happened.
      */
     private function recoverSwap(Conversion $conversion): bool
     {
@@ -621,22 +630,26 @@ final class ConversionRunner
             return false;
         }
 
-        $landed = true;
+        $swapping = $conversion->status === ConversionStatus::Swapping;
+        $landed = $swapping;
 
         foreach ($set->discs as $disc) {
             $final = self::join($set->directory, (string) Arr::first($converter->outputsFor($disc)));
             $parked = self::parked($final);
 
             try {
-                if ($this->paths->exists($console, $parked)) {
-                    $this->discard($console, $parked);
-                    $this->line(__('Removed the unfinished :path; :source is as it was.', ['path' => $parked, 'source' => $final]));
-                    $landed = false;
+                if (! $swapping) {
+                    if ($this->paths->exists($console, $parked)) {
+                        $this->discard($console, $parked);
+                        $this->line(__('Removed the unfinished :path; :source is as it was.', ['path' => $parked, 'source' => $final]));
+                    }
 
                     continue;
                 }
 
-                if ($converter->confirm($this->paths->absolute($console, $final)) !== null) {
+                if ($this->paths->exists($console, $parked)) {
+                    $this->paths->replace($console, $parked, $final);
+                } elseif ($converter->confirm($this->paths->absolute($console, $final)) !== null) {
                     $landed = false;
 
                     continue;

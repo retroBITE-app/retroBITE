@@ -56,8 +56,8 @@ new class extends Component
                 'failure', 'cancel_requested_at', 'started_at', 'finished_at',
             ])
             ->selectRaw('log is not null as has_log')
-            ->orderByRaw('case when status in (?, ?) then 0 when status = ? then 1 else 2 end', [
-                ConversionStatus::Running->value, ConversionStatus::Verifying->value, ConversionStatus::Queued->value,
+            ->orderByRaw('case when status in (?, ?, ?) then 0 when status = ? then 1 else 2 end', [
+                ConversionStatus::Running->value, ConversionStatus::Verifying->value, ConversionStatus::Swapping->value, ConversionStatus::Queued->value,
             ])
             ->orderByDesc('id')
             ->limit(100)
