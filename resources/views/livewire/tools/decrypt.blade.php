@@ -88,17 +88,18 @@ new #[Title('Decrypt')] class extends Component
         }
 
         $keys = app(DiscKeys::class);
-
-        return GameFile::query()
+        $files = GameFile::query()
             ->present()
             ->onConsole($this->console->key)
             ->whereIn('extension', $this->converter->from())
             ->with(['game', 'meta'])
             ->orderBy('path')
-            ->get()
-            ->map(function (GameFile $file) use ($keys): array {
-                return ['file' => $file, 'state' => $keys->state($file)];
-            });
+            ->get();
+        $decrypting = $keys->decrypting($files->modelKeys());
+
+        return $files->map(function (GameFile $file) use ($keys, $decrypting): array {
+            return ['file' => $file, 'state' => $keys->state($file, in_array($file->id, $decrypting, true))];
+        });
     }
 
     /**
@@ -405,7 +406,7 @@ new #[Title('Decrypt')] class extends Component
                         <div class="flex w-24 shrink-0 justify-end">
                             @if ($state === DecryptState::Unchecked)
                                 <flux:button size="xs" variant="ghost" wire:click="check({{ $file->id }})">{{ __('Check') }}</flux:button>
-                            @elseif ($state !== DecryptState::Decrypted)
+                            @elseif (in_array($state, [DecryptState::NeedsKey, DecryptState::Ready], true))
                                 <flux:button size="xs" variant="ghost" icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $file->id }} })">
                                     {{ $state === DecryptState::Ready ? __('Change key') : __('Add key') }}
                                 </flux:button>

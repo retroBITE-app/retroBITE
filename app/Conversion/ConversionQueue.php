@@ -186,17 +186,38 @@ final class ConversionQueue
     }
 
     /**
+     * The conversions waiting or running on each of these files, by file id: what
+     * the queue refuses to double up, and what a page shows as under way.
+     *
+     * @param  iterable<int>  $fileIds
+     * @return array<int, list<string>> file id => converter keys
+     */
+    public function waiting(iterable $fileIds): array
+    {
+        $waiting = [];
+
+        $conversions = Conversion::query()
+            ->whereIn('game_file_id', collect($fileIds)->all())
+            ->whereNotIn('status', ConversionStatus::finishedCases())
+            ->get(['game_file_id', 'converter']);
+
+        foreach ($conversions as $conversion) {
+            $waiting[(int) $conversion->game_file_id][] = $conversion->converter;
+        }
+
+        return $waiting;
+    }
+
+    /**
      * Whether the file already has this conversion waiting or running — a double
      * click — or anything at all beside one that replaces the file.
      */
     private function clashes(SourceSet $set, Converter $converter): bool
     {
-        $waiting = Conversion::query()
-            ->where('game_file_id', $set->file->id)
-            ->whereNotIn('status', ConversionStatus::finishedCases())
-            ->pluck('converter');
+        /** @var list<string> $waiting */
+        $waiting = Arr::get($this->waiting([$set->file->id]), $set->file->id, []);
 
-        return $waiting->contains(function (string $key) use ($converter): bool {
+        return collect($waiting)->contains(function (string $key) use ($converter): bool {
             return $key === $converter->key()
                 || $converter->replacesSource()
                 || (Converters::make($key)?->replacesSource() ?? false);

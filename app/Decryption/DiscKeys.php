@@ -179,12 +179,36 @@ final class DiscKeys
         return $key;
     }
 
-    /** Where a library file stands: what the toolbox read of it, and whether its key is here. */
-    public function state(GameFile $file): DecryptState
+    /**
+     * Where a library file stands: queued, what the toolbox read of it, and whether its
+     * key is here. $decrypting from decrypting(), asked once for a whole list.
+     */
+    public function state(GameFile $file, bool $decrypting = false): DecryptState
     {
         $encrypted = $file->meta?->encrypted;
 
-        return DecryptState::for($encrypted, $encrypted === true && $this->onDisk($file) !== null);
+        return DecryptState::for($encrypted, $encrypted === true && $this->onDisk($file) !== null, $decrypting);
+    }
+
+    /**
+     * Which of these files have a decryption waiting or running, in one query.
+     *
+     * @param  iterable<int>  $fileIds
+     * @return list<int>
+     */
+    public function decrypting(iterable $fileIds): array
+    {
+        return array_values(collect($this->queue->waiting($fileIds))
+            ->filter(function (array $converters): bool {
+                return collect($converters)->contains(function (string $key): bool {
+                    return Converters::make($key)?->page() === Converter::PAGE_DECRYPT;
+                });
+            })
+            ->keys()
+            ->map(function (int|string $id): int {
+                return (int) $id;
+            })
+            ->all());
     }
 
     /**

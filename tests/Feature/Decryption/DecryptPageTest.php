@@ -223,3 +223,28 @@ it('lists its own tools under Tool paths, and only those', function () {
         ->and(Tools::onPage(null))->not->toContain('ps3dec')
         ->and(Tools::onPage(null))->toContain('chdman', 'extract-xiso');
 });
+
+it('shows an image with a decryption under way as Decrypting, with nothing left to press', function () {
+    $file = ps3Image('Keyed', DecryptState::Ready);
+    Livewire::test('decrypt.confirm-modal')->call('open', [$file->id])->call('decrypt');
+
+    Livewire::test('tools.decrypt')
+        ->assertSee('Decrypting')
+        ->assertDontSee('Change key')
+        ->call('toggle', $file->id)
+        ->assertSet('picked', []);
+
+    Livewire::test('games.show', ['game' => $file->game])
+        ->assertSee('Decrypting')
+        ->assertDontSeeHtml("decrypt-confirm', { fileIds: [{$file->id}] }");
+});
+
+it('says when an image is already being decrypted, and offers nothing to press when all are', function () {
+    $file = ps3Image('Keyed', DecryptState::Ready);
+    Livewire::test('decrypt.confirm-modal')->call('open', [$file->id])->call('decrypt');
+
+    Livewire::test('decrypt.confirm-modal')
+        ->call('open', [$file->id])
+        ->assertSee('One of these is already being decrypted')
+        ->assertSet('decrypting', [$file->id]);
+});

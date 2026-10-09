@@ -462,7 +462,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         Flux::toast(variant: 'success', text: __('Deleted :file.', ['file' => (string) $filename]));
     }
 
-    /** Sent by the key and decrypt modals: the image's state has moved. */
+    /** Sent by the key and decrypt modals, and the conversion queue: the image's state has moved. */
     #[On('disc-key-saved')]
     #[On('decrypt-queued')]
     public function discKeySaved(): void
@@ -683,9 +683,10 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     public function fileRows(): array
     {
         $keys = app(DiscKeys::class);
+        $decrypting = $keys->decrypting($this->files->modelKeys());
 
         return $this->files
-            ->map(function (GameFile $file) use ($keys): array {
+            ->map(function (GameFile $file) use ($keys, $decrypting): array {
                 $decryptable = $this->decryptable($file);
 
                 return [
@@ -717,7 +718,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     // An image something decrypts: its encryption and key, as
                     // Tools → Decrypt shows them. The key is shown to hand on,
                     // and is still known once decrypting has removed the .dkey.
-                    'decrypt' => $decryptable && $file->isPresent() ? $keys->state($file) : null,
+                    'decrypt' => $decryptable && $file->isPresent() ? $keys->state($file, in_array($file->id, $decrypting, true)) : null,
                     'discKey' => $decryptable ? $keys->known($file) : null,
                 ];
             })
@@ -1497,6 +1498,19 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             destroy() { this.stop?.() },
         }"
     ></div>
+
+    {{-- A decryption of one of its files starting or ending, so its badge and
+         buttons follow the queue. --}}
+    @if (collect($this->fileRows)->whereNotNull('decrypt')->isNotEmpty())
+        <div
+            hidden
+            x-data="{
+                stop: null,
+                init() { this.stop = live.system('conversion', () => this.$wire.discKeySaved()) },
+                destroy() { this.stop?.() },
+            }"
+        ></div>
+    @endif
 
     {{-- Hero: the backdrop runs to the edges and the detail block is pulled up
          over its lower half, so the poster and title sit on the art.

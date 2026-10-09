@@ -15,10 +15,13 @@
         'border-accent-tint/55 text-accent' => $state === DecryptState::Ready,
         'border-line-strong text-fg-muted' => $state === DecryptState::Decrypted,
         'border-dashed border-line-strong text-fg-faint' => $state === DecryptState::Unchecked,
+        'animate-pulse border-accent-tint/55 text-accent' => $state === DecryptState::Decrypting,
     ]) }}
 >
     @if ($state === DecryptState::Decrypted)
         <flux:icon.lock-open variant="micro" class="size-3" />
+    @elseif ($state === DecryptState::Decrypting)
+        <flux:icon.arrow-path variant="micro" class="size-3" />
     @elseif ($state !== DecryptState::Unchecked)
         <flux:icon.lock-closed variant="micro" class="size-3" />
     @endif

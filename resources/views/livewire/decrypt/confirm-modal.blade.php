@@ -1,6 +1,7 @@
 <?php
 
 use App\Decryption\DiscKeys;
+use App\Enums\DecryptState;
 use App\Models\GameFile;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
@@ -39,6 +40,17 @@ new class extends Component
     }
 
     /**
+     * The asked-about images already waiting or running in the decrypt queue, by id.
+     *
+     * @return list<int>
+     */
+    #[Computed]
+    public function decrypting(): array
+    {
+        return app(DiscKeys::class)->decrypting($this->fileIds);
+    }
+
+    /**
      * Opened for a new set of images.
      *
      * @param  array<int, int|string>  $fileIds
@@ -53,7 +65,7 @@ new class extends Component
             ->values()
             ->all();
 
-        unset($this->files);
+        unset($this->files, $this->decrypting);
     }
 
     /** Queue them, once: the modal closes before a second click can land. */
@@ -86,7 +98,12 @@ new class extends Component
             @if ($this->files->isNotEmpty())
                 <ul class="space-y-1">
                     @foreach ($this->files->take($this::LISTED) as $file)
-                        <li wire:key="confirm-{{ $file->id }}" class="truncate font-mono text-xs text-fg-soft">{{ $file->filename }}</li>
+                        <li wire:key="confirm-{{ $file->id }}" class="flex items-center gap-2">
+                            <span class="min-w-0 truncate font-mono text-xs text-fg-soft">{{ $file->filename }}</span>
+                            @if (in_array($file->id, $this->decrypting, true))
+                                <x-decrypt.state :state="DecryptState::Decrypting" />
+                            @endif
+                        </li>
                     @endforeach
                     @if ($this->files->count() > $this::LISTED)
                         <li class="text-xs text-fg-faint">{{ __('and :count more', ['count' => $this->files->count() - $this::LISTED]) }}</li>
@@ -98,13 +115,16 @@ new class extends Component
                 <p>{{ __('The decrypted image replaces the encrypted one, under the same name. The encrypted image is gone afterwards.') }}</p>
                 <p>{{ __('The .dkey beside it is deleted too: left there, ps3netsrv would decrypt the decrypted image again. The key itself stays on record and is shown on the game\'s page.') }}</p>
                 <p class="text-warn">{{ __('This cannot be undone.') }}</p>
+                @if ($this->decrypting !== [])
+                    <p>{{ trans_choice('One of these is already being decrypted and is left as it is.|:count of these are already being decrypted and are left as they are.', count($this->decrypting), ['count' => count($this->decrypting)]) }}</p>
+                @endif
             </div>
 
             <div class="flex justify-end gap-2">
                 <flux:modal.close>
                     <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
                 </flux:modal.close>
-                <flux:button variant="danger" icon="lock-open" wire:click="decrypt" wire:loading.attr="disabled" :disabled="$this->files->isEmpty()">
+                <flux:button variant="danger" icon="lock-open" wire:click="decrypt" wire:loading.attr="disabled" :disabled="$this->files->count() === count($this->decrypting)">
                     {{ __('Decrypt') }}
                 </flux:button>
             </div>
