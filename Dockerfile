@@ -3,6 +3,12 @@
 # releases carry no arm64 Linux binary. Makefile.linux links it statically
 # against the PolarSSL it bundles — upstream's own recommendation over the
 # meson build — so the runtime stage needs no libraries for it.
+#
+# Read-only: upstream's own READ_ONLY switch (what it ships as ps3netsrv_ro)
+# leaves out create, write, delete, mkdir and rmdir, so a server with no login
+# can serve the library but never change it. And patched: its guard against
+# ".." checks only the first "/.." in a path, so "/PS3ISO/..x/../.." got past
+# it; the patch checks every one.
 FROM debian:bookworm-slim AS ps3netsrv
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -12,10 +18,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     git \
     make \
+    patch \
     && rm -rf /var/lib/apt/lists/*
 
 ARG PS3NETSRV_TAG=20260913
+COPY patches/ps3netsrv-dotdot.patch /src/ps3netsrv-dotdot.patch
 RUN git clone --depth 1 --branch "$PS3NETSRV_TAG" https://github.com/aldostools/ps3netsrv.git /src/ps3netsrv \
+    && patch -d /src/ps3netsrv -p1 < /src/ps3netsrv-dotdot.patch \
+    && sed -i -e 's/^#CFLAGS += -DREAD_ONLY/CFLAGS += -DREAD_ONLY/' -e 's/^#CPPFLAGS += -DREAD_ONLY/CPPFLAGS += -DREAD_ONLY/' /src/ps3netsrv/Makefile.linux \
+    && grep -q '^CFLAGS += -DREAD_ONLY' /src/ps3netsrv/Makefile.linux \
     && make -C /src/ps3netsrv -f Makefile.linux BUILD_DATE="$PS3NETSRV_TAG" \
     && strip /src/ps3netsrv/ps3netsrv
 
@@ -56,6 +67,7 @@ COPY docker/entrypoint.sh /entrypoint.sh
 COPY --from=ps3netsrv /src/ps3netsrv/ps3netsrv /usr/local/bin/ps3netsrv
 
 # A dynamic ps3netsrv would start here and fail at runtime on a missing
+# library, and a writable one would let anyone on the network change the
 # library, so refuse the build instead.
 #
 # ps3netsrv's root is a directory of the image's own. webMAN MOD looks for
@@ -64,6 +76,7 @@ COPY --from=ps3netsrv /src/ps3netsrv/ps3netsrv /usr/local/bin/ps3netsrv
 # nothing is created inside /games for webMAN's sake.
 RUN chmod +x /entrypoint.sh \
     && ldd /usr/local/bin/ps3netsrv 2>&1 | grep -q 'not a dynamic executable' \
+    && grep -q 'READ-ONLY' /usr/local/bin/ps3netsrv \
     && mkdir -p /srv/ps3netsrv
 
 # Expose ports

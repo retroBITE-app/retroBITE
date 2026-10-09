@@ -162,7 +162,7 @@ if [ "$PS3NETSRV" = true ]; then
     done
 
     if [ -z "$PS3NETSRV_WHITELIST" ]; then
-        echo "WARNING: ps3netsrv has no authentication, and anyone on the network can read and write${PS3NETSRV_SERVES:- nothing} through it. Set PS3NETSRV_WHITELIST (e.g. 192.168.1.*) to limit who connects." >&2
+        echo "WARNING: ps3netsrv has no authentication, and anyone on the network can read${PS3NETSRV_SERVES:- nothing} through it (read-only: nothing can be changed). Set PS3NETSRV_WHITELIST (e.g. 192.168.1.*) to limit who connects." >&2
     fi
 fi
 
@@ -190,9 +190,9 @@ declare -A COMMANDS=(
 )
 declare -A PIDS=()
 
-# ps3netsrv as the share account rather than root: the protocol has no login
-# and lets a client create and delete files, so it gets no more than SMB and
-# FTP do. Its root is the image's /srv/ps3netsrv, holding the links made
+# ps3netsrv as the share account rather than root: the protocol has no login,
+# and though this build is read-only (see the Dockerfile), it gets no more
+# than SMB and FTP do. Its root is the image's /srv/ps3netsrv, holding the links made
 # above. A function, not a COMMANDS string, because those are word-split
 # unquoted and a whitelist such as 192.168.1.* would be globbed. exec keeps
 # the pid start_service records on ps3netsrv itself.

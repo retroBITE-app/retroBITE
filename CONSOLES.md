@@ -70,7 +70,7 @@ webMAN MOD streams games straight from retroBITE over ps3netsrv, without copying
    - Port: `38008`
 5. Save, then refresh the XMB: the games appear under webMAN's PS3 ISO list
 
-ps3netsrv has no username or password. Set `PS3NETSRV_WHITELIST` to your PS3's address (or your network, e.g. `192.168.50.*`) so nobody else can reach the library through it, or `PS3NETSRV=false` to turn it off.
+ps3netsrv is read-only — webMAN can list and play, but nothing can be copied to, changed in or deleted from the library through it — and has no username or password. Set `PS3NETSRV_WHITELIST` to your PS3's address (or your network, e.g. `192.168.50.*`) so nobody else can read the library through it, or `PS3NETSRV=false` to turn it off.
 
 ### PS2 and PS1 games
 

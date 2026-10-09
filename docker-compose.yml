@@ -123,8 +123,8 @@ services:
       GAME_FOLDERS: ${GAME_FOLDERS:-}
       SMB_SHARES: ${SMB_SHARES:-}
       # ps3netsrv on port 38008, serving the PS3, PS2 and PS1 folders to
-      # webMAN MOD as its PS3ISO, PS2ISO and PSXISO lists. It has no login:
-      # the whitelist (such as 192.168.1.*) limits who connects.
+      # webMAN MOD as its PS3ISO, PS2ISO and PSXISO lists. Read-only, and with
+      # no login: the whitelist (such as 192.168.1.*) limits who can read it.
       PS3NETSRV: ${PS3NETSRV:-true}
       PS3NETSRV_WHITELIST: ${PS3NETSRV_WHITELIST:-}
       PS3NETSRV_FOLDERS: ${PS3NETSRV_FOLDERS:-PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx}
