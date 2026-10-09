@@ -163,6 +163,10 @@ final class ConversionQueue
             throw ConversionFailed::because(ConversionFailure::Unsupported, $converterKey);
         }
 
+        if ($this->clashes($set, $converter)) {
+            throw ConversionFailed::because(ConversionFailure::AlreadyQueued, $set->file->path);
+        }
+
         $conversion = Conversion::query()->create([
             'console' => $set->console->key,
             'converter' => $converter->key(),
@@ -179,6 +183,24 @@ final class ConversionQueue
         RunConversion::dispatch($conversion->id);
 
         return $conversion;
+    }
+
+    /**
+     * Whether the file already has this conversion waiting or running — a double
+     * click — or anything at all beside one that replaces the file.
+     */
+    private function clashes(SourceSet $set, Converter $converter): bool
+    {
+        $waiting = Conversion::query()
+            ->where('game_file_id', $set->file->id)
+            ->whereNotIn('status', ConversionStatus::finishedCases())
+            ->pluck('converter');
+
+        return $waiting->contains(function (string $key) use ($converter): bool {
+            return $key === $converter->key()
+                || $converter->replacesSource()
+                || (Converters::make($key)?->replacesSource() ?? false);
+        });
     }
 
     /**

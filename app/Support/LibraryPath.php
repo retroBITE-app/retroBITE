@@ -270,6 +270,27 @@ final class LibraryPath
     }
 
     /**
+     * Put one plain file in another's place in a single rename, so there is no
+     * moment with neither: the one write over a library file, by its replacement.
+     *
+     * @param  string  $from  relative to the CONSOLE's folder
+     * @param  string  $to  relative to the CONSOLE's folder
+     *
+     * @throws LibraryPathException
+     */
+    public function replace(Console $console, string $from, string $to): string
+    {
+        $source = $this->plainFile($console, $from);
+        $target = $this->plainFile($console, $to);
+
+        if (! File::move($source, $target)) {
+            throw LibraryPathException::notMoved($this->within($console, $to));
+        }
+
+        return $this->within($console, $to);
+    }
+
+    /**
      * Delete one file inside a console's folder. Never a directory, never a link.
      *
      * @param  string  $relative  relative to the CONSOLE's folder

@@ -55,8 +55,8 @@ use Throwable;
  *    own verifier checks it;
  * 5. only then does anything reach the console's folder, by FileTransferJob,
  *    which renames rather than copies and never writes over a file — for a
- *    converter that replaces its source, under a name of its own first, then
- *    swapped in for the source once the source is gone;
+ *    converter that replaces its source, under a hidden name of its own first,
+ *    then renamed over the source in one step (LibraryPath::replace());
  * 6. with keep-source off, the sources go — never before the output is in;
  * 7. a set gets a playlist of the new discs, and the console is scanned.
  *
@@ -225,6 +225,15 @@ final class ConversionRunner
         }
 
         $this->log = (string) $conversion->log;
+
+        if ($this->recoverSwap($conversion)) {
+            $this->line(__('Finished after a restart: the output had already taken its source\'s place.'));
+            $this->finish($conversion, ConversionStatus::Done);
+            ScanConsoleFolder::dispatch($conversion->console);
+
+            return;
+        }
+
         $this->line(__('Interrupted.'));
         $this->finish($conversion, ConversionStatus::Failed, ConversionFailure::Interrupted);
     }
@@ -313,6 +322,12 @@ final class ConversionRunner
                 // it; the name it is parked under on the way in has to be.
                 $replacing = $converter->replacesSource() && $this->isSource($console, $disc, $relative);
                 $check = $replacing ? self::parked($relative) : $relative;
+
+                // Left by a run that died before its rename: the source never moved,
+                // and the queue lets one conversion of a file run at a time.
+                if ($replacing && $this->taken($console, $check)) {
+                    $this->discard($console, $check);
+                }
 
                 if (in_array($relative, $taken, true) || $this->taken($console, $check)) {
                     throw ConversionFailed::because(ConversionFailure::Exists, $check);
@@ -549,44 +564,93 @@ final class ConversionRunner
             $final = self::join($set->directory, (string) Arr::first($names));
             $parked = self::parked($final);
 
+            // One rename over the source: there is never a moment without the game's file.
             try {
-                $this->paths->delete($console, $final);
+                $this->paths->replace($console, $parked, $final);
             } catch (LibraryPathException $e) {
                 $this->discard($console, $parked);
 
                 throw ConversionFailed::because(ConversionFailure::Unwritable, $final, $e);
             }
 
-            try {
-                $this->paths->relocate($console, $parked, $final);
-            } catch (LibraryPathException $e) {
-                $this->line(__('The output is in the library as :path; the source is gone.', ['path' => $parked]));
+            $this->finishSwap($console, $converter, $disc, $final);
+        }
+    }
 
-                throw ConversionFailed::because(ConversionFailure::Unwritable, $final, $e);
+    /**
+     * After a swap's rename: the row's size and stale facts brought up to date,
+     * the source's companions gone. Safe to run twice, as recovery may.
+     */
+    private function finishSwap(Console $console, Converter $converter, Disc $disc, string $final): void
+    {
+        $disc->file->update([
+            'size_bytes' => (int) filesize($this->paths->absolute($console, $final)),
+            ...array_fill_keys(self::CONTENT_FACTS, null),
+        ]);
+        $disc->file->meta()->update(array_fill_keys(self::META_FACTS, null));
+        $this->line(__('Replaced :path', ['path' => $final]));
+
+        foreach ($converter->companions($disc, $this->paths->root()) as $companion) {
+            $relative = $this->paths->consoleRelative($console, $companion);
+
+            if ($relative === null || ! $this->paths->exists($console, $relative)) {
+                continue;
             }
 
-            $disc->file->update([
-                'size_bytes' => (int) filesize($this->paths->absolute($console, $final)),
-                ...array_fill_keys(self::CONTENT_FACTS, null),
-            ]);
-            $disc->file->meta()->update(array_fill_keys(self::META_FACTS, null));
-            $this->line(__('Replaced :path', ['path' => $final]));
+            try {
+                $this->paths->delete($console, $relative);
+                $this->line(__('Deleted :path', ['path' => $relative]));
+            } catch (LibraryPathException) {
+                $this->line(__('Kept :path: it could not be deleted.', ['path' => $relative]));
+            }
+        }
+    }
 
-            foreach ($converter->companions($disc, $this->paths->root()) as $companion) {
-                $relative = $this->paths->consoleRelative($console, $companion);
+    /**
+     * A replacing conversion the worker died in: a parked output is removed (the
+     * source never moved), a landed rename is finished. Whether it is now done.
+     */
+    private function recoverSwap(Conversion $conversion): bool
+    {
+        $console = Console::tryFrom($conversion->console);
+        $converter = Converters::make($conversion->converter);
+        $file = $conversion->game_file_id !== null ? GameFile::query()->with('game')->find($conversion->game_file_id) : null;
+        $set = $file !== null ? SourceSet::fromFile($file) : null;
 
-                if ($relative === null) {
+        if ($console === null || $converter === null || $set === null || ! $converter->replacesSource()) {
+            return false;
+        }
+
+        $landed = true;
+
+        foreach ($set->discs as $disc) {
+            $final = self::join($set->directory, (string) Arr::first($converter->outputsFor($disc)));
+            $parked = self::parked($final);
+
+            try {
+                if ($this->paths->exists($console, $parked)) {
+                    $this->discard($console, $parked);
+                    $this->line(__('Removed the unfinished :path; :source is as it was.', ['path' => $parked, 'source' => $final]));
+                    $landed = false;
+
                     continue;
                 }
 
-                try {
-                    $this->paths->delete($console, $relative);
-                    $this->line(__('Deleted :path', ['path' => $relative]));
-                } catch (LibraryPathException) {
-                    $this->line(__('Kept :path: it could not be deleted.', ['path' => $relative]));
+                if ($converter->confirm($this->paths->absolute($console, $final)) !== null) {
+                    $landed = false;
+
+                    continue;
                 }
+            } catch (LibraryPathException) {
+                $landed = false;
+
+                continue;
             }
+
+            $this->finishSwap($console, $converter, $disc, $final);
         }
+
+        return $landed;
     }
 
     /** Remove a parked output that will not be swapped in after all. */

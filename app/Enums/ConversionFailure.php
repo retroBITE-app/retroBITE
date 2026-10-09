@@ -23,6 +23,7 @@ enum ConversionFailure: string
     case TimedOut = 'timed_out';
     case Unwritable = 'unwritable';
     case Interrupted = 'interrupted';
+    case AlreadyQueued = 'already_queued';
 
     public function label(): string
     {
@@ -37,6 +38,7 @@ enum ConversionFailure: string
             self::TimedOut => __('The conversion took longer than it is allowed and was stopped.'),
             self::Unwritable => __('The output could not be put into the console\'s folder.'),
             self::Interrupted => __('Interrupted: the worker stopped while this was running.'),
+            self::AlreadyQueued => __('This file is already in the queue.'),
         };
     }
 }

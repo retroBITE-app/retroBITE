@@ -9,6 +9,8 @@ use App\Decryption\DiscKeys;
 use App\Decryption\Ps3Disc;
 use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
+use App\Exceptions\ConversionFailed;
+use App\Exceptions\LibraryPathException;
 use App\Jobs\InspectGameFile;
 use App\Jobs\RunConversion;
 use App\Models\ConsoleSourceFolder;
@@ -16,6 +18,7 @@ use App\Models\Conversion;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Console;
+use App\Support\LibraryPath;
 use Illuminate\Process\FakeProcessDescription;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Arr;
@@ -252,4 +255,80 @@ it('knows what decrypts a file: the console\'s converter on Tools → Decrypt th
         ->and($keys->decrypterFor(new Console('ps2'), $iso))->toBeNull()
         ->and($keys->fits($iso, Ps3Image::KEY))->toBeTrue()
         ->and($keys->fits($iso, str_repeat('0', 32)))->toBeFalse();
+});
+
+it('puts a file in another\'s place in one rename, through the gate only', function () {
+    $gate = app(LibraryPath::class);
+    $ps3 = new Console('ps3');
+    File::put($this->root.'/ps3/old.iso', 'old');
+    File::put($this->root.'/ps3/.new', 'new');
+
+    expect($gate->replace($ps3, '.new', 'old.iso'))->toBe('ps3/old.iso')
+        ->and(File::get($this->root.'/ps3/old.iso'))->toBe('new')
+        ->and(File::exists($this->root.'/ps3/.new'))->toBeFalse()
+        ->and(function () use ($gate, $ps3): void {
+            $gate->replace($ps3, 'missing.iso', 'old.iso');
+        })->toThrow(LibraryPathException::class)
+        ->and(function () use ($gate, $ps3): void {
+            $gate->replace($ps3, 'old.iso', '../ps2/other.iso');
+        })->toThrow(LibraryPathException::class);
+});
+
+it('clears a parked image a dead run left behind, rather than refusing every retry', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    fakePs3dec();
+    $file = ps3Game();
+    File::put($this->root.'/ps3/.Game (USA).iso.retrobite-replacing', 'half a decrypt');
+
+    $conversion = decryptPs3($file);
+
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and(File::glob($this->root.'/ps3/.*retrobite-replacing'))->toBe([])
+        ->and(Ps3Disc::open($this->root.'/ps3/Game (USA).iso')?->encrypted())->toBeFalse();
+});
+
+it('after a restart, removes a parked image and leaves the encrypted one as it was', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $file = ps3Game();
+    $before = md5_file($this->root.'/ps3/Game (USA).iso');
+    $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
+    $conversion->update(['status' => ConversionStatus::Running]);
+    Ps3Image::write($this->root.'/ps3/.Game (USA).iso.retrobite-replacing', null);
+
+    app(ConversionRunner::class)->abandon($conversion);
+
+    expect($conversion->fresh()?->status)->toBe(ConversionStatus::Failed)
+        ->and($conversion->fresh()?->failure)->toBe(ConversionFailure::Interrupted)
+        ->and(File::glob($this->root.'/ps3/.*retrobite-replacing'))->toBe([])
+        ->and(md5_file($this->root.'/ps3/Game (USA).iso'))->toBe($before)
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeTrue();
+});
+
+it('after a restart, finishes a swap whose rename had already landed', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $file = ps3Game();
+    $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
+    $conversion->update(['status' => ConversionStatus::Running]);
+    // The rename landed, then the worker died: decrypted image in place, row and key not yet seen to.
+    Ps3Image::write($this->root.'/ps3/Game (USA).iso', null);
+
+    app(ConversionRunner::class)->abandon($conversion);
+
+    expect($conversion->fresh()?->status)->toBe(ConversionStatus::Done)
+        ->and($conversion->fresh()?->log)->toContain('Finished after a restart')
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeFalse()
+        ->and($file->fresh()?->meta?->encrypted)->toBeNull();
+});
+
+it('refuses to queue a file that already has a conversion waiting or running', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $set = SourceSet::fromFile(ps3Game()->load('game'));
+    $queue = app(ConversionQueue::class);
+
+    $queue->add($set, 'ps3-decrypt', []);
+
+    expect(function () use ($queue, $set): void {
+        $queue->add($set, 'ps3-decrypt', []);
+    })->toThrow(ConversionFailed::class)
+        ->and($queue->addMany([$set], 'ps3-decrypt', []))->toMatchArray(['queued' => [], 'skipped' => 1]);
 });
