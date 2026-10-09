@@ -25,7 +25,7 @@ class DocLibrary
     /** One entry, holding both the fingerprint and the payloads it describes. */
     private const CACHE_KEY = 'docs.index';
 
-    /** Seconds. Long, because the fingerprint — not the clock — decides freshness. */
+    /** Seconds. Long, because verify() — not the clock — decides freshness. */
     private const CACHE_TTL = 86400;
 
     /**
@@ -49,6 +49,13 @@ class DocLibrary
     /**
      * Every document, newest first.
      *
+     * Read from the cache without looking at the disk: the game page, the
+     * search and every modal that lists documents call this on render, and no
+     * page reads the disk. Writes through this class drop the cache at once;
+     * a file changed outside the app is noticed by verify(), which the
+     * documents page runs as it opens and MeasureLibrary every fifteen
+     * minutes. Only an empty cache is built here.
+     *
      * @return Collection<int, DocResource>
      */
     public function index(): Collection
@@ -57,19 +64,49 @@ class DocLibrary
             return $this->memo;
         }
 
-        // Not Cache::flexible(): the index is checked against a fingerprint of
-        // the files on every read and rebuilt only when one has changed, so it
-        // is never stale. Serving it stale-while-revalidating would show a
-        // document that was just edited or deleted outside the app.
-        $files = $this->listing();
-        $fingerprint = $this->fingerprint($files);
         $cached = Cache::get(self::CACHE_KEY);
 
-        if (! is_array($cached) || Arr::get($cached, 'fingerprint') !== $fingerprint) {
-            $cached = ['fingerprint' => $fingerprint, 'docs' => $this->build($files)];
-            Cache::put(self::CACHE_KEY, $cached, self::CACHE_TTL);
-        }
+        return $this->memoise(is_array($cached) ? $cached : $this->rebuild($this->listing()));
+    }
 
+    /**
+     * Check the index against the files and rebuild it when one has changed:
+     * a document edited, added or deleted in the docs folder outside the app.
+     *
+     * Not Cache::flexible(): stale-while-revalidating would show the documents
+     * page a document that was just edited or deleted. This walks the folder
+     * and stats every document, so it belongs where someone is looking at the
+     * documents, or on a queue — never on a page that merely mentions them.
+     */
+    public function verify(): void
+    {
+        $files = $this->listing();
+        $cached = Cache::get(self::CACHE_KEY);
+
+        if (! is_array($cached) || Arr::get($cached, 'fingerprint') !== $this->fingerprint($files)) {
+            $this->memo = null;
+            $this->memoise($this->rebuild($files));
+        }
+    }
+
+    /**
+     * @param  string[]  $files
+     * @return array<string, mixed>
+     */
+    private function rebuild(array $files): array
+    {
+        $cached = ['fingerprint' => $this->fingerprint($files), 'docs' => $this->build($files)];
+        Cache::put(self::CACHE_KEY, $cached, self::CACHE_TTL);
+
+        return $cached;
+    }
+
+    /**
+     * @param  array<string, mixed>  $cached
+     * @return Collection<int, DocResource>
+     */
+    private function memoise(array $cached): Collection
+    {
         return $this->memo = Collection::make((array) Arr::get($cached, 'docs', []))
             ->map(fn (mixed $payload): ?DocResource => DocResource::make(is_array($payload) ? $payload : null))
             ->filter()
@@ -533,8 +570,9 @@ class DocLibrary
     }
 
     /**
-     * Drop the index so the next read rebuilds it. The fingerprint would notice
-     * anyway; this keeps a write and a read in the same request consistent.
+     * Drop the index so the next read rebuilds it. Every write comes through
+     * here: index() trusts the cache, so a write that skipped this would not
+     * be seen until verify() next ran.
      */
     private function forget(): self
     {

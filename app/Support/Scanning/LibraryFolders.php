@@ -50,6 +50,23 @@ final class LibraryFolders
         return self::all()->reject(fn (string $folder) => in_array($folder, $taken, true))->values();
     }
 
+    /**
+     * The names directly beneath the library root, in one read of it.
+     *
+     * Names only, nothing stat-ed: this is for telling a list of a hundred
+     * consoles which of them already have a folder, and a file that happens
+     * to carry a console's folder name is not worth a stat per entry to rule
+     * out. Anything that acts on a folder checks it with is_dir() itself.
+     *
+     * @return array<string, true> keyed by name, for isset()
+     */
+    public static function topLevel(): array
+    {
+        $names = @scandir(self::root()) ?: [];
+
+        return array_fill_keys(array_diff($names, ['.', '..']), true);
+    }
+
     public static function root(): string
     {
         return rtrim((string) config('settings.games_path'), '/');

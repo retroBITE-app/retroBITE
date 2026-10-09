@@ -42,8 +42,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Addressed downward, the way the library is walked: the consoles, one
     // console's shelf, one game on it. A game is named by its slug within its
     // console — unique there and nowhere else, so two consoles may each hold
-    // an "aladdin" — which is why {game} is bound below against the {console}
-    // beside it rather than by slug alone.
+    // an "aladdin" — which is why {game} is bound against the {console}
+    // beside it rather than by slug alone (AppServiceProvider, not here: a
+    // binding in this file is lost when the routes are cached).
     Route::livewire('consoles', 'consoles.index')->name('consoles.index');
     Route::livewire('consoles/{console}', 'games.index')
         ->where('console', '[a-z0-9\-]+')
@@ -51,10 +52,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('consoles/{console}/{game}', 'games.show')
         ->where(['console' => '[a-z0-9\-]+', 'game' => '[a-z0-9\-]+'])
         ->name('games.show');
-    Route::bind('game', fn (string $slug, Illuminate\Routing\Route $route): Game => Game::query()
-        ->where('console', $route->parameter('console'))
-        ->where('slug', $slug)
-        ->firstOrFail());
 
     // Every game, across consoles. Not in the hierarchy: it is a view of the
     // library rather than a place in it.

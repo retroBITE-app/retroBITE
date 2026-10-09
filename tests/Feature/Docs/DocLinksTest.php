@@ -53,11 +53,17 @@ test('a doc that is not there cannot be linked', function () {
     $this->links->link('gc/nothing.md', $this->game);
 })->throws(InvalidArgumentException::class);
 
-test('a link whose file was removed on the disk is dropped the next time it is read', function () {
+test('a link whose file was removed on the disk is dropped once the index has been checked', function () {
     $doc = $this->library->create('gc', 'Walkthrough', '', [], "# W\n");
     $this->links->link($doc->path, $this->game);
 
     Storage::disk('docs')->delete($doc->path);
+
+    // A page reads the index without looking at the disk, so the game page
+    // still shows the link until the documents page or MeasureLibrary checks.
+    expect(app(DocLinks::class)->docsFor($this->game))->toHaveCount(1);
+
+    app(DocLibrary::class)->verify();
 
     expect(app(DocLinks::class)->docsFor($this->game))->toBeEmpty()
         ->and(DocLink::query()->count())->toBe(0);

@@ -69,6 +69,16 @@ find /app/storage /app/bootstrap/cache \
     \( ! -user "$WEB_USER" -o ! -group "$WEB_GROUP" \) -exec chown -h "$WEB_USER:$WEB_GROUP" {} + \
     || echo "WARNING: could not hand every file under storage/ to $WEB_USER; carrying on." >&2
 
+# Config, routes, events and compiled views, cached before Reverb and the
+# workers start so every PHP process reads them: a quarter of a light
+# request's time is otherwise spent loading them again. At start, never at
+# build: the keys above and the environment exist only now. env() outside
+# config/ would read null from here on — there is none, keep it that way.
+# Not fatal: without the caches the app is slower, not broken.
+su-exec "$WEB_USER" php /app/artisan optimize \
+    || { echo "WARNING: could not cache the configuration; carrying on without." >&2
+         su-exec "$WEB_USER" php /app/artisan optimize:clear >/dev/null 2>&1 || true; }
+
 # Live updates (keys were set at the top, before anything ran PHP).
 start_reverb
 

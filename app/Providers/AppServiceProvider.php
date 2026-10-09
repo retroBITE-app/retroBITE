@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Events\SystemUpdated;
 use App\Models\AppSetting;
+use App\Models\Game;
 use App\Support\ConsoleOverrides;
 use App\Support\DocPath;
 use App\Support\LiveUpdates;
@@ -16,10 +17,12 @@ use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Events\JobReleasedAfterException;
+use Illuminate\Routing\Route as IlluminateRoute;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -47,6 +50,23 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         $this->configureRuntimeSettings();
         $this->configureProxies();
+        $this->configureRouteBindings();
+    }
+
+    /**
+     * {game} is a slug within the {console} beside it, unique there and
+     * nowhere else, so two consoles may each hold an "aladdin".
+     *
+     * Here rather than in routes/web.php: with the routes cached, as the
+     * container caches them at start, the routes files are never loaded, and
+     * a binding written there silently stops existing — every game page 404s.
+     */
+    protected function configureRouteBindings(): void
+    {
+        Route::bind('game', fn (string $slug, IlluminateRoute $route): Game => Game::query()
+            ->where('console', $route->parameter('console'))
+            ->where('slug', $slug)
+            ->firstOrFail());
     }
 
     /**

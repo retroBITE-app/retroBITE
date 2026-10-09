@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Models\ConsoleSourceFolder;
+use App\Services\DocLibrary;
 use App\Support\Console;
 use App\Support\LibraryStorage;
 use App\Support\Scanning\FolderCounts;
@@ -13,7 +14,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
 /**
- * Count the files in the library's console folders, and read the free space.
+ * Count the files in the library's console folders, read the free space, and
+ * check the documents index against the docs folder.
  *
  * The only thing that reads the library disk for the figures on the consoles
  * page, the shelf, the dashboard and the sidebar: every one of them reads what
@@ -60,6 +62,10 @@ class MeasureLibrary implements ShouldBeUnique, ShouldQueue
             foreach (ConsoleSourceFolder::consoles() as $console) {
                 self::dispatch($console->key);
             }
+
+            // The documents index, for a file changed in the docs folder
+            // outside the app: pages read the index without looking.
+            app(DocLibrary::class)->verify();
 
             return;
         }
