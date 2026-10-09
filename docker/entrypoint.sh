@@ -161,7 +161,15 @@ if [ "$PS3NETSRV" = true ]; then
         echo "→ ps3netsrv: $name is /games/$folder"
     done
 
-    if [ -z "$PS3NETSRV_WHITELIST" ]; then
+    # ps3netsrv takes one address with * for any part (192.168.1.*) and exits
+    # on anything else — a CIDR such as 192.168.1.0/24 included — which the
+    # restart loop below would then start again and again. Refused here
+    # instead, and not started at all: a whitelist that was meant to narrow
+    # who connects must not become no whitelist. SMB and FTP carry on.
+    if [ -n "$PS3NETSRV_WHITELIST" ] && ! [[ "$PS3NETSRV_WHITELIST" =~ ^([0-9]{1,3}|\*)(\.([0-9]{1,3}|\*)){3}$ ]]; then
+        echo "ERROR: PS3NETSRV_WHITELIST=$PS3NETSRV_WHITELIST is not an address ps3netsrv accepts (one address, * for any part, e.g. 192.168.1.*); ps3netsrv is not started." >&2
+        PS3NETSRV=refused
+    elif [ -z "$PS3NETSRV_WHITELIST" ]; then
         echo "WARNING: ps3netsrv has no authentication, and anyone on the network can read${PS3NETSRV_SERVES:- nothing} through it (read-only: nothing can be changed). Set PS3NETSRV_WHITELIST (e.g. 192.168.1.*) to limit who connects." >&2
     fi
 fi
@@ -189,6 +197,8 @@ declare -A COMMANDS=(
     [vsftpd]="/usr/sbin/vsftpd /etc/vsftpd.conf"
 )
 declare -A PIDS=()
+declare -A STARTED=()
+declare -A BACKOFF=()
 
 # ps3netsrv as the share account rather than root: the protocol has no login,
 # and though this build is read-only (see the Dockerfile), it gets no more
@@ -217,6 +227,7 @@ start_service() {
 
     ${COMMANDS[$name]} &
     PIDS[$name]=$!
+    STARTED[$name]=$SECONDS
 
     echo "→ started $name (pid ${PIDS[$name]})"
 }
@@ -242,13 +253,30 @@ for name in "${!COMMANDS[@]}"; do
 done
 
 # `wait -n` returns as soon as any one of them exits; whichever it was gets
-# restarted, matching supervisord's autorestart.
+# restarted, matching supervisord's autorestart. One that dies within half a
+# minute of starting — a port already taken, a bad setting — waits first, 5 s
+# doubling to a minute, rather than being started again as fast as the CPU
+# allows and filling the log. A run that lasted resets the wait. The sleep is
+# backgrounded so `docker stop` is not held up by it.
 while true; do
     wait -n || true
 
     for name in "${!PIDS[@]}"; do
         if ! kill -0 "${PIDS[$name]}" 2>/dev/null; then
-            echo "⚠ $name exited, restarting"
+            if (( SECONDS - ${STARTED[$name]} < 30 )); then
+                previous=${BACKOFF[$name]:-0}
+                BACKOFF[$name]=$(( previous == 0 ? 5 : previous * 2 ))
+                if (( BACKOFF[$name] > 60 )); then
+                    BACKOFF[$name]=60
+                fi
+                echo "⚠ $name exited within $(( SECONDS - ${STARTED[$name]} ))s, restarting in ${BACKOFF[$name]}s"
+                sleep "${BACKOFF[$name]}" &
+                wait $! || true
+            else
+                BACKOFF[$name]=0
+                echo "⚠ $name exited, restarting"
+            fi
+
             start_service "$name"
         fi
     done
