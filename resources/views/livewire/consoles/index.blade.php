@@ -148,6 +148,19 @@ new #[Title('Consoles')] class extends Component
     }
 
     /**
+     * Which folders are already beneath the library root, for the "Folder
+     * found" badge on the consoles on offer: one read of the root rather than
+     * an is_dir() for each of them.
+     *
+     * @return array<string, true>
+     */
+    #[Computed]
+    public function present(): array
+    {
+        return LibraryFolders::topLevel();
+    }
+
+    /**
      * Folders under the library root that no console has claimed.
      *
      * @return Collection<int, string>
@@ -865,7 +878,7 @@ new #[Title('Consoles')] class extends Component
                                     <span class="block truncate text-sm text-fg-bright">{{ $console->name }}</span>
                                     <span class="block truncate text-xs text-fg-faint">{{ $console->brand }}</span>
                                 </span>
-                                @if ($console->installed())
+                                @if (isset($this->present[$console->folder]))
                                     {{-- Its folder is already there, so adding it asks nothing. --}}
                                     <flux:badge size="sm" color="green">{{ __('Folder found') }}</flux:badge>
                                 @endif

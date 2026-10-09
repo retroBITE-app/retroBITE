@@ -189,6 +189,15 @@ it('lists the consoles on offer only while the add modal is open', function () {
         ->assertDontSee('Dreamcast');
 });
 
+it('marks the consoles on offer whose folder is already in the library', function () {
+    mkdir($this->root.'/dreamcast');
+
+    $component = Livewire::test('consoles.index')->call('openAdd');
+
+    expect($component->instance()->present)->toHaveKey('dreamcast')->not->toHaveKey('snes');
+    $component->assertSeeInOrder(['Dreamcast', 'Folder found']);
+});
+
 it('searches the consoles on offer by name, brand and key', function () {
     $component = Livewire::test('consoles.index')->call('openAdd');
     $offered = fn (): array => $component->instance()->choices->pluck('key')->all();
