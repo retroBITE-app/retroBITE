@@ -93,16 +93,3 @@ it('keeps the table when the move had finished and only the migrations row was l
 
     expect(DB::table('game_file_meta')->where('game_file_id', 1)->value('disc_key'))->toBe(str_repeat('ab', 16));
 });
-
-it('puts every fact back on game_files on the way down, disc keys included', function () {
-    ($this->migration)()->up();
-    ($this->migration)()->down();
-
-    expect(Schema::hasTable('game_file_meta'))->toBeFalse()
-        ->and(DB::table('game_files')->where('id', 1)->value('disc_key'))->toBe(str_repeat('ab', 16))
-        ->and(DB::table('game_files')->where('id', 2)->value('video_mode'))->toBe('PAL');
-
-    ($this->migration)()->up();
-
-    expect(DB::table('game_file_meta')->where('game_file_id', 1)->value('disc_key'))->toBe(str_repeat('ab', 16));
-});

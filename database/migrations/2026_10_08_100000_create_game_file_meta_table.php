@@ -23,6 +23,8 @@ use Illuminate\Support\Facades\Schema;
  * statement the values are still on game_files, so a table found then is a
  * half-made copy and is made again; once they are gone from game_files the
  * move had finished, and the table is the only copy and is kept.
+ *
+ * One way: there is no down(). The facts live in game_file_meta from here on.
  */
 return new class extends Migration
 {
@@ -84,30 +86,5 @@ return new class extends Migration
         Schema::table('game_files', function (Blueprint $table) use ($columns) {
             $table->dropColumn($columns);
         });
-    }
-
-    /**
-     * Every fact back onto game_files, disc keys included: once an image has
-     * been decrypted its .dkey is gone, and the key on record is the only copy.
-     */
-    public function down(): void
-    {
-        Schema::table('game_files', function (Blueprint $table) {
-            $table->string('license_id', 16)->nullable()->index();
-            $table->string('video_mode', 4)->nullable();
-            $table->boolean('encrypted')->nullable();
-            $table->string('disc_key', 32)->nullable();
-        });
-
-        DB::table('game_files')
-            ->join('game_file_meta', 'game_file_meta.game_file_id', '=', 'game_files.id')
-            ->update([
-                'game_files.license_id' => DB::raw('game_file_meta.license_id'),
-                'game_files.video_mode' => DB::raw('game_file_meta.video_mode'),
-                'game_files.encrypted' => DB::raw('game_file_meta.encrypted'),
-                'game_files.disc_key' => DB::raw('game_file_meta.disc_key'),
-            ]);
-
-        Schema::dropIfExists('game_file_meta');
     }
 };
