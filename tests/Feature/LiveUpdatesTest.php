@@ -5,13 +5,14 @@ use App\Events\GameUpdated;
 use App\Events\SystemUpdated;
 use App\Jobs\HashFile;
 use App\Jobs\MatchGame;
-use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Models\GameFile;
+use App\Models\RaGame;
 use App\Models\User;
 use App\Services\GameMatcher;
+use App\Services\GameScorer;
 use App\Services\MediaLibrary;
 use App\Services\ScreenScraperService;
 use App\Support\ExportProgress;
@@ -38,7 +39,7 @@ beforeEach(function () {
     Event::fake([GameUpdated::class, SystemUpdated::class]);
 });
 
-/** A jeuInfos answer for one game, with a rating and one cover. */
+/** A jeuInfos answer for one game, with one cover. */
 function liveAnswer(): array
 {
     return ['response' => ['jeu' => [
@@ -78,13 +79,21 @@ it('tells the game page when the lookup is over', function () {
     Event::assertDispatched(GameUpdated::class, fn (GameUpdated $e): bool => $e->gameId === $game->id && $e->what === GameUpdated::IDENTIFIED);
 });
 
-it('tells the game page when the rating is in', function () {
-    Http::fake(['*' => Http::response(liveAnswer(), 200)]);
-    $game = Game::factory()->forConsole('psx')->matched(19256)->create();
+it('tells the game page when its score changes', function () {
+    $set = RaGame::factory()->synced()->create(['num_distinct_players' => 5000]);
+    $game = Game::factory()->forConsole('psx')->matched(19256)->create(['retroachievements_id' => $set->id]);
 
-    (new RateGame($game->id))->handle(app(ScreenScraperService::class));
+    app(GameScorer::class)->score($game);
 
     Event::assertDispatched(GameUpdated::class, fn (GameUpdated $e): bool => $e->gameId === $game->id && $e->what === GameUpdated::RATING);
+});
+
+it('says nothing when the score has not moved', function () {
+    $game = Game::factory()->forConsole('psx')->matched(19256)->create();
+
+    app(GameScorer::class)->score($game);
+
+    Event::assertNotDispatched(GameUpdated::class, fn (GameUpdated $e): bool => $e->what === GameUpdated::RATING);
 });
 
 it('tells the game page when the artwork is in', function () {

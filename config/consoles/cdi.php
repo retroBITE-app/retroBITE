@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 133,
     'retroachievements_id' => 42,
+    'launchbox_platforms' => ['Philips CD-i'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

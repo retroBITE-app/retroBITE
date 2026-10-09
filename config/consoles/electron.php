@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 85,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Acorn Electron'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

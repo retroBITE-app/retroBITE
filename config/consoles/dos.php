@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 135,
     'retroachievements_id' => 26,
+    'launchbox_platforms' => ['MS-DOS'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

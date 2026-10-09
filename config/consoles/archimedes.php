@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 84,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Acorn Archimedes'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

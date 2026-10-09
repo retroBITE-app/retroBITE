@@ -43,3 +43,5 @@ C*E.md
 avatar.png
 # Laravel Debugbar request captures (dev only)
 /storage/debugbar
+
+.DS_Store

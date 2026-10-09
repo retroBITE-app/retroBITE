@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 80,
     'retroachievements_id' => 57,
+    'launchbox_platforms' => ['Fairchild Channel F'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

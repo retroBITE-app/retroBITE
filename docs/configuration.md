@@ -93,7 +93,7 @@ Raise them on a machine with the room.
 
 | Variable | Default | Work |
 | --- | --- | --- |
-| `QUEUE_WORKERS_SCRAPER` | 1 | Identification and ratings. Raising it adds speed up to your ScreenScraper account's threads (1 on a free account, more on a paid one); past that, workers wait. |
+| `QUEUE_WORKERS_SCRAPER` | 1 | Identification. Raising it adds speed up to your ScreenScraper account's threads (1 on a free account, more on a paid one); past that, workers wait. |
 | `QUEUE_WORKERS_MEDIA` | 1 | Artwork downloads. They share the scraper's threads. |
 | `QUEUE_WORKERS_DEFAULT` | 1 | Scans and file counts. |
 | `QUEUE_WORKERS_THUMBNAILS` | 1 | Cover thumbnails, CPU bound. |
@@ -113,6 +113,16 @@ Your own ScreenScraper account goes in Settings → ScreenScraper, not here.
 | `SCREENSCRAPER_DEV_ID` / `SCREENSCRAPER_DEV_PASSWORD` | the project's | A developer account of your own, in place of the one retroBITE ships with. Set both or neither. |
 | `SCREENSCRAPER_CONNECT_TIMEOUT` | `15` | Seconds to wait for a connection. |
 | `SCREENSCRAPER_TIMEOUT` | `90` | Seconds to wait for an answer. |
+
+## LaunchBox Games Database
+
+Where the players' ratings in the retroBite score come from. No account and no
+key: the whole database is one public download, read weekly.
+
+| Variable | Default | What it is |
+| --- | --- | --- |
+| `LAUNCHBOX_METADATA_URL` | `https://gamesdb.launchbox-app.com/Metadata.zip` | Where to download it from, for a mirror. |
+| `LAUNCHBOX_TIMEOUT` | `900` | Seconds the download (over 100 MB) may take. |
 
 ## RetroAchievements
 

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 222,
     'retroachievements_id' => 65,
+    'launchbox_platforms' => [],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

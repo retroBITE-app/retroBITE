@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 48,
     'retroachievements_id' => 44,
+    'launchbox_platforms' => ['ColecoVision'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

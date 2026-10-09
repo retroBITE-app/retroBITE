@@ -4,6 +4,7 @@ use App\Jobs\MeasureLibrary;
 use App\Models\AppSetting;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -31,6 +32,16 @@ Schedule::command('retrobite:ra:sync-sets --missing --queue')->weeklyOn(0, '03:3
 // Every set again, monthly: achievements are added, removed and re-scored,
 // but seldom.
 Schedule::command('retrobite:ra:sync-sets --queue')->monthlyOn(1, '05:00');
+
+// The LaunchBox ratings behind the retroBite score: one public download,
+// weekly, then the whole library scored against it. Hourly as well until the
+// first one has worked, so a new install is not a week without scores. In the
+// background, because the download is over a hundred megabytes and the
+// fifteen-minute work below should not wait for it.
+Schedule::command('retrobite:launchbox:sync')->weeklyOn(0, '02:00')->runInBackground()->withoutOverlapping();
+Schedule::command('retrobite:launchbox:sync')->hourly()->runInBackground()->withoutOverlapping()->when(function (): bool {
+    return ! DB::table('launchbox_platforms')->exists();
+});
 
 // The cheap pulse: one request per person for everything unlocked lately.
 Schedule::command('retrobite:ra:sync-progress')->everyFifteenMinutes()->withoutOverlapping();

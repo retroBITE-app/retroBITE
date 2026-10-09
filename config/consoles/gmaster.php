@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 103,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Hartung Game Master'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

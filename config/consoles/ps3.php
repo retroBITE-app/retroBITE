@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 59,
     'retroachievements_id' => 82,
+    'launchbox_platforms' => ['Sony Playstation 3'],
     'cover_aspect' => '6/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

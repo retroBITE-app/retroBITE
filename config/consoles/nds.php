@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 15,
     'retroachievements_id' => 18,
+    'launchbox_platforms' => ['Nintendo DS'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -97,11 +97,24 @@ title. The surviving game keeps its identity; the other's files move across.
 and the one for questions that fail is much the smaller. This is why the system
 prefers not to ask rather than ask and miss.
 
-**Rating** — ScreenScraper's own mark for a game, voted on by their users.
-Not a critic's score and not ours. It rides along in every answer, so it costs
-nothing to have, but it only exists for games the provider knows, and a game
-with no rating is commoner than one with. Held out of a hundred because that is
-how the library reads it; the provider counts to twenty.
+**Score** (the retroBite score, `games.rating`) — ours, out of a hundred: how
+good a game is, worked out from what other people measured. Three quarters is
+players' ratings from the LaunchBox Games Database, a quarter is how many play
+it on RetroAchievements and how far they get. Not a critic's score, and not
+ScreenScraper's `note`, which its users give the entry rather than the game. A
+game neither source knows has none. Called "rating" in code and URLs because
+the column was; called the score everywhere a person reads it.
+
+**Rank** (the retroBite rank, `games.library_rank`) — a game's place among
+every scored game in *this* library, across all consoles, 1 the best. Not a
+place in the world: it moves when the library does. Equal scores are told
+apart by how many votes and players stand behind them, so no two games share
+a rank.
+
+**LaunchBox index** — the local copy of the LaunchBox Games Database's ratings
+and names (`launchbox_games`, `launchbox_names`), rebuilt from its public dump
+weekly. A game is found in it by title and platform, never by id: the dump
+holds no ScreenScraper or RetroAchievements one.
 
 **Media** — artwork retroBite downloaded and owns: covers, screenshots, logos,
 backdrops. The opposite of a game file in every way that matters — it did not
@@ -116,9 +129,9 @@ viewer shows it in full.
 
 **Media list** — the artwork the provider *offers* for a game, as its last
 answer listed it. Not media: nothing in it has been downloaded. Every jeuInfos
-answer carries it, so identifying a game, reading its rating and learning its
-artwork are one request, and the list is kept (`media_lists`) so choosing
-artwork again later costs none. Renewed only by "re-fetch all", or by any
+answer carries it, so identifying a game and learning its artwork are one
+request, and the list is kept (`media_lists`) so choosing artwork again later
+costs none. Renewed only by "re-fetch all", or by any
 other answer that happens to arrive.
 
 **Media type** — the provider's own name for a kind of artwork. Kept as the

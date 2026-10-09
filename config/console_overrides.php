@@ -82,6 +82,12 @@ return [
         'description' => 'RetroAchievements\' ConsoleID, also RAHasher\'s systemid. Not the ScreenScraper one.',
     ],
 
+    'launchbox_platforms' => [
+        'type' => 'text[]',
+        'label' => 'LaunchBox platforms',
+        'description' => 'The LaunchBox Games Database platform names to rate this console\'s games from, likeliest first (Comma separated).',
+    ],
+
     'transfer_regions' => [
         'type' => 'region[]',
         'label' => 'Region order for Send to',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 72,
     'retroachievements_id' => 49,
+    'launchbox_platforms' => ['NEC PC-FX'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

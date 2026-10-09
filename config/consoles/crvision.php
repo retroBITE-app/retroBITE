@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 241,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['VTech CreatiVision'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

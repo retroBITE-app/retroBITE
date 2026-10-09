@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 16,
     'retroachievements_id' => 19,
+    'launchbox_platforms' => ['Nintendo Wii'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

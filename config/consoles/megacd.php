@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 20,
     'retroachievements_id' => 9,
+    'launchbox_platforms' => ['Sega CD'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

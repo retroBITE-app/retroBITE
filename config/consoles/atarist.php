@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 42,
     'retroachievements_id' => 36,
+    'launchbox_platforms' => ['Atari ST'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

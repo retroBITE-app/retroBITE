@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 12,
     'retroachievements_id' => 5,
+    'launchbox_platforms' => ['Nintendo Game Boy Advance'],
     'cover_aspect' => '1/1',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 281,
     'retroachievements_id' => 74,
+    'launchbox_platforms' => ['Interton VC 4000'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

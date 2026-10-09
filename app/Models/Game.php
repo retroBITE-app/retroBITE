@@ -45,7 +45,9 @@ use Illuminate\Support\Collection;
  * @property string|null $publisher
  * @property string|null $developer
  * @property string|null $region
- * @property int|null $rating
+ * @property int|null $rating the retroBite score, out of a hundred (App\Support\RetroBiteScore)
+ * @property int|null $library_rank the retroBite rank: this game's place among every scored game in the library, 1 the best (LibraryRanking)
+ * @property int|null $launchbox_id the LaunchBox Games Database's DatabaseID, when the title was found there
  * @property string|null $media_region
  * @property Carbon|null $matched_at
  * @property Carbon|null $dumps_recorded_at when the provider's word on each of its files' dumps was last recorded (ProviderDumps)
@@ -59,7 +61,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'screenscraper_id', 'console', 'title', 'slug', 'status', 'description',
     'release_date', 'genre', 'players', 'publisher', 'developer', 'region',
-    'rating', 'media_region',
+    'rating', 'launchbox_id', 'library_rank', 'media_region',
     'matched_at', 'retroachievements_id', 'retroachievements_status',
     'retroachievements_matched_at',
 ])]
@@ -78,6 +80,8 @@ class Game extends Model
             'matched_at' => 'datetime',
             'dumps_recorded_at' => 'datetime',
             'rating' => 'integer',
+            'launchbox_id' => 'integer',
+            'library_rank' => 'integer',
             'retroachievements_status' => RetroAchievementsStatus::class,
             'retroachievements_matched_at' => 'datetime',
 
@@ -207,6 +211,16 @@ class Game extends Model
     public function raGame(): BelongsTo
     {
         return $this->belongsTo(RaGame::class, 'retroachievements_id');
+    }
+
+    /**
+     * The LaunchBox Games Database's entry for this title, for its rating.
+     *
+     * @return BelongsTo<LaunchBoxGame, $this>
+     */
+    public function launchBoxGame(): BelongsTo
+    {
+        return $this->belongsTo(LaunchBoxGame::class, 'launchbox_id');
     }
 
     /**
@@ -380,32 +394,6 @@ class Game extends Model
         return $this->blockedFromMediaScrape() === null;
     }
 
-    /**
-     * Why this game cannot be asked about its rating, or null when it can.
-     *
-     * Shorter than the media gate on purpose: a rating rides along in the same
-     * answer as everything else, so there is nothing to switch on and nothing
-     * to choose. The provider id is the whole requirement — it is what the
-     * lookup is keyed by.
-     *
-     * Holding a rating already is not a reason to refuse. Ratings are votes and
-     * they accumulate, so asking again is a real question with a possibly
-     * different answer, which is why the menu offers it rather than greying out.
-     */
-    public function blockedFromRating(): ?string
-    {
-        if ($this->screenscraper_id === null) {
-            return __('Identify the game first — the rating comes back by provider id.');
-        }
-
-        return null;
-    }
-
-    public function canBeRated(): bool
-    {
-        return $this->blockedFromRating() === null;
-    }
-
     /** @param  Builder<Game>  $query */
     public function scopeAwaitingLookup(Builder $query): void
     {
@@ -427,21 +415,6 @@ class Game extends Model
             RetroAchievementsStatus::Pending->value,
             RetroAchievementsStatus::NoMatch->value,
         ]);
-    }
-
-    /**
-     * Games identified before ratings existed.
-     *
-     * The backfill's whole selection. Keyed off the rating being absent rather
-     * than off a timestamp, so a game the provider had no rating for last time
-     * is asked again — the votes are theirs and they accumulate. A game with
-     * no screenscraper_id is skipped because there is nothing to ask about.
-     *
-     * @param  Builder<Game>  $query
-     */
-    public function scopeAwaitingRating(Builder $query): void
-    {
-        $query->whereNotNull('games.screenscraper_id')->whereNull('games.rating');
     }
 
     /**

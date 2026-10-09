@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 70,
     'retroachievements_id' => 56,
+    'launchbox_platforms' => ['SNK Neo Geo CD'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

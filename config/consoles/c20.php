@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 73,
     'retroachievements_id' => 34,
+    'launchbox_platforms' => ['Commodore VIC-20'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

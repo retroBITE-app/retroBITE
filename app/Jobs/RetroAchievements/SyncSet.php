@@ -9,6 +9,7 @@ use App\Exceptions\RetroAchievements\RateLimited;
 use App\Exceptions\RetroAchievements\RetroAchievementsException;
 use App\Models\RaAchievement;
 use App\Models\RaGame;
+use App\Services\GameScorer;
 use App\Services\RetroAchievementsProgress;
 use App\Services\RetroAchievementsService;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -132,6 +133,10 @@ class SyncSet implements ShouldBeUnique, ShouldQueue
                 ->whereNull('removed_at')
                 ->update(['removed_at' => $now]);
         });
+
+        // The player counts are half of the score of every game that is this
+        // set, and they have just been read.
+        app(GameScorer::class)->scoreSet($this->raGameId);
 
         // points_possible on every existing progress row is now wrong, and
         // only the progress job may put it right.

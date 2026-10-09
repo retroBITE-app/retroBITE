@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 94,
     'retroachievements_id' => 73,
+    'launchbox_platforms' => ['Emerson Arcadia 2001'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

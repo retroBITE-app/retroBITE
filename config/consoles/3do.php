@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 29,
     'retroachievements_id' => 43,
+    'launchbox_platforms' => ['3DO Interactive Multiplayer'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

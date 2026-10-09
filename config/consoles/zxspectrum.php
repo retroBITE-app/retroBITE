@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 76,
     'retroachievements_id' => 59,
+    'launchbox_platforms' => ['Sinclair ZX Spectrum'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

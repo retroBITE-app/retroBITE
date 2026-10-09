@@ -6,7 +6,6 @@ use App\Enums\MediaKind;
 use App\Jobs\InspectGameFile;
 use App\Jobs\MatchGame;
 use App\Jobs\MeasureLibrary;
-use App\Jobs\RateGame;
 use App\Jobs\RunConversion;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
@@ -15,7 +14,9 @@ use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
+use App\Models\LaunchBoxGame;
 use App\Models\Media;
+use App\Models\RaGame;
 use App\Models\User;
 use App\Providers\AppServiceProvider;
 use App\Services\LibraryScanner;
@@ -1106,144 +1107,23 @@ it('does not add a query per row to show ratings', function () {
 });
 
 /*
- * Asking for a rating by hand, from a console's menu or a game's.
- *
- * The backfill command reaches a whole library once; these are the two places
- * somebody asks about a shelf or a single game after the fact, which is the
- * only way to pick up votes cast since the match.
+ * The retroBite score on the game page, and what it was made of.
  */
 
-it('fetches ratings for a whole console, forced only when starting over', function () {
-    Queue::fake();
-    ConsoleSourceFolder::add(new Console('snes'));
+it('shows the score with the sources it was worked out from', function () {
+    LaunchBoxGame::query()->create(['id' => 39777, 'platform' => 'Super Nintendo Entertainment System', 'name' => 'Super Mario World', 'rating' => 4.73, 'votes' => 1836]);
+    $set = RaGame::factory()->synced()->create(['num_distinct_players' => 111015]);
 
-    // Which games are chosen is RateGame::queueForConsole's business, tested
-    // in JobsTest; this is that the page reaches it.
-    $game = Game::factory()->forConsole('snes')->matched(101)->create();
-
-    Livewire::test('consoles.index')->call('fetchRatings', 'snes');
-
-    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === false);
-
-    Queue::fake();
-
-    // Forced, or the job's own guard would drop a game that already has a
-    // rating — which is the very game somebody asking again means.
-    Livewire::test('consoles.index')->call('fetchRatings', 'snes', true);
-
-    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === true);
-});
-
-it('says so rather than queueing nothing when a console has every rating already', function () {
-    // Added before the fake: adding a console queues a file count, which is
-    // not the queueing this test is about.
-    ConsoleSourceFolder::add(new Console('snes'));
-    Queue::fake();
-    Game::factory()->forConsole('snes')->matched(101)->rated(80)->create();
-
-    Livewire::test('consoles.index')
-        ->call('fetchRatings', 'snes')
-        ->assertDispatched('toast-show');
-
-    Queue::assertNothingPushed();
-});
-
-it('needs no media types switched on to fetch a rating', function () {
-    Queue::fake();
-    ConsoleSourceFolder::add(new Console('snes'));
-    Game::factory()->forConsole('snes')->matched(101)->create();
-
-    // The artwork actions refuse here. A rating rides along in the same answer
-    // and there is nothing to choose, so this one has no such gate.
-    AppSetting::put(AppSetting::MEDIA_TYPES, []);
-
-    Livewire::test('consoles.index')->call('fetchRatings', 'snes');
-
-    Queue::assertPushed(RateGame::class, 1);
-});
-
-it('fetches a rating again from the game page, forced', function () {
-    Queue::fake();
-
-    $game = Game::factory()->forConsole('psx')->matched(19256)->rated(70)->create([
-        'title' => 'Tekken 3', 'slug' => 'tekken-3',
+    $game = Game::factory()->forConsole('snes')->matched(101)->rated(95)->create([
+        'title' => 'Super Mario World', 'slug' => 'super-mario-world',
+        'launchbox_id' => 39777, 'retroachievements_id' => $set->id,
     ]);
 
-    Livewire::test('games.show', ['game' => $game])->call('fetchRating');
-
-    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === true);
-});
-
-it('refuses a rating for a game nobody has identified', function () {
-    Queue::fake();
-
-    $game = Game::factory()->forConsole('psx')->create(['title' => 'Mystery', 'slug' => 'mystery']);
-
-    Livewire::test('games.show', ['game' => $game])->call('fetchRating');
-
-    Queue::assertNothingPushed();
-});
-
-it('waits for a rating to arrive, then stops', function () {
-    Queue::fake();
-
-    $game = Game::factory()->forConsole('psx')->matched(19256)->create([
-        'title' => 'Tekken 3', 'slug' => 'tekken-3',
-    ]);
-
-    $component = Livewire::test('games.show', ['game' => $game])->call('fetchRating');
-
-    // A string, so an unrated game does not read as "not waiting": null means
-    // idle here, the same as it does for artwork.
-    $component->assertSet('ratingFrom', '', true);
-
-    $component->call('checkRating')->assertSet('ratingFrom', '', true);
-
-    $game->update(['rating' => 90]);
-
-    $component->call('checkRating')->assertSet('ratingFrom', null, true);
-});
-
-it('gives up waiting when the provider holds no rating', function () {
-    Queue::fake();
-
-    $game = Game::factory()->forConsole('psx')->matched(19256)->create([
-        'title' => 'Obscure', 'slug' => 'obscure',
-    ]);
-
-    // Nothing is written for a game nobody has voted on, so there is no
-    // arrival to notice — the same shape as artwork the provider does not hold.
-    $component = Livewire::test('games.show', ['game' => $game])->call('fetchRating');
-
-    $component->call('checkRating')->assertSet('ratingFrom', '', true);
-
-    $this->travel(3)->minutes();
-
-    $component->call('checkRating')->assertSet('ratingFrom', null, true);
-});
-
-it('fetches a rating for one game from the list, forced', function () {
-    Queue::fake();
-
-    $game = Game::factory()->forConsole('psx')->matched(19256)->rated(70)->create(['title' => 'Tekken 3', 'slug' => 'tekken-3']);
-
-    Livewire::test('games.index')->call('fetchRating', $game->id);
-
-    // Unforced, the job would drop a game that already has a rating — which is
-    // the very game somebody picking this item most likely meant.
-    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === true);
-});
-
-it('refuses a rating from the list for a game nobody has identified', function () {
-    Queue::fake();
-
-    $game = Game::factory()->forConsole('psx')->create(['title' => 'Unknown', 'slug' => 'unknown']);
-
-    Livewire::test('games.index')
-        ->call('fetchRating', $game->id)
-        ->assertDispatched('toast-show');
-
-    Queue::assertNothingPushed();
+    Livewire::test('games.show', ['game' => $game])
+        ->assertSee('retroBite score')
+        ->assertDontSee('95 / 100')
+        ->assertSee('LaunchBox 4.7★, 1,836 votes')
+        ->assertSee('RetroAchievements, 111,015 players');
 });
 
 /*
@@ -1388,7 +1268,7 @@ it('scans this console from its own shelf', function () {
     Queue::assertPushed(ScanConsoleFolder::class, fn ($job) => $job->console === 'snes');
 });
 
-it('fetches artwork and ratings for this console from its own shelf', function () {
+it('fetches artwork for this console from its own shelf', function () {
     Queue::fake();
     AppSetting::put(AppSetting::MEDIA_TYPES, ['box-2D']);
 
@@ -1399,13 +1279,10 @@ it('fetches artwork and ratings for this console from its own shelf', function (
     Game::factory()->forConsole('psx')->matched(103)->create();
 
     Livewire::test('games.index', ['console' => 'snes'])
-        ->call('fetchConsoleMedia')
-        ->call('fetchConsoleRatings', true);
+        ->call('fetchConsoleMedia');
 
     Queue::assertPushed(ScrapeGameMedia::class, 1);
     Queue::assertPushed(ScrapeGameMedia::class, fn ($job) => $job->gameId === $game->id);
-    Queue::assertPushed(RateGame::class, 1);
-    Queue::assertPushed(RateGame::class, fn ($job) => $job->gameId === $game->id && $job->force === true);
 });
 
 it('says so from the shelf too when no media types are switched on', function () {
@@ -1429,7 +1306,6 @@ it('will not run a shelf action on a page fixed to no console', function () {
     Livewire::test('games.index')
         ->call('scanConsole')
         ->call('fetchConsoleMedia')
-        ->call('fetchConsoleRatings')
         ->call('writeConsoleExport', 'cfg');
 
     Queue::assertNothingPushed();

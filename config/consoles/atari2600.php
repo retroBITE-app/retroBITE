@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 26,
     'retroachievements_id' => 25,
+    'launchbox_platforms' => ['Atari 2600'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

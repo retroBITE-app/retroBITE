@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 106,
     'retroachievements_id' => 81,
+    'launchbox_platforms' => ['Nintendo Famicom Disk System'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

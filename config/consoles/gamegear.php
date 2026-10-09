@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 21,
     'retroachievements_id' => 15,
+    'launchbox_platforms' => ['Sega Game Gear'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 130,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Commodore Amiga CD32'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 107,
     'retroachievements_id' => 3,
+    'launchbox_platforms' => ['Nintendo Satellaview'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

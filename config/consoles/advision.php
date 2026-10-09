@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 78,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Entex Adventure Vision'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

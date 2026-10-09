@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 220,
     'retroachievements_id' => 64,
+    'launchbox_platforms' => ['Sharp X1'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

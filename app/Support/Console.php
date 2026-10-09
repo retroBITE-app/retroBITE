@@ -101,6 +101,19 @@ final class Console
     public readonly ?int $retroachievementsId;
 
     /**
+     * The LaunchBox Games Database platforms this console's games are listed
+     * under, the likeliest first. Their names, not ids: the database's dump
+     * names a game's platform and nothing else.
+     *
+     * More than one where LaunchBox splits what this console holds — the Neo
+     * Geo's carts are AES, MVS and Arcade there — and empty for the consoles
+     * it does not list, whose games then have no LaunchBox rating.
+     *
+     * @var list<string>
+     */
+    public readonly array $launchboxPlatforms;
+
+    /**
      * The regions a transfer sends first, in order, for this console alone;
      * empty for the library's (TransferRegions). Only ever an override.
      *
@@ -136,6 +149,7 @@ final class Console
         $this->converters = array_values(array_filter((array) Arr::get($meta, 'converters', []), 'is_string'));
         $this->decrypters = array_values(array_filter((array) Arr::get($meta, 'decrypters', []), 'is_string'));
         $this->retroachievementsId = $raId !== null ? (int) $raId : null;
+        $this->launchboxPlatforms = array_values(array_filter((array) Arr::get($meta, 'launchbox_platforms', []), 'is_string'));
         $this->transferRegions = array_values(array_filter((array) Arr::get($meta, 'transfer_regions', []), 'is_string'));
     }
 

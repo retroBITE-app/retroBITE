@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 2,
     'retroachievements_id' => 11,
+    'launchbox_platforms' => ['Sega Master System'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',
