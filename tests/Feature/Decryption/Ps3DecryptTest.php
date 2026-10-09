@@ -253,6 +253,23 @@ it('gives ps3dec the key but never writes it into the conversion log', function 
         ->and((string) $conversion->log)->toContain('--dk ********');
 });
 
+it('writes nothing when the library\'s disk has no room for the output', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    // No disk has this much to spare beyond the image.
+    config()->set('converters.free_space_margin', PHP_INT_MAX / 2);
+    fakePs3dec();
+    $file = ps3Game();
+    $before = md5_file($this->root.'/ps3/Game (USA).iso');
+
+    $conversion = decryptPs3($file);
+
+    expect($conversion->status)->toBe(ConversionStatus::Failed)
+        ->and($conversion->failure)->toBe(ConversionFailure::NoSpace)
+        ->and(md5_file($this->root.'/ps3/Game (USA).iso'))->toBe($before)
+        ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeTrue();
+    Process::assertNothingRan();
+});
+
 it('keeps the encrypted image and its key when the output is still encrypted', function () {
     config()->set('decrypters.tools.ps3dec.path', '/bin/true');
     fakePs3dec(wrongKey: true);

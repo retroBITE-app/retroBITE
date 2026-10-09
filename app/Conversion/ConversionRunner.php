@@ -305,6 +305,8 @@ final class ConversionRunner
                 return (int) filesize(LibraryFolders::pathOf($member));
             });
 
+        $this->assertRoom();
+
         $plan = [];
         $taken = [];
 
@@ -549,6 +551,31 @@ final class ConversionRunner
 
         foreach ($names as $name) {
             $this->line(__('Wrote :path', ['path' => self::join($set->directory, $name)]));
+        }
+    }
+
+    /**
+     * Room on the library's disk, where staging is, for an output as large as
+     * its sources and the margin beyond. An unreadable figure is no reason to
+     * refuse; prepareStaging() reports a library that is not there.
+     *
+     * @throws ConversionFailed
+     */
+    private function assertRoom(): void
+    {
+        try {
+            $free = @disk_free_space($this->paths->stagingDirectory());
+        } catch (LibraryPathException) {
+            return;
+        }
+
+        $needed = $this->sourceBytes + (int) config('converters.free_space_margin', 1024 ** 3);
+
+        if ($free !== false && $free < $needed) {
+            throw ConversionFailed::because(ConversionFailure::NoSpace, __(':needed needed, :free free', [
+                'needed' => Number::fileSize($needed, 1),
+                'free' => Number::fileSize($free, 1),
+            ]));
         }
     }
 
