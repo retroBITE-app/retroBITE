@@ -24,6 +24,10 @@ services:
   retrobite-web:
     image: retrobite/retrobite:${RETROBITE_TAG:-develop}
     container_name: retrobite-web
+    # supervisord stops its programs one after another, each worker finishing
+    # cleanly, about a second apiece: past Docker's default ten seconds the
+    # rest would be killed mid-job.
+    stop_grace_period: 30s
     # Anything not listed under environment below — queue workers,
     # ScreenScraper and RetroAchievements timeouts, conversion tools — is read
     # from .env when there is one. See docs/configuration.md.

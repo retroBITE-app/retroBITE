@@ -161,6 +161,9 @@ FROM php:8.5-fpm-alpine
 # installed on the host to work on the frontend.
 RUN apk add --no-cache \
         nginx su-exec unzip git nodejs npm \
+        # Keeps nginx, PHP-FPM, Reverb, the scheduler, the workers and Vite
+        # running (docker/web/supervisord.conf).
+        supervisor \
         libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
         libmemcached-libs gettext libwebp \
         # For the per-console toolboxes in app/Scripts. Alpine's shell is ash
@@ -210,7 +213,9 @@ COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
 COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 COPY docker/web/opcache.dev.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
+COPY docker/web/supervise.sh /usr/local/bin/supervise.sh
 COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
+COPY docker/web/supervisord.conf /etc/supervisord.conf
 COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
 COPY docker/web/app-key.sh /usr/local/bin/app-key.sh
 COPY docker/web/entrypoint.dev.sh /entrypoint.sh
@@ -230,7 +235,7 @@ RUN chdman 2>&1 | grep -q "CHD) manager" \
     && nodtool -V | grep -q "nodtool "
 COPY --from=ps3dec /usr/local/bin/ps3dec /usr/local/bin/ps3dec
 RUN ps3dec --version | grep -q "ps3decrs "
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/supervise.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh
 
 EXPOSE 80
 

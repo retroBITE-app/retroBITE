@@ -8,6 +8,9 @@ set -e
 # when the app boots, so every PHP process from here on must see the same keys.
 . /usr/local/bin/reverb.sh
 
+# What hands each long-running process to supervisord, as in production.
+. /usr/local/bin/supervise.sh
+
 # Ensure storage subdirs exist
 mkdir -p /app/storage/app/games \
          /app/storage/app/docs \
@@ -132,9 +135,8 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 #
 # Every listener carries --timeout, a little over the longest job on its
 # queues, because listen kills its child after 60 seconds whatever the job's
-# own $timeout says — and a killed child takes the listener down with it. The
-# restart loop in queue-workers.sh brings it back, but the job still never
-# finishes. The longest on each: MatchGame 120 (scraper), ScrapeGameMedia 900
+# own $timeout says — and a killed child takes the listener down with it.
+# supervisord brings it back, but the job still never finishes. The longest on each: MatchGame 120 (scraper), ScrapeGameMedia 900
 # (media), ScanConsoleFolder 1800 (default), WriteConsoleExports 1800
 # (toolbox), RunConversion 7060 (toolbox-conversion), SyncHashIndex 900 (ra),
 # ReconcileProgress 300 (ra-progress), HashFile 3600 (hash), FileTransferJob
@@ -192,16 +194,13 @@ workers QUEUE_WORKERS_HASH 1 php /app/artisan queue:listen database-long \
 workers QUEUE_WORKERS_TRANSFER 3 php /app/artisan queue:listen database-long \
     --queue=transfer --sleep=3 --tries=2 --timeout=3660
 
-su-exec "$WEB_USER" php /app/artisan schedule:work &
+supervise scheduler 1 php /app/artisan schedule:work
 
 # Vite, in here rather than on the host, so working on the frontend needs
 # nothing installed locally. Starting it writes public/hot, which Laravel reads
 # to point asset URLs at the dev server instead of the built bundle — which is
 # also why the built bundle was removed above.
-su-exec "$WEB_USER" npm run dev --prefix /app &
+supervise vite 1 npm run dev --prefix /app
 
-# Start PHP-FPM in the background (manages its own worker pool)
-php-fpm -D
-
-# Run Nginx in the foreground so it becomes PID 1 and Docker tracks it
-exec nginx -g 'daemon off;'
+# supervisord as PID 1 from here, as in production.
+exec supervisord -c /etc/supervisord.conf

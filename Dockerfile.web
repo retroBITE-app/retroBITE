@@ -206,6 +206,9 @@ FROM php:8.5-fpm-alpine AS runner
 # unzip and git are for Composer's dist path.
 RUN apk add --no-cache \
         nginx su-exec unzip git \
+        # Keeps nginx, PHP-FPM, Reverb, the scheduler and the workers running
+        # (docker/web/supervisord.conf).
+        supervisor \
         libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
         libmemcached-libs gettext libwebp \
         # For the per-console toolboxes in app/Scripts. Alpine's shell is ash
@@ -283,12 +286,14 @@ COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 COPY docker/web/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
+COPY docker/web/supervise.sh /usr/local/bin/supervise.sh
 COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
+COPY docker/web/supervisord.conf /etc/supervisord.conf
 COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
 COPY docker/web/app-key.sh /usr/local/bin/app-key.sh
 COPY docker/web/warnings.sh /usr/local/bin/warnings.sh
 COPY docker/web/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh /usr/local/bin/warnings.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/supervise.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh /usr/local/bin/warnings.sh
 
 EXPOSE 80
 
