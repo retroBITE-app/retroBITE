@@ -462,23 +462,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         Flux::toast(variant: 'success', text: __('Deleted :file.', ['file' => (string) $filename]));
     }
 
-    /** Queue one image for decryption; it is followed on Tools → Decrypt. */
-    public function decryptFile(int $fileId, DiscKeys $keys): void
-    {
-        $file = $this->files->firstWhere('id', $fileId);
-
-        ['queued' => $queued] = $keys->queueDecryption($file instanceof GameFile ? [$file->setRelation('game', $this->game)] : []);
-
-        Flux::toast(
-            variant: $queued === [] ? 'warning' : 'success',
-            text: $queued === []
-                ? __('It could not be decrypted now: check it still has its key.')
-                : __('Queued for decryption. Follow it on Tools → Decrypt.'),
-        );
-    }
-
-    /** Sent by the key modal: the image's state has moved. */
+    /** Sent by the key and decrypt modals: the image's state has moved. */
     #[On('disc-key-saved')]
+    #[On('decrypt-queued')]
     public function discKeySaved(): void
     {
         unset($this->fileRows);
@@ -2143,7 +2129,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                                 @endif
 
                                                 @if ($decrypt === DecryptState::Ready)
-                                                    <flux:button size="xs" variant="ghost" icon="lock-open" wire:click="decryptFile({{ $id }})">
+                                                    <flux:button size="xs" variant="ghost" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: [{{ $id }}] })">
                                                         {{ __('Decrypt') }}
                                                     </flux:button>
                                                 @endif
@@ -2399,6 +2385,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
     @if (collect($this->fileRows)->whereNotNull('decrypt')->isNotEmpty())
         <livewire:decrypt.key-modal wire:key="disc-key-modal" />
+        <livewire:decrypt.confirm-modal wire:key="decrypt-confirm-modal" />
     @endif
 
     {{-- Opened from Actions → Send to. --}}

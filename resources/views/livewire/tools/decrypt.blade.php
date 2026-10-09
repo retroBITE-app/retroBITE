@@ -247,25 +247,12 @@ new #[Title('Decrypt')] class extends Component
         $this->refreshImages();
     }
 
-    /**
-     * Queue the picked images, one decryption each. Their keys go on record
-     * first: decrypting deletes the .dkey, and the key is still worth having.
-     */
-    public function decrypt(DiscKeys $keys): void
+    /** The confirm modal queued the picks: start the list afresh. */
+    #[On('decrypt-queued')]
+    public function queued(): void
     {
-        ['queued' => $queued, 'skipped' => $skipped] = $keys->queueDecryption(
-            GameFile::query()->whereKey(array_intersect($this->picked, $this->ready))->with('game')->get(),
-        );
-
         $this->picked = [];
-        $this->dispatch('conversion-queued');
-
-        Flux::toast(
-            variant: $queued === [] ? 'danger' : 'success',
-            text: $skipped === 0
-                ? trans_choice(':count image queued for decryption.|:count images queued for decryption.', count($queued), ['count' => count($queued)])
-                : __(':queued queued. :skipped could not be decrypted now: check they still have their key.', ['queued' => count($queued), 'skipped' => $skipped]),
-        );
+        $this->refreshImages();
     }
 
     /** A key saved, a decryption done: the states have moved. */
@@ -359,7 +346,7 @@ new #[Title('Decrypt')] class extends Component
 
                 <x-search-field wire:model.live.debounce.300ms="search" :placeholder="__('Search games, files or title IDs')" class="min-w-0 flex-1" />
 
-                <flux:button variant="primary" size="sm" icon="lock-open" wire:click="decrypt" :disabled="$picked === [] || $this->missingTool !== null">
+                <flux:button variant="primary" size="sm" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: $wire.picked })" :disabled="$picked === [] || $this->missingTool !== null">
                     {{ $picked === [] ? __('Decrypt') : __('Decrypt :count', ['count' => count($picked)]) }}
                 </flux:button>
             </div>
@@ -441,4 +428,6 @@ new #[Title('Decrypt')] class extends Component
     @endif
 
     <livewire:decrypt.key-modal />
+
+    <livewire:decrypt.confirm-modal />
 </div>

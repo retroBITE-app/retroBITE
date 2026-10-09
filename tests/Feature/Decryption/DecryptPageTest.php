@@ -102,7 +102,7 @@ it('reads an unread image on the spot', function () {
         ->and($file->fresh()?->meta?->license_id)->toBe('BLUS30538');
 });
 
-it('queues the picked images, and only ones with their key', function () {
+it('picks only images with their key, and clears the picks once the confirm has queued them', function () {
     $ready = ps3Image('Keyed', DecryptState::Ready);
     $locked = ps3Image('Locked', DecryptState::NeedsKey);
 
@@ -111,9 +111,24 @@ it('queues the picked images, and only ones with their key', function () {
         ->assertSet('picked', [])
         ->call('toggleAll')
         ->assertSet('picked', [$ready->id])
+        ->dispatch('decrypt-queued')
+        ->assertSet('picked', []);
+});
+
+it('asks before decrypting, says the image is replaced and its key file deleted, and queues once', function () {
+    $ready = ps3Image('Keyed', DecryptState::Ready);
+    $locked = ps3Image('Locked', DecryptState::NeedsKey);
+
+    Livewire::test('decrypt.confirm-modal')
+        ->call('open', [$ready->id, $locked->id])
+        ->assertSee(['Keyed (USA).iso', 'Locked (USA).iso'])
+        ->assertSee('replaces the encrypted one')
+        ->assertSee('The .dkey beside it is deleted too')
+        ->assertSee('This cannot be undone.')
         ->call('decrypt')
-        ->assertSet('picked', [])
-        ->assertDispatched('conversion-queued');
+        ->assertDispatched('conversion-queued')
+        ->assertDispatched('decrypt-queued')
+        ->assertSet('fileIds', []);
 
     // On record before decrypting deletes the .dkey.
     expect($ready->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY);
@@ -168,9 +183,21 @@ it('shows a PS3 image\'s state on its game page, and decrypts it from there', fu
     Livewire::test('games.show', ['game' => $file->game])
         ->assertSee('Key ready')
         ->assertSee('Change key')
-        ->call('decryptFile', $file->id);
+        ->assertSeeHtml("decrypt-confirm', { fileIds: [{$file->id}] }");
+
+    Livewire::test('decrypt.confirm-modal')->call('open', [$file->id])->call('decrypt');
 
     expect(Conversion::query()->where('converter', 'ps3-decrypt')->count())->toBe(1);
+});
+
+it('never queues the same image twice, however often Decrypt is pressed', function () {
+    $file = ps3Image('Keyed', DecryptState::Ready);
+    $modal = Livewire::test('decrypt.confirm-modal');
+
+    $modal->call('open', [$file->id])->call('decrypt');
+    $modal->call('open', [$file->id])->call('decrypt');
+
+    expect(Conversion::query()->where('game_file_id', $file->id)->count())->toBe(1);
 });
 
 it('shows a disc key on the game page, still there once the .dkey has gone', function () {
