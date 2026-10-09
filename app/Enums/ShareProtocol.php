@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
+use App\Models\ConsoleSourceFolder;
 use App\Support\Console;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -78,7 +79,9 @@ enum ShareProtocol: string
     }
 
     /**
-     * The installed consoles this protocol serves: ps3netsrv's root is the ps3 folder alone.
+     * The installed consoles this protocol serves. For ps3netsrv, the ones whose
+     * folder is in PS3NETSRV_FOLDERS — the folder the library really keeps
+     * them in, or the console's usual one, which is then shown as misplaced().
      *
      * @param  Collection<int, Console>  $consoles
      * @return Collection<int, Console>
@@ -93,9 +96,52 @@ enum ShareProtocol: string
 
         return $consoles
             ->filter(function (Console $console) use ($folders): bool {
-                return in_array($console->folder, $folders, true);
+                return in_array($console->folder, $folders, true)
+                    || in_array(ConsoleSourceFolder::pathFor($console), $folders, true);
             })
             ->values();
+    }
+
+    /**
+     * Where a console's games really are, when ps3netsrv serves its usual
+     * folder instead: PlayStation 3 pointed at roms/ps3 on the consoles page,
+     * while PS3NETSRV_FOLDERS still says PS3ISO=ps3. ps3netsrv knows nothing
+     * of the app's settings, so webMAN would list an empty folder while the
+     * card said all was well. Null when nothing is amiss.
+     */
+    public function misplaced(Console $console): ?string
+    {
+        if ($this !== self::Ps3netsrv) {
+            return null;
+        }
+
+        $folders = (array) config('settings.network.ps3netsrv_folders', []);
+        $real = ConsoleSourceFolder::pathFor($console);
+
+        return $real !== null && ! in_array($real, $folders, true) ? $real : null;
+    }
+
+    /**
+     * The library folder ps3netsrv serves this console from: the real one
+     * when it is mapped, else its usual one.
+     */
+    public function servedFolder(Console $console): string
+    {
+        $real = ConsoleSourceFolder::pathFor($console);
+
+        return $real !== null && in_array($real, (array) config('settings.network.ps3netsrv_folders', []), true)
+            ? $real
+            : $console->folder;
+    }
+
+    /**
+     * Whether a PS3NETSRV_WHITELIST is in a form ps3netsrv takes — one address,
+     * * for any part — which the share container checks too, and refuses to
+     * start ps3netsrv on rather than drop it.
+     */
+    public static function ps3netsrvWhitelistValid(string $whitelist): bool
+    {
+        return Str::isMatch('/^([0-9]{1,3}|\*)(\.([0-9]{1,3}|\*)){3}$/', $whitelist);
     }
 
     /**

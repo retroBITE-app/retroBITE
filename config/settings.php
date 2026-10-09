@@ -26,7 +26,8 @@ return [
     | PS3NETSRV mirrors the share container's own switch, so a ps3netsrv that
     | was turned off is left off the panel rather than reported offline, and
     | PS3NETSRV_FOLDERS its map of webMAN's folders to the library's, so the
-    | panel lists the consoles ps3netsrv really serves.
+    | panel lists the consoles ps3netsrv really serves, and PS3NETSRV_WHITELIST
+    | so it can say when anyone on the network may read them.
     |
     */
 
@@ -36,6 +37,7 @@ return [
         'username' => env('AUTH_USER', 'retrobite'),
         'ps3netsrv' => filter_var(env('PS3NETSRV', true), FILTER_VALIDATE_BOOL),
         'ps3netsrv_folders' => ShareProtocol::ps3netsrvFolders((string) env('PS3NETSRV_FOLDERS', 'PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx')),
+        'ps3netsrv_whitelist' => trim((string) env('PS3NETSRV_WHITELIST', '')),
     ],
 
     /*

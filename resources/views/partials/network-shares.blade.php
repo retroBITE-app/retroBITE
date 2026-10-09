@@ -1,5 +1,7 @@
 @php
     use App\Enums\ShareProtocol;
+
+    $whitelist = (string) config('settings.network.ps3netsrv_whitelist');
 @endphp
 
 {{--
@@ -51,6 +53,17 @@
                         </div>
                     </dl>
 
+                    @if ($protocol === ShareProtocol::Ps3netsrv)
+                        {{-- It has no login, so who may connect is the whole of its security. --}}
+                        @if ($whitelist === '')
+                            <p class="text-xs text-warn">{{ __('Readable by everyone on the network. Limit it with PS3NETSRV_WHITELIST.') }}</p>
+                        @elseif (! ShareProtocol::ps3netsrvWhitelistValid($whitelist))
+                            <p class="text-xs text-danger">{{ __('PS3NETSRV_WHITELIST=:whitelist is not an address ps3netsrv takes (one address, * for any part), so it is not started.', ['whitelist' => $whitelist]) }}</p>
+                        @else
+                            <p class="text-xs text-fg-dim">{{ __('Only :whitelist may connect.', ['whitelist' => $whitelist]) }}</p>
+                        @endif
+                    @endif
+
                     <div>
                         <p class="kicker mb-2 text-fg-faint">{{ __('Shares') }}</p>
 
@@ -61,10 +74,21 @@
                         @else
                             <ul class="space-y-1">
                                 @foreach ($served as $share)
-                                    <li class="flex items-center gap-2 rounded-md border border-line/70 bg-surface px-3 py-2">
-                                        <img src="{{ $share->icon }}" alt="" class="h-4 w-4 shrink-0 object-contain" />
-                                        <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ $share->name }}</span>
-                                        <span class="min-w-0 shrink truncate font-mono text-xs text-fg-dim">{{ $protocol->connectionString($hostIp, $share->folder) }}</span>
+                                    @php($misplaced = $protocol->misplaced($share))
+                                    <li class="rounded-md border border-line/70 bg-surface px-3 py-2">
+                                        <div class="flex items-center gap-2">
+                                            <img src="{{ $share->icon }}" alt="" class="h-4 w-4 shrink-0 object-contain" />
+                                            <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ $share->name }}</span>
+                                            @if ($misplaced !== null)
+                                                <flux:icon.exclamation-triangle variant="micro" class="size-4 shrink-0 text-warn" />
+                                            @else
+                                                <span class="min-w-0 shrink truncate font-mono text-xs text-fg-dim">{{ $protocol->connectionString($hostIp, $protocol === ShareProtocol::Ps3netsrv ? $protocol->servedFolder($share) : $share->folder) }}</span>
+                                            @endif
+                                        </div>
+                                        @if ($misplaced !== null)
+                                            {{-- ps3netsrv reads PS3NETSRV_FOLDERS, not the consoles page. --}}
+                                            <p class="mt-1 text-xs text-warn">{{ __('Its games are in :real, but ps3netsrv serves :served. Move the folder, or change PS3NETSRV_FOLDERS.', ['real' => $misplaced, 'served' => $share->folder]) }}</p>
+                                        @endif
                                     </li>
                                 @endforeach
                             </ul>

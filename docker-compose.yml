@@ -53,10 +53,11 @@ services:
       HOST_IP: ${HOST_IP:-}
       # The SMB and FTP account, shown on the Network page.
       AUTH_USER: ${AUTH_USER:-retrobite}
-      # Whether retrobite-share runs ps3netsrv, and what it serves, so its
-      # card is shown with the right consoles.
+      # Whether retrobite-share runs ps3netsrv, what it serves and to whom,
+      # so its card is shown with the right consoles and says when it is open.
       PS3NETSRV: ${PS3NETSRV:-true}
       PS3NETSRV_FOLDERS: ${PS3NETSRV_FOLDERS:-PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx}
+      PS3NETSRV_WHITELIST: ${PS3NETSRV_WHITELIST:-}
       # Transfers write to a USB drive from the browser, which Chrome allows
       # only on https or localhost; a page opened another way links here.
       TRANSFER_LOCALHOST_URL: ${TRANSFER_LOCALHOST_URL:-http://localhost:${WEB_PORT:-81}}
