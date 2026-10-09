@@ -99,6 +99,12 @@ final class Ps3Decrypt extends Converter
         ];
     }
 
+    /** The disc key: on record already, and not for the queue's log. */
+    public function secretFlags(): array
+    {
+        return ['--dk'];
+    }
+
     /** A wrong key makes ps3dec write noise and exit 0: the image has to read as decrypted. */
     public function confirm(string $output): ?string
     {

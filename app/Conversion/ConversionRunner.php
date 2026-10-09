@@ -783,8 +783,14 @@ final class ConversionRunner
             throw ConversionFailed::because(ConversionFailure::TimedOut, $tool);
         }
 
+        $secret = $converter->secretFlags();
+
         $this->line('$ '.collect([basename($binary), ...$arguments])
-            ->map(function (string $part): string {
+            ->map(function (string $part, int $index) use ($secret, $arguments): string {
+                if ($index > 0 && in_array($arguments[$index - 2] ?? null, $secret, true)) {
+                    return '********';
+                }
+
                 return Str::contains($part, ' ') ? '"'.$part.'"' : $part;
             })
             ->implode(' '));

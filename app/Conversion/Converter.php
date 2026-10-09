@@ -230,6 +230,18 @@ abstract class Converter
     }
 
     /**
+     * The flags whose value is a secret, such as a disc key: the command is
+     * written into the conversion's log, which the queue shows, and the value
+     * after each of these is masked there. The tool is still given it.
+     *
+     * @return list<string>
+     */
+    public function secretFlags(): array
+    {
+        return [];
+    }
+
+    /**
      * The Tools page it lives on instead of the Conversion picker, e.g.
      * {@see PAGE_DECRYPT}; null for the picker.
      */

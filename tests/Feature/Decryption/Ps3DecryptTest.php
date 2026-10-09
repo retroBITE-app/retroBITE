@@ -240,6 +240,19 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
     });
 });
 
+it('gives ps3dec the key but never writes it into the conversion log', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    fakePs3dec();
+
+    $conversion = decryptPs3(ps3Game());
+
+    Process::assertRan(fn (PendingProcess $process): bool => in_array(Ps3Image::KEY, (array) $process->command, true)
+        || in_array(strtolower(Ps3Image::KEY), (array) $process->command, true));
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and(Str::lower((string) $conversion->log))->not->toContain(Str::lower(Ps3Image::KEY))
+        ->and((string) $conversion->log)->toContain('--dk ********');
+});
+
 it('keeps the encrypted image and its key when the output is still encrypted', function () {
     config()->set('decrypters.tools.ps3dec.path', '/bin/true');
     fakePs3dec(wrongKey: true);
