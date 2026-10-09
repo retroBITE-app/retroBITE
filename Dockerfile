@@ -54,11 +54,15 @@ RUN printf '%s\n' \
 # iproute2 is for the entrypoint's host-IP detection: the container needs the
 # address of the default-route interface, and `hostname -I` cannot tell you
 # which of its seven answers that is.
+# supervisor keeps the daemons running and starts any that dies again
+# (docker/supervisord.conf). It brings Python with it; a restart loop written
+# into the entrypoint did the job without, and kept getting it wrong.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     samba \
     samba-common-bin \
     vsftpd \
     iproute2 \
+    supervisor \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/debconf/*
 
@@ -67,6 +71,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy files
 COPY docker/smb.conf /etc/samba/smb.conf
 COPY docker/vsftpd.conf /etc/vsftpd.conf
+COPY docker/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY --from=ps3netsrv /src/ps3netsrv/ps3netsrv /usr/local/bin/ps3netsrv
 
@@ -91,8 +96,8 @@ EXPOSE 20 21 21100-21110
 # ps3netsrv
 EXPOSE 38008
 
-# smbd answering on 445. FTP is left out: vsftpd is restarted by the
-# entrypoint when it dies, and SMB is what consoles mostly use.
+# smbd answering on 445. FTP is left out: supervisord restarts vsftpd when it
+# dies, and SMB is what consoles mostly use.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD bash -c '</dev/tcp/127.0.0.1/445' || exit 1
 

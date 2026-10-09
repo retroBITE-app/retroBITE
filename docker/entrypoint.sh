@@ -162,8 +162,8 @@ if [ "$PS3NETSRV" = true ]; then
     done
 
     # ps3netsrv takes one address with * for any part (192.168.1.*) and exits
-    # on anything else — a CIDR such as 192.168.1.0/24 included — which the
-    # restart loop below would then start again and again. Refused here
+    # on anything else — a CIDR such as 192.168.1.0/24 included — which
+    # supervisord would then start again until it gave up. Refused here
     # instead, and not started at all: a whitelist that was meant to narrow
     # who connects must not become no whitelist. SMB and FTP carry on.
     if [ -n "$PS3NETSRV_WHITELIST" ] && ! [[ "$PS3NETSRV_WHITELIST" =~ ^([0-9]{1,3}|\*)(\.([0-9]{1,3}|\*)){3}$ ]]; then
@@ -187,97 +187,42 @@ else
     echo "WARNING: /games is not writable as $USER, and its ownership cannot be changed from here (a network mount?). Uploads over SMB and FTP will fail until its owner allows them." >&2
 fi
 
-# The daemons, kept alive. supervisord did this before, but it is a Python
-# program and pulled a CPython runtime in purely to run a few execs. Docker's own
-# init (`init: true` in compose) reaps zombies and forwards signals, so all this
-# has to do is start them and put back whichever one dies.
-declare -A COMMANDS=(
-    [smbd]="/usr/sbin/smbd --foreground --no-process-group"
-    [nmbd]="/usr/sbin/nmbd --foreground --no-process-group"
-    [vsftpd]="/usr/sbin/vsftpd /etc/vsftpd.conf"
-)
-declare -A PIDS=()
-declare -A STARTED=()
-declare -A BACKOFF=()
-
-# ps3netsrv as the share account rather than root: the protocol has no login,
-# and though this build is read-only (see the Dockerfile), it gets no more
-# than SMB and FTP do. Its root is the image's /srv/ps3netsrv, holding the links made
-# above. A function, not a COMMANDS string, because those are word-split
-# unquoted and a whitelist such as 192.168.1.* would be globbed. exec keeps
-# the pid start_service records on ps3netsrv itself.
-run_ps3netsrv() {
-    local args=(/srv/ps3netsrv 38008)
-
-    if [ -n "$PS3NETSRV_WHITELIST" ]; then
-        args+=("$PS3NETSRV_WHITELIST")
-    fi
-
-    exec setpriv --reuid="$USER" --regid="$(id -g "$USER")" --init-groups \
-        /usr/local/bin/ps3netsrv "${args[@]}"
-}
+# ps3netsrv, when it is on, as the share account rather than root: the
+# protocol has no login, and though this build is read-only (see the
+# Dockerfile), it gets no more than SMB and FTP do. Its root is the image's
+# /srv/ps3netsrv, holding the links made above. Written fresh each boot, so
+# switching it off leaves nothing behind for supervisord to start.
+#
+# Its stdin is /dev/null. On an error — the port already taken — ps3netsrv
+# prints "Press ENTER to continue" and reads stdin, and the pipe supervisord
+# gives every program never ends: it would sit there shown as RUNNING, serving
+# nothing, for good. With nothing to read it exits and is started again.
+mkdir -p /etc/supervisor/conf.d
+rm -f /etc/supervisor/conf.d/ps3netsrv.conf
 
 if [ "$PS3NETSRV" = true ]; then
-    COMMANDS[ps3netsrv]="run_ps3netsrv"
+    # Single-quoted, so the shell leaves 192.168.1.* alone; left out when
+    # unset, because an empty argument is a whitelist ps3netsrv refuses. The
+    # check above has made sure it holds no quote.
+    PS3NETSRV_ARGS="/srv/ps3netsrv 38008"
+    if [ -n "$PS3NETSRV_WHITELIST" ]; then
+        PS3NETSRV_ARGS="$PS3NETSRV_ARGS '$PS3NETSRV_WHITELIST'"
+    fi
+
+    cat > /etc/supervisor/conf.d/ps3netsrv.conf <<PROGRAM
+[program:ps3netsrv]
+command=/bin/sh -c "exec /usr/local/bin/ps3netsrv $PS3NETSRV_ARGS < /dev/null"
+user=$USER
+autorestart=true
+startsecs=3
+startretries=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+PROGRAM
 fi
 
-# Launch one daemon and remember its pid.
-start_service() {
-    local name="$1"
-
-    ${COMMANDS[$name]} &
-    PIDS[$name]=$!
-    STARTED[$name]=$SECONDS
-
-    echo "→ started $name (pid ${PIDS[$name]})"
-}
-
-# Stop everything on the way out, so `docker stop` is prompt rather than a
-# ten-second wait for SIGKILL.
-stop_services() {
-    trap - TERM INT
-
-    echo "→ stopping"
-    for name in "${!PIDS[@]}"; do
-        kill "${PIDS[$name]}" 2>/dev/null || true
-    done
-    wait
-
-    exit 0
-}
-
-trap stop_services TERM INT
-
-for name in "${!COMMANDS[@]}"; do
-    start_service "$name"
-done
-
-# `wait -n` returns as soon as any one of them exits; whichever it was gets
-# restarted, matching supervisord's autorestart. One that dies within half a
-# minute of starting — a port already taken, a bad setting — waits first, 5 s
-# doubling to a minute, rather than being started again as fast as the CPU
-# allows and filling the log. A run that lasted resets the wait. The sleep is
-# backgrounded so `docker stop` is not held up by it.
-while true; do
-    wait -n || true
-
-    for name in "${!PIDS[@]}"; do
-        if ! kill -0 "${PIDS[$name]}" 2>/dev/null; then
-            if (( SECONDS - ${STARTED[$name]} < 30 )); then
-                previous=${BACKOFF[$name]:-0}
-                BACKOFF[$name]=$(( previous == 0 ? 5 : previous * 2 ))
-                if (( BACKOFF[$name] > 60 )); then
-                    BACKOFF[$name]=60
-                fi
-                echo "⚠ $name exited within $(( SECONDS - ${STARTED[$name]} ))s, restarting in ${BACKOFF[$name]}s"
-                sleep "${BACKOFF[$name]}" &
-                wait $! || true
-            else
-                BACKOFF[$name]=0
-                echo "⚠ $name exited, restarting"
-            fi
-
-            start_service "$name"
-        fi
-    done
-done
+# supervisord from here: smbd, nmbd, vsftpd and ps3netsrv, each started again
+# when it exits (docker/supervisord.conf). Compose's `init: true` keeps tini
+# as PID 1 above it, forwarding docker stop's signal and reaping orphans.
+exec supervisord -c /etc/supervisor/supervisord.conf
