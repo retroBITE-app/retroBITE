@@ -15,10 +15,30 @@ new class extends Component
 {
     public string $term = '';
 
+    /**
+     * Set the first time the box opens. Until then nothing is looked up or
+     * sent: the layout renders this on every full page load, and the
+     * quick-jump list was fifteen rows of HTML in each one, opened or not.
+     * Persisted, so once loaded it stays loaded for the tab.
+     */
+    public bool $ready = false;
+
     /** @return array<string, mixed> */
     public function with(GlobalSearch $search): array
     {
-        return ['groups' => $search->results($this->term)];
+        return ['groups' => $this->ready ? $search->results($this->term) : []];
+    }
+
+    /** The box was opened: from now on it lists what it finds. */
+    public function load(): void
+    {
+        $this->ready = true;
+    }
+
+    /** Typed into before the first load had come back. */
+    public function updatedTerm(): void
+    {
+        $this->ready = true;
     }
 
     /** Closed: the next open starts from the quick-jump list. */
@@ -83,7 +103,13 @@ new class extends Component
                         @endforeach
                     </div>
                 @empty
-                    <p class="px-2 py-8 text-center text-sm text-fg-faint">{{ __('Nothing matches “:term”.', ['term' => trim($term)]) }}</p>
+                    @if ($ready)
+                        <p class="px-2 py-8 text-center text-sm text-fg-faint">{{ __('Nothing matches “:term”.', ['term' => trim($term)]) }}</p>
+                    @else
+                        <div class="flex justify-center py-8">
+                            <flux:icon.loading class="size-5 text-fg-faint" />
+                        </div>
+                    @endif
                 @endforelse
             </div>
 

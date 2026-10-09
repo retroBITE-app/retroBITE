@@ -15,6 +15,12 @@ export default () => ({
         this.active = 0;
         this.$flux.modal(MODAL).show();
 
+        // The list is not in the page until the box is first opened; see
+        // $ready in livewire/global-search.
+        if (! this.$wire.ready) {
+            this.$wire.load();
+        }
+
         // The input carries autofocus, which the dialog honours as it opens;
         // asked again once it has, in case the dialog took focus itself. Found
         // by selector: inside flux:modal it is out of reach of this $refs.
