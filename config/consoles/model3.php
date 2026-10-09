@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 55,
     'retroachievements_id' => 27,
+    'launchbox_platforms' => ['Sega Model 3', 'Arcade'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 13,
     'retroachievements_id' => 16,
+    'launchbox_platforms' => ['Nintendo GameCube'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

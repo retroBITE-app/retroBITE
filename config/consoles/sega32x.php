@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 19,
     'retroachievements_id' => 10,
+    'launchbox_platforms' => ['Sega 32X'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

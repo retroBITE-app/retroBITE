@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 122,
     'retroachievements_id' => 2,
+    'launchbox_platforms' => ['Nintendo 64DD'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 66,
     'retroachievements_id' => 30,
+    'launchbox_platforms' => ['Commodore 64'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

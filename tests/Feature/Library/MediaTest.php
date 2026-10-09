@@ -3,7 +3,6 @@
 use App\Enums\FileRole;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
-use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
 use App\Models\Game;
@@ -433,8 +432,7 @@ it('keeps one of each type, not one overall', function () {
 });
 
 /*
- * The kept list. One jeuInfos answer names the game, carries its rating and
- * lists its artwork; keeping the list is what lets everything after the match
+ * The kept list. One jeuInfos answer names the game and lists its artwork; keeping the list is what lets everything after the match
  * choose artwork again without paying for that answer twice.
  */
 
@@ -462,8 +460,7 @@ it('keeps the artwork list from the answer that identified the game', function (
     $kept = $this->game->refresh()->mediaList;
 
     expect($kept)->not->toBeNull()
-        ->and(array_column($kept->medias, 'type'))->toBe(['box-2D', 'ss'])
-        ->and($this->game->rating)->toBe(85);
+        ->and(array_column($kept->medias, 'type'))->toBe(['box-2D', 'ss']);
 
     Http::assertSentCount(1);
 });
@@ -548,17 +545,6 @@ it('leaves a game alone when the provider has nothing more to give it', function
 
     expect(ScrapeGameMedia::queueForConsole('psx'))->toBe(0);
     Bus::assertNotDispatched(ScrapeGameMedia::class);
-});
-
-it('keeps the list from a rating fetch too', function () {
-    Http::fake(['*' => Http::response(jeuInfos([entry('box-2D')]), 200)]);
-
-    (new RateGame($this->game->id))->handle(app(ScreenScraperService::class));
-
-    $this->game->refresh();
-
-    expect($this->game->rating)->toBe(85)
-        ->and(array_column($this->game->mediaList->medias, 'type'))->toBe(['box-2D']);
 });
 
 it('still runs a job queued before the list was kept', function () {

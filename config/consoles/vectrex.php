@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 102,
     'retroachievements_id' => 46,
+    'launchbox_platforms' => ['GCE Vectrex'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

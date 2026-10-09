@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 22,
     'retroachievements_id' => 39,
+    'launchbox_platforms' => ['Sega Saturn'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

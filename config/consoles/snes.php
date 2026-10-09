@@ -19,6 +19,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 4,
     'retroachievements_id' => 3,
+    'launchbox_platforms' => ['Super Nintendo Entertainment System'],
     'cover_aspect' => '11/8',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

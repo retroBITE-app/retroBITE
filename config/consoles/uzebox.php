@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 216,
     'retroachievements_id' => 80,
+    'launchbox_platforms' => ['Uzebox'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

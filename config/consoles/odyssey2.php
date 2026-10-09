@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 104,
     'retroachievements_id' => 23,
+    'launchbox_platforms' => ['Magnavox Odyssey 2'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

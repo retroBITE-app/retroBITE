@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 17,
     'retroachievements_id' => 62,
+    'launchbox_platforms' => ['Nintendo 3DS'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

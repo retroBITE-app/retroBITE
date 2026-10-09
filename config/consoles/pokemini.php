@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 211,
     'retroachievements_id' => 24,
+    'launchbox_platforms' => ['Nintendo Pokemon Mini'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

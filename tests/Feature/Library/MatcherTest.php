@@ -101,9 +101,7 @@ it('identifies a game from its filename and size alone', function () {
         ->and($game->slug)->toBe('final-fantasy-ix')
         ->and($game->status)->toBe(GameStatus::Matched)
         ->and($game->publisher)->toBe('Square')
-        ->and($game->matched_at)->not->toBeNull()
-        // The answer carried no note, so there is no rating to record.
-        ->and($game->rating)->toBeNull();
+        ->and($game->matched_at)->not->toBeNull();
 
     // No checksum was computed: reading 430 MB to learn what the filename
     // already told the provider would be wasted work.
@@ -302,52 +300,15 @@ it('keeps two games apart when the provider gives them the same title', function
         ->and(Game::pluck('slug')->sort()->values()->all())->toBe(['final-fantasy-ix', 'final-fantasy-ix-2']);
 });
 
-it('records the provider rating on a game it identifies', function () {
+it('does not take the provider\'s note for a score', function () {
+    // ScreenScraper's voters rate the entry — its artwork, mostly — more
+    // than the game, which is why the retroBite score leaves it out.
     providerHit(['note' => ['text' => '18']]);
 
     $game = psxGame();
     matcher()->match($game);
 
-    // Their mark out of twenty, ours out of a hundred.
-    expect($game->refresh()->rating)->toBe(90);
-});
-
-it('hands a rating to the surviving game of a merge that had none', function () {
-    // The first dump is identified before ratings exist, which is every game
-    // in a library that predates the column.
-    providerSequence(
-        ['id' => '19256'],
-        ['id' => '19256', 'note' => ['text' => '18']],
-    );
-
-    $first = psxGame();
-    matcher()->match($first);
-    expect($first->refresh()->rating)->toBeNull();
-
-    $second = Game::factory()->forConsole('psx')->create(['title' => 'FF9 (USA)', 'slug' => 'ff9-usa']);
-    GameFile::factory()->for($second)->create(['path' => 'psx/FF9 (USA).bin', 'filename' => 'FF9 (USA).bin', 'extension' => 'bin', 'role' => FileRole::Track]);
-
-    // The answer about the second dump is about the same provider id, so it is
-    // about the survivor too — and it has already been paid for.
-    expect(matcher()->match($second)->outcome)->toBe(MatchOutcome::Merged)
-        ->and($first->refresh()->rating)->toBe(90);
-});
-
-it('leaves a rating the surviving game already holds alone', function () {
-    providerSequence(
-        ['id' => '19256', 'note' => ['text' => '18']],
-        ['id' => '19256', 'note' => ['text' => '12']],
-    );
-
-    $first = psxGame();
-    matcher()->match($first);
-
-    $second = Game::factory()->forConsole('psx')->create(['title' => 'FF9 (USA)', 'slug' => 'ff9-usa']);
-    GameFile::factory()->for($second)->create(['path' => 'psx/FF9 (USA).bin', 'filename' => 'FF9 (USA).bin', 'extension' => 'bin', 'role' => FileRole::Track]);
-
-    matcher()->match($second);
-
-    expect($first->refresh()->rating)->toBe(90);
+    expect($game->refresh()->rating)->toBeNull();
 });
 
 it('re-identifies a matched game by hand, dropping the artwork of the game it was', function () {

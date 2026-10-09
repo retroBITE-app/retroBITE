@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 10,
     'retroachievements_id' => 6,
+    'launchbox_platforms' => ['Nintendo Game Boy Color'],
     'cover_aspect' => '1/1',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

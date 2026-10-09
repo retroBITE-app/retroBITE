@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 61,
     'retroachievements_id' => 41,
+    'launchbox_platforms' => ['Sony PSP', 'Sony PSP Minis'],
     'cover_aspect' => '3/5',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

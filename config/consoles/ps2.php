@@ -14,6 +14,7 @@ return [
     'exclude_files' => ['games.bin'],
     'screenscraper_id' => 58,
     'retroachievements_id' => 21,
+    'launchbox_platforms' => ['Sony Playstation 2'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'opl', 'retroarch'],
     'default_layout' => 'custom',

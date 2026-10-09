@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 221,
     'retroachievements_id' => 47,
+    'launchbox_platforms' => ['NEC PC-8801'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

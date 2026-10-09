@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 97,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Fujitsu FM-7'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

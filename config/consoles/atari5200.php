@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 40,
     'retroachievements_id' => 50,
+    'launchbox_platforms' => ['Atari 5200'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

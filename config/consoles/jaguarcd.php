@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 171,
     'retroachievements_id' => 77,
+    'launchbox_platforms' => ['Atari Jaguar CD'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

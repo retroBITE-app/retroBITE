@@ -7,7 +7,6 @@ use App\Enums\MediaKind;
 use App\Enums\ThumbnailSize;
 use App\Exceptions\LibraryFileRejected;
 use App\Jobs\MatchGame;
-use App\Jobs\RateGame;
 use App\Jobs\ScrapeGameMedia;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
@@ -221,70 +220,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }
 
         $this->fetchMedia($this->fetchRegion);
-    }
-
-    /**
-     * The rating the game held when a fetch was queued, or null when idle.
-     *
-     * A string rather than the int, so an unrated game reads as '' and not as
-     * a null that also means "not waiting" — the same reason fetchingFrom is
-     * one. Held on the component because Livewire hydrates $game out of the
-     * database on every request: a before-and-after taken inside one request
-     * is two reads of the same row and can never differ.
-     */
-    public ?string $ratingFrom = null;
-
-    /** When the fetch was queued, for the wait to give up on. */
-    public ?int $ratingSince = null;
-
-    /**
-     * Ask the provider what this game is rated, now.
-     *
-     * Always forced. The job's own guard leaves a game that already has a
-     * rating alone, which is what makes the backfill safe to run twice — but
-     * somebody who opened this menu and chose this is asking a second time on
-     * purpose, and votes accumulate, so the answer can have moved.
-     */
-    public function fetchRating(): void
-    {
-        if ($reason = $this->game->blockedFromRating()) {
-            Flux::toast(variant: 'warning', text: $reason);
-
-            return;
-        }
-
-        $this->ratingFrom = (string) $this->game->rating;
-        $this->ratingSince = now()->timestamp;
-
-        RateGame::dispatch($this->game->id, force: true);
-
-        Flux::toast(text: __('Fetching the rating for :title.', ['title' => $this->game->title]));
-    }
-
-    /**
-     * Called by the wait banner while a rating fetch is outstanding: on the
-     * game's rating signal, and once at the timeout (see x-live-wait).
-     *
-     * An answer that comes back the same number is indistinguishable from no
-     * answer at all, and a game nobody has voted on gets nothing written for it
-     * either. Both are what the timeout is for — the same one the artwork wait
-     * gives up on.
-     */
-    public function checkRating(): void
-    {
-        $this->game->refresh();
-
-        if ((string) $this->game->rating !== $this->ratingFrom) {
-            $this->ratingFrom = null;
-            $this->ratingSince = null;
-
-            return;
-        }
-
-        if ($this->ratingSince !== null && now()->timestamp - $this->ratingSince >= self::WAIT_SECONDS) {
-            $this->ratingFrom = null;
-            $this->ratingSince = null;
-        }
     }
 
     /**
@@ -914,6 +849,43 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
+     * What the retroBite score was made of, one short phrase per source, for
+     * the line under the description. Empty for a game with no score.
+     *
+     * @return list<string>
+     */
+    #[Computed]
+    public function scoreSources(): array
+    {
+        if ($this->game->rating === null) {
+            return [];
+        }
+
+        $sources = [];
+        $entry = $this->game->launchBoxGame;
+
+        if ($entry !== null && $entry->votes > 0 && $entry->rating !== null) {
+            $sources[] = trans_choice(
+                '{1} LaunchBox :stars★, one vote|[2,*] LaunchBox :stars★, :votes votes',
+                $entry->votes,
+                ['stars' => Number::format($entry->rating, maxPrecision: 1), 'votes' => Number::format($entry->votes)],
+            );
+        }
+
+        $set = $this->game->raGame;
+
+        if ($set !== null && $set->set_synced_at !== null && $set->num_distinct_players > 0) {
+            $sources[] = trans_choice(
+                '{1} RetroAchievements, one player|[2,*] RetroAchievements, :players players',
+                $set->num_distinct_players,
+                ['players' => Number::format($set->num_distinct_players)],
+            );
+        }
+
+        return $sources;
+    }
+
+    /**
      * The facts grid under the hero, eight cells in a fixed order.
      *
      * Missing values are dashed rather than dropped: the grid is a 1px gap
@@ -924,13 +896,13 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Computed]
     public function details(): array
     {
-        $rating = $this->game->rating;
-
         return Collection::make([
             ['key' => 'region', 'label' => __('Region'), 'value' => $this->regionLabel ?? $this->game->region],
             ['key' => 'console', 'label' => __('Console'), 'value' => $this->game->console()?->name],
             ['key' => 'released', 'label' => __('Released'), 'value' => $this->game->release_date],
-            ['key' => 'rating', 'label' => __('Rating'), 'value' => $rating !== null ? $rating.' / 100' : null],
+            // The score is not a fact like these: it has its own line under
+            // the description, with its rank and what it was made of.
+            ['key' => 'size', 'label' => __('Size'), 'value' => ($bytes = (int) $this->game->files()->sum('size_bytes')) > 0 ? Number::fileSize($bytes, 1) : null],
             ['key' => 'developer', 'label' => __('Developer'), 'value' => $this->game->developer],
             ['key' => 'publisher', 'label' => __('Publisher'), 'value' => $this->game->publisher],
             ['key' => 'genre', 'label' => __('Genre'), 'value' => $this->game->genre],
@@ -1496,7 +1468,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
             @php($identifyBlocked = $game->blockedFromLookup())
             @php($mediaBlocked = $game->blockedFromMediaScrape())
-            @php($ratingBlocked = $game->blockedFromRating())
             @php($manualBlocked = $game->blockedFromManualLookup())
 
             {{-- Hand-written rather than flux:dropdown: the panel's ground,
@@ -1613,26 +1584,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
                     <div class="my-1.25 mx-2 h-px bg-line"></div>
 
-                    {{-- Offered whether or not the game already has one: a
-                         rating is votes, and the number can have moved since
-                         the match that first wrote it. --}}
-                    <button
-                        type="button"
-                        role="menuitem"
-                        @disabled($ratingBlocked !== null)
-                        @if ($ratingBlocked !== null) title="{{ $ratingBlocked }}" @else wire:click="fetchRating" @endif
-                        @class([
-                            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                            'cursor-pointer hover:bg-raised' => $ratingBlocked === null,
-                            'cursor-not-allowed opacity-45' => $ratingBlocked !== null,
-                        ])
-                    >
-                        <flux:icon.star class="size-[15px] text-fg-muted" />
-                        {{ $game->rating === null ? __('Fetch rating') : __('Fetch rating again') }}
-                    </button>
-
-                    <div class="my-1.25 mx-2 h-px bg-line"></div>
-
                     {{-- The whole game at once: a cuesheet and its tracks, or a
                          playlist and its discs, name each other by filename and
                          only work kept together. Only the layout's own folders,
@@ -1744,6 +1695,39 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             <p class="mt-4 max-w-[100ch] text-sm leading-relaxed text-fg-muted text-pretty">
                 {{ $game->description ?? __('No metadata yet — use Identify to fetch it.') }}
             </p>
+
+            {{-- The retroBite score, its rank in this library and what it was
+                 made of, read with the description rather than filed among the
+                 facts: it is the verdict on the game, not a property of it.
+                 The badge is the shelf's, so a game keeps its colour here. --}}
+            @if ($game->rating !== null)
+                <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+                    <span
+                        style="background-color: {{ App\Support\RatingBand::color($game->rating) }}; color: {{ App\Support\RatingBand::ink() }}"
+                        class="shrink-0 rounded-md px-2 py-0.5 font-mono text-sm font-semibold tabular-nums"
+                    >{{ $game->rating }}</span>
+
+                    <span class="text-fg-soft">{{ __('retroBite score') }}</span>
+
+                    @if ($game->library_rank !== null)
+                        <span class="font-mono font-semibold tabular-nums text-fg-bright" title="{{ __('The retroBite rank: this game\'s place among every scored game in your library, across all consoles.') }}">#{{ $game->library_rank }}</span>
+                    @endif
+
+                    {{-- The figures behind the score, kept out of the line until
+                         somebody asks: a title over the icon, one per line. --}}
+                    <span
+                        tabindex="0"
+                        title="{{ implode("\n", [
+                            __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it on RetroAchievements.'),
+                            ...$this->scoreSources,
+                        ]) }}"
+                        class="cursor-help text-fg-faint transition-colors hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                    >
+                        <flux:icon.information-circle class="size-4" />
+                        <span class="sr-only">{{ implode('. ', $this->scoreSources) }}</span>
+                    </span>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -1768,18 +1752,10 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                             <img src="{{ $this->regionIcon }}" alt="" class="h-4 w-auto shrink-0 border border-line-input" />
                             <span class="truncate">{{ $value }}</span>
                         </dd>
-                    @elseif ($key === 'rating' && $game->rating !== null)
-                        {{-- The same band colour as the shelf badge, so a game
-                             does not change verdict on the way here. --}}
-                        <dd
-                            title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
-                            style="color: {{ App\Support\RatingBand::color($game->rating) }}"
-                            class="mt-2 font-mono text-[15px] font-semibold tabular-nums"
-                        >{{ $value }}</dd>
                     @else
                         <dd @class([
                             'mt-2 truncate text-[15px] text-fg-bright',
-                            'font-mono tabular-nums' => $key === 'released',
+                            'font-mono tabular-nums' => in_array($key, ['released', 'size'], true),
                         ]) title="{{ $value }}">{{ $value }}</dd>
                     @endif
                 </div>
@@ -1787,7 +1763,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         </dl>
     </section>
 
-    @if ($awaiting !== null || $fetchingFrom !== null || $ratingFrom !== null || $watchingTransfer !== null)
+    @if ($awaiting !== null || $fetchingFrom !== null || $watchingTransfer !== null)
         <section class="relative z-1 flex flex-col gap-3 px-4 pt-6.5 lg:px-8 lg:pt-10">
             @if ($watchingTransfer !== null && ($sending = $this->latestTransfer) !== null)
                 {{-- A copy to a network share, on the queue. An hour to the
@@ -1829,14 +1805,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                              class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
                     <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
                     <p class="text-sm text-accent">{{ __('Fetching artwork…') }}</p>
-                </x-live-wait>
-            @endif
-
-            @if ($ratingFrom !== null)
-                <x-live-wait :game="$game->id" on="rating" check="checkRating" :since="$ratingSince" :timeout="$this::WAIT_SECONDS"
-                             class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
-                    <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-                    <p class="text-sm text-accent">{{ __('Fetching the rating…') }}</p>
                 </x-live-wait>
             @endif
         </section>

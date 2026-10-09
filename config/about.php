@@ -25,8 +25,9 @@ return [
 
     // Mirrors BUILT ON at retrobite.app; keep the two in step.
     'credits' => [
-        ['icon' => 'photo', 'name' => 'ScreenScraper.fr', 'role' => 'Game identification, metadata, ratings and artwork'],
-        ['icon' => 'trophy', 'name' => 'RetroAchievements', 'role' => 'Achievement sets, unlocks and the hash index'],
+        ['icon' => 'photo', 'name' => 'ScreenScraper.fr', 'role' => 'Game identification, metadata and artwork'],
+        ['icon' => 'trophy', 'name' => 'RetroAchievements', 'role' => 'Achievement sets, unlocks, the hash index and player counts for the score'],
+        ['icon' => 'star', 'name' => 'LaunchBox Games Database', 'role' => 'Players\' ratings behind the retroBite score'],
         ['icon' => 'puzzle-piece', 'name' => 'Libretro', 'role' => 'Console iconography from retroarch-assets'],
         ['icon' => 'server-stack', 'name' => 'Samba & vsftpd', 'role' => 'The SMB and FTP shares consoles load from'],
         ['icon' => 'circle-stack', 'name' => 'MariaDB', 'role' => 'The library database'],

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 105,
     'retroachievements_id' => 8,
+    'launchbox_platforms' => ['PC Engine SuperGrafx'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -2,7 +2,6 @@
 
 use App\Enums\GameStatus;
 use App\Jobs\MeasureLibrary;
-use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
 use App\Jobs\WriteConsoleExports;
@@ -504,37 +503,6 @@ new #[Title('Consoles')] class extends Component
     }
 
     /**
-     * Queue a rating fetch for every identified game on a console.
-     *
-     * $held reads as it does for artwork: without it only the games holding no
-     * rating are asked about, which is what somebody wants after a scan has
-     * added to the shelf. With it every identified game on the console is asked
-     * again, which is the way to pick up votes cast since the last time.
-     *
-     * No media-types check to make first — a rating needs nothing switched on.
-     * A console that is not mapped to ScreenScraper has no identified games, so
-     * it queues nothing and says so rather than being refused up front.
-     */
-    public function fetchRatings(string $key, bool $held = false): void
-    {
-        $console = Console::tryFrom($key);
-
-        if ($console === null) {
-            return;
-        }
-
-        $queued = RateGame::queueForConsole($console->key, held: $held);
-
-        Flux::toast(text: $queued === 0
-            ? __('Nothing to fetch — every identified game on :console already has a rating.', ['console' => $console->name])
-            : trans_choice(
-                '{1} Fetching the rating for one game.|[2,*] Fetching ratings for :count games.',
-                $queued,
-                ['count' => $queued],
-            ));
-    }
-
-    /**
      * Write a loader's own files back into a console's folder.
      *
      * The only thing here that writes to somebody's library, so it is asked for
@@ -741,23 +709,6 @@ new #[Title('Consoles')] class extends Component
                                                         wire:click="fetchMedia('{{ $row['console']->key }}', true)"
                                                         wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
                                             {{ __('Re-fetch all artwork') }}
-                                        </flux:menu.item>
-
-                                        <flux:menu.separator />
-
-                                        <flux:menu.item icon="star"
-                                                        wire:click="fetchRatings('{{ $row['console']->key }}')">
-                                            {{ __('Fetch missing ratings') }}
-                                        </flux:menu.item>
-
-                                        {{-- Confirmed for the same reason as the
-                                             artwork above it: one provider lookup
-                                             per identified game, spent against the
-                                             same daily allowance. --}}
-                                        <flux:menu.item icon="arrow-path"
-                                                        wire:click="fetchRatings('{{ $row['console']->key }}', true)"
-                                                        wire:confirm="{{ __('Re-fetch ratings for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
-                                            {{ __('Re-fetch all ratings') }}
                                         </flux:menu.item>
 
                                         <flux:menu.separator />

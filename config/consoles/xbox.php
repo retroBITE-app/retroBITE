@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 32,
     'retroachievements_id' => 22,
+    'launchbox_platforms' => ['Microsoft Xbox'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

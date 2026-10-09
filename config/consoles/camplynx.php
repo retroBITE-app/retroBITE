@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 88,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Camputers Lynx'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

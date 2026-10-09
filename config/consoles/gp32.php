@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 101,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['GamePark GP32'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

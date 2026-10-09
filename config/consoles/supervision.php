@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 207,
     'retroachievements_id' => 63,
+    'launchbox_platforms' => ['Watara Supervision'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

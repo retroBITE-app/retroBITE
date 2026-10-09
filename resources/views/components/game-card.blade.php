@@ -157,7 +157,7 @@
                      a class Tailwind never saw in the source is one it never
                      generated — the same reason the geometry above is inline. --}}
                 <span
-                    title="{{ __('Rated :rating out of 100 by ScreenScraper', ['rating' => $game->rating]) }}"
+                    title="{{ __('retroBite score :rating out of 100', ['rating' => $game->rating]) }}"
                     style="background-color: {{ App\Support\RatingBand::color($game->rating) }}; color: {{ App\Support\RatingBand::ink() }}"
                     class="ms-auto shrink-0 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums"
                 >{{ $game->rating }}</span>

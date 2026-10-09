@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 28,
     'retroachievements_id' => 13,
+    'launchbox_platforms' => ['Atari Lynx'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

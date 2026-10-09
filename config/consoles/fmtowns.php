@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 253,
     'retroachievements_id' => 58,
+    'launchbox_platforms' => ['Fujitsu FM Towns Marty'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

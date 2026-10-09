@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 156,
     'retroachievements_id' => 27,
+    'launchbox_platforms' => ['Namco System 22', 'Arcade'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

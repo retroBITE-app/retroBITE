@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 23,
     'retroachievements_id' => 40,
+    'launchbox_platforms' => ['Sega Dreamcast'],
     'cover_aspect' => '7/8',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

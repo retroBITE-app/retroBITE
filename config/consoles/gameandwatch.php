@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 52,
     'retroachievements_id' => 60,
+    'launchbox_platforms' => ['Nintendo Game & Watch'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

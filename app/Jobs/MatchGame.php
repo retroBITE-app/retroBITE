@@ -11,6 +11,7 @@ use App\Jobs\RetroAchievements\IdentifyGame;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Services\GameMatcher;
+use App\Services\GameScorer;
 use App\Support\LiveUpdates;
 use App\Support\Matching\MatchOutcome;
 use Illuminate\Bus\Batchable;
@@ -104,6 +105,12 @@ class MatchGame implements ShouldQueue
             // The list travels with the result, so fetching artwork costs no
             // second metadata request: the answer already held every URL.
             ScrapeGameMedia::dispatch($result->game->id, $result->medias);
+        }
+
+        // The score's LaunchBox half is looked up by title, which the match
+        // has just settled. Its RetroAchievements half follows the set sync.
+        if (in_array($result->outcome, [MatchOutcome::Matched, MatchOutcome::Merged], true) && $result->game !== null) {
+            app(GameScorer::class)->score($result->game, announce: false);
         }
 
         // RetroAchievements is asked whatever ScreenScraper answered, and on

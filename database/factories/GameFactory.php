@@ -33,9 +33,9 @@ class GameFactory extends Factory
             'status' => GameStatus::Placeholder,
             'matched_at' => null,
 
-            // Not faked even on matched(): most of what the provider knows
-            // nobody has voted on, so a test that wants a rating should say so
-            // and every other test gets the ordinary case.
+            // Not faked even on matched(): a score needs a LaunchBox entry or
+            // an achievement set, so a test that wants one should say so and
+            // every other test gets the ordinary case.
             'rating' => null,
         ];
     }
@@ -53,7 +53,7 @@ class GameFactory extends Factory
         ]);
     }
 
-    /** A game the provider holds a rating for. */
+    /** A game holding a retroBite score. */
     public function rated(?int $rating = null): static
     {
         return $this->state(fn (array $attributes) => [

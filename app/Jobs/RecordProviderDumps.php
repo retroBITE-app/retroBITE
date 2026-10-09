@@ -11,18 +11,16 @@ use App\Services\ScreenScraperService;
 use App\Support\Matching\ProviderDumps;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Record what the provider says about each of one game's dumps: region,
  * popularity, flags (ProviderDumps).
  *
- * A backfill, like RateGame and for the same reason: a game identified from
- * now on has them from the answer that identified it, at no extra cost, and
- * this exists for the library identified before. Asks by the provider id the
+ * A backfill: a game identified from now on has them from the answer that
+ * identified it, at no extra cost, and this exists for the library identified
+ * before. Asks by the provider id the
  * game already holds — not a re-match, which could re-slug or merge the game.
- * The rating rides in the same answer, so a game still without one gets it.
  *
  * On the scraper queue with MatchGame: it spends the same thread allowance.
  */
@@ -89,13 +87,9 @@ class RecordProviderDumps implements ShouldQueue
         }
 
         ProviderDumps::record($game, $payload);
-
-        if ($game->rating === null && ($rating = Arr::get($payload, 'rating')) !== null) {
-            $game->update(['rating' => $rating]);
-        }
     }
 
-    /** Put the job back rather than fail it, when the provider says to wait. Named as in RateGame. */
+    /** Put the job back rather than fail it, when the provider says to wait. Named as in MatchGame. */
     private function waitAndRetry(ScreenScraperException $e): void
     {
         if (! $e->retryable()) {

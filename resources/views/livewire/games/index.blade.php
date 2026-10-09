@@ -4,7 +4,6 @@ use App\Conversion\Converters;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Jobs\MatchGame;
-use App\Jobs\RateGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
 use App\Jobs\WriteConsoleExports;
@@ -77,7 +76,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     #[Url(as: 'players', except: '')]
     public string $players = '';
 
-    /** The lowest provider rating to list, out of a hundred, or '' for all. */
+    /** The lowest retroBite score to list, out of a hundred, or '' for all. */
     #[Url(as: 'rating', except: '')]
     public string $minRating = '';
 
@@ -349,16 +348,17 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             // memory, and the size is a sum rather than every file loaded.
             ->with(['media' => fn ($q) => $q->ofKind(MediaKind::Cover)])
             ->withSum('files as size_bytes_sum', 'size_bytes')
-            ->withCount('files')
             // Read by blockedFromLookup(), which otherwise runs a files query
             // per row — twenty-four extra selects on a page of placeholders.
             ->withCount(['files as identifiable_files_count' => fn ($q) => $q->identifiable()->present()])
             ->tap(fn ($q) => match ($this->sort) {
                 // `rating IS NULL` first puts the unrated last rather than
                 // ahead of everything, which is what DESC alone does on
-                // MariaDB. Title breaks the ties, so a page of games that all
-                // scored 80 is still in an order somebody can read.
-                'rating' => $q->orderByRaw('games.rating IS NULL, games.rating DESC')->orderBy('games.title'),
+                // MariaDB. The retroBite rank breaks the ties the way the
+                // game page counts them, then title for a rank not yet worked
+                // out, so a page of games that all scored 80 is in an order
+                // somebody can read.
+                'rating' => $q->orderByRaw('games.rating IS NULL, games.rating DESC, games.library_rank IS NULL, games.library_rank')->orderBy('games.title'),
                 // The provider sends either a bare year or an ISO date, so the
                 // string sorts chronologically as it stands. Empty counts with
                 // null: an unmatched game has '' rather than nothing at all,
@@ -495,32 +495,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         Flux::toast(text: __('Fetching artwork for :title.', ['title' => $game->title]));
     }
 
-    /**
-     * Fetch the provider's rating for one game now.
-     *
-     * Forced, like the one on the game's own page: the row's menu is somebody
-     * asking on purpose, and the job's unforced guard would drop a game that
-     * already has a rating — which is the one they most likely meant.
-     */
-    public function fetchRating(int $id): void
-    {
-        $game = Game::find($id);
-
-        if ($game === null) {
-            return;
-        }
-
-        if ($reason = $game->blockedFromRating()) {
-            Flux::toast(variant: 'warning', text: $reason);
-
-            return;
-        }
-
-        RateGame::dispatch($game->id, force: true);
-
-        Flux::toast(text: __('Fetching the rating for :title.', ['title' => $game->title]));
-    }
-
     /*
      * The shelf's own actions, which are the console's rather than a game's.
      *
@@ -643,26 +617,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             ? __('Nothing to fetch — every identified game on :console already has the artwork switched on in Settings → Media.', ['console' => $console->name])
             : trans_choice(
                 '{1} Fetching artwork for one game.|[2,*] Fetching artwork for :count games. The library fills in as it goes.',
-                $queued,
-                ['count' => $queued],
-            ));
-    }
-
-    /** Queue a rating fetch for every identified game on this console. */
-    public function fetchConsoleRatings(bool $held = false): void
-    {
-        $console = $this->lockedTo;
-
-        if ($console === null) {
-            return;
-        }
-
-        $queued = RateGame::queueForConsole($console->key, held: $held);
-
-        Flux::toast(text: $queued === 0
-            ? __('Nothing to fetch — every identified game on :console already has a rating.', ['console' => $console->name])
-            : trans_choice(
-                '{1} Fetching the rating for one game.|[2,*] Fetching ratings for :count games.',
                 $queued,
                 ['count' => $queued],
             ));
@@ -924,21 +878,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
                             <flux:menu.separator />
 
-                            <flux:menu.item icon="star" wire:click="fetchConsoleRatings">
-                                {{ __('Fetch missing ratings') }}
-                            </flux:menu.item>
-
-                            <flux:menu.item icon="arrow-path"
-                                            wire:click="fetchConsoleRatings(true)"
-                                            wire:confirm="{{ __('Re-fetch ratings for all :count identified games on :console? That is one provider lookup each.', [
-                                                'count' => $this->consoleStats['identified'] ?? 0,
-                                                'console' => $this->lockedTo->name,
-                                            ]) }}">
-                                {{ __('Re-fetch all ratings') }}
-                            </flux:menu.item>
-
-                            <flux:menu.separator />
-
                             {{-- Straight into this console's settings, modal
                                  and all: the page reads the key off the query
                                  string and opens the form on arrival, so it is
@@ -1110,7 +1049,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             @endif
 
             <flux:select wire:model.live="minRating" size="sm" class="w-44">
-                <flux:select.option value="">{{ __('Any rating') }}</flux:select.option>
+                <flux:select.option value="">{{ __('Any score') }}</flux:select.option>
                 <flux:select.option value="90">{{ __('90 and above') }}</flux:select.option>
                 <flux:select.option value="80">{{ __('80 and above') }}</flux:select.option>
                 <flux:select.option value="70">{{ __('70 and above') }}</flux:select.option>
@@ -1131,7 +1070,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
             <flux:select wire:model.live="sort" size="sm" class="w-44">
                 <flux:select.option value="title">{{ __('Title, A to Z') }}</flux:select.option>
-                <flux:select.option value="rating">{{ __('Best rated first') }}</flux:select.option>
+                <flux:select.option value="rating">{{ __('Best score first') }}</flux:select.option>
                 <flux:select.option value="year">{{ __('Year, newest first') }}</flux:select.option>
                 <flux:select.option value="newest">{{ __('Recently added') }}</flux:select.option>
             </flux:select>
@@ -1273,8 +1212,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                         <col class="w-20" />  {{-- year --}}
                         <col class="w-24" />  {{-- players --}}
                         <col class="w-20" />  {{-- rating --}}
-                        <col class="w-44" />  {{-- achievements: the bar plus its count --}}
-                        <col class="w-20" />  {{-- files --}}
+                        <col class="w-20" />  {{-- retroBite rank --}}
                         <col class="w-20" />  {{-- actions --}}
                     </colgroup>
 
@@ -1284,9 +1222,8 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                             <th class="px-4 py-2.5 font-medium">{{ __('Title') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Year') }}</th>
                             <th class="px-4 py-2.5 font-medium">{{ __('Players') }}</th>
-                            <th class="px-4 py-2.5 font-medium">{{ __('Rating') }}</th>
-                            <th class="px-4 py-2.5 font-medium">{{ __('Achievements') }}</th>
-                            <th class="px-4 py-2.5 font-medium">{{ __('Files') }}</th>
+                            <th class="px-4 py-2.5 font-medium">{{ __('Score') }}</th>
+                            <th class="px-4 py-2.5 font-medium" title="{{ __('The retroBite rank: each game\'s place among every scored game in your library, across all consoles.') }}">{{ __('Rank') }}</th>
                             <th class="px-4 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
                         </tr>
                     </thead>
@@ -1313,7 +1250,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
                                 $rowIdentifyBlocked = $game->blockedFromLookup();
                                 $rowMediaBlocked = $game->blockedFromMediaScrape();
-                                $rowRatingBlocked = $game->blockedFromRating();
 
                                 // The line under the title. Console only where
                                 // the page is not already one console's shelf.
@@ -1361,21 +1297,42 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 </td>
 
                                 <td class="px-4 py-2">
-                                    {{-- Plain text while picking: the whole row ticks. --}}
-                                    @if ($picking)
-                                        <span @class(['block truncate font-medium', 'text-accent' => $rowPicked, 'text-fg-bright' => ! $rowPicked])>{{ $game->title }}</span>
-                                    @else
-                                        <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="block truncate font-medium text-fg-bright hover:text-accent">
-                                            {{ $game->title }}
-                                        </a>
-                                    @endif
+                                    <div class="flex items-center gap-4">
+                                        <div class="min-w-0 flex-1">
+                                            {{-- Plain text while picking: the whole row ticks. --}}
+                                            @if ($picking)
+                                                <span @class(['block truncate font-medium', 'text-accent' => $rowPicked, 'text-fg-bright' => ! $rowPicked])>{{ $game->title }}</span>
+                                            @else
+                                                <a href="{{ route('games.show', $game->routeParameters()) }}" wire:navigate class="block truncate font-medium text-fg-bright hover:text-accent">
+                                                    {{ $game->title }}
+                                                </a>
+                                            @endif
 
-                                    {{-- Always rendered, even empty: an absent
-                                         second line would make the row half a
-                                         height shorter than the one above it. --}}
-                                    <p class="truncate text-xs text-fg-dim" title="{{ implode(' · ', $rowMeta) }}">
-                                        {{ $rowMeta === [] ? '—' : implode(' · ', $rowMeta) }}
-                                    </p>
+                                            {{-- Always rendered, even empty: an absent
+                                                 second line would make the row half a
+                                                 height shorter than the one above it. --}}
+                                            <p class="truncate text-xs text-fg-dim" title="{{ implode(' · ', $rowMeta) }}">
+                                                {{ $rowMeta === [] ? '—' : implode(' · ', $rowMeta) }}
+                                            </p>
+                                        </div>
+
+                                        {{-- Achievement progress at the title's far
+                                             end rather than in a column of its own,
+                                             which stood empty for every game without
+                                             a set. The same bar and counts as the
+                                             card, so the two views agree. --}}
+                                        @if ($rowPossible > 0)
+                                            <div class="flex w-32 shrink-0 items-center gap-2">
+                                                <div class="h-1 flex-1 overflow-hidden rounded-sm bg-raised">
+                                                    <div class="h-full rounded-sm bg-accent-deep" style="width: {{ $rowPercent }}%"></div>
+                                                </div>
+                                                <span
+                                                    class="shrink-0 font-mono text-xs text-fg-dim tabular-nums"
+                                                    title="{{ $hardcorePrimary ? __('Hardcore achievements') : __('Achievements') }}"
+                                                >{{ $rowUnlocked }} / {{ $rowPossible }}</span>
+                                            </div>
+                                        @endif
+                                    </div>
                                 </td>
 
                                 <td class="px-4 py-2 font-mono text-fg-soft tabular-nums">{{ $rowYear ?? '—' }}</td>
@@ -1385,27 +1342,8 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 </td>
 
                                 <td class="px-4 py-2 font-mono text-fg-soft tabular-nums">{{ $game->rating ?? '—' }}</td>
+                                <td class="px-4 py-2 font-mono text-fg-soft tabular-nums">{{ $game->library_rank ?? '—' }}</td>
 
-                                <td class="px-4 py-2">
-                                    @if ($rowPossible > 0)
-                                        {{-- The same bar and the same counts as
-                                             the card, so a game does not report
-                                             different progress in the two views. --}}
-                                        <div class="flex w-32 items-center gap-2">
-                                            <div class="h-1 flex-1 overflow-hidden rounded-sm bg-raised">
-                                                <div class="h-full rounded-sm bg-accent-deep" style="width: {{ $rowPercent }}%"></div>
-                                            </div>
-                                            <span
-                                                class="shrink-0 font-mono text-xs text-fg-dim tabular-nums"
-                                                title="{{ $hardcorePrimary ? __('Hardcore achievements') : __('Achievements') }}"
-                                            >{{ $rowUnlocked }} / {{ $rowPossible }}</span>
-                                        </div>
-                                    @else
-                                        <span class="font-mono text-fg-faint">—</span>
-                                    @endif
-                                </td>
-
-                                <td class="px-4 py-2 text-fg-soft">{{ $game->files_count }}</td>
                                 {{-- A menu rather than the one button the row
                                      used to carry. That button showed Identify
                                      or Artwork, never both, so whichever the
@@ -1444,15 +1382,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                                          here would be a claim about
                                                          artwork the row never loaded. --}}
                                                     {{ $rowCover === null ? __('Fetch artwork') : __('Fetch artwork again') }}
-                                                </flux:menu.item>
-
-                                                <flux:menu.separator />
-
-                                                <flux:menu.item icon="star"
-                                                                :disabled="$rowRatingBlocked !== null"
-                                                                :title="$rowRatingBlocked"
-                                                                wire:click="fetchRating({{ $game->id }})">
-                                                    {{ $game->rating === null ? __('Fetch rating') : __('Fetch rating again') }}
                                                 </flux:menu.item>
 
                                                 <flux:menu.separator />

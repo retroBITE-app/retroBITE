@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 87,
     'retroachievements_id' => 37,
+    'launchbox_platforms' => ['Amstrad GX4000'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

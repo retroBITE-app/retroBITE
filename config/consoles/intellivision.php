@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 115,
     'retroachievements_id' => 45,
+    'launchbox_platforms' => ['Mattel Intellivision'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

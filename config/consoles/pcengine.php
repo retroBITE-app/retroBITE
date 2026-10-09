@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 31,
     'retroachievements_id' => 8,
+    'launchbox_platforms' => ['NEC TurboGrafx-16'],
     'cover_aspect' => '1/1',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

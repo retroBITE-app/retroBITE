@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 121,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Tiger Game.com'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 90,
     'retroachievements_id' => 69,
+    'launchbox_platforms' => ['Mega Duck'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

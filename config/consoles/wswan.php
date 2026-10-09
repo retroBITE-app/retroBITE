@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 45,
     'retroachievements_id' => 53,
+    'launchbox_platforms' => ['WonderSwan'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 205,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Texas Instruments TI 99/4A'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

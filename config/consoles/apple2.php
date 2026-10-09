@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 86,
     'retroachievements_id' => 38,
+    'launchbox_platforms' => ['Apple II'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',

@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 129,
     'retroachievements_id' => null,
+    'launchbox_platforms' => ['Commodore CDTV'],
     'cover_aspect' => '5/7',
     'layouts' => ['custom', 'folders'],
     'default_layout' => 'custom',

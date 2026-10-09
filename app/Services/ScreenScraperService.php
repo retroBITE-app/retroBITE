@@ -305,7 +305,6 @@ class ScreenScraperService
             'players' => (string) Arr::get($jeu, 'joueurs.text', ''),
             'publisher' => (string) Arr::get($jeu, 'editeur.text', ''),
             'developer' => (string) Arr::get($jeu, 'developpeur.text', ''),
-            'rating' => $this->rating(Arr::get($jeu, 'note.text')),
             'medias' => $medias,
             'roms' => is_array($roms = Arr::get($jeu, 'roms')) ? $roms : [],
             // The media list inside raw is replaced by the sanitised one: the
@@ -479,34 +478,6 @@ class ScreenScraperService
             ->all();
 
         return $names === [] ? null : implode(', ', $names);
-    }
-
-    /**
-     * ScreenScraper's `note`, from their scale of twenty onto ours of a
-     * hundred.
-     *
-     * Zero is read as "nobody has voted", not as the mark zero: that is what
-     * the provider sends for a game with no votes, and a library sorted by
-     * rating would otherwise put those games below the ones it knows nothing
-     * about at all.
-     *
-     * Everything else is tolerated rather than trusted — the field is
-     * contributed, and an empty string, a comma decimal and a value past the
-     * top of the scale have all been seen.
-     */
-    private function rating(mixed $note): ?int
-    {
-        if (is_string($note)) {
-            $note = str_replace(',', '.', trim($note));
-        }
-
-        if (! is_numeric($note)) {
-            return null;
-        }
-
-        $value = (float) $note;
-
-        return $value <= 0.0 ? null : (int) round(min($value, 20.0) * 5);
     }
 
     /**

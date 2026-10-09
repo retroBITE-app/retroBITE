@@ -14,6 +14,7 @@ return [
     'exclude_files' => [],
     'screenscraper_id' => 77,
     'retroachievements_id' => 31,
+    'launchbox_platforms' => ['Sinclair ZX-81'],
     'cover_aspect' => '2/3',
     'layouts' => ['custom'],
     'default_layout' => 'custom',
