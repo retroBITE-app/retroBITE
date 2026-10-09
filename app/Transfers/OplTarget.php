@@ -258,7 +258,7 @@ final class OplTarget implements TransferTarget
             return $folder;
         }
 
-        $bytes = self::discBytes(LibraryFolders::root().'/'.$disc->path);
+        $bytes = self::discBytes(LibraryFolders::pathOf($disc));
 
         return $bytes !== null && $bytes <= self::CD_BYTES ? $this->layout->cdDirectory() : $this->layout->dvdDirectory();
     }

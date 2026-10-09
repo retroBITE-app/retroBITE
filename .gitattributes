@@ -1,0 +1,3 @@
+# Applied with `patch` in the Dockerfiles against upstream sources that use CRLF;
+# a line-ending conversion would stop them applying.
+patches/*.patch -text

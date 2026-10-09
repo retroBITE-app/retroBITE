@@ -260,7 +260,7 @@ new class extends Component
             ->map(function (SourceSet $set): array {
                 return [
                     'set' => $set,
-                    'keys' => Converters::candidatesFor($set)
+                    'keys' => Converters::pickableFor($set)
                         ->map(function (Converter $converter): string {
                             return $converter->key();
                         })

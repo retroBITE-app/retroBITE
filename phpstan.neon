@@ -17,10 +17,11 @@ parameters:
         # components living in resources/views/livewire/*.blade.php, which is
         # not an analysed path — PHPStan cannot see the `use` statements inside
         # an anonymous class in a Blade file, so it reports the traits as dead.
-        # They are not: see settings/security.blade.php, delete-user-form.blade.php
-        # and profile.blade.php.
+        # They are not: see settings/security.blade.php, delete-user-form.blade.php,
+        # profile.blade.php, and tools/conversion.blade.php and
+        # tools/decrypt.blade.php for PicksConsoleTab.
         -
-            message: '#^Trait App\\Concerns\\(Password|Profile)ValidationRules is used zero times and is not analysed\.$#'
+            message: '#^Trait App\\Concerns\\((Password|Profile)ValidationRules|PicksConsoleTab) is used zero times and is not analysed\.$#'
             path: app/Concerns/*.php
 
         # A toolbox is resolved by ConsoleTools::for(), not constructed with

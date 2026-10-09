@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Log;
  * The one compatibility gate: the page offers only what {@see routesFor()}
  * answers, and the job asks again before it runs, so a format a console's
  * frontends cannot read is never written for it — however the request came.
+ * A converter with a page of its own, such as PS3 decryption on Tools →
+ * Decrypt, passes the same gate; it is only kept out of the Conversion picker.
  */
 final class Converters
 {
@@ -53,10 +55,13 @@ final class Converters
         });
     }
 
-    /** Whether any converter is offered on this console at all. */
+    /**
+     * Whether the Conversion picker has anything for this console: a converter
+     * that lives on a page of its own does not count.
+     */
     public static function offersOn(Console $console): bool
     {
-        return self::forConsole($console)->isNotEmpty();
+        return self::onPage($console, null)->isNotEmpty();
     }
 
     /**
@@ -66,7 +71,7 @@ final class Converters
      */
     public static function readableOn(Console $console): array
     {
-        return array_values(self::forConsole($console)
+        return array_values(self::onPage($console, null)
             ->flatMap(function (Converter $converter) use ($console): array {
                 return array_values(array_filter($converter->from(), function (string $extension) use ($console): bool {
                     return $console->playsExtension($extension);
@@ -97,6 +102,36 @@ final class Converters
     }
 
     /**
+     * What the Conversion picker offers this set: the candidates, less those
+     * that live on a page of their own.
+     *
+     * @return Collection<int, Converter>
+     */
+    public static function pickableFor(SourceSet $set): Collection
+    {
+        return self::candidatesFor($set)
+            ->filter(function (Converter $converter): bool {
+                return $converter->page() === null;
+            })
+            ->values();
+    }
+
+    /**
+     * The console's converters on one Tools page, in its order — what gives the
+     * console a tab there. Null is the Conversion picker, as to Tools::onPage().
+     *
+     * @return Collection<int, Converter>
+     */
+    public static function onPage(Console $console, ?string $page): Collection
+    {
+        return self::forConsole($console)
+            ->filter(function (Converter $converter) use ($page): bool {
+                return $converter->page() === $page;
+            })
+            ->values();
+    }
+
+    /**
      * What this set can become now: the candidates whose tool is installed.
      *
      * @return Collection<int, Converter>
@@ -118,7 +153,7 @@ final class Converters
      */
     private static function forConsole(Console $console): Collection
     {
-        return collect($console->converters)
+        return collect([...$console->converters, ...$console->decrypters])
             ->map(function (string $key): ?Converter {
                 return self::make($key);
             })
@@ -160,9 +195,17 @@ final class Converters
         return app(self::INSTANCES);
     }
 
-    /** @return array<string, string> */
+    /**
+     * Converters and decrypters together: both run on this engine, and live
+     * in config files of their own (converters.php, decrypters.php).
+     *
+     * @return array<string, string>
+     */
     private static function registry(): array
     {
-        return array_filter((array) config('converters.converters', []), 'is_string');
+        return array_filter([
+            ...(array) config('converters.converters', []),
+            ...(array) config('decrypters.decrypters', []),
+        ], 'is_string');
     }
 }

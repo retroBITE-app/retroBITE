@@ -15,8 +15,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Serve one piece of downloaded artwork.
  *
- * The media disk sits outside public/ on purpose, so this route is the only
- * way in and it is behind auth. The path is checked against the media table
+ * Behind the container's nginx this is never reached: nginx answers /media/
+ * from the disk itself, with no login (docker/web/nginx.conf says why). This
+ * is the way in wherever that nginx does not stand in front, and there it is
+ * behind auth. The path is checked against the media table
  * rather than sanitised: only a file some row actually points at can be
  * served, which makes traversal a question of what exists in the database
  * instead of a string-matching exercise. A cover's thumbnails are served the

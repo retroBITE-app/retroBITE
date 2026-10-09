@@ -10,7 +10,7 @@ use App\Conversion\Setting;
 use App\Conversion\SourceSet;
 use App\Enums\FileRole;
 use App\Models\GameFile;
-use App\Support\LibraryPath;
+use App\Support\Scanning\LibraryFolders;
 use Illuminate\Support\Str;
 
 /**
@@ -218,7 +218,7 @@ final class CueToVcd extends Converter
             return null;
         }
 
-        $path = app(LibraryPath::class)->root().'/'.$disc->file->path;
+        $path = LibraryFolders::pathOf($disc->file);
 
         if (! is_file($path) || filesize($path) > self::SHEET_LIMIT) {
             return null;

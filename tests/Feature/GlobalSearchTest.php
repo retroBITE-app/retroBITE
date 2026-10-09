@@ -129,6 +129,15 @@ it('says so when nothing matches', function () {
         ->assertSeeText('Nothing matches');
 });
 
-it('is on every page behind the sidebar', function () {
-    $this->get(route('dashboard'))->assertOk()->assertSee('data-search-item', false);
+it('is on every page behind the sidebar, empty until it is first opened', function () {
+    $this->get(route('dashboard'))->assertOk()
+        ->assertSee('x-data="globalSearch"', false)
+        ->assertDontSee('data-search-item', false);
+});
+
+it('lists the quick-jump rows once opened', function () {
+    Livewire::test('global-search')
+        ->assertDontSeeText('Dashboard')
+        ->call('load')
+        ->assertSeeText('Dashboard');
 });

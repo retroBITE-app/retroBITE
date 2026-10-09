@@ -66,8 +66,11 @@ it with the rest of a NAS's backed-up shares. Volumes and folders survive
 | --- | --- | --- |
 | `GAME_FOLDERS` | `ps2 ps3 gc wii xbox dreamcast` | The console folders created in the library on start. |
 | `SMB_SHARES` | `ps2 gc wii` | Folders that also get an SMB share of their own. Open PS2 Loader, for one, connects to a share named after the console. |
+| `PS3NETSRV_FOLDERS` | `PS3ISO=ps3 PS2ISO=ps2 PSXISO=psx` | Which of webMAN MOD's lists ps3netsrv serves, and the library folder behind each. Set on both containers. Add `PSPISO=psp` for PSP games; a moved console folder goes here too: ps3netsrv does not read the consoles page, and its card warns when a console's games are in a folder it does not serve. Only webMAN's own names (`PS3ISO`, `PS2ISO`, `PSXISO`, `PSPISO`, `BDISO`, `DVDISO`, `GAMES`, `PKG`) and plain folder names are taken. |
+| `PS3NETSRV` | `true` | Runs ps3netsrv on port 38008, serving the folders in `PS3NETSRV_FOLDERS` to webMAN MOD, read-only: it can list and stream, never create, change or delete. Set on both containers: the web one shows its status card from it. `false` turns it off. Being read-only it lists folders the way current webMAN MOD does; a much older webMAN that lists them another way sees them empty. |
+| `PS3NETSRV_WHITELIST` | none | Who may connect to ps3netsrv, such as `192.168.1.*` or one PS3's address. It has no login of its own, so anyone else on the network can read those folders through it. One address, with `*` for any part; a range such as `192.168.1.0/24` is not understood, and ps3netsrv is then not started at all (the log says why). Set on both containers: the web one's ps3netsrv card says who may connect, or that anyone can. |
 | `SHARE_IP`, `SHARE_SUBNET`, `SHARE_GATEWAY`, `SHARE_PARENT` | none | Only with `docker-compose.macvlan.yml`. They give the share container its own LAN address; see [installing.md](installing.md#when-ports-445-139-and-21-are-taken). |
-| `SHARE_HOST` | `HOST_IP` | Where the web container checks SMB and FTP. The macvlan file sets it; nothing else needs to. |
+| `SHARE_HOST` | `HOST_IP` | Where the web container checks SMB, FTP and ps3netsrv. The macvlan file sets it; nothing else needs to. |
 
 ## Web and reverse proxies
 
@@ -140,4 +143,4 @@ Every tool ships in the web image, on `PATH`.
 | --- | --- | --- |
 | `CONVERSION_CONCURRENCY` | `1` | Conversions at once. Raise `QUEUE_WORKERS_CONVERSION` to match. |
 | `CONVERSION_TIMEOUT` | `7000` | Seconds one conversion may take. |
-| `CHDMAN_PATH`, `MAXCSO_PATH`, `ECM_PATH`, `UNECM_PATH`, `EXTRACT_XISO_PATH`, `CUE2POPS_PATH`, `POPS2CUE_PATH`, `NODTOOL_PATH` | `/usr/local/bin/…` | Point one at another build of that tool. |
+| `CHDMAN_PATH`, `MAXCSO_PATH`, `ECM_PATH`, `UNECM_PATH`, `EXTRACT_XISO_PATH`, `CUE2POPS_PATH`, `POPS2CUE_PATH`, `NODTOOL_PATH`, `PS3DEC_PATH` | `/usr/local/bin/…` | Point one at another build of that tool. |

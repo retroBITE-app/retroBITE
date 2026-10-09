@@ -54,6 +54,22 @@ final class LibraryPath
     }
 
     /**
+     * A library-root path as the console's folder sees it, or null when it is outside it.
+     *
+     * @param  string  $path  relative to the library root, as game_files.path stores it
+     */
+    public function consoleRelative(Console $console, string $path): ?string
+    {
+        $root = ConsoleSourceFolder::pathFor($console);
+
+        if ($root === null || ! Str::startsWith($path, $root.'/')) {
+            return null;
+        }
+
+        return Str::after($path, $root.'/');
+    }
+
+    /**
      * Admit a path inside a console's own folder.
      *
      * Returns it relative to the library root, ready for the `games` disk.
@@ -251,6 +267,27 @@ final class LibraryPath
         $source = $this->plainFile($console, $from);
 
         return $this->place($console, $source, $to);
+    }
+
+    /**
+     * Put one plain file in another's place in a single rename, so there is no
+     * moment with neither: the one write over a library file, by its replacement.
+     *
+     * @param  string  $from  relative to the CONSOLE's folder
+     * @param  string  $to  relative to the CONSOLE's folder
+     *
+     * @throws LibraryPathException
+     */
+    public function replace(Console $console, string $from, string $to): string
+    {
+        $source = $this->plainFile($console, $from);
+        $target = $this->plainFile($console, $to);
+
+        if (! File::move($source, $target)) {
+            throw LibraryPathException::notMoved($this->within($console, $to));
+        }
+
+        return $this->within($console, $to);
     }
 
     /**

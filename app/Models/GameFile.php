@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -43,8 +44,6 @@ use Illuminate\Support\Collection;
  * @property string|null $region
  * @property int|null $scrapes how many times the provider has had this very dump scraped; null for one it does not know
  * @property list<string>|null $provider_flags the provider's flags for the dump: beta, demo, proto, trad, hack, unl, alt, best
- * @property string|null $license_id the serial the disc names itself by, e.g. SLES_503.86
- * @property string|null $video_mode PAL or NTSC, as the disc declares it
  * @property int|null $parent_id
  * @property Carbon|null $missing_since
  * @property Carbon|null $created_at
@@ -52,11 +51,12 @@ use Illuminate\Support\Collection;
  * @property-read Game $game
  * @property-read GameFile|null $parent
  * @property-read Collection<int, GameFile> $children
+ * @property-read GameFileMeta|null $meta what the toolbox read off the disc; null until something has
  */
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
-    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'scrapes', 'provider_flags', 'license_id',
-    'video_mode', 'parent_id', 'missing_since', 'ra_hash', 'ra_hash_size',
+    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'scrapes', 'provider_flags',
+    'parent_id', 'missing_since', 'ra_hash', 'ra_hash_size',
     'ra_hash_mtime', 'ra_hashed_at',
 ])]
 class GameFile extends Model
@@ -107,6 +107,29 @@ class GameFile extends Model
     public function children(): HasMany
     {
         return $this->hasMany(GameFile::class, 'parent_id');
+    }
+
+    /**
+     * What the toolbox read off the disc: serial, video mode, encryption, disc key.
+     *
+     * @return HasOne<GameFileMeta, $this>
+     */
+    public function meta(): HasOne
+    {
+        return $this->hasOne(GameFileMeta::class);
+    }
+
+    /**
+     * Keep disc facts on record, merging them into what is there already.
+     *
+     * @param  array{license_id?: string|null, video_mode?: string|null, encrypted?: bool|null, disc_key?: string|null}  $facts
+     */
+    public function rememberMeta(array $facts): GameFileMeta
+    {
+        $meta = $this->meta()->updateOrCreate([], $facts);
+        $this->setRelation('meta', $meta);
+
+        return $meta;
     }
 
     /** Whether a checksum has been computed for this file yet. */
@@ -168,6 +191,18 @@ class GameFile extends Model
      */
     public function scopeUninspected(Builder $query): void
     {
-        $query->whereNull('license_id');
+        $query->whereDoesntHave('meta', function (Builder $meta): void {
+            $meta->whereNotNull('license_id');
+        });
+    }
+
+    /**
+     * The files of one console's games, by its key.
+     *
+     * @param  Builder<GameFile>  $query
+     */
+    public function scopeOnConsole(Builder $query, string $console): void
+    {
+        $query->whereIn('game_id', Game::query()->forConsole($console)->select('id'));
     }
 }

@@ -289,7 +289,7 @@ class Game extends Model
      */
     public function licenseId(): ?string
     {
-        return $this->identifiableFile()?->license_id;
+        return $this->identifiableFile()?->meta?->license_id;
     }
 
     /**

@@ -23,7 +23,7 @@ class NetworkService
         $host = (string) config('settings.network.status_host');
         $result = [];
 
-        foreach (ShareProtocol::cases() as $protocol) {
+        foreach (ShareProtocol::enabled() as $protocol) {
             $result[$protocol->value] = $this->isPortOpen($host, $protocol->port());
         }
 

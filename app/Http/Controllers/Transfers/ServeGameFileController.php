@@ -24,7 +24,7 @@ class ServeGameFileController extends Controller
     {
         $gameFile = GameFile::query()->present()->findOrFail($file);
 
-        $path = LibraryFolders::root().'/'.$gameFile->path;
+        $path = LibraryFolders::pathOf($gameFile);
 
         abort_unless(is_file($path), 404);
 

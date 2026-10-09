@@ -49,6 +49,18 @@ class GameFileFactory extends Factory
         ]);
     }
 
+    /**
+     * With disc facts on record, as the toolbox would have left them.
+     *
+     * @param  array{license_id?: string|null, video_mode?: string|null, encrypted?: bool|null, disc_key?: string|null}  $meta
+     */
+    public function withMeta(array $meta): static
+    {
+        return $this->afterCreating(function (GameFile $file) use ($meta): void {
+            $file->rememberMeta($meta);
+        });
+    }
+
     public function missing(): static
     {
         return $this->state(fn (array $attributes) => [

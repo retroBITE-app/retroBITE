@@ -9,6 +9,10 @@ set -e
 # when the app boots, so every PHP process from here on must see the same keys.
 . /usr/local/bin/reverb.sh
 
+# What hands each long-running process to supervisord (Reverb, the scheduler,
+# the queue workers). They are written down here and started at the very end.
+. /usr/local/bin/supervise.sh
+
 GAMES_DIR=/app/storage/app/games
 
 . /usr/local/bin/warnings.sh
@@ -65,6 +69,16 @@ find /app/storage /app/bootstrap/cache \
     \( ! -user "$WEB_USER" -o ! -group "$WEB_GROUP" \) -exec chown -h "$WEB_USER:$WEB_GROUP" {} + \
     || echo "WARNING: could not hand every file under storage/ to $WEB_USER; carrying on." >&2
 
+# Config, routes, events and compiled views, cached before Reverb and the
+# workers start so every PHP process reads them: a quarter of a light
+# request's time is otherwise spent loading them again. At start, never at
+# build: the keys above and the environment exist only now. env() outside
+# config/ would read null from here on — there is none, keep it that way.
+# Not fatal: without the caches the app is slower, not broken.
+su-exec "$WEB_USER" php /app/artisan optimize \
+    || { echo "WARNING: could not cache the configuration; carrying on without." >&2
+         su-exec "$WEB_USER" php /app/artisan optimize:clear >/dev/null 2>&1 || true; }
+
 # Live updates (keys were set at the top, before anything ran PHP).
 start_reverb
 
@@ -90,10 +104,9 @@ su-exec "$WEB_USER" php /app/artisan conversion:tools \
 # recycles a worker hourly, which is the ordinary guard against a long-lived
 # PHP process accumulating memory.
 #
-# Backgrounded rather than run under a supervisor, each in the restart loop
-# queue-workers.sh wraps it in: nginx is PID 1 and outlives every worker, so
-# the hourly --max-time exit and a job killed at its timeout would otherwise
-# end that worker for the life of the container.
+# Under supervisord, which starts each one again when it exits: the hourly
+# --max-time exit and a job killed at its timeout would otherwise end that
+# worker for the life of the container.
 #
 # No --timeout here: queue:work takes each job's own $timeout, and every job
 # declares one. What has to follow them is the connection's retry_after — see
@@ -165,10 +178,8 @@ workers QUEUE_WORKERS_TRANSFER 3 php /app/artisan queue:work database-long \
     --queue=transfer --sleep=3 --tries=2 --timeout=3600 --max-time=3600
 
 # The scheduler, for the nightly index sync and the progress pulse.
-su-exec "$WEB_USER" php /app/artisan schedule:work &
+supervise scheduler 1 php /app/artisan schedule:work
 
-# Start PHP-FPM in the background (manages its own worker pool)
-php-fpm -D
-
-# Run Nginx in the foreground so it becomes PID 1 and Docker tracks it
-exec nginx -g 'daemon off;'
+# supervisord as PID 1 from here: nginx, PHP-FPM, and everything handed to it
+# above, each started again when it exits (docker/web/supervisord.conf).
+exec supervisord -c /etc/supervisord.conf

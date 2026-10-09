@@ -82,13 +82,12 @@ function oplDisc(Game $game, string $path, int $bytes = 4096, ?int $uncompressed
     ftruncate($handle, $bytes);
     fclose($handle);
 
-    return GameFile::factory()->for($game)->create([
+    return GameFile::factory()->for($game)->withMeta(['license_id' => $serial])->create([
         'path' => $path,
         'filename' => basename($path),
         'extension' => Str::lower(pathinfo($path, PATHINFO_EXTENSION)),
         'role' => FileRole::Rom,
         'size_bytes' => $bytes,
-        'license_id' => $serial,
     ]);
 }
 

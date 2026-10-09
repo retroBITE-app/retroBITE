@@ -18,6 +18,7 @@ use App\Models\LaunchBoxGame;
 use App\Models\Media;
 use App\Models\RaGame;
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use App\Services\LibraryScanner;
 use App\Support\Console;
 use App\Support\ExportProgress;
@@ -25,10 +26,12 @@ use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
 use App\Support\SystemActivity;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Route as RouteFacade;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
@@ -101,6 +104,19 @@ it('renders a game page, on each of its tabs', function () {
     $this->get($url.'?tab=artwork')->assertOk();
 });
 
+it('binds {game} from a provider, which still runs when the routes are cached', function () {
+    // The container caches the routes at start, and then routes/web.php is
+    // never loaded: a binding written there was lost and every game page
+    // 404ed. A router of its own, with nothing but the providers' work on it.
+    $router = new Router(app('events'), app());
+    app()->instance('router', $router);
+    RouteFacade::clearResolvedInstance('router');
+
+    (new AppServiceProvider(app()))->boot();
+
+    expect($router->getBindingCallback('game'))->not->toBeNull();
+});
+
 it('renders the consoles page', function () {
     ConsoleSourceFolder::add(new Console('snes'));
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
@@ -163,6 +179,24 @@ it('asks where the roms are when the console folder is missing', function () {
 
     expect(ConsoleSourceFolder::sole()->path)->toBe('my-snes-dumps');
     Queue::assertPushed(ScanConsoleFolder::class);
+});
+
+it('lists the consoles on offer only while the add modal is open', function () {
+    Livewire::test('consoles.index')
+        ->assertDontSee('Dreamcast')
+        ->call('openAdd')
+        ->assertSee('Dreamcast')
+        ->call('closeAdd')
+        ->assertDontSee('Dreamcast');
+});
+
+it('marks the consoles on offer whose folder is already in the library', function () {
+    mkdir($this->root.'/dreamcast');
+
+    $component = Livewire::test('consoles.index')->call('openAdd');
+
+    expect($component->instance()->present)->toHaveKey('dreamcast')->not->toHaveKey('snes');
+    $component->assertSeeInOrder(['Dreamcast', 'Folder found']);
 });
 
 it('searches the consoles on offer by name, brand and key', function () {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Tools\ConsoleTool\DiscFolders;
 use App\Tools\ConsoleTool\PS2;
+use App\Tools\ConsoleTool\PS3;
 
 /**
  * The consoles that have a toolbox, and how long one may take.
@@ -41,6 +42,7 @@ return [
     // arrangement, and the playlist it needs written, are the same on each.
     'consoles' => [
         'ps2' => PS2::class,
+        'ps3' => PS3::class,
         'psx' => DiscFolders::class,
         'saturn' => DiscFolders::class,
         'megacd' => DiscFolders::class,

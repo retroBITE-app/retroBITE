@@ -129,7 +129,7 @@ new class extends Component
                 return $query->whereKey($this->gameId);
             })
             ->with(['files' => function ($query) {
-                return $query->present()->with('children');
+                return $query->present()->with(['children', 'meta']);
             }])
             ->orderBy('title')
             ->get();
@@ -150,7 +150,7 @@ new class extends Component
 
                 if ($to !== null) {
                     $result['renames'][] = ['file' => $file, 'to' => $to];
-                } elseif ($withLicenseId && $file->license_id === null) {
+                } elseif ($withLicenseId && $file->meta?->license_id === null) {
                     $result['unread']++;
                 } else {
                     $result['unchanged']++;

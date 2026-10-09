@@ -7,7 +7,6 @@ namespace App\Console\Commands;
 use App\Models\GameFile;
 use App\Support\RomRegions;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -30,7 +29,7 @@ class FillFileRegions extends Command
         $query = GameFile::query()->whereNull('region');
 
         if ($console = $this->option('console')) {
-            $query->whereHas('game', fn (Builder $games) => $games->forConsole((string) $console));
+            $query->onConsole((string) $console);
         }
 
         $filled = 0;

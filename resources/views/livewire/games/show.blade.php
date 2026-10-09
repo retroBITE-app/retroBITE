@@ -2,7 +2,9 @@
 
 use App\Conversion\Converters;
 use App\Conversion\SourceSet;
+use App\Decryption\DiscKeys;
 use App\Enums\AchievementKind;
+use App\Enums\DecryptState;
 use App\Enums\MediaKind;
 use App\Enums\ThumbnailSize;
 use App\Exceptions\LibraryFileRejected;
@@ -124,7 +126,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     private function loadRelations(): void
     {
         $this->game->load([
-            'files' => fn ($query) => $query->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
+            'files' => fn ($query) => $query->with('meta')->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
             // Ordered because the strip, the viewer's set and its "3 / 12"
             // counter are one list, and they have to agree on it. gallery()
             // puts it in slot order from here.
@@ -395,6 +397,14 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         Flux::toast(variant: 'success', text: __('Deleted :file.', ['file' => (string) $filename]));
     }
 
+    /** Sent by the key and decrypt modals, and the conversion queue: the image's state has moved. */
+    #[On('disc-key-saved')]
+    #[On('decrypt-queued')]
+    public function discKeySaved(): void
+    {
+        unset($this->fileRows);
+    }
+
     /**
      * The network shares this game can be sent to.
      *
@@ -600,41 +610,63 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      *     regionIcon: string|null,
      *     scrapes: string|null,
      *     flags: list<string>,
+     *     decrypt: DecryptState|null,
+     *     discKey: string|null,
      * }>
      */
     #[Computed]
     public function fileRows(): array
     {
+        $keys = app(DiscKeys::class);
+        $decrypting = $keys->decrypting($this->files->modelKeys());
+
         return $this->files
-            ->map(fn (GameFile $file) => [
-                'id' => $file->id,
-                'filename' => $file->filename,
-                'folder' => $this->subfolder($file),
-                'role' => $file->role->label(),
-                'disc' => $file->disc_number !== null ? (string) $file->disc_number : '—',
-                'size' => $file->size_bytes !== null ? Number::fileSize($file->size_bytes, 1) : '—',
-                'format' => Str::upper($file->extension),
-                'added' => $this->relative($file->created_at),
-                // The library holds no last-seen stamp, so the honest answer is
-                // whether the file is there now, and how long ago it went if not.
-                'lastSeen' => $file->isPresent() ? __('Present') : $this->relative($file->missing_since),
-                'missing' => ! $file->isPresent(),
-                'md5' => $file->md5,
-                // Read out of the disc rather than from the provider, and the
-                // only name Open PS2 Loader knows this game by.
-                'licenseId' => $file->license_id,
-                // The file's own region, which a game holding several can
-                // differ by (CONTEXT.md: file region) — not the game's.
-                'region' => $file->region,
-                'regionLabel' => MediaRegions::label($file->region) ?? ($file->region !== null ? Str::upper($file->region) : null),
-                'regionIcon' => MediaRegions::icon($file->region),
-                // How many people the provider has seen holding this very
-                // dump; what Send to picks the most scraped version by.
-                'scrapes' => $file->scrapes !== null ? Number::abbreviate($file->scrapes, 1) : null,
-                'flags' => array_values(array_diff($file->provider_flags ?? [], ['best'])),
-            ])
+            ->map(function (GameFile $file) use ($keys, $decrypting): array {
+                $decryptable = $this->decryptable($file);
+
+                return [
+                    'id' => $file->id,
+                    'filename' => $file->filename,
+                    'folder' => $this->subfolder($file),
+                    'role' => $file->role->label(),
+                    'disc' => $file->disc_number !== null ? (string) $file->disc_number : '—',
+                    'size' => $file->size_bytes !== null ? Number::fileSize($file->size_bytes, 1) : '—',
+                    'format' => Str::upper($file->extension),
+                    'added' => $this->relative($file->created_at),
+                    // The library holds no last-seen stamp, so the honest answer is
+                    // whether the file is there now, and how long ago it went if not.
+                    'lastSeen' => $file->isPresent() ? __('Present') : $this->relative($file->missing_since),
+                    'missing' => ! $file->isPresent(),
+                    'md5' => $file->md5,
+                    // Read out of the disc rather than from the provider, and the
+                    // only name Open PS2 Loader knows this game by.
+                    'licenseId' => $file->meta?->license_id,
+                    // The file's own region, which a game holding several can
+                    // differ by (CONTEXT.md: file region) — not the game's.
+                    'region' => $file->region,
+                    'regionLabel' => MediaRegions::label($file->region) ?? ($file->region !== null ? Str::upper($file->region) : null),
+                    'regionIcon' => MediaRegions::icon($file->region),
+                    // How many people the provider has seen holding this very
+                    // dump; what Send to picks the most scraped version by.
+                    'scrapes' => $file->scrapes !== null ? Number::abbreviate($file->scrapes, 1) : null,
+                    'flags' => array_values(array_diff($file->provider_flags ?? [], ['best'])),
+                    // An image something decrypts: its encryption and key, as
+                    // Tools → Decrypt shows them. The key is shown to hand on,
+                    // and is still known once decrypting has removed the .dkey.
+                    'decrypt' => $decryptable && $file->isPresent() ? $keys->state($file, in_array($file->id, $decrypting, true)) : null,
+                    'discKey' => $decryptable ? $keys->known($file) : null,
+                ];
+            })
             ->values()
             ->all();
+    }
+
+    /** Whether something on this console decrypts the file, which gives it a state and a key. */
+    private function decryptable(GameFile $file): bool
+    {
+        $console = $this->game->console();
+
+        return $console !== null && app(DiscKeys::class)->decrypterFor($console, $file) !== null;
     }
 
     /**
@@ -1439,6 +1471,19 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }"
     ></div>
 
+    {{-- A decryption of one of its files starting or ending, so its badge and
+         buttons follow the queue. --}}
+    @if (collect($this->fileRows)->whereNotNull('decrypt')->isNotEmpty())
+        <div
+            hidden
+            x-data="{
+                stop: null,
+                init() { this.stop = live.system('conversion', () => this.$wire.discKeySaved()) },
+                destroy() { this.stop?.() },
+            }"
+        ></div>
+    @endif
+
     {{-- Hero: the backdrop runs to the edges and the detail block is pulled up
          over its lower half, so the poster and title sit on the art.
          These two heights are load-bearing: the detail block below pulls up by
@@ -2024,6 +2069,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 'regionIcon' => $regionIcon,
                                 'scrapes' => $scrapes,
                                 'flags' => $flags,
+                                'decrypt' => $decrypt,
+                                'discKey' => $discKey,
                             ])
                                 <tr wire:key="file-{{ $id }}" class="border-t border-raised first:border-t-0">
                                     <td class="px-4.5 py-3">
@@ -2048,6 +2095,39 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                             <p class="mt-1 inline-block rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted">
                                                 {{ $licenseId }}
                                             </p>
+                                        @endif
+
+                                        {{-- A PS3 image: whether it is still encrypted, and the
+                                             next step towards playing it — its key, then
+                                             decrypting. Tools → Decrypt does the same for all. --}}
+                                        @if ($decrypt !== null)
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                                <x-decrypt.state :state="$decrypt" />
+
+                                                @if (in_array($decrypt, [DecryptState::NeedsKey, DecryptState::Ready], true))
+                                                    <flux:button size="xs" variant="ghost" icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $id }} })">
+                                                        {{ $decrypt === DecryptState::Ready ? __('Change key') : __('Add key') }}
+                                                    </flux:button>
+                                                @endif
+
+                                                @if ($decrypt === DecryptState::Ready)
+                                                    <flux:button size="xs" variant="ghost" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: [{{ $id }}] })">
+                                                        {{ __('Decrypt') }}
+                                                    </flux:button>
+                                                @endif
+                                            </div>
+                                        @endif
+
+                                        {{-- The disc key, to hand to someone with the same disc.
+                                             Kept on record, so it stays after decrypting. --}}
+                                        @if ($discKey !== null)
+                                            <div class="mt-1.5 flex items-center gap-1.5">
+                                                <span class="kicker text-fg-faint">{{ __('Disc key') }}</span>
+                                                <span class="font-mono text-xs text-fg-soft select-all">{{ $discKey }}</span>
+                                                <x-copy-button :text="$discKey" label="">
+                                                    <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
+                                                </x-copy-button>
+                                            </div>
                                         @endif
                                     </td>
                                     <td class="px-4.5 py-3 whitespace-nowrap">
@@ -2283,6 +2363,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
     @if ($this->canRename)
         <livewire:games.rename-modal :console="$game->console" :game-id="$game->id" wire:key="rename-modal" />
+    @endif
+
+    @if (collect($this->fileRows)->whereNotNull('decrypt')->isNotEmpty())
+        <livewire:decrypt.key-modal wire:key="disc-key-modal" />
+        <livewire:decrypt.confirm-modal wire:key="decrypt-confirm-modal" />
     @endif
 
     {{-- Opened from Actions → Send to. --}}

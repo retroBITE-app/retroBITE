@@ -38,6 +38,34 @@ final class Tools
     }
 
     /**
+     * The tools a Tools page's converters run, for its Tool paths panel. Null is
+     * Conversion, which also lists tools no converter uses yet.
+     *
+     * @return list<string>
+     */
+    public static function onPage(?string $page): array
+    {
+        return array_values(collect(self::keys())
+            ->filter(function (string $tool) use ($page): bool {
+                $pages = Converters::all()
+                    ->filter(function (Converter $converter) use ($tool): bool {
+                        return in_array($tool, $converter->tools(), true);
+                    })
+                    ->map(function (Converter $converter): ?string {
+                        return $converter->page();
+                    })
+                    ->all();
+
+                if ($pages === []) {
+                    return $page === null;
+                }
+
+                return in_array($page, $pages, true);
+            })
+            ->all());
+    }
+
+    /**
      * The absolute path of a tool's binary, or null when it cannot be found
      * or run. A bare name is looked for on PATH; a path is taken as given.
      */
@@ -214,6 +242,9 @@ final class Tools
     /** @return array<string, array<string, mixed>> */
     private static function registry(): array
     {
-        return array_filter((array) config('converters.tools', []), 'is_array');
+        return array_filter([
+            ...(array) config('converters.tools', []),
+            ...(array) config('decrypters.tools', []),
+        ], 'is_array');
     }
 }

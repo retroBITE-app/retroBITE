@@ -35,6 +35,9 @@ abstract class Converter
     /** The tool's own tunables, by {@see Setting} key; see {@see settings()}. */
     public const ADVANCED = 'advanced';
 
+    /** Tools → Decrypt, as {@see page()} names it. */
+    public const PAGE_DECRYPT = 'decrypt';
+
     /** What config/converters.php registers it as, and a conversion stores. */
     abstract public function key(): string;
 
@@ -186,6 +189,65 @@ abstract class Converter
     public function verifyFailed(string $output): bool
     {
         return false;
+    }
+
+    /**
+     * Why a written file is wrong, or null: asked of every output before it reaches
+     * the library, for a tool that can write a wrong file and exit 0.
+     */
+    public function confirm(string $output): ?string
+    {
+        return null;
+    }
+
+    /**
+     * Where its tools run, absolute; null for wherever the worker is. For a
+     * tool that writes beside itself, such as a log folder.
+     */
+    public function workingDirectory(string $staging): ?string
+    {
+        return null;
+    }
+
+    /**
+     * Whether the output takes its source's place and name, its row kept;
+     * keep-source does not apply. Single-file discs only.
+     */
+    public function replacesSource(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Files beside a disc that belong to the source rather than the output,
+     * relative to the library root, and go when it is replaced.
+     *
+     * @return list<string>
+     */
+    public function companions(Disc $disc, string $root): array
+    {
+        return [];
+    }
+
+    /**
+     * The flags whose value is a secret, such as a disc key: the command is
+     * written into the conversion's log, which the queue shows, and the value
+     * after each of these is masked there. The tool is still given it.
+     *
+     * @return list<string>
+     */
+    public function secretFlags(): array
+    {
+        return [];
+    }
+
+    /**
+     * The Tools page it lives on instead of the Conversion picker, e.g.
+     * {@see PAGE_DECRYPT}; null for the picker.
+     */
+    public function page(): ?string
+    {
+        return null;
     }
 
     /**

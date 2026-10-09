@@ -1,0 +1,24 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -375,17 +375,17 @@
+ 		return NULL;
+ 	}
+ 
+-	// check unsecure path
++	// check unsecure path: every "/.." segment, not only the first
+ 	char *p = strstr(path, "/..");
+-	if(p)
++	while(p)
+ 	{
+-		p += 3;
+-		if ((*p == 0) || (*p == '/'))
++		if ((p[3] == 0) || (p[3] == '/'))
+ 		{
+ 			printf("ERROR: The path \"%s\" is unsecure!\n", path);
+ 			if(path) free(path);
+ 			return NULL;
+ 		}
++		p = strstr(p + 1, "/..");
+ 	}
+ 
+ 	p = (char *)malloc(MAX_PATH_LEN + root_len + path_len + 1);
