@@ -121,9 +121,12 @@ FROM alpine:3.24 AS ps3dec
 
 RUN apk add --no-cache cargo git
 
+# The tag names the release; the commit is what is built (a moved tag fails).
 ARG PS3DEC_TAG=v3.0.0
+ARG PS3DEC_COMMIT=3fde80de6d59d62fb7548651bc878e0fddfc7e27
 RUN git clone --depth 1 --branch "$PS3DEC_TAG" https://github.com/Redrrx/ps3dec.git /src/ps3dec \
     && cd /src/ps3dec \
+    && test "$(git rev-parse HEAD)" = "$PS3DEC_COMMIT" \
     && rm -f rust-toolchain.toml \
     && target="$(uname -m)-alpine-linux-musl" \
     && RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --locked --bin ps3dec --target "$target" \

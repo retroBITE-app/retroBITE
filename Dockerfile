@@ -21,9 +21,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     patch \
     && rm -rf /var/lib/apt/lists/*
 
+# The tag names the release; the commit is what is built. A tag can be moved
+# upstream, and a moved one now fails the build instead of changing it.
 ARG PS3NETSRV_TAG=20260913
+ARG PS3NETSRV_COMMIT=158a829a30dd9c5bc61e851f1d3505e2db91b08a
 COPY patches/ps3netsrv-dotdot.patch /src/ps3netsrv-dotdot.patch
 RUN git clone --depth 1 --branch "$PS3NETSRV_TAG" https://github.com/aldostools/ps3netsrv.git /src/ps3netsrv \
+    && test "$(git -C /src/ps3netsrv rev-parse HEAD)" = "$PS3NETSRV_COMMIT" \
     && patch -d /src/ps3netsrv -p1 < /src/ps3netsrv-dotdot.patch \
     && sed -i -e 's/^#CFLAGS += -DREAD_ONLY/CFLAGS += -DREAD_ONLY/' -e 's/^#CPPFLAGS += -DREAD_ONLY/CPPFLAGS += -DREAD_ONLY/' /src/ps3netsrv/Makefile.linux \
     && grep -q '^CFLAGS += -DREAD_ONLY' /src/ps3netsrv/Makefile.linux \
