@@ -25,7 +25,7 @@ use InvalidArgumentException;
  * image play over the network as it is, and is what Tools → Decrypt hands
  * ps3dec. Only the lower-case names count, as they do to ps3netsrv.
  *
- * A key seen to fit is also kept on the file's row (game_files.disc_key):
+ * A key seen to fit is also kept with the file's facts (game_file_meta.disc_key):
  * decrypting deletes the file beside the image, and the key is still worth
  * showing — to hand to a friend with the same disc.
  */

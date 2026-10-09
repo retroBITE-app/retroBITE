@@ -8,7 +8,7 @@ namespace App\Enums;
  * Where a PS3 disc image stands on Tools → Decrypt and its game's page.
  *
  * Worked out from two facts, never stored: what the toolbox read
- * (game_files.encrypted) and whether a key is beside the image.
+ * (game_file_meta.encrypted) and whether a key is beside the image.
  */
 enum DecryptState: string
 {
