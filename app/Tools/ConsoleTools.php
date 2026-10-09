@@ -194,13 +194,14 @@ abstract class ConsoleTools
     /**
      * Everything this toolbox can read out of one file.
      *
-     * Keys map onto game_files columns. An empty array means nothing was
+     * Keys map onto game_file_meta columns (GameFile::rememberMeta()), but
+     * region, which is game_files'. An empty array means nothing was
      * learned, which is an ordinary answer for a file that is not what it
      * looked like. Takes the file rather than reading one off the chain
      * because it is a public entry point and its caller has just asked
      * handles() about the same file.
      *
-     * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string}
+     * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string, encrypted?: bool, disc_key?: string}
      */
     abstract public function inspect(GameFile $file): array;
 
@@ -309,7 +310,7 @@ abstract class ConsoleTools
      */
     protected function absolutePath(): string
     {
-        return LibraryFolders::root().'/'.($this->file->path ?? '');
+        return $this->file !== null ? LibraryFolders::pathOf($this->file) : LibraryFolders::root().'/';
     }
 
     /**

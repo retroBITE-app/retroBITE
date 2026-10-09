@@ -84,6 +84,14 @@ final class Console
     public readonly array $converters;
 
     /**
+     * The decrypters offered on this console, by key in config/decrypters.php:
+     * what puts it on Tools → Decrypt. None for every console but the PS3.
+     *
+     * @var list<string>
+     */
+    public readonly array $decrypters;
+
+    /**
      * RetroAchievements' ConsoleID, which is also RAHasher's systemid.
      *
      * Unrelated to screenscraperId despite both being small integers, and the
@@ -126,6 +134,7 @@ final class Console
         $this->layouts = (array) Arr::get($meta, 'layouts', [Layouts::FALLBACK]);
         $this->defaultLayout = (string) Arr::get($meta, 'default_layout', Layouts::FALLBACK);
         $this->converters = array_values(array_filter((array) Arr::get($meta, 'converters', []), 'is_string'));
+        $this->decrypters = array_values(array_filter((array) Arr::get($meta, 'decrypters', []), 'is_string'));
         $this->retroachievementsId = $raId !== null ? (int) $raId : null;
         $this->transferRegions = array_values(array_filter((array) Arr::get($meta, 'transfer_regions', []), 'is_string'));
     }

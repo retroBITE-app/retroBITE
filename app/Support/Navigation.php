@@ -26,9 +26,22 @@ final class Navigation
             ['label' => 'Dashboard', 'route' => 'dashboard', 'icon' => 'squares-2x2', 'keywords' => 'home overview start'],
             ['label' => 'Consoles', 'route' => 'consoles.index', 'icon' => 'puzzle-piece', 'keywords' => 'systems platforms library'],
             ['label' => 'Games', 'route' => 'games.index', 'icon' => 'rectangle-stack', 'keywords' => 'library roms titles'],
-            ['label' => 'Conversion', 'route' => 'tools.conversion', 'icon' => 'arrows-right-left', 'keywords' => 'tools convert chd cso rvz iso compress'],
+            ...self::tools(),
             ['label' => 'Documents', 'route' => 'docs.index', 'icon' => 'book-open', 'keywords' => 'docs documentation help guides manual notes'],
             ['label' => 'Settings', 'route' => 'user.edit', 'icon' => 'adjustments-horizontal', 'keywords' => 'preferences options configuration'],
+        ];
+    }
+
+    /**
+     * The pages under Tools in the sidebar, in its order.
+     *
+     * @return list<array{label: string, route: string, icon: string, keywords: string}>
+     */
+    public static function tools(): array
+    {
+        return [
+            ['label' => 'Conversion', 'route' => 'tools.conversion', 'icon' => 'arrows-right-left', 'keywords' => 'tools convert chd cso rvz iso compress'],
+            ['label' => 'Decrypt', 'route' => 'tools.decrypt', 'icon' => 'lock-open', 'keywords' => 'tools ps3 decrypt dkey key redump iso ps3dec'],
         ];
     }
 

@@ -112,6 +112,28 @@ RUN arch="$(uname -m)" \
     && install -m755 /tmp/nodtool /usr/local/bin/nodtool \
     && nodtool -V | grep -q "nodtool ${NODTOOL_VERSION#v}"
 
+# ps3dec (Redrrx/ps3dec): decrypts Redump PS3 ISOs with their disc key, for
+# Tools → Decrypt. Rust with no C dependencies; its releases are glibc only,
+# so it is built here and linked statically (crt-static), which needs the
+# target named or the proc-macro crates refuse to build. The pinned
+# rust-toolchain.toml asks for rustup, which Alpine's cargo is not.
+FROM alpine:3.24 AS ps3dec
+
+RUN apk add --no-cache cargo git
+
+# The tag names the release; the commit is what is built (a moved tag fails).
+ARG PS3DEC_TAG=v3.0.0
+ARG PS3DEC_COMMIT=3fde80de6d59d62fb7548651bc878e0fddfc7e27
+RUN git clone --depth 1 --branch "$PS3DEC_TAG" https://github.com/Redrrx/ps3dec.git /src/ps3dec \
+    && cd /src/ps3dec \
+    && test "$(git rev-parse HEAD)" = "$PS3DEC_COMMIT" \
+    && rm -f rust-toolchain.toml \
+    && target="$(uname -m)-alpine-linux-musl" \
+    && RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --locked --bin ps3dec --target "$target" \
+    && install -m755 "target/$target/release/ps3dec" /usr/local/bin/ps3dec \
+    && rm -rf /src/ps3dec /root/.cargo/registry \
+    && ps3dec --version | grep -q "${PS3DEC_TAG#v}"
+
 FROM php:8.5-fpm-alpine
 
 # php:8.5-fpm-alpine already has pdo_sqlite, sqlite3, OPcache and the whole
@@ -139,6 +161,9 @@ FROM php:8.5-fpm-alpine
 # installed on the host to work on the frontend.
 RUN apk add --no-cache \
         nginx su-exec unzip git nodejs npm \
+        # Keeps nginx, PHP-FPM, Reverb, the scheduler, the workers and Vite
+        # running (docker/web/supervisord.conf).
+        supervisor \
         libzip icu-libs libpng libjpeg-turbo freetype libpq libldap \
         libmemcached-libs gettext libwebp \
         # For the per-console toolboxes in app/Scripts. Alpine's shell is ash
@@ -188,7 +213,9 @@ COPY docker/web/zz-env.conf /usr/local/etc/php-fpm.d/zz-env.conf
 COPY docker/web/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 COPY docker/web/opcache.dev.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/web/user-setup.sh /usr/local/bin/user-setup.sh
+COPY docker/web/supervise.sh /usr/local/bin/supervise.sh
 COPY docker/web/queue-workers.sh /usr/local/bin/queue-workers.sh
+COPY docker/web/supervisord.conf /etc/supervisord.conf
 COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
 COPY docker/web/app-key.sh /usr/local/bin/app-key.sh
 COPY docker/web/entrypoint.dev.sh /entrypoint.sh
@@ -206,7 +233,9 @@ RUN chdman 2>&1 | grep -q "CHD) manager" \
     && cue2pops 2>&1 | grep -q "conversion tool v" \
     && { pops2cue 2>&1 || true; } | grep -q "POPS2CUE v" \
     && nodtool -V | grep -q "nodtool "
-RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh
+COPY --from=ps3dec /usr/local/bin/ps3dec /usr/local/bin/ps3dec
+RUN ps3dec --version | grep -q "ps3decrs "
+RUN chmod +x /entrypoint.sh /usr/local/bin/user-setup.sh /usr/local/bin/supervise.sh /usr/local/bin/queue-workers.sh /usr/local/bin/reverb.sh /usr/local/bin/app-key.sh
 
 EXPOSE 80
 

@@ -48,8 +48,8 @@ final class SourceSet
     {
         $files = GameFile::query()
             ->present()
-            ->whereIn('game_id', Game::query()->forConsole($console->key)->select('id'))
-            ->with('game')
+            ->onConsole($console->key)
+            ->with(['game', 'meta'])
             ->orderBy('path')
             ->get();
 
@@ -68,7 +68,7 @@ final class SourceSet
      */
     public static function forGame(Game $game): Collection
     {
-        return self::fromFiles($game, $game->files()->present()->orderBy('path')->get());
+        return self::fromFiles($game, $game->files()->present()->with('meta')->orderBy('path')->get());
     }
 
     /**

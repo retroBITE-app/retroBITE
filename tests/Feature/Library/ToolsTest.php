@@ -64,8 +64,8 @@ it('writes what the script reported onto the file', function () {
 
     (new InspectGameFile($file->id))->handle();
 
-    expect($file->refresh()->license_id)->toBe('SLES_521.18')
-        ->and($file->video_mode)->toBe('PAL')
+    expect($file->refresh()->meta?->license_id)->toBe('SLES_521.18')
+        ->and($file->meta?->video_mode)->toBe('PAL')
         ->and($file->region)->toBe('eu');
 });
 
@@ -78,8 +78,8 @@ it('leaves the file alone when the script found nothing', function () {
 
     (new InspectGameFile($file->id))->handle();
 
-    expect($file->refresh()->license_id)->toBeNull()
-        ->and($file->video_mode)->toBeNull();
+    expect($file->refresh()->meta?->license_id)->toBeNull()
+        ->and($file->meta?->video_mode)->toBeNull();
 });
 
 it('survives a script that fell over', function () {
@@ -89,7 +89,7 @@ it('survives a script that fell over', function () {
 
     (new InspectGameFile($file->id))->handle();
 
-    expect($file->refresh()->license_id)->toBeNull();
+    expect($file->refresh()->meta?->license_id)->toBeNull();
 });
 
 it('does not open a compressed image', function () {
@@ -100,14 +100,14 @@ it('does not open a compressed image', function () {
     (new InspectGameFile($file->id))->handle();
 
     Process::assertNothingRan();
-    expect($file->refresh()->license_id)->toBeNull();
+    expect($file->refresh()->meta?->license_id)->toBeNull();
 });
 
 it('does not re-read a file it has already read', function () {
     Process::fake();
 
     $file = ps2File();
-    $file->update(['license_id' => 'SLES_521.18']);
+    $file->rememberMeta(['license_id' => 'SLES_521.18']);
 
     (new InspectGameFile($file->id))->handle();
 
@@ -118,11 +118,11 @@ it('re-reads one when told to', function () {
     Process::fake(['*' => Process::result("license_id\tSLES_503.86\n")]);
 
     $file = ps2File();
-    $file->update(['license_id' => 'WRONG_000.00']);
+    $file->rememberMeta(['license_id' => 'WRONG_000.00']);
 
     (new InspectGameFile($file->id, force: true))->handle();
 
-    expect($file->refresh()->license_id)->toBe('SLES_503.86');
+    expect($file->refresh()->meta?->license_id)->toBe('SLES_503.86');
 });
 
 it('keeps a region the provider already gave', function () {

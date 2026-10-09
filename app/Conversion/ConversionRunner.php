@@ -23,12 +23,14 @@ use App\Services\LibraryFiles;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\LiveUpdates;
+use App\Support\Scanning\LibraryFolders;
 use App\Transfers\FileTransfer;
 use App\Transfers\Location;
 use Carbon\CarbonInterface;
 use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Process\FakeInvokedProcess;
 use Illuminate\Process\InvokedProcess;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -49,9 +51,12 @@ use Throwable;
  * 3. the tool writes into a folder of its own in upload staging, on the same
  *    filesystem as the library, while its output is read for progress and
  *    the row checked for a cancel;
- * 4. with verify on, the tool's own verifier checks what was written;
+ * 4. the converter confirms what was written, and with verify on the tool's
+ *    own verifier checks it;
  * 5. only then does anything reach the console's folder, by FileTransferJob,
- *    which renames rather than copies and never writes over a file;
+ *    which renames rather than copies and never writes over a file — for a
+ *    converter that replaces its source, under a hidden name of its own first,
+ *    then renamed over the source in one step (LibraryPath::replace());
  * 6. with keep-source off, the sources go — never before the output is in;
  * 7. a set gets a playlist of the new discs, and the console is scanned.
  *
@@ -75,6 +80,21 @@ final class ConversionRunner
 
     /** Seconds kept clear under the long connection's retry_after, so a running job is never handed out twice. */
     private const RETRY_MARGIN = 120;
+
+    /**
+     * What a file row knows about the bytes in it, and no longer knows once
+     * they are replaced: hashes and the provider's word on the dump.
+     */
+    private const CONTENT_FACTS = [
+        'crc', 'md5', 'sha1', 'hashed_at', 'scrapes', 'provider_flags',
+        'ra_hash', 'ra_hash_size', 'ra_hash_mtime', 'ra_hashed_at',
+    ];
+
+    /**
+     * What the toolbox read off the replaced bytes, for the next scan to read again.
+     * Not disc_key: it is the disc's, and kept once decrypting has deleted its file.
+     */
+    private const META_FACTS = ['license_id', 'video_mode', 'encrypted'];
 
     private string $log = '';
 
@@ -139,8 +159,9 @@ final class ConversionRunner
 
             $this->start($conversion);
             $this->convert($conversion, $converter, $plan, $staging);
+            $this->confirm($conversion, $converter, $plan, $staging);
             $this->verify($conversion, $converter, $plan, $staging);
-            $this->place($conversion, $console, $set, $plan, $staging);
+            $this->place($conversion, $console, $converter, $set, $plan, $staging);
         } catch (ConversionCancelled) {
             $this->removeStaging($staging);
             $this->line(__('Cancelled.'));
@@ -172,9 +193,12 @@ final class ConversionRunner
         // so a Retry pressed the moment it does cannot start in a folder this
         // is about to delete.
         $this->removeStaging($staging);
-        $this->settle($conversion, function () use ($conversion, $set): void {
-            $this->removeSources($conversion, $set);
-        });
+        // A replacing converter swapped its sources out already, in place().
+        if (! $converter->replacesSource()) {
+            $this->settle($conversion, function () use ($conversion, $set): void {
+                $this->removeSources($conversion, $set);
+            });
+        }
         $this->settle($conversion, function () use ($conversion, $console, $converter, $set, $plan): void {
             $this->writePlaylist($conversion, $console, $converter, $set, $plan);
         });
@@ -201,6 +225,15 @@ final class ConversionRunner
         }
 
         $this->log = (string) $conversion->log;
+
+        if ($this->recoverSwap($conversion)) {
+            $this->line(__('Finished after a restart: the output had already taken its source\'s place.'));
+            $this->finish($conversion, ConversionStatus::Done);
+            ScanConsoleFolder::dispatch($conversion->console);
+
+            return;
+        }
+
         $this->line(__('Interrupted.'));
         $this->finish($conversion, ConversionStatus::Failed, ConversionFailure::Interrupted);
     }
@@ -255,7 +288,7 @@ final class ConversionRunner
     private function plan(Console $console, Converter $converter, SourceSet $set): array
     {
         foreach ($set->files() as $file) {
-            $absolute = $this->paths->root().'/'.$file->path;
+            $absolute = LibraryFolders::pathOf($file);
 
             if (is_link($absolute) || ! is_file($absolute) || ! is_readable($absolute)) {
                 throw ConversionFailed::because(ConversionFailure::SourceMissing, $file->path);
@@ -269,8 +302,10 @@ final class ConversionRunner
                 return $disc->members;
             })
             ->sum(function (GameFile $member): int {
-                return (int) filesize($this->paths->root().'/'.$member->path);
+                return (int) filesize(LibraryFolders::pathOf($member));
             });
+
+        $this->assertRoom();
 
         $plan = [];
         $taken = [];
@@ -278,11 +313,26 @@ final class ConversionRunner
         foreach ($set->discs as $disc) {
             $outputs = $converter->outputsFor($disc);
 
+            if ($converter->replacesSource() && (count($outputs) !== 1 || count($disc->members) !== 1)) {
+                throw ConversionFailed::because(ConversionFailure::Unsupported, $disc->file->path);
+            }
+
             foreach ($outputs as $name) {
                 $relative = self::join($set->directory, $name);
 
-                if (in_array($relative, $taken, true) || $this->taken($console, $relative)) {
-                    throw ConversionFailed::because(ConversionFailure::Exists, $relative);
+                // Its own source's name is free to a converter that replaces
+                // it; the name it is parked under on the way in has to be.
+                $replacing = $converter->replacesSource() && $this->isSource($console, $disc, $relative);
+                $check = $replacing ? self::parked($relative) : $relative;
+
+                // Left by a run that died before its rename: the source never moved,
+                // and the queue lets one conversion of a file run at a time.
+                if ($replacing && $this->taken($console, $check)) {
+                    $this->discard($console, $check);
+                }
+
+                if (in_array($relative, $taken, true) || $this->taken($console, $check)) {
+                    throw ConversionFailed::because(ConversionFailure::Exists, $check);
                 }
 
                 $taken[] = $relative;
@@ -367,7 +417,7 @@ final class ConversionRunner
             foreach ($commands as $step => ['tool' => $tool, 'arguments' => $arguments, 'reading' => $reading]) {
                 $exit = $this->execute($conversion, $converter, $tool, $arguments, $reading, function (float $percent) use ($index, $count, $step, $steps): float {
                     return ($index + ($step + $percent / 100) / $steps) / $count * 100;
-                });
+                }, directory: $converter->workingDirectory($staging));
 
                 if (! Tools::succeeded($tool, $exit)) {
                     throw ConversionFailed::because(ConversionFailure::ToolFailed, $tool.' exit '.$exit);
@@ -384,6 +434,28 @@ final class ConversionRunner
         }
 
         $this->report($conversion, 100.0);
+    }
+
+    /**
+     * Ask the converter about every written file, verify on or off: its own
+     * check of what a tool can get wrong and still exit 0.
+     *
+     * @param  list<array{disc: Disc, outputs: list<string>}>  $plan
+     *
+     * @throws ConversionFailed
+     */
+    private function confirm(Conversion $conversion, Converter $converter, array $plan, string $staging): void
+    {
+        foreach (self::outputs($plan) as $name) {
+            $reason = $converter->confirm($staging.'/'.$name);
+
+            if ($reason !== null) {
+                $this->line($reason);
+                $conversion->update(['log' => $this->log]);
+
+                throw ConversionFailed::because(ConversionFailure::VerifyFailed, $name);
+            }
+        }
     }
 
     /**
@@ -422,7 +494,7 @@ final class ConversionRunner
 
             $exit = $this->execute($conversion, $converter, $converter->tool(), (array) $converter->verifyArguments($output), $output, function (float $percent) use ($index, $count): float {
                 return ($index + $percent / 100) / $count * 100;
-            }, keepOutput: true);
+            }, keepOutput: true, directory: $converter->workingDirectory($staging));
 
             if (! Tools::succeeded($converter->tool(), $exit) || $converter->verifyFailed($this->lastOutput)) {
                 throw ConversionFailed::because(ConversionFailure::VerifyFailed, $name);
@@ -440,7 +512,7 @@ final class ConversionRunner
      *
      * @throws ConversionFailed
      */
-    private function place(Conversion $conversion, Console $console, SourceSet $set, array $plan, string $staging): void
+    private function place(Conversion $conversion, Console $console, Converter $converter, SourceSet $set, array $plan, string $staging): void
     {
         $names = self::outputs($plan);
 
@@ -449,10 +521,12 @@ final class ConversionRunner
         });
 
         $moves = array_values($names
-            ->map(function (string $name) use ($conversion, $console, $set): FileTransfer {
+            ->map(function (string $name) use ($conversion, $console, $converter, $set): FileTransfer {
+                $relative = self::join($set->directory, $name);
+
                 return new FileTransfer(
                     Location::staging($conversion->stagingFolder().'/'.$name),
-                    Location::library($console, self::join($set->directory, $name)),
+                    Location::library($console, $converter->replacesSource() ? self::parked($relative) : $relative),
                 );
             })
             ->all());
@@ -467,11 +541,172 @@ final class ConversionRunner
             );
         }
 
+        if ($converter->replacesSource()) {
+            // On record before the first rename, so recovery knows a swap began.
+            $conversion->update(['status' => ConversionStatus::Swapping]);
+            $this->swap($console, $converter, $set, $plan);
+        }
+
         $conversion->update(['outputs' => $names->all(), 'directory' => $set->directory]);
 
         foreach ($names as $name) {
             $this->line(__('Wrote :path', ['path' => self::join($set->directory, $name)]));
         }
+    }
+
+    /**
+     * Room on the library's disk, where staging is, for an output as large as
+     * its sources and the margin beyond. An unreadable figure is no reason to
+     * refuse; prepareStaging() reports a library that is not there.
+     *
+     * @throws ConversionFailed
+     */
+    private function assertRoom(): void
+    {
+        try {
+            $free = @disk_free_space($this->paths->stagingDirectory());
+        } catch (LibraryPathException) {
+            return;
+        }
+
+        $needed = $this->sourceBytes + (int) config('converters.free_space_margin', 1024 ** 3);
+
+        if ($free !== false && $free < $needed) {
+            throw ConversionFailed::because(ConversionFailure::NoSpace, __(':needed needed, :free free', [
+                'needed' => Number::fileSize($needed, 1),
+                'free' => Number::fileSize($free, 1),
+            ]));
+        }
+    }
+
+    /**
+     * Swap each parked output in for its source, keeping the source's row and
+     * dropping its companions. A source that will not go leaves everything as it was.
+     *
+     * @param  list<array{disc: Disc, outputs: list<string>}>  $plan
+     *
+     * @throws ConversionFailed
+     */
+    private function swap(Console $console, Converter $converter, SourceSet $set, array $plan): void
+    {
+        foreach ($plan as ['disc' => $disc, 'outputs' => $names]) {
+            $final = self::join($set->directory, (string) Arr::first($names));
+            $parked = self::parked($final);
+
+            // One rename over the source: there is never a moment without the game's file.
+            try {
+                $this->paths->replace($console, $parked, $final);
+            } catch (LibraryPathException $e) {
+                $this->discard($console, $parked);
+
+                throw ConversionFailed::because(ConversionFailure::Unwritable, $final, $e);
+            }
+
+            $this->finishSwap($console, $converter, $disc, $final);
+        }
+    }
+
+    /**
+     * After a swap's rename: the row's size and stale facts brought up to date,
+     * the source's companions gone. Safe to run twice, as recovery may.
+     */
+    private function finishSwap(Console $console, Converter $converter, Disc $disc, string $final): void
+    {
+        $disc->file->update([
+            'size_bytes' => (int) filesize($this->paths->absolute($console, $final)),
+            ...array_fill_keys(self::CONTENT_FACTS, null),
+        ]);
+        $disc->file->meta()->update(array_fill_keys(self::META_FACTS, null));
+        $this->line(__('Replaced :path', ['path' => $final]));
+
+        foreach ($converter->companions($disc, $this->paths->root()) as $companion) {
+            $relative = $this->paths->consoleRelative($console, $companion);
+
+            if ($relative === null || ! $this->paths->exists($console, $relative)) {
+                continue;
+            }
+
+            try {
+                $this->paths->delete($console, $relative);
+                $this->line(__('Deleted :path', ['path' => $relative]));
+            } catch (LibraryPathException) {
+                $this->line(__('Kept :path: it could not be deleted.', ['path' => $relative]));
+            }
+        }
+    }
+
+    /**
+     * A replacing conversion the worker died in. Whether it is now done.
+     *
+     * Only a conversion that reached the swap (ConversionStatus::Swapping) is
+     * finished: everything it wrote had been verified and placed, so a disc
+     * still parked is renamed in, and one whose rename had landed is brought
+     * up to date. Any earlier, nothing had touched the sources; parked outputs
+     * are removed and the sources, their facts and their key files are left
+     * as they were — a source that merely reads as converted must not be taken
+     * for a swap that happened.
+     */
+    private function recoverSwap(Conversion $conversion): bool
+    {
+        $console = Console::tryFrom($conversion->console);
+        $converter = Converters::make($conversion->converter);
+        $file = $conversion->game_file_id !== null ? GameFile::query()->with('game')->find($conversion->game_file_id) : null;
+        $set = $file !== null ? SourceSet::fromFile($file) : null;
+
+        if ($console === null || $converter === null || $set === null || ! $converter->replacesSource()) {
+            return false;
+        }
+
+        $swapping = $conversion->status === ConversionStatus::Swapping;
+        $landed = $swapping;
+
+        foreach ($set->discs as $disc) {
+            $final = self::join($set->directory, (string) Arr::first($converter->outputsFor($disc)));
+            $parked = self::parked($final);
+
+            try {
+                if (! $swapping) {
+                    if ($this->paths->exists($console, $parked)) {
+                        $this->discard($console, $parked);
+                        $this->line(__('Removed the unfinished :path; :source is as it was.', ['path' => $parked, 'source' => $final]));
+                    }
+
+                    continue;
+                }
+
+                if ($this->paths->exists($console, $parked)) {
+                    $this->paths->replace($console, $parked, $final);
+                } elseif ($converter->confirm($this->paths->absolute($console, $final)) !== null) {
+                    $landed = false;
+
+                    continue;
+                }
+            } catch (LibraryPathException) {
+                $landed = false;
+
+                continue;
+            }
+
+            $this->finishSwap($console, $converter, $disc, $final);
+        }
+
+        return $landed;
+    }
+
+    /** Remove a parked output that will not be swapped in after all. */
+    private function discard(Console $console, string $parked): void
+    {
+        try {
+            $this->paths->delete($console, $parked);
+        } catch (LibraryPathException) {
+            $this->line(__('Left :path behind: it could not be removed.', ['path' => $parked]));
+        }
+    }
+
+    /** Whether a path in the console's folder is this disc's own file. */
+    private function isSource(Console $console, Disc $disc, string $relative): bool
+    {
+        return $this->paths->consoleRelative($console, $disc->file->path) === $relative;
     }
 
     /**
@@ -562,7 +797,7 @@ final class ConversionRunner
      * @throws ConversionFailed
      * @throws ConversionCancelled
      */
-    private function execute(Conversion $conversion, Converter $converter, string $tool, array $arguments, string $reading, callable $overall, bool $keepOutput = false): int
+    private function execute(Conversion $conversion, Converter $converter, string $tool, array $arguments, string $reading, callable $overall, bool $keepOutput = false, ?string $directory = null): int
     {
         $binary = Tools::path($tool);
         $remaining = (int) ceil($this->deadline - microtime(true));
@@ -575,8 +810,14 @@ final class ConversionRunner
             throw ConversionFailed::because(ConversionFailure::TimedOut, $tool);
         }
 
+        $secret = $converter->secretFlags();
+
         $this->line('$ '.collect([basename($binary), ...$arguments])
-            ->map(function (string $part): string {
+            ->map(function (string $part, int $index) use ($secret, $arguments): string {
+                if ($index > 0 && in_array($arguments[$index - 2] ?? null, $secret, true)) {
+                    return '********';
+                }
+
                 return Str::contains($part, ' ') ? '"'.$part.'"' : $part;
             })
             ->implode(' '));
@@ -586,7 +827,8 @@ final class ConversionRunner
         $this->keepOutput = $keepOutput;
         $this->readingFd = null;
 
-        $process = Process::timeout($remaining)->start([$binary, ...$arguments]);
+        $pending = Process::timeout($remaining);
+        $process = ($directory !== null ? $pending->path($directory) : $pending)->start([$binary, ...$arguments]);
         $target = realpath($reading);
         $size = $target !== false ? (int) filesize($target) : 0;
         $parsed = false;
@@ -861,5 +1103,16 @@ final class ConversionRunner
     private static function join(string $directory, string $name): string
     {
         return $directory === '' ? $name : $directory.'/'.$name;
+    }
+
+    /**
+     * Where a replacing output waits beside its source until the source has
+     * gone. Hidden, as staging is, and not an extension the scanner plays.
+     */
+    private static function parked(string $relative): string
+    {
+        $directory = dirname($relative);
+
+        return self::join($directory === '.' ? '' : $directory, '.'.basename($relative).'.retrobite-replacing');
     }
 }

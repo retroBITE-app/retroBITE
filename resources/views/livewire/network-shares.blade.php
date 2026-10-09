@@ -7,7 +7,7 @@ use Livewire\Attributes\Defer;
 use Livewire\Component;
 
 /**
- * The dashboard's SMB and FTP status cards.
+ * The dashboard's SMB, FTP and ps3netsrv status cards.
  *
  * A component rather than part of the dashboard's own render because the probe
  * behind it opens a socket per protocol with a timeout each, and a share

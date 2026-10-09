@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Scanning;
 
+use App\Models\GameFile;
 use FilesystemIterator;
 use Illuminate\Support\Collection;
 use SplFileInfo;
@@ -52,6 +53,12 @@ final class LibraryFolders
     public static function root(): string
     {
         return rtrim((string) config('settings.games_path'), '/');
+    }
+
+    /** Where a library file is on disk, absolute. */
+    public static function pathOf(GameFile $file): string
+    {
+        return self::root().'/'.$file->path;
     }
 
     /** Whether a chosen folder is really inside the library root. */

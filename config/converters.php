@@ -47,6 +47,14 @@ return [
     'concurrency' => max(1, (int) (env('CONVERSION_CONCURRENCY') ?: 1)),
 
     /*
+     * Room left over, in bytes, beyond the sources' own size, before a
+     * conversion starts writing. Staging is on the library's disk and an
+     * output is about as large as its source at most; a disk filled half way
+     * through a 25 GB image is full until staging is cleared.
+     */
+    'free_space_margin' => 1024 ** 3,
+
+    /*
      * Seconds one conversion may take before it is stopped — the whole of it,
      * every disc and every step. A dual-layer PS2 disc read over a network
      * mount is the case to size for. ConversionRunner::timeout() holds it two
