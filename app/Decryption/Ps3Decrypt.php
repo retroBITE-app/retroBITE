@@ -7,6 +7,8 @@ namespace App\Decryption;
 use App\Conversion\Converter;
 use App\Conversion\Disc;
 use App\Conversion\SourceSet;
+use App\Enums\ConversionFailure;
+use App\Exceptions\ConversionFailed;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
@@ -80,10 +82,17 @@ final class Ps3Decrypt extends Converter
     public function arguments(string $input, array $outputs, array $options): array
     {
         $output = (string) Arr::first($outputs);
+        $key = $this->keys->read($input);
+
+        // Checked when the run was admitted; gone since only if the key file
+        // was taken away in between. ps3dec with an empty key writes noise.
+        if ($key === null) {
+            throw ConversionFailed::because(ConversionFailure::Unsupported, __('No disc key beside :path', ['path' => basename($input)]));
+        }
 
         return [
             $input,
-            '--dk', (string) $this->keys->read($input),
+            '--dk', $key,
             '--skip',
             '-o', dirname($output),
             '-n', Str::beforeLast(basename($output), '.'),

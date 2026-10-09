@@ -22,6 +22,7 @@ use App\Support\LibraryPath;
 use Illuminate\Process\FakeProcessDescription;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
@@ -356,6 +357,38 @@ it('cannot be cancelled in the middle of a swap', function () {
     expect(ConversionStatus::Swapping->cancellable())->toBeFalse()
         ->and(ConversionStatus::Swapping->active())->toBeTrue()
         ->and(ConversionStatus::Running->cancellable())->toBeTrue();
+});
+
+it('refuses to queue a file another request is queueing at this moment', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $file = ps3Game();
+    // The other tab holds the file's lock between its check and its insert.
+    $held = Cache::lock('conversion.file.'.$file->id, 10);
+    $held->get();
+
+    expect(fn () => app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []))
+        ->toThrow(ConversionFailed::class);
+
+    $held->release();
+
+    expect(app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', [])->status)
+        ->toBe(ConversionStatus::Queued);
+});
+
+it('fails clearly, and leaves the image alone, when its key is gone by the time it runs', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    fakePs3dec();
+    $file = ps3Game();
+    $before = md5_file($this->root.'/ps3/Game (USA).iso');
+    $conversion = app(ConversionQueue::class)->add(SourceSet::fromFile($file->load('game')), 'ps3-decrypt', []);
+    File::delete($this->root.'/ps3/Game (USA).dkey');
+
+    (new RunConversion($conversion->id))->handle(app(ConversionRunner::class));
+
+    expect($conversion->fresh()?->status)->toBe(ConversionStatus::Failed)
+        ->and($conversion->fresh()?->failure)->toBe(ConversionFailure::Unsupported)
+        ->and(md5_file($this->root.'/ps3/Game (USA).iso'))->toBe($before);
+    Process::assertNothingRan();
 });
 
 it('refuses to queue a file that already has a conversion waiting or running', function () {

@@ -13,6 +13,7 @@ use App\Models\Conversion;
 use App\Support\LiveUpdates;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * What the Conversion page does to the queue: add a conversion, cancel one,
@@ -163,6 +164,30 @@ final class ConversionQueue
             throw ConversionFailed::because(ConversionFailure::Unsupported, $converterKey);
         }
 
+        // The check and the insert under one lock per file: two tabs — the game
+        // page and Tools → Decrypt — confirming at once would otherwise both
+        // find nothing queued and both queue. Not waited for: held means the
+        // other request is queueing this very file, which is the answer.
+        $lock = Cache::lock('conversion.file.'.$set->file->id, 10);
+
+        if (! $lock->get()) {
+            throw ConversionFailed::because(ConversionFailure::AlreadyQueued, $set->file->path);
+        }
+
+        try {
+            return $this->create($set, $converter, $options);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     *
+     * @throws ConversionFailed
+     */
+    private function create(SourceSet $set, Converter $converter, array $options): Conversion
+    {
         if ($this->clashes($set, $converter)) {
             throw ConversionFailed::because(ConversionFailure::AlreadyQueued, $set->file->path);
         }
