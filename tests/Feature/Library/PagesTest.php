@@ -17,6 +17,7 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use App\Services\LibraryScanner;
 use App\Support\Console;
 use App\Support\ExportProgress;
@@ -24,10 +25,12 @@ use App\Support\MediaRegions;
 use App\Support\MediaTypes;
 use App\Support\Scanning\FolderCounts;
 use App\Support\SystemActivity;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Route as RouteFacade;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
@@ -98,6 +101,19 @@ it('renders a game page, on each of its tabs', function () {
 
     $this->get($url)->assertOk();
     $this->get($url.'?tab=artwork')->assertOk();
+});
+
+it('binds {game} from a provider, which still runs when the routes are cached', function () {
+    // The container caches the routes at start, and then routes/web.php is
+    // never loaded: a binding written there was lost and every game page
+    // 404ed. A router of its own, with nothing but the providers' work on it.
+    $router = new Router(app('events'), app());
+    app()->instance('router', $router);
+    RouteFacade::clearResolvedInstance('router');
+
+    (new AppServiceProvider(app()))->boot();
+
+    expect($router->getBindingCallback('game'))->not->toBeNull();
 });
 
 it('renders the consoles page', function () {
