@@ -180,6 +180,15 @@ it('asks where the roms are when the console folder is missing', function () {
     Queue::assertPushed(ScanConsoleFolder::class);
 });
 
+it('lists the consoles on offer only while the add modal is open', function () {
+    Livewire::test('consoles.index')
+        ->assertDontSee('Dreamcast')
+        ->call('openAdd')
+        ->assertSee('Dreamcast')
+        ->call('closeAdd')
+        ->assertDontSee('Dreamcast');
+});
+
 it('searches the consoles on offer by name, brand and key', function () {
     $component = Livewire::test('consoles.index')->call('openAdd');
     $offered = fn (): array => $component->instance()->choices->pluck('key')->all();

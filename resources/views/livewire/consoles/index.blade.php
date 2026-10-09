@@ -50,6 +50,13 @@ new #[Title('Consoles')] class extends Component
     public bool $editingLayout = false;
 
     /**
+     * Whether the modal is open. Its body is rendered only then: closed, it
+     * was every console not yet added — a hundred rows, each with a look at
+     * the disk for its folder — in the HTML of every render of this page.
+     */
+    public bool $modalOpen = false;
+
+    /**
      * The consoles in the library, with their counts.
      *
      * Not every console with a directory on disk: a collection copied wholesale
@@ -159,13 +166,14 @@ new #[Title('Consoles')] class extends Component
     public function openAdd(): void
     {
         $this->reset('search', 'adding', 'chosenFolder', 'step', 'editingLayout');
+        $this->modalOpen = true;
 
         Flux::modal(self::MODAL)->show();
     }
 
     public function closeAdd(): void
     {
-        $this->reset('search', 'adding', 'chosenFolder', 'step', 'editingLayout');
+        $this->reset('search', 'adding', 'chosenFolder', 'step', 'editingLayout', 'modalOpen');
 
         Flux::modal(self::MODAL)->close();
     }
@@ -291,6 +299,7 @@ new #[Title('Consoles')] class extends Component
         $this->adding = $key;
         $this->editingLayout = true;
         $this->step = 'layout';
+        $this->modalOpen = true;
 
         Flux::modal(self::MODAL)->show();
     }
@@ -829,7 +838,9 @@ new #[Title('Consoles')] class extends Component
     </div>
 
     <flux:modal :name="$this::MODAL" wire:close="closeAdd" class="w-full max-w-lg">
-        @if ($step === 'console')
+        @if (! $modalOpen)
+            {{-- Closed: nothing to send. See $modalOpen. --}}
+        @elseif ($step === 'console')
             <div class="flex flex-col gap-4">
                 <div>
                     <flux:heading size="lg">{{ __('Add a console') }}</flux:heading>
