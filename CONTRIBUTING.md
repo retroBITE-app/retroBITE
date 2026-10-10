@@ -306,25 +306,24 @@ pre-release picks the channel, never the suffix:
 | Release `20260930` | `:20260930`, `:latest` |
 | Pre-release `20260930-ALPHA` (or `-PREALPHA`) | `:20260930-ALPHA`, `:develop` |
 
-Releases are built and pushed by a founder from their own Mac with `./build`.
-That takes about ten minutes on Apple silicon (arm64 natively, amd64 through
-Rosetta), where GitHub Actions took two hours. `.github/workflows/docker.yml`
-is kept as a fallback to run by hand from the Actions tab.
+Both are built by `.github/workflows/images.yml`, on two events only:
+
+- **every push to `develop`**, published as `:develop` and `:develop-<short sha>`;
+- **a published GitHub release**, published under the table above.
+
+Each architecture is built on a GitHub runner of its own (no emulation),
+pushed to GHCR, started on both architectures, and copied unchanged to Docker
+Hub once someone approves the `dockerhub` environment. A push to `master` on
+its own builds nothing. `./build` stays for trying a build locally and for
+pushing by hand when CI cannot (see the end of this section).
 
 ### Publishing a release
 
-You need, once:
+You need `gh auth login`, for the GitHub release, and to be one of the
+`dockerhub` environment's reviewers. Then, for each release:
 
-- Docker with buildx: OrbStack or Docker Desktop, with Rosetta on for amd64
-- `docker login` as an account that can push to `retrobite/retrobite` and
-  `retrobite/share`
-- `gh auth login`, for the GitHub release
-- `jq`, which `./build` reads the build's metadata with
-
-Then, for each release:
-
-1. **Start from a clean, tested `develop`.** `./build` builds what is
-   committed, never the working tree.
+1. **Start from a clean, tested `develop`.** CI builds what is committed and
+   tagged, never anyone's working tree.
 
    ```bash
    git switch develop && git pull
@@ -341,51 +340,44 @@ Then, for each release:
    git push origin develop --tags
    ```
 
-3. **Build, test and push both images.** The version is read off the tag.
-
-   ```bash
-   ./build master                  # a release: :20261010 and :latest
-   ./build develop                 # a pre-release: :20261010-BETA and :develop
-   ```
-
-   Answer `y` to push. `./build` first builds the web image for this Mac and
-   starts it with `./smoke`, the way an install starts it. **Nothing is pushed
-   unless it starts**: it must come up healthy, serve its first page, generate
-   its application key and keep that key when recreated. Then both images are
-   built for amd64 and arm64 and pushed.
-
-4. **Check what Docker Hub has.** Both platforms should be listed under each
-   tag.
-
-   ```bash
-   docker buildx imagetools inspect retrobite/retrobite:20261010
-   docker buildx imagetools inspect retrobite/share:20261010
-   ```
-
-5. **Publish the release on GitHub,** from the same tag.
+3. **Publish the release on GitHub,** from the same tag. The pre-release box,
+   not the tag's suffix, decides `:latest` or `:develop`.
 
    ```bash
    gh release create 20261010 --title 20261010 --notes ""
    gh release create 20261010-BETA --title 20261010-BETA --notes "" --prerelease
    ```
 
-   Publishing it runs two workflows:
+   Publishing it runs three workflows:
 
+   - **images.yml** builds both images for amd64 and arm64 from the tag,
+     starts them the way an install does (`./smoke` for the web image, the
+     share's healthcheck), and waits for approval. Approved, it publishes them
+     and, for a release (not a pre-release), updates the Docker Hub pages from
+     `docs/dockerhub/`. Its token, `DOCKERHUB_TOKEN` in the `dockerhub`
+     environment, needs Read, Write and Delete access for that.
    - **changelog.yml** writes the notes from the commits since the previous
      tag. Anything typed in `--notes` is kept above them.
-   - **release-files.yml** does two things:
-     - It attaches `docker-compose.yml`, `docker-compose.macvlan.yml` and
-       `.env.example`, the last as `env.example` because GitHub renames an
-       asset whose name starts with a dot. The attached compose file defaults to that release's
-       version, so anyone can install one version and stay on it.
-       [docs/installing.md](docs/installing.md) and the site fetch the
-       `develop` branch's files instead. Either way these files *are* the
-       installation, and a change to them belongs in the notes.
-     - For a release, not a pre-release, it updates the Docker Hub pages from
-       `docs/dockerhub/`. This needs `DOCKERHUB_TOKEN` to have Read, Write and
-       Delete access.
+   - **release-files.yml** attaches `docker-compose.yml`,
+     `docker-compose.macvlan.yml` and `.env.example`, the last as
+     `env.example` because GitHub renames an asset whose name starts with a
+     dot. The attached compose file defaults to that release's version, so
+     anyone can install one version and stay on it.
+     [docs/installing.md](docs/installing.md) and the site fetch the `develop`
+     branch's files instead. Either way these files *are* the installation, and
+     a change to them belongs in the notes.
 
-6. **Check it as an installer would**, on another machine or in an empty
+4. **Approve the publish.** In the release's images run under Actions, review
+   the `dockerhub` deployment. Nothing reaches Docker Hub before that, and only
+   the digests that were tested do. Then check both platforms are listed under
+   each tag:
+
+   ```bash
+   docker buildx imagetools inspect retrobite/retrobite:20261010
+   docker buildx imagetools inspect retrobite/share:20261010
+   ```
+
+5. **Check it as an installer would**, on another machine or in an empty
    folder:
 
    ```bash
@@ -393,7 +385,12 @@ Then, for each release:
    docker compose up -d                # runs exactly the version just released
    ```
 
-`./build` also works outside a release:
+**By hand, when CI cannot:** `./build master` (a release, `:latest`) or
+`./build develop` (a pre-release) from a clean, tagged checkout builds both
+images for amd64 and arm64 and pushes them, after starting the web image with
+`./smoke`. It needs Docker with buildx, `docker login` as an account that can
+push to `retrobite/retrobite` and `retrobite/share`, and `jq`. It also works
+outside a release:
 
 ```bash
 ./build                            # this Mac only, loaded: :develop, :develop-<commit>

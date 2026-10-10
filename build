@@ -36,12 +36,15 @@
 # with ./smoke, the way an install starts it; nothing is pushed unless it
 # comes up. The layers are cached by then, so the push costs no second build.
 #
-# Releases are built here, not on GitHub: a Mac's own arm64 build and Rosetta
-# for amd64 take minutes where Actions took hours. Tag, ./build, then publish
-# the release on GitHub for its notes (changelog.yml).
+# Releases are built on GitHub now: publishing one runs
+# .github/workflows/images.yml, which builds each architecture natively, tests
+# it and copies it to Docker Hub once approved; every push to develop runs it
+# too. It does not use this script. This is for trying a build locally, and
+# for pushing by hand when CI cannot; --digest-dir and --merge were for the
+# workflow images.yml replaced.
 #
 # The web UI is retrobite/retrobite (Dockerfile.web), the SMB/FTP share
-# retrobite/share (Dockerfile). The CI job is .github/workflows/docker.yml.
+# retrobite/share (Dockerfile).
 
 set -euo pipefail
 cd "$(dirname "$0")"
