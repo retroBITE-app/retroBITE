@@ -130,3 +130,41 @@ test('an image with text beside it stays in the paragraph', function () {
         ->toContain('<p>')
         ->not->toContain('<figure>');
 });
+
+test('a numbered list that resumes after a code block keeps its number', function () {
+    $html = renderDoc("1. One\n2. Two\n\n```text\ntree\n```\n\n3. Three\n4. Four");
+
+    // The badge is a CSS counter, so start="3" alone would still draw 1.
+    expect($html)->toContain('<ol style="counter-reset: step 2" start="3">');
+});
+
+test('a list that starts at one carries no counter reset', function () {
+    expect(renderDoc("1. One\n2. Two"))->not->toContain('counter-reset');
+});
+
+test('flush left bullets under a step become that step\'s sub list', function () {
+    $html = renderDoc("3. **Download**\n- Get the PUP\n- Rename it\n\n4. **Install**\n- Eject the drive");
+
+    expect($html)
+        ->toContain("<li><strong>Download</strong>\n<ul>\n<li>Get the PUP</li>")
+        ->toContain("<li><strong>Install</strong>\n<ul>\n<li>Eject the drive</li>")
+        // Step 4 carried on the count, so it joined step 3's list.
+        ->and(substr_count($html, '<ol'))->toBe(1);
+});
+
+test('bullets after a blank line stay a list of their own', function () {
+    $html = renderDoc("1. Step\n\n- Not part of it");
+
+    expect($html)->toContain("</ol>\n<ul>");
+});
+
+test('a numbered list that restarts the count is not joined', function () {
+    $html = renderDoc("1. One\n- detail\n\n1. Again");
+
+    expect(substr_count($html, '<ol'))->toBe(2);
+});
+
+test('an indented sub list nests', function () {
+    expect(renderDoc("- Clear Cache\n- Clear History\n   - sub list item 1"))
+        ->toContain("<li>Clear History\n<ul>\n<li>sub list item 1</li>");
+});

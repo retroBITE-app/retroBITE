@@ -7,6 +7,7 @@ use App\Resources\DocResource;
 use App\Support\DocPath;
 use App\Support\Markdown\DocImageExtension;
 use App\Support\Markdown\DocLinkExtension;
+use App\Support\Markdown\DocListExtension;
 use App\Support\Markdown\VideoEmbedExtension;
 use Closure;
 use Illuminate\Support\Str;
@@ -41,6 +42,7 @@ class DocRenderer
         $environment->addExtension(new GithubFlavoredMarkdownExtension);
         $environment->addExtension(new VideoEmbedExtension);
         $environment->addExtension(new DocLinkExtension);
+        $environment->addExtension(new DocListExtension);
         $environment->addExtension(new DocImageExtension($this->mediaResolver($doc)));
 
         return (new MarkdownConverter($environment))->convert($doc->body)->getContent();
