@@ -15,7 +15,7 @@ name: images
 #            for a full release, the Docker Hub pages from docs/dockerhub/
 #
 # Tags on Docker Hub follow ./build:
-#   a push to develop    :develop and :develop-<short sha>
+#   a push to develop    :develop, :dev-<date> and :develop-<short sha>
 #   a pre-release        :<tag> and :develop      (./build develop)
 #   a release            :<tag> and :latest       (./build master)
 # Whether a release is a pre-release is the release's own box, never read off
@@ -59,6 +59,8 @@ jobs:
           set -euo pipefail
 
           commit=$(git rev-parse --short HEAD)
+          # The commit's own day in UTC, not the build's: a rerun is named the same.
+          day=$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d HEAD)
 
           # What ./build writes and tags for the same thing.
           if [ "$GITHUB_EVENT_NAME" = release ]; then
@@ -75,8 +77,9 @@ jobs:
               tags="$version latest"
             fi
           else
-            version="develop-$commit"
-            tags="develop develop-$commit"
+            # Named by day; the commit's tag still pins one exact build.
+            version="dev-$day"
+            tags="develop dev-$day develop-$commit"
           fi
 
           # GHCR wants the owner in lower case; retroBITE-app is not.

@@ -308,7 +308,8 @@ pre-release picks the channel, never the suffix:
 
 Both are built by `.github/workflows/images.yml`, on two events only:
 
-- **every push to `develop`**, published as `:develop` and `:develop-<short sha>`;
+- **every push to `develop`**, published as `:develop`, `:dev-<date>` (the
+  commit's day, which is also the version the app shows) and `:develop-<short sha>`;
 - **a published GitHub release**, published under the table above.
 
 Each architecture is built on a GitHub runner of its own (no emulation),
@@ -393,7 +394,7 @@ push to `retrobite/retrobite` and `retrobite/share`, and `jq`. It also works
 outside a release:
 
 ```bash
-./build                            # this Mac only, loaded: :develop, :develop-<commit>
+./build                            # this Mac only, loaded: :develop, :dev-<date>, :develop-<commit>
 ./smoke develop                    # start that as an install would
 ./build --only web                 # one of the two images
 ./build master --version 20261010  # a version without its tag on this commit

@@ -3,8 +3,8 @@
 #
 #   ./build develop [--version 20260930-ALPHA]
 #                        a pre-release: :<version> and :develop. With no
-#                        version and no tag on this commit, :develop and
-#                        :develop-<commit>, to try something out
+#                        version and no tag on this commit, :develop,
+#                        :dev-<date> and :develop-<commit>, to try something out
 #   ./build master [--version 20260930]
 #                        a release: :<version> and :latest
 #   ./build --only web|share      one of the two images
@@ -112,6 +112,8 @@ if [ -n "$digest_dir" ] && { [[ $PLATFORMS == *,* ]] || [ $auto_yes -ne 1 ]; }; 
 fi
 
 commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+# The commit's own day in UTC, as CI names a develop build: a rebuild is named the same.
+day=$(TZ=UTC git show -s --format=%cd --date=format-local:%Y%m%d HEAD 2>/dev/null || date -u +%Y%m%d)
 
 if [ -z "$version" ]; then
     version=$(git describe --tags --exact-match 2>/dev/null || true)
@@ -126,7 +128,8 @@ if [ -z "$version" ] && [ "$channel" = master ]; then
 fi
 
 # Every tag one image gets: the release's own, and the channel's moving one.
-# A develop build of no release is named after its commit instead.
+# A develop build of no release is named after its commit's day instead, and
+# tagged with the commit too, so one exact build can still be pinned.
 tags_for() {
     local image=$1
     local moving=latest
@@ -136,7 +139,7 @@ tags_for() {
     if [ -n "$version" ]; then
         echo "$image:$version" "$image:$moving"
     else
-        echo "$image:develop" "$image:develop-$commit"
+        echo "$image:develop" "$image:dev-$day" "$image:develop-$commit"
     fi
 }
 
@@ -212,7 +215,7 @@ if [ $push -eq 1 ]; then
     fi
 
     git archive HEAD | tar -x -C "$context"
-    echo "${version:-develop-$commit}" > "$context/version.txt"
+    echo "${version:-dev-$day}" > "$context/version.txt"
 fi
 
 build_image() {
@@ -235,7 +238,7 @@ build_image() {
         --label "org.opencontainers.image.licenses=$(license)"
         --label "org.opencontainers.image.source=$SOURCE_URL"
         --label "org.opencontainers.image.revision=$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-        --label "org.opencontainers.image.version=${version:-develop-$commit}"
+        --label "org.opencontainers.image.version=${version:-dev-$day}"
         --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     )
 
