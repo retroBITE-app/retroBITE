@@ -30,6 +30,7 @@ return [
         ['icon' => 'star', 'name' => 'LaunchBox Games Database', 'role' => 'Players\' ratings behind the retroBite score'],
         ['icon' => 'puzzle-piece', 'name' => 'Libretro', 'role' => 'Console iconography from retroarch-assets'],
         ['icon' => 'server-stack', 'name' => 'Samba & vsftpd', 'role' => 'The SMB and FTP shares consoles load from'],
+        ['icon' => 'share', 'name' => 'ps3netsrv', 'role' => 'Streams PS3, PS2 and PS1 games to webMAN MOD'],
         ['icon' => 'circle-stack', 'name' => 'MariaDB', 'role' => 'The library database'],
         ['icon' => 'bolt', 'name' => 'Laravel & Livewire', 'role' => 'The app and its interface'],
         ['icon' => 'signal', 'name' => 'Laravel Reverb', 'role' => 'Live updates over WebSockets'],
@@ -41,5 +42,6 @@ return [
         ['icon' => 'arrows-right-left', 'name' => 'cue2pops & pops2cue', 'role' => 'CUE to POPStarter VCD, and VCD back to BIN/CUE'],
         ['icon' => 'arrow-path', 'name' => 'nodtool', 'role' => 'GameCube and Wii images to RVZ, WBFS and ISO'],
         ['icon' => 'cube-transparent', 'name' => 'extract-xiso', 'role' => 'Xbox ISO tools, bundled for upcoming support'],
+        ['icon' => 'lock-open', 'name' => 'ps3dec', 'role' => 'Redump PS3 images decrypted with their disc key'],
     ],
 ];
