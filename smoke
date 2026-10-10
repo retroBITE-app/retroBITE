@@ -14,8 +14,8 @@
 #   * keeps that key when the container is recreated
 #
 # then removes the project and its volumes. Run it before pushing a release:
-# an image that fails here would fail every install. The docker workflow's
-# smoke job runs the same.
+# an image that fails here would fail every install. The images workflow's
+# test job runs the same, on amd64 and arm64.
 
 set -euo pipefail
 cd "$(dirname "$0")"

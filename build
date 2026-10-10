@@ -41,7 +41,9 @@
 # the release on GitHub for its notes (changelog.yml).
 #
 # The web UI is retrobite/retrobite (Dockerfile.web), the SMB/FTP share
-# retrobite/share (Dockerfile). The CI job is .github/workflows/docker.yml.
+# retrobite/share (Dockerfile). CI builds develop with its own workflow,
+# .github/workflows/images.yml, without this script; --digest-dir and --merge
+# were for the workflow it replaced.
 
 set -euo pipefail
 cd "$(dirname "$0")"

@@ -1,0 +1,339 @@
+name: images
+
+# Build both images on every push to develop, each architecture on a runner of
+# its own (no QEMU), test them, and publish exactly what was tested to Docker
+# Hub once someone approves the `dockerhub` environment.
+#
+#   meta     the tags and version, worked out once
+#   build    web and share × amd64 and arm64, pushed to GHCR untagged, by digest
+#   merge    each image's two digests joined into one multi-platform image,
+#            tagged with the commit SHA in GHCR
+#   test     every architecture: the web image started the way an install does
+#            (./smoke), the share image started until its healthcheck passes
+#   publish  the same digests copied to Docker Hub — nothing rebuilt
+#
+# Tags on Docker Hub follow ./build develop, the channel a push to develop is:
+# :develop and :develop-<short sha>, or :<version> and :develop when the commit
+# carries a release tag such as 20261006-BETA. :latest stays ./build master's.
+
+on:
+  push:
+    branches: [develop]
+
+# One run at a time, and a running one is never cancelled for a newer push.
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  DOCKERHUB_NAMESPACE: retrobite
+
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    outputs:
+      registry: ${{ steps.meta.outputs.registry }}
+      version: ${{ steps.meta.outputs.version }}
+      tags: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Tags too: a commit that carries a release's tag is published under it.
+          fetch-depth: 0
+
+      - name: Work out the version and tags
+        id: meta
+        run: |
+          set -euo pipefail
+
+          commit=$(git rev-parse --short HEAD)
+          version=$(git describe --tags --exact-match 2>/dev/null || true)
+
+          if [ -n "$version" ] && ! [[ $version =~ ^[0-9]{8}(-[0-9A-Za-z]+)?$ ]]; then
+            echo "::error::$version is not a version (a date, 20260930, or 20260930-BETA)."
+            exit 1
+          fi
+
+          # What ./build develop writes and tags.
+          if [ -n "$version" ]; then
+            tags="$version develop"
+          else
+            version="develop-$commit"
+            tags="develop develop-$commit"
+          fi
+
+          # GHCR wants the owner in lower case; retroBITE-app is not.
+          {
+            echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+            echo "version=$version"
+            echo "tags=$tags"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $version, Docker Hub tags: $tags"
+
+  build:
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    # Every image and architecture side by side: one failing neither stops nor
+    # hides the others.
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web, share]
+        arch: [amd64, arm64]
+        include:
+          - image: web
+            name: retrobite
+            dockerfile: Dockerfile.web
+          - image: share
+            name: share
+            dockerfile: Dockerfile
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # config/app.php reads the version from here; ./build writes the same.
+      - name: Write version.txt
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: echo "$VERSION" > version.txt
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          # Untagged: the merge job names the multi-platform image.
+          outputs: type=image,name=${{ needs.meta.outputs.registry }}/${{ matrix.name }},push-by-digest=true,name-canonical=true,push=true
+          # A cache per image and architecture, so one never evicts the other's layers.
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }},mode=max
+
+      - name: Export the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # One job rather than a matrix: a matrix job's outputs overwrite each
+  # other, and test and publish need both images' digests.
+  merge:
+    needs: [meta, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+
+    outputs:
+      web-digest: ${{ steps.merge.outputs.web-digest }}
+      share-digest: ${{ steps.merge.outputs.share-digest }}
+
+    steps:
+      - name: Download the digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the multi-platform images
+        id: merge
+        env:
+          REGISTRY: ${{ needs.meta.outputs.registry }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          for pair in web:retrobite share:share; do
+            image=${pair%%:*}
+            ref="$REGISTRY/${pair#*:}"
+
+            # One digest file per architecture, named after the digest.
+            sources=()
+            for dir in "$RUNNER_TEMP"/digests/digest-"$image"-*; do
+              for file in "$dir"/*; do
+                sources+=("$ref@sha256:$(basename "$file")")
+              done
+            done
+
+            if [ "${#sources[@]}" -ne 2 ]; then
+              echo "::error::$image: expected 2 digests, found ${#sources[@]}."
+              exit 1
+            fi
+
+            docker buildx imagetools create -t "$ref:$SHA" "${sources[@]}"
+
+            echo "::group::$ref:$SHA"
+            docker buildx imagetools inspect "$ref:$SHA"
+            echo "::endgroup::"
+
+            digest=$(docker buildx imagetools inspect "$ref:$SHA" --format '{{json .Manifest}}' | jq -r .digest)
+            echo "$image-digest=$digest" >> "$GITHUB_OUTPUT"
+            echo "$image: $ref@$digest"
+          done
+
+  test:
+    needs: [meta, merge]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    env:
+      REGISTRY: ${{ needs.meta.outputs.registry }}
+      WEB_DIGEST: ${{ needs.merge.outputs.web-digest }}
+      SHARE_DIGEST: ${{ needs.merge.outputs.share-digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # By digest: the runner's own architecture is picked out of the
+      # multi-platform image. ./smoke pulls nothing, so the database comes too.
+      - name: Pull the images
+        run: |
+          set -euo pipefail
+          docker pull "$REGISTRY/retrobite@$WEB_DIGEST"
+          docker pull "$REGISTRY/share@$SHARE_DIGEST"
+          docker compose -f docker-compose.yml config --images | grep '^mariadb' | xargs -r -n1 docker pull
+
+      - name: Start the web image as an install would
+        run: |
+          docker tag "$REGISTRY/retrobite@$WEB_DIGEST" retrobite/retrobite:smoke
+          ./smoke smoke
+
+      # Its healthcheck is smbd answering on 445.
+      - name: Start the share image until it is healthy
+        run: |
+          set -euo pipefail
+          games=$(mktemp -d)
+          docker run -d --name share-smoke -v "$games:/games" "$REGISTRY/share@$SHARE_DIGEST"
+
+          for _ in $(seq 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' share-smoke)
+            [ "$status" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Running}}' share-smoke)" = true ] || break
+            sleep 2
+          done
+
+          docker exec share-smoke supervisorctl status || true
+          docker logs share-smoke
+          [ "$(docker inspect -f '{{.State.Health.Status}}' share-smoke)" = healthy ] \
+            || { echo "::error::The share image did not become healthy."; exit 1; }
+          docker rm -f share-smoke
+
+  publish:
+    needs: [meta, merge, test]
+    runs-on: ubuntu-24.04
+    # Required reviewers are set on the environment in the repository settings.
+    environment: dockerhub
+    permissions:
+      packages: read
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # The tested digests, copied registry to registry: the same bytes, not a rebuild.
+      - name: Copy to Docker Hub
+        env:
+          REGISTRY: ${{ needs.meta.outputs.registry }}
+          TAGS: ${{ needs.meta.outputs.tags }}
+          WEB_DIGEST: ${{ needs.merge.outputs.web-digest }}
+          SHARE_DIGEST: ${{ needs.merge.outputs.share-digest }}
+        run: |
+          set -euo pipefail
+
+          publish() {
+            local source="$1" target="$2" args=()
+
+            for tag in $TAGS; do
+              args+=(-t "docker.io/$DOCKERHUB_NAMESPACE/$target:$tag")
+            done
+
+            docker buildx imagetools create "${args[@]}" "$source"
+            docker buildx imagetools inspect "docker.io/$DOCKERHUB_NAMESPACE/$target:${TAGS%% *}"
+          }
+
+          publish "$REGISTRY/retrobite@$WEB_DIGEST" retrobite
+          publish "$REGISTRY/share@$SHARE_DIGEST" share

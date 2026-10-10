@@ -308,8 +308,13 @@ pre-release picks the channel, never the suffix:
 
 Releases are built and pushed by a founder from their own Mac with `./build`.
 That takes about ten minutes on Apple silicon (arm64 natively, amd64 through
-Rosetta), where GitHub Actions took two hours. `.github/workflows/docker.yml`
-is kept as a fallback to run by hand from the Actions tab.
+Rosetta).
+
+Every push to `develop` is also built by `.github/workflows/images.yml`: each
+architecture on a GitHub runner of its own (no emulation), pushed to GHCR,
+started on both architectures, and copied unchanged to Docker Hub as
+`:develop` and `:develop-<short sha>` once someone approves the `dockerhub`
+environment.
 
 ### Publishing a release
 

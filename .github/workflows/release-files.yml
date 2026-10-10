@@ -14,7 +14,7 @@ name: release-files
 # access; with less, that job fails and the files are attached regardless.
 #
 # Builds nothing: the images are pushed with ./build before the release is
-# published (docker.yml is the fallback), so this runs in seconds.
+# published (images.yml builds every push to develop), so this runs in seconds.
 
 on:
   release:
