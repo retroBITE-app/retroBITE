@@ -1,6 +1,7 @@
 import docsRail from './docs-rail';
 import globalSearch from './global-search';
 import romUpload from './rom-upload';
+import shareRows from './share-rows';
 import tabStrip from './tab-strip';
 import transfer from './transfer';
 import usbTransfers from './usb-transfers';
@@ -26,6 +27,8 @@ document.addEventListener('alpine:init', () => {
     window.Alpine.data('globalSearch', globalSearch);
     // Copying a game onto a drive; see transfer.js.
     window.Alpine.data('transfer', transfer);
+    // The Network shares panel's open share lists; see share-rows.js.
+    window.Alpine.data('shareRows', shareRows);
     // A sideways-scrolling tab strip kept on its current tab; see tab-strip.js.
     window.Alpine.data('tabStrip', tabStrip);
     // The copying itself, for the whole tab: it outlives the modal and the page.
