@@ -1,24 +1,15 @@
 @props(['consoles', 'selected'])
 
 {{-- One tab per console, for a page using App\Concerns\PicksConsoleTab:
-     each calls the page's selectConsole(). One row that scrolls sideways when
-     the consoles outrun the screen, as the settings and game-page tabs do,
-     kept on the current tab by tabStrip (resources/js/tab-strip.js). --}}
-<div x-data="tabStrip" {{ $attributes->class('flex items-center gap-1 overflow-x-auto border-b border-line') }}>
+     each calls the page's selectConsole(). The app's own tab strip, with the
+     console's icon on each tab. --}}
+<x-tabs {{ $attributes }}>
     @foreach ($consoles as $key => $console)
-        <button
-            type="button"
+        <x-tabs.item
             wire:key="tab-{{ $key }}"
-            wire:click="selectConsole(@js($key))"
-            @if ($key === $selected) aria-current="page" @endif
-            @class([
-                'flex shrink-0 cursor-pointer items-center gap-2 rounded-t-lg border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors',
-                'border-accent text-accent' => $key === $selected,
-                'border-transparent text-fg-muted hover:text-fg-soft' => $key !== $selected,
-            ])
-        >
-            <img src="{{ $console->icon }}" alt="" class="size-4 object-contain" />
-            {{ $console->name }}
-        </button>
+            wire:click="selectConsole('{{ $key }}')"
+            :active="$key === $selected"
+            :image="$console->icon"
+        >{{ $console->name }}</x-tabs.item>
     @endforeach
-</div>
+</x-tabs>

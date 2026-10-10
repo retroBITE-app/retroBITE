@@ -1891,30 +1891,17 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
          it used to carry, since the tab now says it, and keeps only what is
          its own: the filter, the folder, the source. --}}
     <section class="relative z-1 px-4 pt-6.5 lg:px-8">
-        <div x-data="tabStrip" class="flex gap-5.5 overflow-x-auto border-b border-raised">
-            @foreach ($this->contentTabs as $contentTab)
-                <button
-                    type="button"
-                    wire:key="tab-{{ $contentTab['key'] }}"
-                    wire:click="selectTab('{{ $contentTab['key'] }}')"
-                    @if ($this->activeTab === $contentTab['key']) aria-current="page" @endif
-                    @class([
-                        'flex shrink-0 cursor-pointer items-center gap-2 pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                        'text-fg-bright shadow-underline' => $this->activeTab === $contentTab['key'],
-                        'text-fg-muted hover:text-fg-soft' => $this->activeTab !== $contentTab['key'],
-                    ])
-                >
-                    <flux:icon :name="$contentTab['icon']" class="size-4" />
-
-                    {{-- Label and count on one baseline: the count is mono and
-                         smaller, and centred apart the two sit at two heights. --}}
-                    <span class="flex items-baseline gap-2">
-                        {{ $contentTab['label'] }}
-                        <span class="font-mono text-xs text-fg-dim">{{ $contentTab['count'] }}</span>
-                    </span>
-                </button>
+        <x-tabs>
+            @foreach ($this->contentTabs as ['key' => $tabKey, 'label' => $tabLabel, 'icon' => $tabIcon, 'count' => $tabCount])
+                <x-tabs.item
+                    wire:key="tab-{{ $tabKey }}"
+                    wire:click="selectTab('{{ $tabKey }}')"
+                    :active="$this->activeTab === $tabKey"
+                    :icon="$tabIcon"
+                    :count="$tabCount"
+                >{{ $tabLabel }}</x-tabs.item>
             @endforeach
-        </div>
+        </x-tabs>
     </section>
 
     @if ($this->activeTab === 'achievements')
