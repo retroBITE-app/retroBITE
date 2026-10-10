@@ -37,21 +37,11 @@
 @endphp
 
 @if ($showTabs)
-<div class="mb-6 flex gap-5.5 overflow-x-auto border-b border-raised">
-    @foreach ($tabs as $tab)
-        <a
-            href="{{ route($tab['route']) }}"
-            wire:navigate
-            @class([
-                'shrink-0 cursor-pointer pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                'text-fg-bright shadow-underline' => $tab['active'],
-                'text-fg-muted hover:text-fg-soft' => ! $tab['active'],
-            ])
-        >
-            {{ $tab['label'] }}
-        </a>
+<x-tabs class="mb-6">
+    @foreach ($tabs as ['label' => $label, 'route' => $route, 'active' => $active])
+        <x-tabs.item :href="route($route)" :active="$active">{{ $label }}</x-tabs.item>
     @endforeach
-</div>
+</x-tabs>
 @endif
 
 @if (filled($heading) || filled($subheading) || filled($actions))

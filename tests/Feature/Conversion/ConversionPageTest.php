@@ -553,3 +553,10 @@ it('forgets the shelf\'s picks on another console', function () {
         ->call('selectConsole', 'psx')
         ->assertSet('search', '');
 });
+
+it('draws each console tab with a working selectConsole call', function () {
+    $this->get(route('tools.conversion'))
+        ->assertSee("selectConsole('ps2')", false)
+        ->assertSee("selectConsole('psx')", false)
+        ->assertDontSee('@js(', false);
+});

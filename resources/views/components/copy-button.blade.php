@@ -14,7 +14,8 @@
 
 @php
     $variants = [
-        'plain' => 'rounded px-2 py-1 text-sm text-fg-faint hover:bg-hover hover:text-fg-soft',
+        // Inline-flex so an icon in the slot and the label sit on one line.
+        'plain' => 'inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-sm text-fg-faint hover:bg-hover hover:text-fg-soft',
         'menu' => 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft hover:bg-raised',
     ];
 @endphp

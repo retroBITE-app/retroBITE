@@ -40,7 +40,25 @@ it('draws ps3netsrv with the PlayStation consoles it serves, each in its webMAN 
         ->assertSee('192.168.1.10:38008 · PS3ISO')
         ->assertSee('192.168.1.10:38008 · PS2ISO')
         ->assertSee('192.168.1.10:38008 · PSXISO')
-        ->assertSee('None');
+        ->assertSee('none')
+        ->assertSee('Read-only');
+});
+
+it('says the host once, folds each share list under its row, and explains a protocol that is down', function () {
+    ConsoleSourceFolder::add(new Console('ps2'));
+    config(['settings.network.host_ip' => '192.168.1.10']);
+
+    $this->mock(NetworkService::class)
+        ->shouldReceive('status')
+        ->andReturn(['smb' => false, 'ftp' => true, 'ps3netsrv' => true]);
+
+    Livewire::withoutLazyLoading()
+        ->test('network-shares')
+        ->assertSeeHtml('x-data="shareRows"')
+        ->assertSeeHtml("x-show=\"isOpen('smb')\"")
+        ->assertSee('1 share')
+        ->assertSee('Not answering on 445. Is the share container running?')
+        ->assertDontSee('Not answering on 21.');
 });
 
 it('leaves ps3netsrv off the panel when the share container does not run it', function () {
@@ -75,6 +93,6 @@ it('says on the ps3netsrv card who may connect', function (string $whitelist, st
     Livewire::withoutLazyLoading()->test('network-shares')->assertSee($says);
 })->with([
     'nobody named' => ['', 'Readable by everyone on the network'],
-    'a whitelist' => ['192.168.1.*', 'Only 192.168.1.* may connect'],
+    'a whitelist' => ['192.168.1.*', '192.168.1.* only'],
     'a range it cannot read' => ['192.168.1.0/24', 'so it is not started'],
 ]);

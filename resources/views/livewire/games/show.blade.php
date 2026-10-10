@@ -1859,30 +1859,17 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
          it used to carry, since the tab now says it, and keeps only what is
          its own: the filter, the folder, the source. --}}
     <section class="relative z-1 px-4 pt-6.5 lg:px-8">
-        <div class="flex gap-5.5 overflow-x-auto border-b border-raised">
-            @foreach ($this->contentTabs as $contentTab)
-                <button
-                    type="button"
-                    wire:key="tab-{{ $contentTab['key'] }}"
-                    wire:click="selectTab('{{ $contentTab['key'] }}')"
-                    @if ($this->activeTab === $contentTab['key']) aria-current="page" @endif
-                    @class([
-                        'flex shrink-0 cursor-pointer items-center gap-2 pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                        'text-fg-bright shadow-underline' => $this->activeTab === $contentTab['key'],
-                        'text-fg-muted hover:text-fg-soft' => $this->activeTab !== $contentTab['key'],
-                    ])
-                >
-                    <flux:icon :name="$contentTab['icon']" class="size-4" />
-
-                    {{-- Label and count on one baseline: the count is mono and
-                         smaller, and centred apart the two sit at two heights. --}}
-                    <span class="flex items-baseline gap-2">
-                        {{ $contentTab['label'] }}
-                        <span class="font-mono text-xs text-fg-dim">{{ $contentTab['count'] }}</span>
-                    </span>
-                </button>
+        <x-tabs>
+            @foreach ($this->contentTabs as ['key' => $tabKey, 'label' => $tabLabel, 'icon' => $tabIcon, 'count' => $tabCount])
+                <x-tabs.item
+                    wire:key="tab-{{ $tabKey }}"
+                    wire:click="selectTab('{{ $tabKey }}')"
+                    :active="$this->activeTab === $tabKey"
+                    :icon="$tabIcon"
+                    :count="$tabCount"
+                >{{ $tabLabel }}</x-tabs.item>
             @endforeach
-        </div>
+        </x-tabs>
     </section>
 
     @if ($this->activeTab === 'achievements')
@@ -2088,32 +2075,31 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                             <p class="mt-0.5 font-mono text-xs text-fg-faint">{{ $folder }}</p>
                                         @endif
 
-                                        {{-- The disc's own name for itself. Shown beside the
-                                             filename because on an OPL drive the two disagree:
-                                             the file can be called anything, the serial cannot. --}}
-                                        @if ($licenseId)
-                                            <p class="mt-1 inline-block rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted">
-                                                {{ $licenseId }}
-                                            </p>
-                                        @endif
-
-                                        {{-- A PS3 image: whether it is still encrypted, and the
-                                             next step towards playing it — its key, then
-                                             decrypting. Tools → Decrypt does the same for all. --}}
-                                        @if ($decrypt !== null)
+                                        {{-- One line under the filename: the disc's own name for
+                                             itself — shown because on an OPL drive the file can be
+                                             called anything and the serial cannot — then, for a PS3
+                                             image, whether it is still encrypted and the next step
+                                             towards playing it: its key, then decrypting. --}}
+                                        @if ($licenseId || $decrypt !== null)
                                             <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                                <x-decrypt.state :state="$decrypt" />
-
-                                                @if (in_array($decrypt, [DecryptState::NeedsKey, DecryptState::Ready], true))
-                                                    <flux:button size="xs" variant="ghost" icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $id }} })">
-                                                        {{ $decrypt === DecryptState::Ready ? __('Change key') : __('Add key') }}
-                                                    </flux:button>
+                                                @if ($licenseId)
+                                                    <span class="rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted">{{ $licenseId }}</span>
                                                 @endif
 
-                                                @if ($decrypt === DecryptState::Ready)
-                                                    <flux:button size="xs" variant="ghost" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: [{{ $id }}] })">
-                                                        {{ __('Decrypt') }}
-                                                    </flux:button>
+                                                @if ($decrypt !== null)
+                                                    <x-decrypt.state :state="$decrypt" />
+
+                                                    @if (in_array($decrypt, [DecryptState::NeedsKey, DecryptState::Ready], true))
+                                                        <flux:button size="xs" variant="ghost" icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $id }} })">
+                                                            {{ $decrypt === DecryptState::Ready ? __('Change key') : __('Add key') }}
+                                                        </flux:button>
+                                                    @endif
+
+                                                    @if ($decrypt === DecryptState::Ready)
+                                                        <flux:button size="xs" variant="ghost" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: [{{ $id }}] })">
+                                                            {{ __('Decrypt') }}
+                                                        </flux:button>
+                                                    @endif
                                                 @endif
                                             </div>
                                         @endif
