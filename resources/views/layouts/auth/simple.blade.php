@@ -15,7 +15,9 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen antialiased">
+    {{-- dvh, not screen: on a phone 100vh counts the space behind the browser's
+         bars, which pushed the stats pinned to the foot below the visible edge. --}}
+    <body class="min-h-dvh antialiased">
 
         {{-- Scraped key art once the library has some. Until then the scene
              that ships in public/images, so a fresh install's sign-in and
@@ -50,7 +52,7 @@
             "
         ></div>
 
-        <div class="relative flex min-h-screen flex-col px-5 py-12">
+        <div class="relative flex min-h-dvh flex-col px-5 py-12">
             <div class="relative z-10 flex flex-1 items-center justify-center">
                 <div @class(['flex w-full flex-col', 'max-w-[880px]' => $wide, 'max-w-[372px]' => ! $wide])>
                     <a href="{{ route('login') }}" wire:navigate>

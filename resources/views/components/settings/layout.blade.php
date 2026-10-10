@@ -37,18 +37,19 @@
 @endphp
 
 @if ($showTabs)
-<div class="mb-6 flex gap-5.5 overflow-x-auto border-b border-raised">
-    @foreach ($tabs as $tab)
+<div x-data="tabStrip" class="mb-6 flex gap-5.5 overflow-x-auto border-b border-raised">
+    @foreach ($tabs as ['label' => $label, 'route' => $route, 'active' => $active])
         <a
-            href="{{ route($tab['route']) }}"
+            href="{{ route($route) }}"
             wire:navigate
+            @if ($active) aria-current="page" @endif
             @class([
                 'shrink-0 cursor-pointer pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                'text-fg-bright shadow-underline' => $tab['active'],
-                'text-fg-muted hover:text-fg-soft' => ! $tab['active'],
+                'text-fg-bright shadow-underline' => $active,
+                'text-fg-muted hover:text-fg-soft' => ! $active,
             ])
         >
-            {{ $tab['label'] }}
+            {{ $label }}
         </a>
     @endforeach
 </div>
