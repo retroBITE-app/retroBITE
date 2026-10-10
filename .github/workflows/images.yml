@@ -1,8 +1,9 @@
 name: images
 
-# Build both images on every push to develop, each architecture on a runner of
-# its own (no QEMU), test them, and publish exactly what was tested to Docker
-# Hub once someone approves the `dockerhub` environment.
+# Build both images on every push to develop and on every published release,
+# each architecture on a runner of its own (no QEMU), test them, and publish
+# exactly what was tested to Docker Hub once someone approves the `dockerhub`
+# environment. Nothing else builds: a push to master on its own does not.
 #
 #   meta     the tags and version, worked out once
 #   build    web and share × amd64 and arm64, pushed to GHCR untagged, by digest
@@ -10,20 +11,21 @@ name: images
 #            tagged with the commit SHA in GHCR
 #   test     every architecture: the web image started the way an install does
 #            (./smoke), the share image started until its healthcheck passes
-#   publish  the same digests copied to Docker Hub — nothing rebuilt
+#   publish  the same digests copied to Docker Hub — nothing rebuilt — and,
+#            for a full release, the Docker Hub pages from docs/dockerhub/
 #
-# Tags on Docker Hub follow ./build develop, the channel a push to develop is:
-# :develop and :develop-<short sha>, or :<version> and :develop when the commit
-# carries a release tag such as 20261006-BETA. :latest stays ./build master's.
+# Tags on Docker Hub follow ./build:
+#   a push to develop    :develop and :develop-<short sha>
+#   a pre-release        :<tag> and :develop      (./build develop)
+#   a release            :<tag> and :latest       (./build master)
+# Whether a release is a pre-release is the release's own box, never read off
+# the tag's suffix. The tag is the version: 20261006, or 20261006-BETA.
 
 on:
   push:
     branches: [develop]
-
-# One run at a time, and a running one is never cancelled for a newer push.
-concurrency:
-  group: images-${{ github.ref }}
-  cancel-in-progress: false
+  release:
+    types: [published]
 
 permissions: {}
 
@@ -40,31 +42,38 @@ jobs:
       registry: ${{ steps.meta.outputs.registry }}
       version: ${{ steps.meta.outputs.version }}
       tags: ${{ steps.meta.outputs.tags }}
+      created: ${{ steps.meta.outputs.created }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Tags too: a commit that carries a release's tag is published under it.
-          fetch-depth: 0
 
       - name: Work out the version and tags
         id: meta
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           set -euo pipefail
 
           commit=$(git rev-parse --short HEAD)
-          version=$(git describe --tags --exact-match 2>/dev/null || true)
 
-          if [ -n "$version" ] && ! [[ $version =~ ^[0-9]{8}(-[0-9A-Za-z]+)?$ ]]; then
-            echo "::error::$version is not a version (a date, 20260930, or 20260930-BETA)."
-            exit 1
-          fi
+          # What ./build writes and tags for the same thing.
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            version=$RELEASE_TAG
 
-          # What ./build develop writes and tags.
-          if [ -n "$version" ]; then
-            tags="$version develop"
+            if ! [[ $version =~ ^[0-9]{8}(-[0-9A-Za-z]+)?$ ]]; then
+              echo "::error::$version is not a version (a date, 20260930, or 20260930-BETA)."
+              exit 1
+            fi
+
+            if [ "$PRERELEASE" = true ]; then
+              tags="$version develop"
+            else
+              tags="$version latest"
+            fi
           else
             version="develop-$commit"
             tags="develop develop-$commit"
@@ -75,6 +84,8 @@ jobs:
             echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
             echo "version=$version"
             echo "tags=$tags"
+            # The commit's own time, not the build's: a rerun labels the image the same.
+            echo "created=$(git show -s --format=%cI HEAD)"
           } >> "$GITHUB_OUTPUT"
           echo "Version $version, Docker Hub tags: $tags"
 
@@ -96,9 +107,11 @@ jobs:
           - image: web
             name: retrobite
             dockerfile: Dockerfile.web
+            description: 'retroBITE, a self-hosted collection manager for retro games: the web interface'
           - image: share
             name: share
             dockerfile: Dockerfile
+            description: "retroBITE's SMB and FTP server, serving a ROM library to consoles"
           - arch: amd64
             platform: linux/amd64
             runner: ubuntu-24.04
@@ -140,6 +153,17 @@ jobs:
           # A cache per image and architecture, so one never evicts the other's layers.
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }},mode=max
+          # The labels ./build gives the same image, so Docker Hub cannot tell who built it.
+          labels: |
+            org.opencontainers.image.title=${{ matrix.name }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/develop/docs/installing.md
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+            org.opencontainers.image.created=${{ needs.meta.outputs.created }}
 
       - name: Export the digest
         env:
@@ -190,6 +214,8 @@ jobs:
         env:
           REGISTRY: ${{ needs.meta.outputs.registry }}
           SHA: ${{ github.sha }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -210,7 +236,12 @@ jobs:
               exit 1
             fi
 
-            docker buildx imagetools create -t "$ref:$SHA" "${sources[@]}"
+            # The index carries the same facts as each platform's labels.
+            docker buildx imagetools create -t "$ref:$SHA" \
+              --annotation "index:org.opencontainers.image.source=$SOURCE" \
+              --annotation "index:org.opencontainers.image.revision=$SHA" \
+              --annotation "index:org.opencontainers.image.version=$VERSION" \
+              "${sources[@]}"
 
             echo "::group::$ref:$SHA"
             docker buildx imagetools inspect "$ref:$SHA"
@@ -274,7 +305,8 @@ jobs:
         run: |
           set -euo pipefail
           games=$(mktemp -d)
-          docker run -d --name share-smoke -v "$games:/games" "$REGISTRY/share@$SHARE_DIGEST"
+          # As docker-compose.yml runs it: init in front of supervisord, and a password of its own.
+          docker run -d --init --name share-smoke -e AUTH_PASS=smoke-test -v "$games:/games" "$REGISTRY/share@$SHARE_DIGEST"
 
           for _ in $(seq 60); do
             status=$(docker inspect -f '{{.State.Health.Status}}' share-smoke)
@@ -283,6 +315,7 @@ jobs:
             sleep 2
           done
 
+          # Each daemon supervisord keeps: smbd, nmbd, vsftpd, and ps3netsrv when on.
           docker exec share-smoke supervisorctl status || true
           docker logs share-smoke
           [ "$(docker inspect -f '{{.State.Health.Status}}' share-smoke)" = healthy ] \
@@ -294,10 +327,22 @@ jobs:
     runs-on: ubuntu-24.04
     # Required reviewers are set on the environment in the repository settings.
     environment: dockerhub
+    # One publish at a time, in order, never cancelled. On this job alone: a
+    # publish waiting for its reviewer holds back no other push's build and test.
+    concurrency:
+      group: images-publish
+      cancel-in-progress: false
     permissions:
       packages: read
 
     steps:
+      # For the Docker Hub pages, from docs/dockerhub/.
+      - name: Checkout code
+        if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -337,3 +382,26 @@ jobs:
 
           publish "$REGISTRY/retrobite@$WEB_DIGEST" retrobite
           publish "$REGISTRY/share@$SHARE_DIGEST" share
+
+      # A full release, not a pre-release, also refreshes both Docker Hub pages:
+      # in this job, so one approval and one Docker Hub token cover both. The
+      # token needs Read, Write and Delete for these two steps.
+      - name: Update the web image's Docker Hub page
+        if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_NAMESPACE }}/retrobite
+          readme-filepath: docs/dockerhub/web.md
+          short-description: Self-hosted collection manager for retro games — the web interface.
+
+      - name: Update the share image's Docker Hub page
+        if: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_NAMESPACE }}/share
+          readme-filepath: docs/dockerhub/share.md
+          short-description: retroBITE's SMB and FTP server, serving a ROM library to consoles.

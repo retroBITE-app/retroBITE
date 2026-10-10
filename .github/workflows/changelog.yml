@@ -7,8 +7,8 @@ name: changelog
 # mark — feat(docs): or feat!: — counts the same; merge commits are left out.
 #
 # Notes already typed on the release are kept, with the generated list below
-# them. The images are built and pushed with ./build before publishing; every
-# push to develop is also built and published by images.yml.
+# them. The images are built and published by images.yml, which the same
+# event starts (and every push to develop too).
 
 on:
   release:

@@ -9,12 +9,9 @@ name: release-files
 # version and stay on it. docs/installing.md and the site fetch the develop
 # branch's files instead, which follow the newest pre-release.
 #
-# A full release (not a pre-release) also updates the Docker Hub pages from
-# docs/dockerhub/. That needs DOCKERHUB_TOKEN to have Read, Write and Delete
-# access; with less, that job fails and the files are attached regardless.
-#
-# Builds nothing: the images are pushed with ./build before the release is
-# published (images.yml builds every push to develop), so this runs in seconds.
+# Builds nothing and touches no Docker Hub: images.yml builds and publishes the
+# release's images, and refreshes the Docker Hub pages, from the same event.
+# This runs in seconds.
 
 on:
   release:
@@ -55,33 +52,3 @@ jobs:
             "$RUNNER_TEMP"/files/docker-compose.yml \
             "$RUNNER_TEMP"/files/docker-compose.macvlan.yml \
             "$RUNNER_TEMP"/files/env.example
-
-  describe:
-    if: ${{ !github.event.release.prerelease }}
-    runs-on: ubuntu-24.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - repository: retrobite/retrobite
-            readme: docs/dockerhub/web.md
-            summary: Self-hosted collection manager for retro games — the web interface.
-          - repository: retrobite/share
-            readme: docs/dockerhub/share.md
-            summary: retroBITE's SMB and FTP server, serving a ROM library to consoles.
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Update the Docker Hub page
-        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ matrix.repository }}
-          readme-filepath: ${{ matrix.readme }}
-          short-description: ${{ matrix.summary }}
