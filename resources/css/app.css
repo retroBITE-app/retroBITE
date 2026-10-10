@@ -879,6 +879,31 @@ body:has([data-flux-sidebar][data-flux-sidebar-on-mobile]:not([data-flux-sidebar
     background-color: var(--color-fg-faint);
 }
 
+/* A tab strip's scrollbar (<x-tabs>, tabStrip in resources/js/tab-strip.js):
+   at rest it keeps its room but fades out, so it never covers the current
+   tab's underline; hovered or scrolled, it fades back in. The thumb's colour
+   is a registered property because only those transition — scrollbar-color
+   itself just jumps. Browsers that only know ::-webkit-scrollbar jump too. */
+@property --tab-strip-thumb {
+    syntax: '<color>';
+    inherits: false;
+    initial-value: transparent;
+}
+
+.tab-strip {
+    --tab-strip-thumb: var(--color-line-bright);
+    scrollbar-color: var(--tab-strip-thumb) transparent;
+    transition: --tab-strip-thumb 400ms ease;
+}
+
+.tab-strip-idle {
+    --tab-strip-thumb: transparent;
+}
+
+.tab-strip-idle::-webkit-scrollbar-thumb {
+    background-color: transparent;
+}
+
 /*
  * Rendered markdown.
  *
