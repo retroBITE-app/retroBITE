@@ -116,6 +116,25 @@ final class GameScorer
     }
 
     /**
+     * Score these games, without a live signal per row and without working
+     * out the ranks: one chunk of a queued `retrobite:score`, whose batch
+     * ranks once at the end.
+     *
+     * @param  list<int>  $ids
+     * @return int how many games were scored
+     */
+    public function scoreMany(array $ids): int
+    {
+        $games = Game::query()->with('raGame')->whereIn('id', $ids)->get();
+
+        foreach ($games as $game) {
+            $this->score($game, announce: false, rank: false);
+        }
+
+        return $games->count();
+    }
+
+    /**
      * Score the games that are one achievement set, after it was synced.
      *
      * @return int how many games were scored
