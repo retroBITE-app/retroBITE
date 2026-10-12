@@ -125,5 +125,12 @@ identified games were found; 6 080 are.
   running `retrobite:score` rescores the library without fetching anything;
   the command queues it as a batch, `--now` runs it in place.
 - Games identified before 2026-10-12 have no `provider_scrapes` until asked
-  again: the migration marks them so, and `retrobite:dumps --queue` asks,
-  one lookup per game.
+  again: the migration marks them so, and the scheduler asks about 2 000 a
+  night (`retrobite:dumps --queue --limit=2000`, 03:00) until all have been,
+  scoring each again with what it learns. A new install never needs it: a
+  game carries the count out of the match that identified it.
+- The upgrade empties the LaunchBox index, whose keys were reduced the old
+  way; the scheduler rebuilds an empty index within the hour. Nothing is
+  scored while there is no index — a new install before its first sync
+  included — so no game loses its score in the meantime, and the sync scores
+  the library once it is in.

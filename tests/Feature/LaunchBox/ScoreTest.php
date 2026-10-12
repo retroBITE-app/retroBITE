@@ -2,6 +2,7 @@
 
 use App\Enums\FileRole;
 use App\Jobs\MatchGame;
+use App\Jobs\RecordProviderDumps;
 use App\Jobs\RetroAchievements\SyncSet;
 use App\Jobs\ScoreGameChunk;
 use App\Models\Game;
@@ -14,6 +15,7 @@ use App\Services\LaunchBoxIndex;
 use App\Services\LibraryRanking;
 use App\Services\RetroAchievementsProgress;
 use App\Services\RetroAchievementsService;
+use App\Services\ScreenScraperService;
 use App\Support\Console;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -199,6 +201,15 @@ it('finds a game by its RetroAchievements title when its own is not in the index
         ->and($scorer->find($named('Early Zelda', '~Prototype~ The Legend of Zelda: A Link to the Past'), $console))->toBeNull();
 });
 
+it('leaves every score as it is while there is no index to score against', function () {
+    // A new install before its first sync, or an index emptied to be rebuilt.
+    $game = ratedSnesGame('Super Mario World', ['rating' => 95, 'launchbox_id' => 39777]);
+
+    expect(app(GameScorer::class)->score($game))->toBe(95)
+        ->and($game->refresh()->rating)->toBe(95)
+        ->and($game->launchbox_id)->toBe(39777);
+});
+
 it('does not look up a game by its filename', function () {
     importLaunchBox($this->dump, launchBoxSnesDump());
 
@@ -255,6 +266,8 @@ it('scores the games of a set when the set is synced', function () {
     config()->set('retroachievements.min_interval', 0);
     config()->set('retroachievements.api_key_fallback', 'test-key');
 
+    // An index with the platform at a plain average, and no entry for the game.
+    DB::table('launchbox_platforms')->insert(['name' => LAUNCHBOX_SNES, 'mean_rating' => 3.5]);
     $game = ratedSnesGame('Homebrew Nobody Rated', ['retroachievements_id' => 4111]);
 
     Http::fake(['*' => Http::response([
@@ -439,4 +452,21 @@ it('shows the rank in the library table, but not on the cards', function () {
     // A plain whole number, no separator: the column says what it is.
     Livewire::test('games.index')->set('view', 'table')->assertSeeHtml('>1720</td>');
     Livewire::test('games.index')->set('view', 'cards')->assertDontSee('1720');
+});
+
+it('backfills a game\'s scrape count a share a night, and scores it with what it learns', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
+    $smw = ratedSnesGame('Super Mario World', ['screenscraper_id' => 1234]);
+    app(GameScorer::class)->score($smw);
+    $before = $smw->refresh()->rating;
+
+    Http::fake(['*' => Http::response(['response' => ['jeu' => [
+        'id' => '1234', 'noms' => [['region' => 'ss', 'text' => 'Super Mario World']],
+        'roms' => [['romfilename' => 'Super Mario World (USA).sfc', 'nbscrap' => '480000']],
+    ]]], 200)]);
+
+    (new RecordProviderDumps($smw->id))->handle(app(ScreenScraperService::class), app(GameScorer::class));
+
+    expect($smw->refresh()->provider_scrapes)->toBe(480000)
+        ->and($smw->rating)->toBeGreaterThanOrEqual($before);
 });

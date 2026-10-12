@@ -46,6 +46,9 @@ final class GameScorer
      */
     private array $platformVotes = [];
 
+    /** Whether the LaunchBox index holds anything, once asked. */
+    private ?bool $indexed = null;
+
     public function __construct(private readonly LibraryRanking $ranking) {}
 
     /**
@@ -59,6 +62,15 @@ final class GameScorer
      */
     public function score(Game $game, bool $announce = true, bool $rank = true): ?int
     {
+        // No index yet — a new install before its first sync, or one emptied
+        // to be rebuilt. Scored now, every game would lose its LaunchBox
+        // half; the sync scores the whole library once it is in.
+        $this->indexed ??= DB::table('launchbox_platforms')->exists();
+
+        if (! $this->indexed) {
+            return $game->rating;
+        }
+
         $console = $game->console();
         $entry = $console !== null ? $this->find($game, $console) : null;
         $set = $game->retroachievements_id !== null
@@ -109,6 +121,7 @@ final class GameScorer
         $this->engagement = [];
         $this->platformMeans = [];
         $this->platformVotes = [];
+        $this->indexed = null;
         $count = 0;
 
         Game::query()
