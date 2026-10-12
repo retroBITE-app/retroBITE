@@ -12,6 +12,9 @@
 #   ./retrobite test          pint --test, phpstan and the suite (dev only)
 #   ./retrobite shell         a shell in the web container
 #
+# With GAMES_SMB_HOST set (in .env or the environment), every stack mounts the
+# ROM library from that SMB share instead of GAMES_PATH: docker-compose.smb.yml.
+#
 # The dev stack (docker-compose.dev.yml) when it is running, or with --dev;
 # otherwise the production stack, docker-compose.yml, built from this checkout
 # by docker-compose.build.yml (or pulled, with up --hub). Nothing needs installing on the host: PHP,
@@ -29,6 +32,16 @@ cd "$(dirname "$0")"
 DEV=(docker compose -f docker-compose.dev.yml)
 PROD=(docker compose -f docker-compose.yml -f docker-compose.build.yml)
 HUB=(docker compose -f docker-compose.yml)
+
+# The library from an SMB share rather than a folder (docker-compose.smb.yml),
+# whenever GAMES_SMB_HOST is set, in the environment or in .env — for every
+# stack and every command, so up, down and exec all see the same mounts.
+smb_host=${GAMES_SMB_HOST:-$(sed -n 's/^GAMES_SMB_HOST=//p' .env 2>/dev/null | tail -n 1)}
+if [ -n "$smb_host" ]; then
+    DEV+=(-f docker-compose.smb.yml)
+    PROD+=(-f docker-compose.smb.yml)
+    HUB+=(-f docker-compose.smb.yml)
+fi
 SERVICE=retrobite-web
 
 running() {

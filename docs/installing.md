@@ -41,6 +41,7 @@ passwords are read only once, when the database is created.
 - [TrueNAS SCALE](#truenas-scale)
 - [Docker Desktop on Windows and macOS](#docker-desktop-on-windows-and-macos)
 - [When ports 445, 139 and 21 are taken](#when-ports-445-139-and-21-are-taken)
+- [When the library is on another machine](#when-the-library-is-on-another-machine)
 - [Updating](#updating)
 - [Backing up](#backing-up)
 
@@ -189,6 +190,13 @@ and serve the library to consoles from the computer itself, or from a NAS. On
 Windows, put the library on the Windows drive (`GAMES_PATH=C:/Games`), and
 expect scanning to be slower than on a Linux disk.
 
+A library on a NAS is best mounted by Docker itself, with
+[docker-compose.smb.yml](#when-the-library-is-on-another-machine), rather than
+mounted on the Mac or PC and handed to Docker as `GAMES_PATH`. Through Docker
+Desktop's file sharing, every file is a round trip to the computer and another
+to the NAS: reading a PlayStation folder of 11 000 files took over three
+minutes that way, against 14 seconds on the Mac itself.
+
 Send to → USB drive works from Docker Desktop. It needs Chrome or Edge on
 `http://localhost:81`.
 
@@ -224,6 +232,41 @@ another computer, and leaves the NAS's sharing alone.
 Consoles connect to `SHARE_IP`. The NAS itself cannot reach that address, which
 is how macvlan works and nothing to fix: retroBITE checks the share over a
 network of its own.
+
+## When the library is on another machine
+
+When the ROMs are on a NAS other than the machine running retroBITE,
+**docker-compose.smb.yml** has Docker mount the NAS's share directly, in place
+of the `GAMES_PATH` folder. It is also the fast way on Docker Desktop: a share
+the Mac or Windows has mounted reaches a container through Docker's file
+sharing, and walking a large console that way takes minutes instead of
+seconds.
+
+1. **Add these settings** to `.env` or to the stack's variables:
+
+   ```bash
+   GAMES_SMB_HOST=192.168.1.10   # the NAS
+   GAMES_SMB_SHARE=roms          # the share, or roms/games for a folder in it
+   GAMES_SMB_USERNAME=retrobite  # an account that can read and write it
+   GAMES_SMB_PASSWORD=secret     # no commas
+   ```
+
+2. **Start it with both files:**
+
+   ```bash
+   curl -LO https://raw.githubusercontent.com/retroBITE-app/retroBITE/develop/docker-compose.smb.yml
+   docker compose -f docker-compose.yml -f docker-compose.smb.yml up -d
+   ```
+
+   From a checkout, `./retrobite up` adds the file itself once
+   `GAMES_SMB_HOST` is set. In Portainer, Dockhand or Container Manager, merge
+   the `volumes:` block and the two services' volume lines into
+   `docker-compose.yml`.
+
+The share container serves the mounted library to consoles as usual, but what
+they read then crosses the network twice. Pointing consoles at the NAS's own
+share avoids that. Every setting is in
+[configuration.md](configuration.md#a-library-on-an-smb-share).
 
 ## Updating
 

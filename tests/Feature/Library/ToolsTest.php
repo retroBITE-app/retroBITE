@@ -1,16 +1,14 @@
 <?php
 
 use App\Jobs\InspectGameFile;
-use App\Jobs\ScanConsoleFolder;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
-use App\Services\LibraryScanner;
 use App\Support\Console;
 use App\Tools\ConsoleTools;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 /**
@@ -148,16 +146,15 @@ it('queues nothing for a console with no toolbox', function () {
 });
 
 it('queues an inspection per file after a ps2 scan', function () {
-    Bus::fake();
     Process::fake();
 
     File::ensureDirectoryExists($this->root.'/ps2/DVD');
     File::put($this->root.'/ps2/DVD/Castlevania.iso', 'x');
     ConsoleSourceFolder::add(new Console('ps2'), null, 'opl');
 
-    (new ScanConsoleFolder('ps2'))->handle(app(LibraryScanner::class));
+    runScanJob('ps2');
 
-    Bus::assertDispatched(InspectGameFile::class, 1);
+    Queue::assertPushed(InspectGameFile::class, 1);
 });
 
 /**

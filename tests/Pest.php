@@ -1,12 +1,17 @@
 <?php
 
+use App\Jobs\FinishScan;
+use App\Jobs\ScanConsoleFolder;
+use App\Jobs\ScanFolderChunk;
 use App\Models\AppSetting;
+use App\Services\LibraryScanner;
 use App\Support\ConsoleOverrides;
 use App\Transfers\Smb\ShareClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Queue;
 use Tests\Fakes\RefusingShareClient;
 use Tests\TestCase;
 
@@ -125,4 +130,19 @@ function queueRows(string $queue, int $times): void
         'available_at' => $now,
         'created_at' => $now,
     ]));
+}
+
+/**
+ * A queued scan run to its end — the plan, every chunk, the finish — with
+ * whatever it queues after that held in the fake, so a test can count what a
+ * scan started. Bus::fake() would hold the chunks' batch too and nothing would
+ * be recorded.
+ *
+ * @param  list<class-string>  $alsoRun  further jobs to run rather than hold
+ */
+function runScanJob(string $console, array $alsoRun = []): void
+{
+    Queue::fake()->except([ScanConsoleFolder::class, ScanFolderChunk::class, FinishScan::class, ...$alsoRun]);
+
+    (new ScanConsoleFolder($console))->handle(app(LibraryScanner::class));
 }

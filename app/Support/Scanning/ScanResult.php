@@ -35,6 +35,20 @@ final class ScanResult
         return new self($this->console, ...array_values($values));
     }
 
+    /** Both results' counters added together. */
+    public function plus(self $other): self
+    {
+        return new self(
+            $this->console,
+            $this->filesSeen + $other->filesSeen,
+            $this->gamesCreated + $other->gamesCreated,
+            $this->filesCreated + $other->filesCreated,
+            $this->filesReturned + $other->filesReturned,
+            $this->filesMissing + $other->filesMissing,
+            $this->filesSkipped + $other->filesSkipped,
+        );
+    }
+
     /** @return array<string, int|string> */
     public function toArray(): array
     {
