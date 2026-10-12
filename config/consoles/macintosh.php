@@ -5,6 +5,7 @@ return [
     'name' => 'Macintosh 128K',
     'brand' => 'Apple',
     'released' => 1984,
+    'category' => 'computer',
     'folder' => 'macintosh',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

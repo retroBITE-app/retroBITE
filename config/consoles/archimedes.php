@@ -5,6 +5,7 @@ return [
     'name' => 'Acorn Archimedes',
     'brand' => 'Acorn Computers',
     'released' => 1987,
+    'category' => 'computer',
     'folder' => 'archimedes',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

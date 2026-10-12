@@ -5,6 +5,7 @@ return [
     'name' => 'GameCube',
     'brand' => 'Nintendo',
     'released' => 2001,
+    'category' => 'home',
     'folder' => 'gc',
     'icon' => '/images/consoles/Nintendo - GameCube.png',
     'file_icon' => '/images/consoles/Nintendo - GameCube-content.png',

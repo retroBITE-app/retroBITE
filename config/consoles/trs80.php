@@ -5,6 +5,7 @@ return [
     'name' => 'TRS-80',
     'brand' => 'Tandy Radio Shack',
     'released' => 1977,
+    'category' => 'computer',
     'folder' => 'trs80',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

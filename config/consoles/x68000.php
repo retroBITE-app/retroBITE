@@ -5,6 +5,7 @@ return [
     'name' => 'Sharp X68000',
     'brand' => 'Sharp',
     'released' => 1987,
+    'category' => 'computer',
     'folder' => 'x68000',
     'icon' => '/images/consoles/Sharp - X68000.png',
     'file_icon' => '/images/consoles/Sharp - X68000-content.png',

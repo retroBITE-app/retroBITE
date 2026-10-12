@@ -5,6 +5,7 @@ return [
     'name' => 'ZX Spectrum',
     'brand' => 'Sinclair',
     'released' => 1982,
+    'category' => 'computer',
     'folder' => 'zxspectrum',
     'icon' => '/images/consoles/Sinclair - ZX Spectrum.png',
     'file_icon' => '/images/consoles/Sinclair - ZX Spectrum-content.png',

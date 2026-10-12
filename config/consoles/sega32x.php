@@ -5,6 +5,7 @@ return [
     'name' => 'Sega 32X',
     'brand' => 'Sega',
     'released' => 1994,
+    'category' => 'home',
     'folder' => 'sega32x',
     'icon' => '/images/consoles/Sega - 32X.png',
     'file_icon' => '/images/consoles/Sega - 32X-content.png',

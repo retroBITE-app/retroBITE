@@ -5,6 +5,7 @@ return [
     'name' => 'Commodore Plus/4',
     'brand' => 'Commodore',
     'released' => 1984,
+    'category' => 'computer',
     'folder' => 'cplus4',
     'icon' => '/images/consoles/Commodore - Plus-4.png',
     'file_icon' => '/images/consoles/Commodore - Plus-4-content.png',

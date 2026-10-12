@@ -5,6 +5,7 @@ return [
     'name' => 'Entex Adventure Vision',
     'brand' => 'Entex',
     'released' => 1982,
+    'category' => 'home',
     'folder' => 'advision',
     'icon' => '/images/consoles/Entex - Adventure Vision.png',
     'file_icon' => '/images/consoles/Entex - Adventure Vision-content.png',

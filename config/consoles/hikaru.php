@@ -5,6 +5,7 @@ return [
     'name' => 'Sega Hikaru',
     'brand' => 'Sega',
     'released' => 1999,
+    'category' => 'arcade',
     'folder' => 'hikaru',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

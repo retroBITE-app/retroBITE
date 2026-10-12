@@ -5,6 +5,7 @@ return [
     'name' => 'ColecoVision',
     'brand' => 'Coleco',
     'released' => 1982,
+    'category' => 'home',
     'folder' => 'colecovision',
     'icon' => '/images/consoles/Coleco - ColecoVision.png',
     'file_icon' => '/images/consoles/Coleco - ColecoVision-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'PC Engine CD-ROM2',
     'brand' => 'NEC',
     'released' => 1988,
+    'category' => 'home',
     'folder' => 'pcenginecd',
     'icon' => '/images/consoles/NEC - PC Engine CD - TurboGrafx-CD.png',
     'file_icon' => '/images/consoles/NEC - PC Engine CD - TurboGrafx-CD-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'Super Cassette Vision',
     'brand' => 'Epoch',
     'released' => 1984,
+    'category' => 'home',
     'folder' => 'scv',
     'icon' => '/images/consoles/Epoch - Super Cassette Vision.png',
     'file_icon' => '/images/consoles/Epoch - Super Cassette Vision-content.png',

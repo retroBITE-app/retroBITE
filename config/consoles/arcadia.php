@@ -5,6 +5,7 @@ return [
     'name' => 'Arcadia 2001',
     'brand' => 'Emerson Radio',
     'released' => 1982,
+    'category' => 'home',
     'folder' => 'arcadia',
     'icon' => '/images/consoles/Emerson - Arcadia 2001.png',
     'file_icon' => '/images/consoles/Emerson - Arcadia 2001-content.png',

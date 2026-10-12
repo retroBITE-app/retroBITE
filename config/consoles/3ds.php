@@ -5,6 +5,7 @@ return [
     'name' => 'Nintendo 3DS',
     'brand' => 'Nintendo',
     'released' => 2011,
+    'category' => 'handheld',
     'folder' => '3ds',
     'icon' => '/images/consoles/Nintendo - Nintendo 3DS.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo 3DS-content.png',

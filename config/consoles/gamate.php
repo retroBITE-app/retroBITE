@@ -5,6 +5,7 @@ return [
     'name' => 'Gamate',
     'brand' => 'Bit Corporation',
     'released' => 1990,
+    'category' => 'handheld',
     'folder' => 'gamate',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

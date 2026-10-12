@@ -5,6 +5,7 @@ return [
     'name' => 'Sega Pico',
     'brand' => 'Sega',
     'released' => 1993,
+    'category' => 'home',
     'folder' => 'pico',
     'icon' => '/images/consoles/Sega - PICO.png',
     'file_icon' => '/images/consoles/Sega - PICO-content.png',

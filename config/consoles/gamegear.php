@@ -5,6 +5,7 @@ return [
     'name' => 'Sega Game Gear',
     'brand' => 'Sega',
     'released' => 1990,
+    'category' => 'handheld',
     'folder' => 'gamegear',
     'icon' => '/images/consoles/Sega - Game Gear.png',
     'file_icon' => '/images/consoles/Sega - Game Gear-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'GP32',
     'brand' => 'Game Park',
     'released' => 2001,
+    'category' => 'handheld',
     'folder' => 'gp32',
     'icon' => '/images/consoles/GamePark - GP32.png',
     'file_icon' => '/images/consoles/GamePark - GP32-content.png',

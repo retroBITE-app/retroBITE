@@ -5,6 +5,7 @@ return [
     'name' => 'Namco System 22',
     'brand' => 'Namco',
     'released' => 1993,
+    'category' => 'arcade',
     'folder' => 'namco22',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

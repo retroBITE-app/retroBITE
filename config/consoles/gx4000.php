@@ -5,6 +5,7 @@ return [
     'name' => 'Amstrad GX4000',
     'brand' => 'Amstrad',
     'released' => 1990,
+    'category' => 'home',
     'folder' => 'gx4000',
     'icon' => '/images/consoles/Amstrad - CPC.png',
     'file_icon' => '/images/consoles/Amstrad - CPC-content.png',

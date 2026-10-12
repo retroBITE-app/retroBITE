@@ -5,6 +5,7 @@ return [
     'name' => 'Neo Geo Pocket',
     'brand' => 'SNK',
     'released' => 1998,
+    'category' => 'handheld',
     'folder' => 'ngp',
     'icon' => '/images/consoles/SNK - Neo Geo Pocket.png',
     'file_icon' => '/images/consoles/SNK - Neo Geo Pocket-content.png',

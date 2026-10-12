@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\ColorScheme;
+use App\Enums\ConsoleGrouping;
+use App\Enums\ConsoleSort;
 use App\Models\AppSetting;
 use App\Models\Game;
 use App\Models\Media;
@@ -99,4 +101,40 @@ it('falls back to the default for a stored scheme that no longer ships', functio
     AppSetting::put(AppSetting::UI_COLOR_SCHEME, 'retired');
 
     expect(ColorScheme::current())->toBe(ColorScheme::Default);
+});
+
+it('saves how the consoles are ordered and grouped', function () {
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test('settings.interface')
+        ->assertSet('consoleSort', 'name')
+        ->assertSet('consoleGrouping', 'none')
+        ->set('consoleSort', 'games')
+        ->set('consoleGrouping', 'decade')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(ConsoleSort::current())->toBe(ConsoleSort::Games)
+        ->and(ConsoleGrouping::current())->toBe(ConsoleGrouping::Decade);
+});
+
+it('refuses an order or a grouping it does not know', function () {
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test('settings.interface')
+        ->set('consoleSort', 'colour')
+        ->set('consoleGrouping', 'mood')
+        ->call('save')
+        ->assertHasErrors(['consoleSort', 'consoleGrouping']);
+
+    expect(AppSetting::get(AppSetting::UI_CONSOLE_SORT))->toBe('name')
+        ->and(AppSetting::get(AppSetting::UI_CONSOLE_GROUPING))->toBe('none');
+});
+
+it('falls back to A to Z, ungrouped, for a stored choice that no longer exists', function () {
+    AppSetting::put(AppSetting::UI_CONSOLE_SORT, 'retired');
+    AppSetting::put(AppSetting::UI_CONSOLE_GROUPING, 'retired');
+
+    expect(ConsoleSort::current())->toBe(ConsoleSort::Name)
+        ->and(ConsoleGrouping::current())->toBe(ConsoleGrouping::None);
 });

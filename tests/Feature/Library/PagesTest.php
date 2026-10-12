@@ -1562,3 +1562,42 @@ it('describes every media type it offers', function () {
         expect(MediaTypes::describe($type))->not->toBeNull("{$type} has no description");
     }
 });
+
+it('splits the consoles page into a section per group', function () {
+    foreach (['snes', 'gb', 'psx', 'mame'] as $key) {
+        ConsoleSourceFolder::add(new Console($key));
+    }
+
+    $sections = function (): array {
+        return collect(Livewire::test('consoles.index')->instance()->sections)
+            ->map(function (array $section): array {
+                return [$section['label'], $section['rows']->pluck('console.key')->all()];
+            })
+            ->all();
+    };
+
+    // Ungrouped is one section with no heading, so the page draws as it did.
+    expect($sections())->toBe([['', ['gb', 'mame', 'psx', 'snes']]]);
+
+    AppSetting::put(AppSetting::UI_CONSOLE_GROUPING, 'brand');
+
+    expect($sections())->toBe([
+        ['Nintendo', ['gb', 'snes']],
+        ['Sony', ['psx']],
+        ['Various', ['mame']],
+    ]);
+
+    Livewire::test('consoles.index')->assertSeeInOrder(['Nintendo', 'Game Boy', 'Super Nintendo', 'Sony', 'Sony PlayStation']);
+});
+
+it('heads the sidebar\'s consoles by group', function () {
+    foreach (['snes', 'gb'] as $key) {
+        ConsoleSourceFolder::add(new Console($key));
+    }
+
+    AppSetting::put(AppSetting::UI_CONSOLE_GROUPING, 'category');
+
+    $this->get(route('dashboard'))
+        ->assertOk()
+        ->assertSeeInOrder(['Home console', 'Super Nintendo', 'Handheld', 'Game Boy']);
+});

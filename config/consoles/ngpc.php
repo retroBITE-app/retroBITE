@@ -5,6 +5,7 @@ return [
     'name' => 'Neo Geo Pocket Color',
     'brand' => 'SNK',
     'released' => 1999,
+    'category' => 'handheld',
     'folder' => 'ngpc',
     'icon' => '/images/consoles/SNK - Neo Geo Pocket Color.png',
     'file_icon' => '/images/consoles/SNK - Neo Geo Pocket Color-content.png',

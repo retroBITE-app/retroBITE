@@ -72,7 +72,7 @@ new #[Title('Console settings')] class extends Component
      * The fields the modal draws, already carrying everything the markup needs
      * so it can destructure rather than subscript an optional key.
      *
-     * @return array<int, array{name: string, label: string, description: string, type: string, placeholder: string, spans: bool}>
+     * @return array<int, array{name: string, label: string, description: string, type: string, placeholder: string, spans: bool, options: array<string, string>}>
      */
     #[Computed]
     public function formFields(): array
@@ -91,6 +91,7 @@ new #[Title('Console settings')] class extends Component
                     'placeholder' => (string) Arr::get($placeholders, $name, ''),
                     // A list of extensions runs long enough that half a row cuts it off.
                     'spans' => str_ends_with($type, '[]'),
+                    'options' => ConsoleOverrides::choicesFor($field),
                 ];
             })
             ->values()
@@ -325,7 +326,7 @@ new #[Title('Console settings')] class extends Component
                              inside the field and pushed its description up beside
                              the label. data-field-grid carries the row template
                              that keeps the inputs level across a row. --}}
-                        @foreach ($this->formFields as ['name' => $field, 'label' => $label, 'description' => $description, 'type' => $type, 'placeholder' => $placeholder, 'spans' => $spans])
+                        @foreach ($this->formFields as ['name' => $field, 'label' => $label, 'description' => $description, 'type' => $type, 'placeholder' => $placeholder, 'spans' => $spans, 'options' => $options])
                             <div wire:key="field-{{ $this->editing }}-{{ $field }}"
                                  @class(['sm:col-span-2' => $spans])>
                                 @if ($type === 'region[]')
@@ -358,6 +359,19 @@ new #[Title('Console settings')] class extends Component
 
                                         <flux:error name="fields.{{ $field }}" />
                                     </flux:field>
+                                @elseif ($type === 'choice')
+                                    {{-- Empty is "as the console file says", like an
+                                         empty text field; it names what that is. --}}
+                                    <flux:select
+                                        wire:model="fields.{{ $field }}"
+                                        :label="__($label)"
+                                        :description="filled($description) ? __($description) : null"
+                                    >
+                                        <flux:select.option value="">{{ __('As shipped (:value)', ['value' => Illuminate\Support\Arr::get($options, $placeholder, $placeholder)]) }}</flux:select.option>
+                                        @foreach ($options as $value => $text)
+                                            <flux:select.option :value="$value">{{ $text }}</flux:select.option>
+                                        @endforeach
+                                    </flux:select>
                                 @else
                                     <flux:input
                                         wire:model="fields.{{ $field }}"

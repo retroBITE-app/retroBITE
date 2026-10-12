@@ -5,6 +5,7 @@ return [
     'name' => 'Multiple Arcade Machine Emulator',
     'brand' => 'Various',
     'released' => null,
+    'category' => 'arcade',
     'folder' => 'mame',
     'icon' => '/images/consoles/Arcade - Misc.png',
     'file_icon' => '/images/consoles/Arcade - Misc-content.png',

@@ -94,6 +94,18 @@ class AppSetting extends Model
     public const UI_COLOR_SCHEME = 'ui_color_scheme';
 
     /**
+     * How the sidebar and the Consoles page order the library's consoles, an
+     * App\Enums\ConsoleSort value.
+     */
+    public const UI_CONSOLE_SORT = 'ui_console_sort';
+
+    /**
+     * What the sidebar and the Consoles page group the library's consoles by,
+     * an App\Enums\ConsoleGrouping value.
+     */
+    public const UI_CONSOLE_GROUPING = 'ui_console_grouping';
+
+    /**
      * Runtime edits to the shipped console config, keyed by console then by
      * config key. Absent means every console is as its file declares it.
      */
@@ -157,6 +169,8 @@ class AppSetting extends Model
         self::UI_HERO_TITLE => 'text',
         self::UI_UPLOADS => false,
         self::UI_COLOR_SCHEME => 'default',
+        self::UI_CONSOLE_SORT => 'name',
+        self::UI_CONSOLE_GROUPING => 'none',
         self::IS_ONBOARDED => false,
         self::RA_HARDCORE_PRIMARY => true,
         self::PRUNE_MISSING_AFTER_DAYS => 30,

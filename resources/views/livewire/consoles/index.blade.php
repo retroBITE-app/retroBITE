@@ -77,7 +77,7 @@ new #[Title('Consoles')] class extends Component
      * Identified has no on-disk answer — it is what the provider knew — so
      * that half is a query, as is the size the files take.
      *
-     * @return Collection<int, array{console: Console, files: int, identified: int, unidentified: int, bytes: int, size: string, folder: string|null, layout: string|null, backdrop: string, covers: array<int, string>, aspect: string}>
+     * @return Collection<int, array{console: Console, files: int, identified: int, unidentified: int, bytes: int, size: string, folder: string|null, layout: string|null, backdrop: string, covers: array<int, string>, aspect: string, group: string}>
      */
     #[Computed]
     public function added(): Collection
@@ -99,37 +99,59 @@ new #[Title('Consoles')] class extends Component
             ->groupBy('games.console')
             ->pluck('bytes', 'console');
 
-        $consoles = ConsoleSourceFolder::consoles();
-        $covers = $this->recentCovers($consoles);
+        // Sorted and grouped as Settings → UI says, the same as the sidebar.
+        $arranged = ConsoleSourceFolder::arranged($identified);
+        $covers = $this->recentCovers($arranged->flatten(1));
 
-        return $consoles->map(function (Console $console) use ($identified, $totals, $bytes, $covers): array {
-            $named = (int) $identified->get($console->key, 0);
-            $size = (int) $bytes->get($console->key, 0);
-            $backdrop = Arr::first(Media::backdropsFor($console));
+        return $arranged->flatMap(function (Collection $consoles, int|string $heading) use ($identified, $totals, $bytes, $covers): array {
+            return $consoles->map(function (Console $console) use ($heading, $identified, $totals, $bytes, $covers): array {
+                $named = (int) $identified->get($console->key, 0);
+                $size = (int) $bytes->get($console->key, 0);
+                $backdrop = Arr::first(Media::backdropsFor($console));
 
-            return [
-                'console' => $console,
-                'files' => FolderCounts::gamesIn($console),
-                'identified' => $named,
-                'unidentified' => (int) $totals->get($console->key, 0) - $named,
-                'bytes' => $size,
-                'size' => Number::fileSize($size, 1),
-                'folder' => ConsoleSourceFolder::pathFor($console),
-                // Only where there was a choice to make. For the 134 consoles
-                // that know one arrangement it would say the same thing on
-                // every card and mean nothing.
-                'layout' => count(Layouts::keysFor($console)) > 1
-                    ? ConsoleSourceFolder::layoutFor($console)->label()
-                    : null,
-                // The best-rated game's key art, the same every visit; the
-                // shelf behind the card is the one that rotates.
-                'backdrop' => $backdrop !== null
-                    ? route('media.show', ['path' => $backdrop])
-                    : asset('images/default-backdrop.jpg'),
-                'covers' => Arr::get($covers, $console->key, []),
-                'aspect' => CoverGeometry::aspect($console),
-            ];
+                return [
+                    'console' => $console,
+                    'files' => FolderCounts::gamesIn($console),
+                    'identified' => $named,
+                    'unidentified' => (int) $totals->get($console->key, 0) - $named,
+                    'bytes' => $size,
+                    'size' => Number::fileSize($size, 1),
+                    'folder' => ConsoleSourceFolder::pathFor($console),
+                    // Only where there was a choice to make. For the 134 consoles
+                    // that know one arrangement it would say the same thing on
+                    // every card and mean nothing.
+                    'layout' => count(Layouts::keysFor($console)) > 1
+                        ? ConsoleSourceFolder::layoutFor($console)->label()
+                        : null,
+                    // The best-rated game's key art, the same every visit; the
+                    // shelf behind the card is the one that rotates.
+                    'backdrop' => $backdrop !== null
+                        ? route('media.show', ['path' => $backdrop])
+                        : asset('images/default-backdrop.jpg'),
+                    'covers' => Arr::get($covers, $console->key, []),
+                    'aspect' => CoverGeometry::aspect($console),
+                    'group' => (string) $heading,
+                ];
+            })->all();
         })->values();
+    }
+
+    /**
+     * The cards split under the grouping's headings, in order: one section
+     * with an empty label when the consoles are not grouped.
+     *
+     * @return list<array{label: string, rows: Collection<int, array<string, mixed>>}>
+     */
+    #[Computed]
+    public function sections(): array
+    {
+        return $this->added
+            ->groupBy('group')
+            ->map(function (Collection $rows, int|string $label): array {
+                return ['label' => (string) $label, 'rows' => $rows];
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -715,201 +737,216 @@ new #[Title('Consoles')] class extends Component
                 </flux:button>
             </div>
         @else
-            {{-- As many columns as fit a card's minimum width rather than a
-                 count per breakpoint: the fan takes the right of the card, so
-                 the name needs room the sidebar's width decides, not the
-                 viewport's. Not the shelf utility, whose two-column floor
-                 would squeeze a phone into two of these. --}}
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] gap-4">
-                @foreach ($this->added as $row)
-                    {{-- The same hover as a game card: the border takes the
-                         accent and the name brightens. Only the covers move. --}}
-                    <div wire:key="added-{{ $row['console']->key }}"
-                         class="group relative flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-accent-tint focus-within:border-accent-tint">
-                        {{-- Stretched over the card rather than wrapping it, so
-                             the menu sits above the link instead of inside it. --}}
-                        <a
-                            href="{{ route('consoles.games', ['console' => $row['console']->key]) }}"
-                            wire:navigate
-                            aria-label="{{ $row['console']->name }}"
-                            class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                        ></a>
-
-                        {{-- The best-rated game's key art, masked into the card
-                             rather than faded into the page ground, which would
-                             show as a seam against the card's surface. --}}
-                        <div aria-hidden="true" class="art-fade-b pointer-events-none relative h-28 shrink-0">
-                            <div class="absolute inset-0 bg-cover bg-[position:50%_28%] opacity-70 transition-opacity group-hover:opacity-90"
-                                 style="background-image: url('{{ $row['backdrop'] }}')"></div>
-                            @scanlines
-                                <div class="scanlines absolute inset-0"></div>
-                            @endscanlines
-                        </div>
-
-                        <div class="absolute top-2.5 right-2.5 z-20">
-                            <flux:dropdown position="bottom" align="end">
-                                <button
-                                    type="button"
-                                    aria-label="{{ __('Actions for :console', ['console' => $row['console']->name]) }}"
-                                    class="grid size-8 cursor-pointer place-items-center rounded-lg border border-line-input bg-scrim/60 text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright hover:text-fg-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                                >
-                                    <flux:icon.ellipsis-horizontal class="size-4" />
-                                </button>
-
-                                <flux:menu>
-                                    @php
-                                        // The group under Scan is two optional
-                                        // items: most consoles know one
-                                        // arrangement and only a couple have a
-                                        // loader to write for. Without this the
-                                        // menu would draw two rules in a row.
-                                        $rowLayouts = count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1;
-                                        $rowExports = $this->exportsFor($row['console']);
-                                    @endphp
-
-                                    {{-- In here rather than on the card, where
-                                         a click meant for the console landed
-                                         on it and walked the whole folder. --}}
-                                    <flux:menu.item icon="magnifying-glass"
-                                                    wire:click="scan('{{ $row['console']->key }}')">
-                                        {{ __('Scan folder') }}
-                                    </flux:menu.item>
-
-                                    <flux:menu.separator />
-
-                                    @if ($rowLayouts)
-                                        <flux:menu.item icon="folder-open"
-                                                        wire:click="changeLayout('{{ $row['console']->key }}')">
-                                            {{ __('Change layout') }}
-                                        </flux:menu.item>
-                                    @endif
-
-                                    {{-- The only actions in the app that write into the
-                                         library, so each says where it writes before it
-                                         does it. Offered only where the loader that reads
-                                         those folders is the one in use. --}}
-                                    @foreach ($rowExports as $export)
-                                        <flux:menu.item icon="arrow-down-tray"
-                                                        wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
-                                                        wire:confirm="{{ App\Tools\ConsoleTools::for($row['console'])?->exportConfirm($export, (string) $row['folder']) }}">
-                                            {{ App\Tools\ConsoleTools::for($row['console'])?->exportLabel($export) }}
-                                        </flux:menu.item>
-                                    @endforeach
-
-                                    @if ($rowLayouts || $rowExports !== [])
-                                        <flux:menu.separator />
-                                    @endif
-
-                                    <flux:menu.item icon="photo"
-                                                    wire:click="fetchMedia('{{ $row['console']->key }}')">
-                                        {{ __('Fetch missing artwork') }}
-                                    </flux:menu.item>
-
-                                    {{-- Confirmed, and the scraper's own count
-                                         is in the question: this is one
-                                         provider lookup per identified game,
-                                         and on a large console that is a
-                                         visible bite out of the day. --}}
-                                    <flux:menu.item icon="arrow-path"
-                                                    wire:click="fetchMedia('{{ $row['console']->key }}', true)"
-                                                    wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
-                                        {{ __('Re-fetch all artwork') }}
-                                    </flux:menu.item>
-
-                                    <flux:menu.separator />
-
-                                    {{-- The same destination the console's own
-                                         shelf offers, so there is one place a
-                                         console is configured and one way in
-                                         from either list. --}}
-                                    <flux:menu.item icon="cog-6-tooth"
-                                                    href="{{ route('console-config.edit', ['console' => $row['console']->key]) }}"
-                                                    wire:navigate>
-                                        {{ __('Manage console') }}
-                                    </flux:menu.item>
-
-                                    <flux:menu.separator />
-
-                                    <flux:menu.item icon="trash" variant="danger"
-                                                    wire:click="remove('{{ $row['console']->key }}')"
-                                                    wire:confirm="{{ __('Remove :console from your library? Its games stay and nothing on disk is touched.', ['console' => $row['console']->name]) }}">
-                                        {{ __('Remove') }}
-                                    </flux:menu.item>
-                                </flux:menu>
-                            </flux:dropdown>
-                        </div>
-
-                        {{-- The newest three covers, fanned across the seam
-                             between the art and the card, newest in front.
-                             They spread a little under the pointer. --}}
-                        @if ($row['covers'] !== [])
-                            @php
-                                $portrait = App\Support\CoverGeometry::orientation($row['console']) === 'portrait';
-                                $fan = [
-                                    'z-3 -translate-x-1/2 motion-safe:group-hover:-translate-y-1',
-                                    'z-2 -translate-x-[92%] -rotate-8 motion-safe:group-hover:-translate-x-[115%] motion-safe:group-hover:-rotate-12',
-                                    'z-1 -translate-x-[8%] rotate-8 motion-safe:group-hover:translate-x-[15%] motion-safe:group-hover:rotate-12',
-                                ];
-                            @endphp
-                            <div aria-hidden="true" class="pointer-events-none absolute top-13 right-5 h-24 w-36">
-                                @foreach ($row['covers'] as $index => $cover)
-                                    <img src="{{ $cover }}" alt="" loading="lazy"
-                                         style="aspect-ratio: {{ $row['aspect'] }}"
-                                         class="{{ $portrait ? 'h-24' : 'w-22' }} {{ Illuminate\Support\Arr::get($fan, $index) }} absolute bottom-0 left-1/2 origin-bottom rounded-md border border-line-input object-cover shadow-lift motion-safe:transition-[translate,rotate] motion-safe:duration-300" />
-                                @endforeach
+            {{-- One section per group from Settings → UI, each its own grid
+                 under a heading; ungrouped is a single section without one. --}}
+            <div class="flex flex-col gap-8">
+                @foreach ($this->sections as ['label' => $label, 'rows' => $rows])
+                    <section wire:key="section-{{ $loop->index }}-{{ $label }}" class="flex flex-col gap-3">
+                        @if ($label !== '')
+                            <div class="flex items-center gap-3">
+                                <h2 class="kicker text-fg-faint">{{ $label }}</h2>
+                                <span class="font-mono text-xs text-fg-dim">{{ $rows->count() }}</span>
+                                <div aria-hidden="true" class="h-px flex-1 bg-line"></div>
                             </div>
                         @endif
+                        {{-- As many columns as fit a card's minimum width rather than a
+                             count per breakpoint: the fan takes the right of the card, so
+                             the name needs room the sidebar's width decides, not the
+                             viewport's. Not the shelf utility, whose two-column floor
+                             would squeeze a phone into two of these. --}}
+                        <div class="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] gap-4">
+                            @foreach ($rows as $row)
+                                {{-- The same hover as a game card: the border takes the
+                                     accent and the name brightens. Only the covers move. --}}
+                                <div wire:key="added-{{ $row['console']->key }}"
+                                     class="group relative flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition-colors hover:border-accent-tint focus-within:border-accent-tint">
+                                    {{-- Stretched over the card rather than wrapping it, so
+                                         the menu sits above the link instead of inside it. --}}
+                                    <a
+                                        href="{{ route('consoles.games', ['console' => $row['console']->key]) }}"
+                                        wire:navigate
+                                        aria-label="{{ $row['console']->name }}"
+                                        class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                                    ></a>
 
-                        <div class="relative -mt-9 flex items-center gap-3.5 px-4 {{ $row['covers'] !== [] ? 'pr-42' : '' }}">
-                            <img src="{{ $row['console']->icon }}" alt="" class="size-14 shrink-0 object-contain drop-shadow-lg" />
+                                    {{-- The best-rated game's key art, masked into the card
+                                         rather than faded into the page ground, which would
+                                         show as a seam against the card's surface. --}}
+                                    <div aria-hidden="true" class="art-fade-b pointer-events-none relative h-28 shrink-0">
+                                        <div class="absolute inset-0 bg-cover bg-[position:50%_28%] opacity-70 transition-opacity group-hover:opacity-90"
+                                             style="background-image: url('{{ $row['backdrop'] }}')"></div>
+                                        @scanlines
+                                            <div class="scanlines absolute inset-0"></div>
+                                        @endscanlines
+                                    </div>
 
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate font-medium text-fg transition-colors group-hover:text-fg-bright">{{ $row['console']->name }}</p>
-                                <p class="mt-0.5 truncate text-sm text-fg-dim">
-                                    {{-- Joined here rather than with an @if between them,
-                                         which Livewire would mark with a comment mid-line. --}}
-                                    {{ collect([$row['console']->brand, $row['console']->released])->filter()->join(' · ') }}
-                                </p>
-                            </div>
-                        </div>
+                                    <div class="absolute top-2.5 right-2.5 z-20">
+                                        <flux:dropdown position="bottom" align="end">
+                                            <button
+                                                type="button"
+                                                aria-label="{{ __('Actions for :console', ['console' => $row['console']->name]) }}"
+                                                class="grid size-8 cursor-pointer place-items-center rounded-lg border border-line-input bg-scrim/60 text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright hover:text-fg-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                                            >
+                                                <flux:icon.ellipsis-horizontal class="size-4" />
+                                            </button>
 
-                        {{--
-                            Games are what the provider identified; files are
-                            what is on the disk, and a four-disc set is four of
-                            those and one of these. The file count is read off
-                            the drive, so it is right before a scan has run.
-                            Unidentified only when there is something left to
-                            name, so a tidy console stays quiet.
-                        --}}
-                        <dl class="flex flex-wrap gap-x-6 gap-y-3 px-4 pt-6 pb-4">
-                            <div>
-                                <dt class="kicker text-fg-faint">{{ __('Games') }}</dt>
-                                <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['identified']) }}</dd>
-                            </div>
-                            @if ($row['unidentified'] > 0)
-                                <div>
-                                    <dt class="kicker text-fg-faint">{{ __('Unidentified') }}</dt>
-                                    <dd class="mt-1 font-mono text-lg tabular-nums text-warn">{{ Illuminate\Support\Number::format($row['unidentified']) }}</dd>
+                                            <flux:menu>
+                                                @php
+                                                    // The group under Scan is two optional
+                                                    // items: most consoles know one
+                                                    // arrangement and only a couple have a
+                                                    // loader to write for. Without this the
+                                                    // menu would draw two rules in a row.
+                                                    $rowLayouts = count(App\Support\Layouts\Layouts::keysFor($row['console'])) > 1;
+                                                    $rowExports = $this->exportsFor($row['console']);
+                                                @endphp
+
+                                                {{-- In here rather than on the card, where
+                                                     a click meant for the console landed
+                                                     on it and walked the whole folder. --}}
+                                                <flux:menu.item icon="magnifying-glass"
+                                                                wire:click="scan('{{ $row['console']->key }}')">
+                                                    {{ __('Scan folder') }}
+                                                </flux:menu.item>
+
+                                                <flux:menu.separator />
+
+                                                @if ($rowLayouts)
+                                                    <flux:menu.item icon="folder-open"
+                                                                    wire:click="changeLayout('{{ $row['console']->key }}')">
+                                                        {{ __('Change layout') }}
+                                                    </flux:menu.item>
+                                                @endif
+
+                                                {{-- The only actions in the app that write into the
+                                                     library, so each says where it writes before it
+                                                     does it. Offered only where the loader that reads
+                                                     those folders is the one in use. --}}
+                                                @foreach ($rowExports as $export)
+                                                    <flux:menu.item icon="arrow-down-tray"
+                                                                    wire:click="writeExport('{{ $row['console']->key }}', '{{ $export }}')"
+                                                                    wire:confirm="{{ App\Tools\ConsoleTools::for($row['console'])?->exportConfirm($export, (string) $row['folder']) }}">
+                                                        {{ App\Tools\ConsoleTools::for($row['console'])?->exportLabel($export) }}
+                                                    </flux:menu.item>
+                                                @endforeach
+
+                                                @if ($rowLayouts || $rowExports !== [])
+                                                    <flux:menu.separator />
+                                                @endif
+
+                                                <flux:menu.item icon="photo"
+                                                                wire:click="fetchMedia('{{ $row['console']->key }}')">
+                                                    {{ __('Fetch missing artwork') }}
+                                                </flux:menu.item>
+
+                                                {{-- Confirmed, and the scraper's own count
+                                                     is in the question: this is one
+                                                     provider lookup per identified game,
+                                                     and on a large console that is a
+                                                     visible bite out of the day. --}}
+                                                <flux:menu.item icon="arrow-path"
+                                                                wire:click="fetchMedia('{{ $row['console']->key }}', true)"
+                                                                wire:confirm="{{ __('Re-fetch artwork for all :count identified games on :console? That is one provider lookup each.', ['count' => $row['identified'], 'console' => $row['console']->name]) }}">
+                                                    {{ __('Re-fetch all artwork') }}
+                                                </flux:menu.item>
+
+                                                <flux:menu.separator />
+
+                                                {{-- The same destination the console's own
+                                                     shelf offers, so there is one place a
+                                                     console is configured and one way in
+                                                     from either list. --}}
+                                                <flux:menu.item icon="cog-6-tooth"
+                                                                href="{{ route('console-config.edit', ['console' => $row['console']->key]) }}"
+                                                                wire:navigate>
+                                                    {{ __('Manage console') }}
+                                                </flux:menu.item>
+
+                                                <flux:menu.separator />
+
+                                                <flux:menu.item icon="trash" variant="danger"
+                                                                wire:click="remove('{{ $row['console']->key }}')"
+                                                                wire:confirm="{{ __('Remove :console from your library? Its games stay and nothing on disk is touched.', ['console' => $row['console']->name]) }}">
+                                                    {{ __('Remove') }}
+                                                </flux:menu.item>
+                                            </flux:menu>
+                                        </flux:dropdown>
+                                    </div>
+
+                                    {{-- The newest three covers, fanned across the seam
+                                         between the art and the card, newest in front.
+                                         They spread a little under the pointer. --}}
+                                    @if ($row['covers'] !== [])
+                                        @php
+                                            $portrait = App\Support\CoverGeometry::orientation($row['console']) === 'portrait';
+                                            $fan = [
+                                                'z-3 -translate-x-1/2 motion-safe:group-hover:-translate-y-1',
+                                                'z-2 -translate-x-[92%] -rotate-8 motion-safe:group-hover:-translate-x-[115%] motion-safe:group-hover:-rotate-12',
+                                                'z-1 -translate-x-[8%] rotate-8 motion-safe:group-hover:translate-x-[15%] motion-safe:group-hover:rotate-12',
+                                            ];
+                                        @endphp
+                                        <div aria-hidden="true" class="pointer-events-none absolute top-13 right-5 h-24 w-36">
+                                            @foreach ($row['covers'] as $index => $cover)
+                                                <img src="{{ $cover }}" alt="" loading="lazy"
+                                                     style="aspect-ratio: {{ $row['aspect'] }}"
+                                                     class="{{ $portrait ? 'h-24' : 'w-22' }} {{ Illuminate\Support\Arr::get($fan, $index) }} absolute bottom-0 left-1/2 origin-bottom rounded-md border border-line-input object-cover shadow-lift motion-safe:transition-[translate,rotate] motion-safe:duration-300" />
+                                            @endforeach
+                                        </div>
+                                    @endif
+
+                                    <div class="relative -mt-9 flex items-center gap-3.5 px-4 {{ $row['covers'] !== [] ? 'pr-42' : '' }}">
+                                        <img src="{{ $row['console']->icon }}" alt="" class="size-14 shrink-0 object-contain drop-shadow-lg" />
+
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate font-medium text-fg transition-colors group-hover:text-fg-bright">{{ $row['console']->name }}</p>
+                                            <p class="mt-0.5 truncate text-sm text-fg-dim">
+                                                {{-- Joined here rather than with an @if between them,
+                                                     which Livewire would mark with a comment mid-line. --}}
+                                                {{ collect([$row['console']->brand, $row['console']->released])->filter()->join(' · ') }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {{--
+                                        Games are what the provider identified; files are
+                                        what is on the disk, and a four-disc set is four of
+                                        those and one of these. The file count is read off
+                                        the drive, so it is right before a scan has run.
+                                        Unidentified only when there is something left to
+                                        name, so a tidy console stays quiet.
+                                    --}}
+                                    <dl class="flex flex-wrap gap-x-6 gap-y-3 px-4 pt-6 pb-4">
+                                        <div>
+                                            <dt class="kicker text-fg-faint">{{ __('Games') }}</dt>
+                                            <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['identified']) }}</dd>
+                                        </div>
+                                        @if ($row['unidentified'] > 0)
+                                            <div>
+                                                <dt class="kicker text-fg-faint">{{ __('Unidentified') }}</dt>
+                                                <dd class="mt-1 font-mono text-lg tabular-nums text-warn">{{ Illuminate\Support\Number::format($row['unidentified']) }}</dd>
+                                            </div>
+                                        @endif
+                                        <div>
+                                            <dt class="kicker text-fg-faint">{{ __('Files') }}</dt>
+                                            <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['files']) }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="kicker text-fg-faint">{{ __('On disk') }}</dt>
+                                            <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ $row['size'] }}</dd>
+                                        </div>
+                                    </dl>
+
+                                    <p class="mt-auto flex items-center gap-1.5 truncate border-t border-line px-4 py-2.5 text-xs text-fg-faint">
+                                        <span class="truncate font-mono">{{ $row['folder'] }}</span>
+                                        @if ($row['layout'] !== null)
+                                            <span aria-hidden="true">·</span>
+                                            <span class="truncate">{{ $row['layout'] }}</span>
+                                        @endif
+                                    </p>
                                 </div>
-                            @endif
-                            <div>
-                                <dt class="kicker text-fg-faint">{{ __('Files') }}</dt>
-                                <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['files']) }}</dd>
-                            </div>
-                            <div>
-                                <dt class="kicker text-fg-faint">{{ __('On disk') }}</dt>
-                                <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ $row['size'] }}</dd>
-                            </div>
-                        </dl>
-
-                        <p class="mt-auto flex items-center gap-1.5 truncate border-t border-line px-4 py-2.5 text-xs text-fg-faint">
-                            <span class="truncate font-mono">{{ $row['folder'] }}</span>
-                            @if ($row['layout'] !== null)
-                                <span aria-hidden="true">·</span>
-                                <span class="truncate">{{ $row['layout'] }}</span>
-                            @endif
-                        </p>
-                    </div>
+                            @endforeach
+                        </div>
+                    </section>
                 @endforeach
             </div>
         @endif

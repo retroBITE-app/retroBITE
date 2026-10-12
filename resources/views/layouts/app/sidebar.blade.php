@@ -36,7 +36,7 @@
                 <kbd aria-hidden="true" class="font-sans text-xs">⌘K</kbd>
             </button>
 
-            @php($installed = App\Models\ConsoleSourceFolder::consoles())
+            @php($installed = App\Models\ConsoleSourceFolder::arranged($gameCounts))
 
             <flux:sidebar.nav>
                 <flux:sidebar.item icon="squares-2x2" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
@@ -59,23 +59,33 @@
                         <div class="absolute inset-y-[3px] start-0 ms-5 w-px bg-line-strong"></div>
 
                         <div class="flex flex-col gap-px">
-                            @foreach ($installed as $console)
-                                {{-- A game is inside its console now, so its page lights the console too. --}}
-                                @php($isCurrent = request()->routeIs('consoles.games', 'games.show') && request()->route('console') === $console->key)
+                            @foreach ($installed as $heading => $consoles)
+                                {{-- Settings → UI's grouping, as quiet headings
+                                     inside the list rather than sections that
+                                     open and close: the list is short, and a
+                                     heading is enough to find a run of rows. --}}
+                                @if ($heading !== '')
+                                    <p @class(['kicker truncate px-3 pb-1 text-fg-faint', 'pt-2.5' => ! $loop->first, 'pt-1' => $loop->first])>{{ $heading }}</p>
+                                @endif
 
-                                <a
-                                    href="{{ route('consoles.games', ['console' => $console->key]) }}"
-                                    wire:navigate
-                                    @class([
-                                        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
-                                        'bg-accent-tint/13 text-accent shadow-rail' => $isCurrent,
-                                        'text-fg-cool hover:bg-hover hover:text-fg' => ! $isCurrent,
-                                    ])
-                                >
-                                    <img src="{{ $console->icon }}" alt="" class="size-4 shrink-0 object-contain" />
-                                    <span class="truncate">{{ $console->name }}</span>
-                                    <span class="ms-auto font-mono text-xs text-fg-faint">{{ Illuminate\Support\Arr::get($gameCounts, $console->key, 0) }}</span>
-                                </a>
+                                @foreach ($consoles as $console)
+                                    {{-- A game is inside its console now, so its page lights the console too. --}}
+                                    @php($isCurrent = request()->routeIs('consoles.games', 'games.show') && request()->route('console') === $console->key)
+
+                                    <a
+                                        href="{{ route('consoles.games', ['console' => $console->key]) }}"
+                                        wire:navigate
+                                        @class([
+                                            'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                                            'bg-accent-tint/13 text-accent shadow-rail' => $isCurrent,
+                                            'text-fg-cool hover:bg-hover hover:text-fg' => ! $isCurrent,
+                                        ])
+                                    >
+                                        <img src="{{ $console->icon }}" alt="" class="size-4 shrink-0 object-contain" />
+                                        <span class="truncate">{{ $console->name }}</span>
+                                        <span class="ms-auto font-mono text-xs text-fg-faint">{{ Illuminate\Support\Arr::get($gameCounts, $console->key, 0) }}</span>
+                                    </a>
+                                @endforeach
                             @endforeach
                         </div>
                     </div>

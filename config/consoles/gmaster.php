@@ -5,6 +5,7 @@ return [
     'name' => 'Game Master',
     'brand' => 'Hartung',
     'released' => 1990,
+    'category' => 'handheld',
     'folder' => 'gmaster',
     'icon' => '/images/consoles/Hartung - Game Master.png',
     'file_icon' => '/images/consoles/Hartung - Game Master-content.png',

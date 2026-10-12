@@ -5,6 +5,7 @@ return [
     'name' => 'Thomson MO/TO',
     'brand' => 'Thomson',
     'released' => 1982,
+    'category' => 'computer',
     'folder' => 'thomson',
     'icon' => '/images/consoles/Thomson - MOTO.png',
     'file_icon' => '/images/consoles/Thomson - MOTO-content.png',

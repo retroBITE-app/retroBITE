@@ -5,6 +5,7 @@ return [
     'name' => 'Sammy Atomiswave',
     'brand' => 'Sammy',
     'released' => 2003,
+    'category' => 'arcade',
     'folder' => 'atomiswave',
     'icon' => '/images/consoles/Arcade - Misc.png',
     'file_icon' => '/images/consoles/Arcade - Misc-content.png',

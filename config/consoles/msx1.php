@@ -5,6 +5,7 @@ return [
     'name' => 'Microsoft MSX1',
     'brand' => 'Microsoft',
     'released' => 1983,
+    'category' => 'computer',
     'folder' => 'msx1',
     'icon' => '/images/consoles/Microsoft - MSX.png',
     'file_icon' => '/images/consoles/Microsoft - MSX-content.png',

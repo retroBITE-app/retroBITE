@@ -5,6 +5,7 @@ return [
     'name' => 'PC Engine/TurboGrafx-16',
     'brand' => 'NEC',
     'released' => 1987,
+    'category' => 'home',
     'folder' => 'pcengine',
     'icon' => '/images/consoles/NEC - PC Engine - TurboGrafx 16.png',
     'file_icon' => '/images/consoles/NEC - PC Engine - TurboGrafx 16-content.png',

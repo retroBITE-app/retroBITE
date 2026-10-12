@@ -5,6 +5,7 @@ return [
     'name' => 'Epoch Game Pocket Computer',
     'brand' => 'Epoch',
     'released' => 1984,
+    'category' => 'handheld',
     'folder' => 'gamepock',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

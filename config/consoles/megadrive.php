@@ -5,6 +5,7 @@ return [
     'name' => 'Sega Genesis/Mega Drive',
     'brand' => 'Sega',
     'released' => 1988,
+    'category' => 'home',
     'folder' => 'megadrive',
     'icon' => '/images/consoles/Sega - Mega Drive - Genesis.png',
     'file_icon' => '/images/consoles/Sega - Mega Drive - Genesis-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'Xbox',
     'brand' => 'Microsoft',
     'released' => 2001,
+    'category' => 'home',
     'folder' => 'xbox',
     'icon' => '/images/consoles/Microsoft - Xbox.png',
     'file_icon' => '/images/consoles/Microsoft - Xbox-content.png',

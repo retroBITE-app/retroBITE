@@ -5,6 +5,7 @@ return [
     'name' => 'Fujitsu FM-7',
     'brand' => 'Fujitsu',
     'released' => 1982,
+    'category' => 'computer',
     'folder' => 'fm7',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

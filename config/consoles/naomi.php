@@ -5,6 +5,7 @@ return [
     'name' => 'Sega NAOMI',
     'brand' => 'Sega',
     'released' => 1998,
+    'category' => 'arcade',
     'folder' => 'naomi',
     'icon' => '/images/consoles/Arcade - Misc.png',
     'file_icon' => '/images/consoles/Arcade - Misc-content.png',

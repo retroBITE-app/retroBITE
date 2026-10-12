@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Enums\ConsoleCategory;
 
 /**
  * Which keys of a config/consoles/ entry somebody may change at runtime.
@@ -20,6 +21,7 @@ declare(strict_types=1);
  *   text[] — comma-separated list, kept as typed
  *   ext[]  — comma-separated list, lowercased; extension matching is case-folded
  *   region[] — comma-separated list of the provider's region codes, lowercased
+ *   choice — one of an enum's values; `options` names the enum class
  *
  * A field left empty means "whatever the console file says", which is also what
  * a field equal to its shipped value means. Neither is stored.
@@ -37,6 +39,13 @@ return [
         'type' => 'text',
         'label' => 'Brand',
         'description' => 'Searched alongside the name.',
+    ],
+
+    'category' => [
+        'type' => 'choice',
+        'options' => ConsoleCategory::class,
+        'label' => 'Type',
+        'description' => 'Home console, handheld, computer or arcade: the group it falls in when consoles are grouped by type.',
     ],
 
     'icon' => [

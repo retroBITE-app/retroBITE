@@ -5,6 +5,7 @@ return [
     'name' => 'Atari 800',
     'brand' => 'Atari',
     'released' => 1979,
+    'category' => 'computer',
     'folder' => 'atari800',
     'icon' => '/images/consoles/Atari - XEGS.png',
     'file_icon' => '/images/consoles/Atari - XEGS-content.png',

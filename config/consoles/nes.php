@@ -5,6 +5,7 @@ return [
     'name' => 'Nintendo Entertainment System',
     'brand' => 'Nintendo',
     'released' => 1983,
+    'category' => 'home',
     'folder' => 'nes',
     'icon' => '/images/consoles/Nintendo - Nintendo Entertainment System.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo Entertainment System-content.png',

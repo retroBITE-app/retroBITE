@@ -5,6 +5,7 @@ return [
     'name' => 'Mega Duck',
     'brand' => 'Welback Holdings',
     'released' => 1993,
+    'category' => 'handheld',
     'folder' => 'megaduck',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

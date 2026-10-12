@@ -5,6 +5,7 @@ return [
     'name' => 'PC Engine SuperGrafx',
     'brand' => 'NEC',
     'released' => 1989,
+    'category' => 'home',
     'folder' => 'supergrafx',
     'icon' => '/images/consoles/NEC - PC Engine SuperGrafx.png',
     'file_icon' => '/images/consoles/NEC - PC Engine SuperGrafx-content.png',
