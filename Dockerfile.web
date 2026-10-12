@@ -34,13 +34,16 @@ RUN npm run build
 # the runtime below is musl and a glibc build would not run on it.
 FROM alpine:3.21 AS rahasher
 
-RUN apk add --no-cache build-base git zlib-dev zlib-static
+RUN apk add --no-cache build-base git zlib-dev zlib-static lz4-dev lz4-static
 
 # Pinned. A hasher that quietly changed what it returned between deploys would
 # invalidate the cached hash on every file in the library.
 ARG RALIBRETRO_TAG=1.8.4
 
-# Four deviations from the documented build, each for a reason:
+COPY patches/rahasher-ciso.patch /src-patches/rahasher-ciso.patch
+COPY docker/web/ciso/ /ciso/
+
+# Five deviations from the documented build, each for a reason:
 #
 #  * Only three submodules. The full set pulls SDL2, which RAHasher does not
 #    link and which is most of the download.
@@ -54,15 +57,29 @@ ARG RALIBRETRO_TAG=1.8.4
 #    off, so gzlib.c calls lseek() with no declaration. It rides on CC rather
 #    than CFLAGS because Makefile.common assigns CFLAGS outright and overriding
 #    it would drop every include path.
+#  * A CD reader for CSO and ZSO (docker/web/ciso, wired in by
+#    patches/rahasher-ciso.patch as HAVE_CISO). rcheevos reads ISO, cue/bin
+#    and, with HAVE_CHD, CHD; a CSO or ZSO it opens as raw sectors and gives up
+#    with "Could not determine sector size". The reader sniffs each file and
+#    hands anything that is not one to rcheevos' own, so other formats hash
+#    as they always did, and the hashing itself stays rcheevos'.
+#
+# discread is the same CSO/ZSO reader as a command, for the toolbox scripts in
+# app/Scripts: maxcso can only decompress a whole image to a file. Static, so
+# it runs on whichever Alpine the runtime is.
 RUN git clone --depth 1 --branch "$RALIBRETRO_TAG" \
         https://github.com/RetroAchievements/RALibretro.git /src \
     && cd /src \
     && git submodule update --init --depth 1 src/miniz src/rcheevos src/libchdr \
     && sed -i '/#include <stddef.h>/a #include <cstdio>\n#include <ctime>' src/Util.h \
     && printf '#define RA_LIBRETRO_VERSION_SHORT "%s"\n' "$RALIBRETRO_TAG" > src/RA_BuildVer.h \
-    && make -f Makefile.RAHasher HAVE_CHD=1 -j"$(nproc)" CC="gcc -DZ_HAVE_UNISTD_H" \
+    && patch -p1 < /src-patches/rahasher-ciso.patch \
+    && cp /ciso/ciso.h /ciso/ciso.c /ciso/HashCISO.cpp src/ \
+    && make -f Makefile.RAHasher HAVE_CHD=1 HAVE_CISO=1 -j"$(nproc)" CC="gcc -DZ_HAVE_UNISTD_H" \
     && cp "$(find /src -type f -name RAHasher -perm -u+x | head -n 1)" /usr/local/bin/RAHasher \
-    && /usr/local/bin/RAHasher | head -n 1
+    && /usr/local/bin/RAHasher | head -n 1 \
+    && gcc -O2 -Wall -static -o /usr/local/bin/discread /ciso/ciso.c /ciso/discread.c -l:libz.a -l:liblz4.a \
+    && (/usr/local/bin/discread 2>/dev/null; test $? -eq 2)
 
 # Stage 4: the conversion tools
 #
@@ -259,7 +276,10 @@ RUN composer dump-autoload --optimize --no-dev
 COPY --from=frontend-builder /app/public/build ./public/build
 
 # On PATH, which is where config/retroachievements.php looks by default.
-COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/RAHasher
+# discread beside it, where app/Scripts/PS2/Inspect.sh finds it; run once so a
+# binary that cannot start here fails the build rather than an inspection.
+COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/discread /usr/local/bin/
+RUN (discread 2>/dev/null; test $? -eq 2)
 
 # The conversion tools, on PATH, which is where config/converters.php
 # looks by default. Each is run once: they were built against the converters

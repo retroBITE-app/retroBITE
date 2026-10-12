@@ -4,6 +4,8 @@ use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\ExecutableFinder;
+use Tests\Fakes\DiscImage;
 
 /**
  * The one test that runs a console's script for real rather than faking the
@@ -98,6 +100,14 @@ function inspectImage(string $path): ProcessResult
         ->run(['bash', 'Inspect.sh', $path]);
 }
 
+/** A CSO or ZSO is read through discread, which only the web image ships. */
+function requireDiscread(): void
+{
+    if ((new ExecutableFinder)->find('discread') === null) {
+        test()->markTestSkipped('discread is not installed');
+    }
+}
+
 it('finds SYSTEM.CNF through the disc\'s directory, however deep it sits', function () {
     // Past the 16 MiB slice, where the old search had to walk the whole disc
     // — four gigabytes over a network mount, and a job that timed out.
@@ -159,19 +169,58 @@ it('reads a serial out of the filename without opening the disc', function () {
         ]);
 });
 
-it('refuses a compressed image whatever it is called', function (string $filename, string $magic) {
-    $result = inspect($filename, $magic.str_repeat("\0", 64));
+it('reads the serial inside a CSO or ZSO, whatever it is called', function (string $filename, string $magic) {
+    requireDiscread();
+
+    // Past the 16 MiB slice, so the serial can only have come through the
+    // directory walk, a sector at a time out of the compressed blocks.
+    $iso = isoImage('Plain.iso', 16 * 512 + 900, "BOOT2 = cdrom0:\\SLES_518.90;1\r\nVMODE = PAL\r\n");
+    $path = $this->dir.'/'.$filename;
+    File::put($path, DiscImage::pack((string) File::get($iso), $magic));
+
+    $result = inspectImage($path);
+
+    expect($result->exitCode())->toBe(0)
+        ->and(facts($result))->toBe([
+            'license_id' => 'SLES_518.90',
+            'cover_id' => 'SLES-51890',
+            'region' => 'Europe',
+            'video_mode' => 'PAL',
+        ]);
+})->with([
+    'a cso' => ['Game.cso', 'CISO'],
+    // The case an extension check cannot catch: config says .iso is readable,
+    // and this one is a CSO wearing the name.
+    'a cso called iso' => ['Game.iso', 'CISO'],
+    'a zso' => ['Game.zso', 'ZISO'],
+]);
+
+it('says so when a CSO arrives and discread is not there to open it', function () {
+    $path = $this->dir.'/Game.cso';
+    File::put($path, DiscImage::pack(str_repeat("\0", 2048 * 20)));
+
+    // /usr/local/bin is where the image puts discread; bash, coreutils and
+    // binutils are all in the other two.
+    $result = Process::path(base_path('app/Scripts/PS2'))
+        ->env(['PATH' => '/usr/bin:/bin'])
+        ->run(['bash', 'Inspect.sh', $path]);
+
+    // Exit 2, not 1: a broken install, which the toolbox logs, rather than a
+    // disc with nothing to say.
+    expect($result->exitCode())->toBe(2)
+        ->and($result->errorOutput())->toContain('discread');
+});
+
+it('refuses a CHD whatever it is called', function (string $filename) {
+    $result = inspect($filename, 'MComprHD'.str_repeat("\0", 64));
 
     // Exit 1 is "nothing to find here", which is an answer rather than a
     // failure — the toolbox writes no facts and logs nothing alarming.
     expect($result->exitCode())->toBe(1)
         ->and($result->output())->toBe('');
 })->with([
-    // The case an extension check cannot catch: config says .iso is readable,
-    // and this one is a CSO wearing the name.
-    'a cso called iso' => ['Game.iso', 'CISO'],
-    'a zso' => ['Game.zso', 'ZISO'],
-    'a chd' => ['Game.chd', 'MComprHD'],
+    'a chd' => ['Game.chd'],
+    'a chd called iso' => ['Game.iso'],
 ]);
 
 it('says it found nothing in a file with no serial', function () {

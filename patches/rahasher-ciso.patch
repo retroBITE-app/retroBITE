@@ -1,0 +1,47 @@
+diff --git a/Makefile.RAHasher b/Makefile.RAHasher
+index ec55e39..8c700f2 100644
+--- a/Makefile.RAHasher
++++ b/Makefile.RAHasher
+@@ -46,6 +46,15 @@ ifdef HAVE_CHD
+           src/HashCHD.o
+ endif
+ 
++# CSO/ZSO, through the zlib HAVE_CHD vendors and a static liblz4
++ifdef HAVE_CISO
++  CFLAGS += -DHAVE_CISO
++  CXXFLAGS += -DHAVE_CISO
++  OBJS += src/ciso.o \
++          src/HashCISO.o
++  LDFLAGS += -l:liblz4.a
++endif
++
+ all: $(OUTDIR)/RAHasher$(EXE)
+ 
+ %.o: %.cpp
+diff --git a/src/RAHasher.cpp b/src/RAHasher.cpp
+index 50e6a21..d90e1a1 100644
+--- a/src/RAHasher.cpp
++++ b/src/RAHasher.cpp
+@@ -29,6 +29,10 @@
+ void rc_hash_init_chd_cdreader(); /* in HashCHD.cpp */
+ #endif
+ 
++#ifdef HAVE_CISO
++void rc_hash_init_ciso_cdreader(); /* in HashCISO.cpp */
++#endif
++
+ void   initHash3DS(const std::string& systemDir); /* in Hash3DS.cpp */
+ 
+ static void usage(const char* appname)
+@@ -146,7 +150,11 @@ static int process_file(int consoleId, const std::string& file)
+   }
+   else
+   {
++#ifdef HAVE_CISO
++    rc_hash_init_ciso_cdreader();
++#else
+     rc_hash_init_default_cdreader();
++#endif
+   }
+ 
+   if (consoleId > RC_CONSOLE_MAX)

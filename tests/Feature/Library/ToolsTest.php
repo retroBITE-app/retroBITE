@@ -169,6 +169,9 @@ it('opens what the console config says it opens', function (string $extension, b
 })->with([
     ['iso', true],
     ['ISO', true],
+    // Compressed a block at a time, so the script reads them through discread.
+    ['cso', true],
+    ['zso', true],
     // A compressed container. It is a ps2 file — file_extensions lists it —
     // and still nothing can be read inside one, which is why the toolbox keeps
     // a list of its own.

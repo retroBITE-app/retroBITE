@@ -18,9 +18,16 @@
 #   video_mode	PAL
 #
 # Exit 0  something was found
-#      1  nothing to find here — a compressed image, or a disc with no serial.
-#         An ordinary answer, not a failure.
-#      2  called wrongly, or the file cannot be read
+#      1  nothing to find here — a CHD, or a disc with no serial. An ordinary
+#         answer, not a failure.
+#      2  called wrongly, the file cannot be read, or it is a CSO/ZSO and
+#         discread is not installed
+#
+# A CSO or ZSO is read through discread (docker/web/ciso, built beside RAHasher
+# in Dockerfile.web), which hands back the uncompressed bytes of any slice of
+# it; a plain image is read directly. Everything below reads through the
+# helpers that choose between the two, so the directory walk and the fallbacks
+# work on either.
 #
 # This exists because doing it in PHP means parsing ISO9660 by hand, while
 # `strings` over the first 16 MiB answers in a line.
@@ -45,7 +52,11 @@ PS2_SERIAL_PREFIXES="SLUS|SLES|SLPS|SLPM|SCUS|SCES|SCPS|SCPM|SCAJ|SLKA|SCKA|SLAJ
 PS2_HEADER_BYTES=$((16 * 1024 * 1024))
 
 read_header() {
-    head -c "$PS2_HEADER_BYTES" "$1" 2>/dev/null | strings
+    if [ "$PACKED" -eq 1 ]; then
+        discread "$1" 0 "$PS2_HEADER_BYTES" 2>/dev/null | strings
+    else
+        head -c "$PS2_HEADER_BYTES" "$1" 2>/dev/null | strings
+    fi
 }
 
 # ISO9660's sector size, for every position the directory gives.
@@ -56,7 +67,33 @@ ISO_SECTOR=2048
 read_bytes() {
     local file="$1" offset="$2" length="$3"
 
-    od -An -v -tu1 -j "$offset" -N "$length" "$file" 2>/dev/null | tr -s ' \n' ' '
+    if [ "$PACKED" -eq 1 ]; then
+        discread "$file" "$offset" "$length" 2>/dev/null | od -An -v -tu1 | tr -s ' \n' ' '
+    else
+        od -An -v -tu1 -j "$offset" -N "$length" "$file" 2>/dev/null | tr -s ' \n' ' '
+    fi
+}
+
+# A few raw bytes of the disc, unaligned; small reads only.
+read_slice() {
+    local file="$1" offset="$2" length="$3"
+
+    if [ "$PACKED" -eq 1 ]; then
+        discread "$file" "$offset" "$length" 2>/dev/null
+    else
+        dd if="$file" bs=1 skip="$offset" count="$length" 2>/dev/null
+    fi
+}
+
+# One whole ISO9660 sector, by its number.
+read_sector() {
+    local file="$1" lba="$2"
+
+    if [ "$PACKED" -eq 1 ]; then
+        discread "$file" $(( lba * ISO_SECTOR )) "$ISO_SECTOR" 2>/dev/null
+    else
+        dd if="$file" bs="$ISO_SECTOR" skip="$lba" count=1 2>/dev/null
+    fi
 }
 
 # A little-endian 32-bit field out of a byte array, starting at an index.
@@ -81,7 +118,7 @@ system_cnf() {
     local file="$1" descriptor root_lba root_size dir_bytes pos length name_length i ok lba size
     local -a pvd dir target
 
-    descriptor=$(dd if="$file" bs=1 skip=$(( 16 * ISO_SECTOR + 1 )) count=5 2>/dev/null)
+    descriptor=$(read_slice "$file" $(( 16 * ISO_SECTOR + 1 )) 5)
     [ "$descriptor" = "CD001" ] || return 1
 
     read -r -a pvd <<<"$(read_bytes "$file" $(( 16 * ISO_SECTOR + 156 )) 34)"
@@ -133,7 +170,7 @@ system_cnf() {
                 # SYSTEM.CNF is a few lines; a large "file" is not one.
                 [ "$size" -gt 0 ] && [ "$size" -le "$ISO_SECTOR" ] || return 1
 
-                dd if="$file" bs="$ISO_SECTOR" skip="$lba" count=1 2>/dev/null | head -c "$size"
+                read_sector "$file" "$lba" | head -c "$size"
 
                 return 0
             fi
@@ -150,7 +187,11 @@ PS2_SYSTEM_CNF="SYSTEM.CNF"
 # Streamed, never captured whole: `strings` over a 4 GB disc would otherwise land
 # in a shell variable. `-m1` also lets strings exit early on a hit.
 scan_disc() {
-    strings "$1" | grep -m1 -oiE "$2"
+    if [ "$PACKED" -eq 1 ]; then
+        discread "$1" 0 2>/dev/null | strings | grep -m1 -oiE "$2"
+    else
+        strings "$1" | grep -m1 -oiE "$2"
+    fi
 }
 
 # The first line matching a pattern, cheap slice first and full disc after.
@@ -250,24 +291,27 @@ video_mode_for() {
         | sed 's/.*=[[:space:]]*//' | tr -d '\r\n' | tr 'a-z' 'A-Z'
 }
 
-# Whether this is a compressed container rather than a raw disc.
+# What kind of container this is, by magic number rather than by extension.
 #
-# By magic number rather than by extension: the caller has already checked the
-# extension against the console's config, so repeating that here would be the
-# same check twice. What this catches is the case the extension cannot — a CSO
-# somebody renamed to .iso, which is common enough on these drives. Nothing the
-# rest of this script looks for survives the compression, so scanning one is
-# four gigabytes spent learning nothing.
-is_compressed() {
+# The caller has already checked the extension against the console's config,
+# so repeating that here would be the same check twice. What this catches is
+# the case the extension cannot — a CSO somebody renamed to .iso, which is
+# common enough on these drives.
+#
+#   packed  CSO or ZSO: blocks of the disc, each compressed on its own, which
+#           discread can hand back a slice at a time
+#   chd     a CHD: hunks and metadata nothing here can read, so scanning one
+#           is four gigabytes spent learning nothing
+#   plain   anything else, read as it is
+container_of() {
     local magic
 
-    magic=$(head -c 8 "$1" 2>/dev/null)
+    magic=$(head -c 8 "$1" 2>/dev/null | tr -d '\0')
 
     case "$magic" in
-        CISO*)     return 0 ;;  # .cso
-        ZISO*)     return 0 ;;  # .zso
-        MComprHD*) return 0 ;;  # .chd
-        *)         return 1 ;;
+        CISO*|ZISO*) echo "packed" ;;
+        MComprHD*)   echo "chd" ;;
+        *)           echo "plain" ;;
     esac
 }
 
@@ -285,10 +329,24 @@ if [ ! -r "$iso_file" ]; then
     exit 2
 fi
 
-if is_compressed "$iso_file"; then
-    echo "Compressed image, nothing to read inside: ${iso_file}" >&2
+container=$(container_of "$iso_file")
+
+if [ "$container" = "chd" ]; then
+    echo "CHD image, nothing to read inside: ${iso_file}" >&2
 
     exit 1
+fi
+
+PACKED=0
+
+if [ "$container" = "packed" ]; then
+    PACKED=1
+
+    if ! command -v discread >/dev/null 2>&1; then
+        echo "discread is needed to read inside a CSO or ZSO: ${iso_file}" >&2
+
+        exit 2
+    fi
 fi
 
 # The filename first: it costs nothing, and on an OPL drive it is already there.

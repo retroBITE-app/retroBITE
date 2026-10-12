@@ -11,7 +11,7 @@ return [
     'file_icon' => '/images/consoles/Sony - PlayStation 2-content.png',
     'file_extensions' => ['iso', 'bin', 'cue', 'img', 'mdf', 'nrg', 'zso', 'chd', 'cso'],
     'bios_extensions' => ['bin'],
-    'toolbox_file_extensions' => ['iso', 'bin', 'img', 'mdf', 'nrg'],
+    'toolbox_file_extensions' => ['iso', 'bin', 'img', 'mdf', 'nrg', 'cso', 'zso'],
     'exclude_files' => ['games.bin'],
     'screenscraper_id' => 58,
     'retroachievements_id' => 21,
