@@ -19,7 +19,6 @@ use App\Models\Media;
 use App\Models\RaGame;
 use App\Models\User;
 use App\Providers\AppServiceProvider;
-use App\Services\LibraryScanner;
 use App\Support\Console;
 use App\Support\ExportProgress;
 use App\Support\MediaRegions;
@@ -990,9 +989,7 @@ it('counts the folder again once a scan has walked it', function () {
     // Faked so the scan's follow-up work — a provider lookup per new game —
     // stays out of a test that is only about the count. The recount itself
     // runs, since it is the thing under test.
-    Queue::fake()->except(MeasureLibrary::class);
-
-    (new ScanConsoleFolder('ps2'))->handle(app(LibraryScanner::class));
+    runScanJob('ps2', [MeasureLibrary::class]);
 
     expect(consoleCard('ps2')['files'])->toBe(2);
 });

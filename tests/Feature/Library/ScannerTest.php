@@ -12,6 +12,7 @@ use App\Services\LibraryScanner;
 use App\Support\Console;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
@@ -314,46 +315,40 @@ it('queues a lookup for everything the scan found', function () {
     // Recording what is on disk is only half the job. Without this the library
     // fills with placeholders named after their filenames and nothing ever
     // identifies them.
-    Bus::fake();
-
     put('snes/Super Mario World.sfc');
     put('snes/Zelda.sfc');
 
-    (new ScanConsoleFolder('snes'))->handle(app(LibraryScanner::class));
+    runScanJob('snes');
 
-    Bus::assertDispatchedTimes(MatchGame::class, 2);
+    Queue::assertPushed(MatchGame::class, 2);
 });
 
 it('asks about a multi-disc set once, not once per file', function () {
-    Bus::fake();
-
     put('psx/FF9/Final Fantasy IX.m3u', "FF9 (Disc 1).cue\nFF9 (Disc 2).cue\n");
     foreach (range(1, 2) as $disc) {
         put("psx/FF9/FF9 (Disc {$disc}).cue", "FILE \"FF9 (Disc {$disc}).bin\" BINARY\n");
         put("psx/FF9/FF9 (Disc {$disc}).bin");
     }
 
-    (new ScanConsoleFolder('psx'))->handle(app(LibraryScanner::class));
+    runScanJob('psx');
 
     // Five files, one game, one question.
     expect(Game::count())->toBe(1);
-    Bus::assertDispatchedTimes(MatchGame::class, 1);
+    Queue::assertPushed(MatchGame::class, 1);
 });
 
 it('does not ask again about a game the provider already failed to name', function () {
-    Bus::fake();
-
     put('snes/Super Mario World.sfc');
     put('snes/rom_hack_final.sfc');
     scan('snes');
 
     Game::where('slug', 'rom-hack-final')->update(['status' => GameStatus::Unmatched]);
 
-    (new ScanConsoleFolder('snes'))->handle(app(LibraryScanner::class));
+    runScanJob('snes');
 
     // Retrying it would spend the failed-lookup allowance, which is ten times
     // scarcer than the ordinary one, to be told the same thing.
-    Bus::assertDispatchedTimes(MatchGame::class, 1);
+    Queue::assertPushed(MatchGame::class, 1);
 });
 
 it('queues nothing when the scan refuses to run', function () {

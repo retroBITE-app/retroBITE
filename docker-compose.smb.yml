@@ -1,0 +1,54 @@
+# The ROM library from an SMB share, on top of docker-compose.yml (or
+# docker-compose.dev.yml):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.smb.yml up -d
+#
+# ./retrobite up adds this file by itself whenever GAMES_SMB_HOST is set.
+#
+# For a library that lives on another machine — a NAS that is not the one
+# running retroBITE, or a share a Mac has mounted under /Volumes. Docker
+# mounts the share itself, with the Linux kernel's own SMB client, in place of
+# the GAMES_PATH folder. On Docker Desktop that is the difference between
+# minutes and seconds to walk a large console: a share mounted on the Mac
+# reaches a container through Docker's file sharing, every file a round trip
+# to the Mac and from there another to the NAS.
+#
+# Set in .env, or in the stack's variables:
+#
+#   GAMES_SMB_HOST=192.168.1.10   the machine with the share, by address or name
+#                                 (Docker resolves the name, not the NAS)
+#   GAMES_SMB_SHARE=roms          the share; a folder inside it as roms/games
+#   GAMES_SMB_USERNAME=retrobite  an account that can read and write it
+#   GAMES_SMB_PASSWORD=secret     no commas: the mount's options are split on them
+#   GAMES_SMB_VERSION=3.0         the SMB dialect; 2.1 for an old NAS
+#   GAMES_SMB_UID=1000            who the files belong to inside the containers;
+#   GAMES_SMB_GID=1000            not 0, which reads as a plain local folder
+#
+# Both containers take the ids of whoever owns the library when they start
+# (docker/web/user-setup.sh, docker/entrypoint.sh), so the uid and gid here
+# become the web user's and the share user's. On the NAS every write is the
+# account's, whatever the ids say.
+#
+# The share container exports this mount again over SMB and FTP. That works,
+# but what a console reads crosses the network twice; consoles can be pointed
+# at the NAS's own share instead.
+#
+# The volume is created once, with the options of its first start. After
+# changing any of them: docker compose down, docker volume rm <project>_games-smb.
+
+services:
+  retrobite-web:
+    volumes:
+      - games-smb:/app/storage/app/games
+
+  retrobite-share:
+    volumes:
+      - games-smb:/games
+
+volumes:
+  games-smb:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//${GAMES_SMB_HOST:?Set GAMES_SMB_HOST to the machine with the ROM share}/${GAMES_SMB_SHARE:?Set GAMES_SMB_SHARE to the share holding the ROM library}"
+      o: "addr=${GAMES_SMB_HOST},username=${GAMES_SMB_USERNAME:-guest},password=${GAMES_SMB_PASSWORD:-},vers=${GAMES_SMB_VERSION:-3.0},uid=${GAMES_SMB_UID:-1000},gid=${GAMES_SMB_GID:-1000},file_mode=0664,dir_mode=0775"

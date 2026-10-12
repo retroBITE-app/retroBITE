@@ -14,9 +14,12 @@ use App\Support\Console;
 use App\Support\Layouts\ConsoleLayout;
 use App\Support\Scanning\CueSheet;
 use App\Support\Scanning\Playlist;
+use App\Support\Scanning\ScanPlan;
 use App\Support\Scanning\ScanResult;
+use App\Support\Scanning\ScanUnit;
 use App\Tools\ConsoleTools;
 use FilesystemIterator;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -35,6 +38,10 @@ use SplFileInfo;
  * flat would make nine games out of them and spend nine lookups discovering
  * that eight were wrong — and a failed lookup costs ten times a successful
  * one against ScreenScraper's allowance. Reading the playlist first costs one.
+ *
+ * The passes make a plan, which writes nothing; recording it is a second
+ * step that can be cut into chunks, so a large console is many short jobs
+ * whose progress can be watched rather than one that runs for minutes.
  */
 final class LibraryScanner
 {
@@ -43,11 +50,8 @@ final class LibraryScanner
 
     private const SHEET_EXTENSIONS = ['cue', 'gdi', 'ccd'];
 
-    /** @var array<string, true> relative paths already claimed by an earlier pass */
+    /** @var array<string, true> relative paths already put in a unit of the plan being made */
     private array $claimed = [];
-
-    /** @var array<string, true> relative paths seen anywhere in this scan */
-    private array $seen = [];
 
     /** How this console's folder is arranged, as whoever added it said. */
     private ConsoleLayout $layout;
@@ -58,7 +62,32 @@ final class LibraryScanner
     /** The console's root, relative to the library root. */
     private string $relativeRoot = '';
 
+    /**
+     * The whole scan in one go: plan, mark what has gone, record everything.
+     *
+     * What `retrobite:scan` without --queue runs. Queued, the same three steps
+     * are ScanConsoleFolder, then a ScanFolderChunk per chunk of the plan.
+     */
     public function scan(Console $console): ScanResult
+    {
+        $plan = $this->plan($console);
+
+        $result = (new ScanResult($console->key))
+            ->with('filesSkipped', $plan->skipped)
+            ->with('filesMissing', $this->markMissing($console, $plan));
+
+        return $result->plus($this->record($console, $plan->units));
+    }
+
+    /**
+     * Walk the folder and work out what it holds, writing nothing.
+     *
+     * The passes run here, over the whole folder, so a chunk recorded later
+     * can never mistake a disc a playlist names for a loose game. Each file
+     * goes into one unit only: two chunks writing the same path at once would
+     * race on its unique index.
+     */
+    public function plan(Console $console): ScanPlan
     {
         $relativeRoot = ConsoleSourceFolder::pathFor($console);
 
@@ -86,38 +115,107 @@ final class LibraryScanner
         }
 
         $this->claimed = [];
-        $this->seen = [];
 
+        $units = [
+            ...$this->planPlaylists($files),
+            ...$this->planSheets($files),
+        ];
+
+        [$loose, $skipped] = $this->planLooseFiles($console, $files);
+
+        return new ScanPlan([...$units, ...$loose], $skipped);
+    }
+
+    /**
+     * Write the rows for some units of a plan. One chunk's work.
+     *
+     * @param  list<ScanUnit>  $units
+     */
+    public function record(Console $console, array $units): ScanResult
+    {
         $result = new ScanResult($console->key);
-        $result = $this->scanPlaylists($console, $files, $result);
-        $result = $this->scanSheets($console, $files, $result);
-        $result = $this->scanLooseFiles($console, $files, $result);
 
-        return $this->markMissing($console, $relativeRoot, $result);
+        foreach ($units as $unit) {
+            [$game, $created] = $this->gameFor($console, $unit->title);
+            $result = $created ? $result->with('gamesCreated') : $result;
+
+            /** @var array<string, int> $ids */
+            $ids = [];
+
+            foreach ($unit->files as $file) {
+                [$row, $result] = $this->recordFile(
+                    $game,
+                    $file['path'],
+                    $file['size'],
+                    $file['role'],
+                    $result,
+                    $file['parent'] === null ? null : ($ids[$file['parent']] ?? null),
+                    $file['disc'],
+                );
+
+                $ids[$file['path']] = $row->id;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Flag rows under this console's root that the plan does not hold.
+     *
+     * Before the chunks rather than after them: the plan already knows every
+     * file there is, and a file that is back is cleared again by its chunk.
+     *
+     * @return int how many were flagged
+     */
+    public function markMissing(Console $console, ScanPlan $plan): int
+    {
+        $relativeRoot = ConsoleSourceFolder::pathFor($console);
+
+        if ($relativeRoot === null) {
+            return 0;
+        }
+
+        $present = $plan->paths();
+
+        // Compared here rather than in a whereNotIn: a large console is tens
+        // of thousands of paths, past what one statement can bind.
+        $stale = GameFile::query()
+            ->whereNull('missing_since')
+            ->where('path', 'like', $relativeRoot.'/%')
+            ->pluck('path', 'id')
+            ->reject(fn (string $path): bool => isset($present[$path]))
+            ->keys();
+
+        foreach ($stale->chunk(1000) as $ids) {
+            GameFile::query()->whereIn('id', $ids)->update(['missing_since' => now()]);
+        }
+
+        return $stale->count();
     }
 
     /**
      * Pass one: playlists, and everything they name.
      *
-     * @param  array<string, SplFileInfo>  $files  keyed by relative path
+     * @param  array<string, int|null>  $files  sizes, keyed by relative path
+     * @return list<ScanUnit>
      */
-    private function scanPlaylists(Console $console, array $files, ScanResult $result): ScanResult
+    private function planPlaylists(array $files): array
     {
-        foreach ($files as $relative => $info) {
+        $units = [];
+
+        foreach ($files as $relative => $size) {
             if (! $this->extensionIn($relative, self::PLAYLIST_EXTENSIONS) || isset($this->claimed[$relative])) {
                 continue;
             }
 
-            $entries = Playlist::entriesIn((string) file_get_contents($info->getPathname()));
+            $entries = Playlist::entriesIn((string) file_get_contents($this->absolute($relative)));
 
             if ($entries === []) {
                 continue;
             }
 
-            [$game, $created] = $this->gameFor($console, $this->titleFrom($relative));
-            $result = $created ? $result->with('gamesCreated') : $result;
-
-            [$playlist, $result] = $this->recordFile($game, $relative, $info, FileRole::Playlist, $result);
+            $planned = [$this->planned($relative, $size, FileRole::Playlist)];
 
             $disc = 0;
             foreach ($entries as $entry) {
@@ -129,107 +227,116 @@ final class LibraryScanner
 
                 $disc++;
 
+                if (isset($this->claimed[$discRelative])) {
+                    continue;
+                }
+
                 // An entry may itself be a cuesheet, in which case its tracks
                 // hang off it and the disc number belongs to the sheet.
                 $role = $this->extensionIn($discRelative, self::SHEET_EXTENSIONS)
                     ? FileRole::Sheet
                     : FileRole::Rom;
 
-                [$discFile, $result] = $this->recordFile(
-                    $game, $discRelative, $files[$discRelative], $role, $result, $playlist->id, $disc,
-                );
+                $planned[] = $this->planned($discRelative, $files[$discRelative], $role, $relative, $disc);
 
                 if ($role === FileRole::Sheet) {
-                    $result = $this->recordTracks($game, $discRelative, $files, $discFile->id, $disc, $result);
+                    array_push($planned, ...$this->planTracks($discRelative, $files, $disc));
                 }
             }
+
+            $units[] = new ScanUnit($this->titleFrom($relative), $planned);
         }
 
-        return $result;
+        return $units;
     }
 
     /**
      * Pass two: cuesheets nothing has claimed, and their tracks.
      *
-     * @param  array<string, SplFileInfo>  $files
+     * @param  array<string, int|null>  $files
+     * @return list<ScanUnit>
      */
-    private function scanSheets(Console $console, array $files, ScanResult $result): ScanResult
+    private function planSheets(array $files): array
     {
-        foreach ($files as $relative => $info) {
+        $units = [];
+
+        foreach ($files as $relative => $size) {
             if (! $this->extensionIn($relative, self::SHEET_EXTENSIONS) || isset($this->claimed[$relative])) {
                 continue;
             }
 
-            [$game, $created] = $this->gameFor($console, $this->titleFrom($relative));
-            $result = $created ? $result->with('gamesCreated') : $result;
-
-            [$sheet, $result] = $this->recordFile($game, $relative, $info, FileRole::Sheet, $result);
-
-            $result = $this->recordTracks($game, $relative, $files, $sheet->id, null, $result);
+            $units[] = new ScanUnit($this->titleFrom($relative), [
+                $this->planned($relative, $size, FileRole::Sheet),
+                ...$this->planTracks($relative, $files, null),
+            ]);
         }
 
-        return $result;
+        return $units;
     }
 
     /**
      * Pass three: whatever is left and carries a playable extension.
      *
-     * @param  array<string, SplFileInfo>  $files
+     * @param  array<string, int|null>  $files
+     * @return array{0: list<ScanUnit>, 1: int} the units, and how many files were not playable
      */
-    private function scanLooseFiles(Console $console, array $files, ScanResult $result): ScanResult
+    private function planLooseFiles(Console $console, array $files): array
     {
-        foreach ($files as $relative => $info) {
+        $units = [];
+        $skipped = 0;
+
+        foreach ($files as $relative => $size) {
             if (isset($this->claimed[$relative])) {
                 continue;
             }
 
             if (! $this->isPlayable($console, $relative)) {
-                $result = $result->with('filesSkipped');
+                $skipped++;
 
                 continue;
             }
 
-            [$game, $created] = $this->gameFor($console, $this->titleFrom($relative));
-            $result = $created ? $result->with('gamesCreated') : $result;
-
-            [, $result] = $this->recordFile($game, $relative, $info, FileRole::Rom, $result);
+            $units[] = new ScanUnit($this->titleFrom($relative), [
+                $this->planned($relative, $size, FileRole::Rom),
+            ]);
         }
 
-        return $result;
+        return [$units, $skipped];
     }
 
     /**
-     * Record the tracks a sheet names, as children of that sheet.
+     * The tracks a sheet names, as children of that sheet.
      *
-     * @param  array<string, SplFileInfo>  $files
+     * @param  array<string, int|null>  $files
+     * @return list<array{path: string, size: int|null, role: FileRole, parent: string|null, disc: int|null}>
      */
-    private function recordTracks(
-        Game $game,
-        string $sheetRelative,
-        array $files,
-        int $parentId,
-        ?int $disc,
-        ScanResult $result,
-    ): ScanResult {
-        $sheet = $files[$sheetRelative] ?? null;
+    private function planTracks(string $sheetRelative, array $files, ?int $disc): array
+    {
+        $tracks = [];
 
-        if ($sheet === null) {
-            return $result;
-        }
-
-        foreach (CueSheet::tracksIn((string) file_get_contents($sheet->getPathname())) as $track) {
+        foreach (CueSheet::tracksIn((string) file_get_contents($this->absolute($sheetRelative))) as $track) {
             $trackRelative = $this->resolve($sheetRelative, $track, $files);
 
-            if ($trackRelative === null) {
+            if ($trackRelative === null || isset($this->claimed[$trackRelative])) {
                 continue;
             }
 
-            [, $result] = $this->recordFile(
-                $game, $trackRelative, $files[$trackRelative], FileRole::Track, $result, $parentId, $disc,
-            );
+            $tracks[] = $this->planned($trackRelative, $files[$trackRelative], FileRole::Track, $sheetRelative, $disc);
         }
 
-        return $result;
+        return $tracks;
+    }
+
+    /**
+     * One file of a unit, claimed so no later pass puts it in another.
+     *
+     * @return array{path: string, size: int|null, role: FileRole, parent: string|null, disc: int|null}
+     */
+    private function planned(string $relative, ?int $size, FileRole $role, ?string $parent = null, ?int $disc = null): array
+    {
+        $this->claimed[$relative] = true;
+
+        return ['path' => $relative, 'size' => $size, 'role' => $role, 'parent' => $parent, 'disc' => $disc];
     }
 
     /**
@@ -240,23 +347,20 @@ final class LibraryScanner
     private function recordFile(
         Game $game,
         string $relative,
-        SplFileInfo $info,
+        ?int $size,
         FileRole $role,
         ScanResult $result,
         ?int $parentId = null,
         ?int $disc = null,
     ): array {
-        $this->claimed[$relative] = true;
-        $this->seen[$relative] = true;
-
         $existing = GameFile::query()->where('path', $relative)->first();
         $returning = $existing !== null && $existing->missing_since !== null;
 
         $file = GameFile::query()->updateOrCreate(['path' => $relative], [
             'game_id' => $game->id,
-            'filename' => $info->getFilename(),
+            'filename' => basename($relative),
             'extension' => $this->extension($relative),
-            'size_bytes' => $info->getSize() === false ? null : $info->getSize(),
+            'size_bytes' => $size,
             'role' => $role,
             'disc_number' => $disc,
             'parent_id' => $parentId,
@@ -277,28 +381,14 @@ final class LibraryScanner
     }
 
     /**
-     * Flag rows under this console's root that the scan did not find.
-     */
-    private function markMissing(Console $console, string $relativeRoot, ScanResult $result): ScanResult
-    {
-        $stale = GameFile::query()
-            ->whereNull('missing_since')
-            ->where('path', 'like', $relativeRoot.'/%')
-            ->whereNotIn('path', array_keys($this->seen))
-            ->get();
-
-        foreach ($stale as $file) {
-            $file->update(['missing_since' => now()]);
-            $result = $result->with('filesMissing');
-        }
-
-        return $result;
-    }
-
-    /**
-     * Every file under the root, keyed by its path relative to the library.
+     * Every file under the root and its size, keyed by its path relative to
+     * the library.
      *
-     * @return array<string, SplFileInfo>
+     * Sizes and not the SplFileInfo itself: a clone keeps a whole directory
+     * entry and costs ten times as much, which a large console's folder spent
+     * past the worker's memory before the first row was written.
+     *
+     * @return array<string, int|null>
      */
     private function filesUnder(string $root, Console $console): array
     {
@@ -329,7 +419,8 @@ final class LibraryScanner
                 continue;
             }
 
-            $found[$relative] = clone $info;
+            $size = $info->getSize();
+            $found[$relative] = $size === false ? null : $size;
         }
 
         ksort($found);
@@ -344,7 +435,7 @@ final class LibraryScanner
      * naming ../../etc/passwd resolves to nothing, because nothing outside the
      * console's folder was ever collected.
      *
-     * @param  array<string, SplFileInfo>  $files
+     * @param  array<string, int|null>  $files
      */
     private function resolve(string $fromRelative, string $entry, array $files): ?string
     {
@@ -373,20 +464,9 @@ final class LibraryScanner
 
         $resolved = implode('/', $parts);
 
-        if (isset($files[$resolved])) {
-            return $resolved;
-        }
-
-        // Sets renamed after the sheet was written are common enough to be
-        // worth one fallback: match on filename within the same directory.
-        $wanted = strtolower(basename($resolved));
-        foreach ($files as $relative => $_) {
-            if (dirname($relative) === $directory && strtolower(basename($relative)) === $wanted) {
-                return $relative;
-            }
-        }
-
-        return null;
+        // Exactly as written, or not at all. A sheet whose names no longer
+        // match its files is its owner's to fix, not something to guess at.
+        return isset($files[$resolved]) ? $resolved : null;
     }
 
     /**
@@ -408,7 +488,7 @@ final class LibraryScanner
      *
      * @return array{0: Game, 1: bool} the game, and whether it was created
      */
-    private function gameFor(Console $console, string $title): array
+    private function gameFor(Console $console, string $title, int $attempt = 1): array
     {
         $slug = $this->availableSlug($console, $title);
 
@@ -421,12 +501,24 @@ final class LibraryScanner
             return [$existing, false];
         }
 
-        return [Game::query()->create([
-            'console' => $console->key,
-            'title' => $title,
-            'slug' => $slug,
-            'status' => GameStatus::Placeholder,
-        ]), true];
+        try {
+            return [Game::query()->create([
+                'console' => $console->key,
+                'title' => $title,
+                'slug' => $slug,
+                'status' => GameStatus::Placeholder,
+            ]), true];
+        } catch (UniqueConstraintViolationException $e) {
+            // Another chunk took the slug between the look and the write. The
+            // plan keeps one slug to one chunk, so this is the rare suffixed
+            // slug another title happens to reduce to. Looked for again, it is
+            // either this title's game now or taken, and the next one is free.
+            if ($attempt >= 3) {
+                throw $e;
+            }
+
+            return $this->gameFor($console, $title, $attempt + 1);
+        }
     }
 
     /**
@@ -496,6 +588,11 @@ final class LibraryScanner
     private function extensionIn(string $relative, array $extensions): bool
     {
         return in_array($this->extension($relative), $extensions, true);
+    }
+
+    private function absolute(string $relative): string
+    {
+        return $this->libraryRoot().'/'.$relative;
     }
 
     private function libraryRoot(): string
