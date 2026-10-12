@@ -108,7 +108,8 @@ After changing one, run `docker compose down` and remove the volume
 ## Queue workers
 
 Background work is done by workers, one per queue unless the table says otherwise; `0` starts none.
-Raise them on a machine with the room.
+Raise them on a machine with the room. They are read when the container starts,
+from `.env` or from the stack's variables alike.
 
 | Variable | Default | Work |
 | --- | --- | --- |
@@ -117,7 +118,7 @@ Raise them on a machine with the room.
 | `QUEUE_WORKERS_DEFAULT` | 2 | Scans and file counts. A scan is recorded in chunks, two at a time with two workers. |
 | `QUEUE_WORKERS_THUMBNAILS` | 1 | Cover thumbnails, CPU bound. |
 | `QUEUE_WORKERS_TOOLBOX` | 1 | Loader exports and licence ID reading. |
-| `QUEUE_WORKERS_CONVERSION` | 1 | Tools → Conversion, one disc at a time. |
+| `QUEUE_WORKERS_CONVERSION` | `CONVERSION_CONCURRENCY` | Tools → Conversion. Unset, as many as conversions may run at once. |
 | `QUEUE_WORKERS_RA` | 1 | RetroAchievements identification and sets. |
 | `QUEUE_WORKERS_RA_PROGRESS` | 1 | RetroAchievements unlocks. |
 | `QUEUE_WORKERS_HASH` | 1 | Checksums and RetroAchievements hashes, disk bound. |
@@ -160,6 +161,6 @@ Every tool ships in the web image, on `PATH`.
 
 | Variable | Default | What it is |
 | --- | --- | --- |
-| `CONVERSION_CONCURRENCY` | `1` | Conversions at once. Raise `QUEUE_WORKERS_CONVERSION` to match. |
+| `CONVERSION_CONCURRENCY` | `1` | Conversions at once. Also how many conversion workers start, unless `QUEUE_WORKERS_CONVERSION` is set. |
 | `CONVERSION_TIMEOUT` | `7000` | Seconds one conversion may take. |
 | `CHDMAN_PATH`, `MAXCSO_PATH`, `ECM_PATH`, `UNECM_PATH`, `EXTRACT_XISO_PATH`, `CUE2POPS_PATH`, `POPS2CUE_PATH`, `NODTOOL_PATH`, `PS3DEC_PATH` | `/usr/local/bin/…` | Point one at another build of that tool. |

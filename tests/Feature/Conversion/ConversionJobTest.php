@@ -311,7 +311,33 @@ it('deletes the source only once the output is in, when keep-source is off', fun
     expect($conversion->status)->toBe(ConversionStatus::Done)
         ->and(File::exists($this->root.'/ps2/Game.chd'))->toBeTrue()
         ->and(File::exists($this->root.'/ps2/Game.iso'))->toBeFalse()
-        ->and($game->files()->count())->toBe(0);
+        // The output in its place, under the same game.
+        ->and($game->files()->pluck('path')->all())->toBe(['ps2/Game.chd']);
+});
+
+it('puts the output on the game it was made from, a missing row of the same name included', function () {
+    fakeTools();
+    $game = convertibleGame('psx', ['Silent Hill (USA).cue' => 80, 'Silent Hill (USA).bin' => 2352]);
+    $game->update(['title' => 'Silent Hill', 'slug' => 'silent-hill']);
+
+    // Converted once before, deleted over the share, and left on record as
+    // missing under a placeholder a scan made from the filename.
+    $stale = GameFile::factory()->for(Game::factory()->forConsole('psx')->create(['title' => 'Silent Hill (USA)']))->create([
+        'path' => 'psx/Silent Hill (USA).chd',
+        'filename' => 'Silent Hill (USA).chd',
+        'extension' => 'chd',
+        'role' => FileRole::Rom,
+        'missing_since' => now(),
+    ]);
+
+    $conversion = runConversion(queueConversion($game, 'chd-cd', [Converter::KEEP_SOURCE => false]));
+
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and($game->files()->get()->map->only('path', 'role')->all())->toBe([
+            ['path' => 'psx/Silent Hill (USA).chd', 'role' => FileRole::Rom],
+        ])
+        ->and($stale->fresh()->game_id)->toBe($game->id)
+        ->and($stale->fresh()->missing_since)->toBeNull();
 });
 
 it('fails a source renamed behind the library\'s back, and rescans the console', function () {
@@ -391,6 +417,12 @@ it('converts every disc of a set in one job and writes a playlist of the new dis
         ->and($conversion->outputs)->toBe(['FF9 (Disc 1).chd', 'FF9 (Disc 2).chd', 'FF9 (CHD).m3u'])
         ->and(File::get($this->root.'/psx/FF9/FF9 (CHD).m3u'))->toBe("FF9 (Disc 1).chd\nFF9 (Disc 2).chd\n")
         ->and(File::exists($this->root.'/psx/FF9/FF9.m3u'))->toBeTrue();
+
+    $new = $game->files()->whereIn('filename', ['FF9 (Disc 1).chd', 'FF9 (Disc 2).chd', 'FF9 (CHD).m3u'])->get()->keyBy('filename');
+
+    expect($new['FF9 (CHD).m3u']->role)->toBe(FileRole::Playlist)
+        ->and($new['FF9 (Disc 2).chd']->disc_number)->toBe(2)
+        ->and($new['FF9 (Disc 2).chd']->parent_id)->toBe($new['FF9 (CHD).m3u']->id);
 });
 
 it('names the new playlist as the old one was, when the old one goes', function () {

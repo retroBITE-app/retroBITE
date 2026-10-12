@@ -7,7 +7,6 @@ namespace App\Services;
 use App\Enums\AchievementKind;
 use App\Enums\GameStatus;
 use App\Events\GameUpdated;
-use App\Jobs\RankLibrary;
 use App\Models\Game;
 use App\Models\LaunchBoxGame;
 use App\Models\RaAchievement;
@@ -46,8 +45,9 @@ final class GameScorer
      *
      * Also refreshes which LaunchBox entry the game is, because the title or
      * the index may have moved since it was last scored. A changed score
-     * moves the library's ranks, which are queued to be worked out again
-     * unless $rank is off — scoreAll() works them out once at the end.
+     * moves the library's ranks, which are marked stale for the scheduler
+     * to work out again unless $rank is off — scoreAll() works them out once
+     * at the end.
      */
     public function score(Game $game, bool $announce = true, bool $rank = true): ?int
     {
@@ -76,7 +76,7 @@ final class GameScorer
             $game->update(['rating' => $score, 'launchbox_id' => $entry?->id]);
 
             if ($rank) {
-                RankLibrary::dispatch();
+                $this->ranking->markStale();
             }
 
             if ($announce) {

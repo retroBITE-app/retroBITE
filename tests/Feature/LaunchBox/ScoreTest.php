@@ -2,7 +2,6 @@
 
 use App\Enums\FileRole;
 use App\Jobs\MatchGame;
-use App\Jobs\RankLibrary;
 use App\Jobs\RetroAchievements\SyncSet;
 use App\Models\Game;
 use App\Models\GameFile;
@@ -18,7 +17,6 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 
@@ -303,13 +301,52 @@ it('ranks the library after scoring all of it', function () {
         ->and($shaq->refresh()->library_rank)->toBe(3);
 });
 
-it('queues the ranks to be worked out again when one score moves', function () {
-    Queue::fake();
+it('marks the ranks stale when one score moves, and works them out on the next round', function () {
     importLaunchBox($this->dump, launchBoxSnesDump());
+    $ranking = app(LibraryRanking::class);
 
+    $smw = ratedSnesGame('Super Mario World');
+    app(GameScorer::class)->score($smw);
+
+    // Not worked out there and then: that rewrote the whole library after
+    // every match of an identification run.
+    expect($ranking->isStale())->toBeTrue()
+        ->and($smw->refresh()->library_rank)->toBeNull();
+
+    $this->artisan('retrobite:rank --stale')->assertSuccessful();
+
+    expect($ranking->isStale())->toBeFalse()
+        ->and($smw->refresh()->library_rank)->toBe(1);
+
+    // Nothing has moved since, so the next round leaves them alone.
+    $this->artisan('retrobite:rank --stale')
+        ->expectsOutput('No score has moved; the ranks stand.')
+        ->assertSuccessful();
+});
+
+it('keeps the ranks stale when working them out fails, so the next round tries again', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
     app(GameScorer::class)->score(ratedSnesGame('Super Mario World'));
 
-    Queue::assertPushed(RankLibrary::class, 1);
+    DB::beforeExecuting(function (string $query): void {
+        if (str_contains($query, 'ROW_NUMBER')) {
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    expect(fn () => app(LibraryRanking::class)->rebuild())->toThrow(RuntimeException::class)
+        ->and(app(LibraryRanking::class)->isStale())->toBeTrue();
+});
+
+it('leaves the ranks alone when a score is worked out the same again', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
+    $smw = ratedSnesGame('Super Mario World');
+    app(GameScorer::class)->score($smw);
+    app(LibraryRanking::class)->rebuild();
+
+    app(GameScorer::class)->score($smw->refresh());
+
+    expect(app(LibraryRanking::class)->isStale())->toBeFalse();
 });
 
 it('shows the rank with the score under the description', function () {

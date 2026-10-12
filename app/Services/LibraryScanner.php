@@ -136,7 +136,18 @@ final class LibraryScanner
         $result = new ScanResult($console->key);
 
         foreach ($units as $unit) {
-            [$game, $created] = $this->gameFor($console, $unit->title);
+            // A unit already on record stays with the game it belongs to. Its
+            // title is the filename's, and an identified game's slug is the
+            // provider's, so looking it up by title would make a placeholder,
+            // take the files from the game, and send every one of them back
+            // through the lookup to be merged home again.
+            $game = $this->ownerOf($unit);
+            $created = false;
+
+            if ($game === null) {
+                [$game, $created] = $this->gameFor($console, $unit->title);
+            }
+
             $result = $created ? $result->with('gamesCreated') : $result;
 
             /** @var array<string, int> $ids */
@@ -158,6 +169,29 @@ final class LibraryScanner
         }
 
         return $result;
+    }
+
+    /**
+     * The game a unit's files are already recorded under, if any.
+     *
+     * The unit's first file decides — the playlist, sheet or loose file the
+     * game was named after — then the rest in order.
+     */
+    private function ownerOf(ScanUnit $unit): ?Game
+    {
+        $owners = GameFile::query()
+            ->whereIn('path', array_column($unit->files, 'path'))
+            ->pluck('game_id', 'path');
+
+        foreach ($unit->files as $file) {
+            $game = isset($owners[$file['path']]) ? Game::query()->find((int) $owners[$file['path']]) : null;
+
+            if ($game !== null) {
+                return $game;
+            }
+        }
+
+        return null;
     }
 
     /**
