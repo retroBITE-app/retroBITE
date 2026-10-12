@@ -70,7 +70,9 @@ by hand are gone.
   platform average, and a wrong match would hand a game another game's score.
   Placeholders are never looked up, because their title is a filename.
 - The score also orders the whole library: `games.library_rank`, the
-  retroBite rank, is each scored game's place across every console, worked out
-  again whenever a score moves.
+  retroBite rank, is each scored game's place across every console. A moved
+  score marks the ranks stale and the scheduler works them out every ten
+  minutes (`retrobite:rank --stale`), since one statement rewrites every
+  game's place and an identification run moves a score about once a second.
 - The weights and anchors are constants in one class. Changing them and
   running `retrobite:score` rescores the library without fetching anything.

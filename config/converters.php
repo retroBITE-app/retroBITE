@@ -40,9 +40,10 @@ use App\Conversion\Converters\VcdToCue;
  */
 return [
     /*
-     * How many conversions may run at once. They run on the conversion worker,
-     * so more than one also needs QUEUE_WORKERS_CONVERSION raised to match;
-     * past the disk's own speed a second one only makes both slower.
+     * How many conversions may run at once. They run on the conversion
+     * workers, which the entrypoint starts as many of as this unless
+     * QUEUE_WORKERS_CONVERSION is set; past the disk's own speed a second one
+     * only makes both slower.
      */
     'concurrency' => max(1, (int) (env('CONVERSION_CONCURRENCY') ?: 1)),
 

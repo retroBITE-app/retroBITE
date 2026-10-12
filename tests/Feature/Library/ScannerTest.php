@@ -351,6 +351,31 @@ it('does not ask again about a game the provider already failed to name', functi
     Queue::assertPushed(MatchGame::class, 1);
 });
 
+it('leaves an identified game its files on the next scan', function () {
+    put('psx/FF9/FF9.m3u', "FF9 (Disc 1).cue\nFF9 (Disc 2).cue\n");
+
+    foreach ([1, 2] as $disc) {
+        put("psx/FF9/FF9 (Disc {$disc}).cue", "FILE \"FF9 (Disc {$disc}).bin\" BINARY\n");
+        put("psx/FF9/FF9 (Disc {$disc}).bin");
+    }
+
+    put('psx/Crash Bandicoot (USA).bin');
+    scan();
+
+    // Identified: the provider's title and slug, no longer the filename's.
+    GameFile::where('path', 'psx/FF9/FF9.m3u')->sole()->game->update(['status' => GameStatus::Matched, 'title' => 'Final Fantasy IX', 'slug' => 'final-fantasy-ix']);
+    GameFile::where('path', 'psx/Crash Bandicoot (USA).bin')->sole()->game->update(['status' => GameStatus::Matched, 'title' => 'Crash Bandicoot Ⅰ', 'slug' => 'crash-bandicoot-i']);
+
+    runScanJob('psx');
+
+    // No placeholder made from the filenames, no file taken from its game, and
+    // nothing sent back through the lookup to be merged home again.
+    expect(Game::count())->toBe(2)
+        ->and(Game::where('slug', 'final-fantasy-ix')->sole()->files()->count())->toBe(5)
+        ->and(Game::where('slug', 'crash-bandicoot-i')->sole()->files()->count())->toBe(1);
+    Queue::assertNotPushed(MatchGame::class);
+});
+
 it('queues nothing when the scan refuses to run', function () {
     Bus::fake();
 

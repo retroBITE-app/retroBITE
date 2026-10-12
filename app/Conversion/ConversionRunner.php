@@ -6,6 +6,7 @@ namespace App\Conversion;
 
 use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
+use App\Enums\FileRole;
 use App\Enums\TransferFailure;
 use App\Enums\TransferMode;
 use App\Events\SystemUpdated;
@@ -202,6 +203,12 @@ final class ConversionRunner
         $this->settle($conversion, function () use ($conversion, $console, $converter, $set, $plan): void {
             $this->writePlaylist($conversion, $console, $converter, $set, $plan);
         });
+        // A replacing converter kept its rows in finishSwap().
+        if (! $converter->replacesSource()) {
+            $this->settle($conversion, function () use ($conversion, $console, $set, $plan): void {
+                $this->recordOutputs($conversion, $console, $set, $plan);
+            });
+        }
         $this->finish($conversion, ConversionStatus::Done, null, [
             'source_bytes' => $this->sourceBytes,
             'output_bytes' => $this->outputBytes,
@@ -767,6 +774,64 @@ final class ConversionRunner
         $this->paths->put($console, $relative, $entries."\n");
         $conversion->update(['outputs' => [...($conversion->outputs ?? []), $name]]);
         $this->line(__('Wrote :path', ['path' => $relative]));
+    }
+
+    /**
+     * The new files on record under the game they were made from.
+     *
+     * Not left to the scan that follows: it names a game after the file, and
+     * an identified game's name is the provider's, so the output would land
+     * on a placeholder of its own while the sources it replaced were gone
+     * from the game. A row already there — a file that went missing once —
+     * is brought back and moved to this game.
+     *
+     * @param  list<array{disc: Disc, outputs: list<string>}>  $plan
+     *
+     * @throws LibraryPathException
+     */
+    private function recordOutputs(Conversion $conversion, Console $console, SourceSet $set, array $plan): void
+    {
+        if ($set->game === null) {
+            return;
+        }
+
+        $record = function (string $name, FileRole $role, ?int $disc = null, ?int $parent = null) use ($console, $set): GameFile {
+            $relative = $this->paths->within($console, self::join($set->directory, $name));
+
+            return GameFile::query()->updateOrCreate(['path' => $relative], [
+                'game_id' => $set->game->id,
+                'filename' => basename($relative),
+                'extension' => strtolower(pathinfo($relative, PATHINFO_EXTENSION)),
+                'size_bytes' => (int) filesize($this->paths->absolute($console, self::join($set->directory, $name))),
+                'role' => $role,
+                'disc_number' => $disc,
+                'parent_id' => $parent,
+                'missing_since' => null,
+            ]);
+        };
+
+        // The playlist writePlaylist() added, the one output the plan does not
+        // hold, and first: its discs answer to it, as the scan has them.
+        $playlist = null;
+
+        foreach (array_diff($conversion->outputs ?? [], self::outputs($plan)->all()) as $name) {
+            $playlist = $record($name, FileRole::Playlist)->id;
+        }
+
+        // In the set's order, which is the discs' own: counted from one, as the scan does.
+        foreach ($plan as $index => $step) {
+            $disc = $set->isSet() ? $index + 1 : null;
+            $sheet = Arr::first($step['outputs'], fn (string $name): bool => in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), ['cue', 'gdi'], true));
+            $sheetId = $sheet === null ? null : $record($sheet, FileRole::Sheet, $disc, $playlist)->id;
+
+            foreach ($step['outputs'] as $name) {
+                if ($name !== $sheet) {
+                    $sheetId === null
+                        ? $record($name, FileRole::Rom, $disc, $playlist)
+                        : $record($name, FileRole::Track, $disc, $sheetId);
+                }
+            }
+        }
     }
 
     /**
