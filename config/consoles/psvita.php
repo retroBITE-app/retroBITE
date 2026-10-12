@@ -5,6 +5,7 @@ return [
     'name' => 'PlayStation Vita',
     'brand' => 'Sony',
     'released' => 2011,
+    'category' => 'handheld',
     'folder' => 'psvita',
     'icon' => '/images/consoles/Sony - PlayStation Vita.png',
     'file_icon' => '/images/consoles/Sony - PlayStation Vita-content.png',

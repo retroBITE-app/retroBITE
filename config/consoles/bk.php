@@ -5,6 +5,7 @@ return [
     'name' => 'Elektronika BK',
     'brand' => 'Elektronika',
     'released' => 1985,
+    'category' => 'computer',
     'folder' => 'bk',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'DAPHNE',
     'brand' => 'Various',
     'released' => null,
+    'category' => 'arcade',
     'folder' => 'daphne',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

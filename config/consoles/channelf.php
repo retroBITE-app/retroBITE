@@ -5,6 +5,7 @@ return [
     'name' => 'Fairchild Channel F',
     'brand' => 'Fairchild',
     'released' => 1976,
+    'category' => 'home',
     'folder' => 'channelf',
     'icon' => '/images/consoles/Fairchild - Channel F.png',
     'file_icon' => '/images/consoles/Fairchild - Channel F-content.png',

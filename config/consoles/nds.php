@@ -5,6 +5,7 @@ return [
     'name' => 'Nintendo DS',
     'brand' => 'Nintendo',
     'released' => 2004,
+    'category' => 'handheld',
     'folder' => 'nds',
     'icon' => '/images/consoles/Nintendo - Nintendo DS.png',
     'file_icon' => '/images/consoles/Nintendo - Nintendo DS-content.png',

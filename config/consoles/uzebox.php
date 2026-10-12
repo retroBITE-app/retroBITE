@@ -5,6 +5,7 @@ return [
     'name' => 'Uzebox',
     'brand' => 'Alec Bourque',
     'released' => 2008,
+    'category' => 'home',
     'folder' => 'uzebox',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

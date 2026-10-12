@@ -5,6 +5,7 @@ return [
     'name' => 'Apple IIGS',
     'brand' => 'Apple',
     'released' => 1986,
+    'category' => 'computer',
     'folder' => 'apple2gs',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

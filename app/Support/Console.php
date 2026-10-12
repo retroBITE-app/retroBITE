@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Enums\ConsoleCategory;
 use App\Support\Layouts\Layouts;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -29,6 +30,9 @@ final class Console
      * and the Mark III's 1985 for the Master System.
      */
     public readonly ?int $released;
+
+    /** Home console, handheld, computer or arcade: how the console lists group it. */
+    public readonly ConsoleCategory $category;
 
     public readonly string $icon;
 
@@ -136,6 +140,7 @@ final class Console
         $this->name = (string) Arr::get($meta, 'name', '');
         $this->brand = (string) Arr::get($meta, 'brand', '');
         $this->released = ($year = Arr::get($meta, 'released')) !== null ? (int) $year : null;
+        $this->category = ConsoleCategory::fromConfig(Arr::get($meta, 'category'));
         $this->icon = (string) Arr::get($meta, 'icon', '');
         $this->fileIcon = (string) Arr::get($meta, 'file_icon', '');
         $this->folder = (string) Arr::get($meta, 'folder', '');

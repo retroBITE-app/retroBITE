@@ -5,6 +5,7 @@ return [
     'name' => 'Game Boy Color',
     'brand' => 'Nintendo',
     'released' => 1998,
+    'category' => 'handheld',
     'folder' => 'gbc',
     'icon' => '/images/consoles/Nintendo - Game Boy Color.png',
     'file_icon' => '/images/consoles/Nintendo - Game Boy Color-content.png',

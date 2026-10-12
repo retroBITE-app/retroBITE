@@ -1752,25 +1752,18 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         class="shrink-0 rounded-md px-2 py-0.5 font-mono text-sm font-semibold tabular-nums"
                     >{{ $game->rating }}</span>
 
-                    <span class="text-fg-soft">{{ __('retroBite score') }}</span>
+                    <span class="text-fg-soft">{{ __('retroBITE score') }}</span>
 
                     @if ($game->library_rank !== null)
                         <span class="font-mono font-semibold tabular-nums text-fg-bright" title="{{ __('The retroBite rank: this game\'s place among every scored game in your library, across all consoles.') }}">#{{ $game->library_rank }}</span>
                     @endif
 
                     {{-- The figures behind the score, kept out of the line until
-                         somebody asks: a title over the icon, one per line. --}}
-                    <span
-                        tabindex="0"
-                        title="{{ implode("\n", [
-                            __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it on RetroAchievements.'),
-                            ...$this->scoreSources,
-                        ]) }}"
-                        class="cursor-help text-fg-faint transition-colors hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                    >
-                        <flux:icon.information-circle class="size-4" />
-                        <span class="sr-only">{{ implode('. ', $this->scoreSources) }}</span>
-                    </span>
+                         somebody asks, one per line. --}}
+                    <x-info class="-translate-y-px" :text="[
+                        __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it on RetroAchievements.'),
+                        ...$this->scoreSources,
+                    ]" />
                 </div>
             @endif
         </div>

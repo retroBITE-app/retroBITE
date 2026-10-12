@@ -5,6 +5,7 @@ return [
     'name' => 'Interton Video Computer 4000',
     'brand' => 'Interton',
     'released' => 1978,
+    'category' => 'home',
     'folder' => 'vc4000',
     'icon' => '/images/consoles/RCA - Studio II.png',
     'file_icon' => '/images/consoles/RCA - Studio II-content.png',

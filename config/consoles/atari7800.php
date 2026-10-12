@@ -5,6 +5,7 @@ return [
     'name' => 'Atari 7800',
     'brand' => 'Atari',
     'released' => 1986,
+    'category' => 'home',
     'folder' => 'atari7800',
     'icon' => '/images/consoles/Atari - 7800.png',
     'file_icon' => '/images/consoles/Atari - 7800-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'NEC PC-FX',
     'brand' => 'NEC',
     'released' => 1994,
+    'category' => 'home',
     'folder' => 'pcfx',
     'icon' => '/images/consoles/NEC - PC-FX.png',
     'file_icon' => '/images/consoles/NEC - PC-FX-content.png',

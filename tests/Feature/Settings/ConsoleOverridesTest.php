@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ConsoleCategory;
 use App\Models\AppSetting;
 use App\Models\User;
 use App\Resources\ConsoleResource;
@@ -211,4 +212,31 @@ it('sorts a console\'s own region order, starting from the library\'s, and keeps
     expect(Console::tryFrom('snes')?->transferRegions)->toBe([]);
 
     ConsoleOverrides::forgetAll();
+});
+
+it('moves a console to another type', function () {
+    $this->actingAs(User::factory()->create());
+
+    expect((new Console('gb'))->category)->toBe(ConsoleCategory::Handheld);
+
+    Livewire::test('settings.consoles')
+        ->call('edit', 'gb')
+        ->assertSet('fields.category', 'handheld')
+        ->set('fields.category', 'arcade')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect((new Console('gb'))->category)->toBe(ConsoleCategory::Arcade);
+});
+
+it('will not take a type there is no group for', function () {
+    $this->actingAs(User::factory()->create());
+
+    Livewire::test('settings.consoles')
+        ->call('edit', 'gb')
+        ->set('fields.category', 'spaceship')
+        ->call('save')
+        ->assertHasErrors('fields.category');
+
+    expect(ConsoleOverrides::has('gb'))->toBeFalse();
 });

@@ -5,6 +5,7 @@ return [
     'name' => 'Atari Jaguar',
     'brand' => 'Atari',
     'released' => 1993,
+    'category' => 'home',
     'folder' => 'jaguar',
     'icon' => '/images/consoles/Atari - Jaguar.png',
     'file_icon' => '/images/consoles/Atari - Jaguar-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'ScummVM',
     'brand' => 'Various',
     'released' => null,
+    'category' => 'computer',
     'folder' => 'scummvm',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

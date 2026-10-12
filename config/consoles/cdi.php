@@ -5,6 +5,7 @@ return [
     'name' => 'Philips CD-i',
     'brand' => 'Philips',
     'released' => 1991,
+    'category' => 'home',
     'folder' => 'cdi',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

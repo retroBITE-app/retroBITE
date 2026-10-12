@@ -5,6 +5,7 @@ return [
     'name' => 'WINE',
     'brand' => 'PC',
     'released' => null,
+    'category' => 'computer',
     'folder' => 'windows',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

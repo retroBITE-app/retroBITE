@@ -5,6 +5,7 @@ return [
     'name' => '3DO Interactive Multiplayer',
     'brand' => 'Panasonic',
     'released' => 1993,
+    'category' => 'home',
     'folder' => '3do',
     'icon' => '/images/consoles/The 3DO Company - 3DO.png',
     'file_icon' => '/images/consoles/The 3DO Company - 3DO-content.png',

@@ -5,6 +5,7 @@ return [
     'name' => 'Game & Watch',
     'brand' => 'Nintendo',
     'released' => 1980,
+    'category' => 'handheld',
     'folder' => 'gameandwatch',
     'icon' => '/images/consoles/Handheld Electronic Game.png',
     'file_icon' => '/images/consoles/Handheld Electronic Game-content.png',

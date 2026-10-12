@@ -5,6 +5,7 @@ return [
     'name' => 'Sony PlayStation 4',
     'brand' => 'Sony',
     'released' => 2013,
+    'category' => 'home',
     'folder' => 'ps4',
     'icon' => '/images/consoles/Sony - PlayStation 4.png',
     'file_icon' => '/images/consoles/Sony - PlayStation 4-content.png',

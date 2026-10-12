@@ -5,6 +5,7 @@ return [
     'name' => 'Arduboy',
     'brand' => 'Arduboy',
     'released' => 2014,
+    'category' => 'handheld',
     'folder' => 'arduboy',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

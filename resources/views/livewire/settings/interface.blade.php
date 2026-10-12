@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\ColorScheme;
+use App\Enums\ConsoleGrouping;
+use App\Enums\ConsoleSort;
 use App\Models\AppSetting;
 use Flux\Flux;
 use Illuminate\Validation\Rule;
@@ -28,12 +30,20 @@ new #[Title('UI settings')] class extends Component
     /** A ColorScheme value. Previewed on <html> as soon as it is picked. */
     public string $colorScheme = 'default';
 
+    /** A ConsoleSort value: how the sidebar and the Consoles page order consoles. */
+    public string $consoleSort = 'name';
+
+    /** A ConsoleGrouping value: what the sidebar and the Consoles page group consoles by. */
+    public string $consoleGrouping = 'none';
+
     public function mount(): void
     {
         $this->scanlines = AppSetting::enabled(AppSetting::UI_SCANLINES);
         $this->heroTitle = (string) AppSetting::get(AppSetting::UI_HERO_TITLE);
         $this->uploads = AppSetting::enabled(AppSetting::UI_UPLOADS);
         $this->colorScheme = ColorScheme::current()->value;
+        $this->consoleSort = ConsoleSort::current()->value;
+        $this->consoleGrouping = ConsoleGrouping::current()->value;
     }
 
     public function save(): void
@@ -41,12 +51,16 @@ new #[Title('UI settings')] class extends Component
         $this->validate([
             'heroTitle' => ['required', 'in:logo,text'],
             'colorScheme' => ['required', Rule::enum(ColorScheme::class)],
+            'consoleSort' => ['required', Rule::enum(ConsoleSort::class)],
+            'consoleGrouping' => ['required', Rule::enum(ConsoleGrouping::class)],
         ]);
 
         AppSetting::put(AppSetting::UI_SCANLINES, $this->scanlines);
         AppSetting::put(AppSetting::UI_HERO_TITLE, $this->heroTitle);
         AppSetting::put(AppSetting::UI_UPLOADS, $this->uploads);
         AppSetting::put(AppSetting::UI_COLOR_SCHEME, $this->colorScheme);
+        AppSetting::put(AppSetting::UI_CONSOLE_SORT, $this->consoleSort);
+        AppSetting::put(AppSetting::UI_CONSOLE_GROUPING, $this->consoleGrouping);
 
         // Tells the preview the pick is kept, so leaving the page no longer
         // puts the old scheme back.
@@ -139,31 +153,43 @@ new #[Title('UI settings')] class extends Component
                 </div>
             </div>
 
-            {{-- The docs viewer's Preview / Markdown pill rather than Flux's
-                 segmented radio, so the two two-way switches look alike. --}}
+            {{-- The text grows and the pills keep their width, so a long
+                 description wraps beside them; only below 16rem of text, on a
+                 phone, do the pills drop under it. --}}
             <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-surface p-5">
-                <div class="min-w-0">
+                <div class="min-w-0 flex-1 basis-64">
                     <p class="text-sm font-medium text-fg-bright">{{ __('Game page title') }}</p>
                     <p class="mt-1 text-sm text-fg-muted">
                         {{ __('What heads a game\'s page: the provider\'s logo, or the title as text. A game with no logo shows its title either way.') }}
                     </p>
                 </div>
 
-                <div role="radiogroup" aria-label="{{ __('Game page title') }}" class="flex shrink-0 items-center gap-0.5 rounded-lg border border-line-input p-0.5">
-                    @foreach (['logo' => __('Logo'), 'text' => __('Text')] as $value => $label)
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked="{{ $heroTitle === $value ? 'true' : 'false' }}"
-                            wire:click="$set('heroTitle', '{{ $value }}')"
-                            @class([
-                                'cursor-pointer rounded-md px-2.75 py-1 text-xs transition-colors',
-                                'bg-accent-tint/15 text-accent' => $heroTitle === $value,
-                                'text-fg-dim hover:bg-hover hover:text-fg' => $heroTitle !== $value,
-                            ])
-                        >{{ $label }}</button>
-                    @endforeach
+                <x-pill-choice model="heroTitle" :value="$heroTitle" :label="__('Game page title')"
+                               :options="['logo' => __('Logo'), 'text' => __('Text')]" />
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-surface p-5">
+                <div class="min-w-0 flex-1 basis-64">
+                    <p class="text-sm font-medium text-fg-bright">{{ __('Console order') }}</p>
+                    <p class="mt-1 text-sm text-fg-muted">
+                        {{ __('How the sidebar and the Consoles page list your consoles: by name, oldest first, or by how many games each holds.') }}
+                    </p>
                 </div>
+
+                <x-pill-choice model="consoleSort" :value="$consoleSort" :label="__('Console order')"
+                               :options="App\Enums\ConsoleSort::options()" />
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-surface p-5">
+                <div class="min-w-0 flex-1 basis-64">
+                    <p class="text-sm font-medium text-fg-bright">{{ __('Group consoles by') }}</p>
+                    <p class="mt-1 text-sm text-fg-muted">
+                        {{ __('Headings in the sidebar and sections on the Consoles page. The order above applies inside each group.') }}
+                    </p>
+                </div>
+
+                <x-pill-choice model="consoleGrouping" :value="$consoleGrouping" :label="__('Group consoles by')"
+                               :options="App\Enums\ConsoleGrouping::options()" />
             </div>
 
             <div class="rounded-xl border border-line bg-surface p-5">

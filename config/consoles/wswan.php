@@ -5,6 +5,7 @@ return [
     'name' => 'WonderSwan',
     'brand' => 'Bandai',
     'released' => 1999,
+    'category' => 'handheld',
     'folder' => 'wswan',
     'icon' => '/images/consoles/Bandai - WonderSwan.png',
     'file_icon' => '/images/consoles/Bandai - WonderSwan-content.png',

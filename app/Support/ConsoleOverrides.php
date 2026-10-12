@@ -229,6 +229,7 @@ final class ConsoleOverrides
                     'number' => ['nullable', 'integer', 'min:0', 'max:999999'],
                     'url' => ['nullable', 'string', 'max:255', 'regex:'.self::URL_PATTERN],
                     'region[]' => ['nullable', 'string', 'max:255', 'regex:'.self::regionPattern()],
+                    'choice' => ['nullable', 'string', 'in:'.implode(',', array_keys(self::choicesFor($field)))],
                     default => ['nullable', 'string', 'max:255'],
                 };
 
@@ -266,6 +267,19 @@ final class ConsoleOverrides
             'number' => self::asInt($value),
             default => self::asText($value),
         };
+    }
+
+    /**
+     * A choice field's values and labels, from the enum its `options` names.
+     *
+     * @param  array<string, mixed>  $field
+     * @return array<string, string>
+     */
+    public static function choicesFor(array $field): array
+    {
+        $enum = Arr::get($field, 'options');
+
+        return is_string($enum) && method_exists($enum, 'options') ? $enum::options() : [];
     }
 
     /** A comma-separated list of region codes the app knows, and nothing else. */

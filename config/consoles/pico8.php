@@ -5,6 +5,7 @@ return [
     'name' => 'PICO-8',
     'brand' => 'Lexaloffle Games',
     'released' => 2015,
+    'category' => 'computer',
     'folder' => 'pico8',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

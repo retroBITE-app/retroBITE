@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ConsoleGrouping;
+use App\Enums\ConsoleSort;
 use App\Support\Console;
 use App\Support\Layouts\ConsoleLayout;
 use App\Support\Layouts\Layouts;
@@ -102,6 +104,19 @@ class ConsoleSourceFolder extends Model
         return Console::all()
             ->filter(fn (Console $console) => $rows->has($console->key))
             ->values();
+    }
+
+    /**
+     * The library's consoles as the sidebar and the Consoles page list them:
+     * sorted and grouped as Settings → UI says, keyed by group heading ('' when
+     * ungrouped).
+     *
+     * @param  Collection<string, int|string>  $gameCounts  identified games by console key, for the Games order
+     * @return Collection<string, Collection<int, Console>>
+     */
+    public static function arranged(Collection $gameCounts): Collection
+    {
+        return ConsoleGrouping::current()->apply(ConsoleSort::current()->apply(self::consoles(), $gameCounts));
     }
 
     public static function has(Console $console): bool

@@ -5,6 +5,7 @@ return [
     'name' => 'Colour Genie',
     'brand' => 'EACA',
     'released' => 1982,
+    'category' => 'computer',
     'folder' => 'cgenie',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

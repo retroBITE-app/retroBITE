@@ -55,7 +55,7 @@ final class Navigation
     {
         return [
             ['label' => 'User', 'route' => 'user.edit', 'active' => 'user.*', 'icon' => 'user', 'keywords' => 'account profile password email username two-factor 2fa'],
-            ['label' => 'UI', 'route' => 'interface.edit', 'active' => 'interface.edit', 'icon' => 'swatch', 'keywords' => 'interface appearance theme colour color scanlines view'],
+            ['label' => 'UI', 'route' => 'interface.edit', 'active' => 'interface.edit', 'icon' => 'swatch', 'keywords' => 'interface appearance theme colour color scanlines view sort order group consoles'],
             ['label' => 'Media', 'route' => 'media.edit', 'active' => 'media.edit', 'icon' => 'photo', 'keywords' => 'artwork covers images region'],
             ['label' => 'Consoles', 'route' => 'console-config.edit', 'active' => 'console-config.edit', 'icon' => 'puzzle-piece', 'keywords' => 'console config extensions folders'],
             ['label' => 'Library', 'route' => 'library.edit', 'active' => 'library.edit', 'icon' => 'archive-box', 'keywords' => 'prune missing roms housekeeping clean'],

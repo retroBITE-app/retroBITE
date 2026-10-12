@@ -5,6 +5,7 @@ return [
     'name' => 'VTech CreatiVision',
     'brand' => 'VTech',
     'released' => 1981,
+    'category' => 'home',
     'folder' => 'crvision',
     'icon' => '/images/consoles/VTech - CreatiVision.png',
     'file_icon' => '/images/consoles/VTech - CreatiVision-content.png',

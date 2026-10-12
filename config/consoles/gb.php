@@ -5,6 +5,7 @@ return [
     'name' => 'Game Boy',
     'brand' => 'Nintendo',
     'released' => 1989,
+    'category' => 'handheld',
     'folder' => 'gb',
     'icon' => '/images/consoles/Nintendo - Game Boy.png',
     'file_icon' => '/images/consoles/Nintendo - Game Boy-content.png',

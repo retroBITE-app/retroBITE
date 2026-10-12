@@ -5,6 +5,7 @@ return [
     'name' => 'Game.com',
     'brand' => 'Tiger Electronics',
     'released' => 1997,
+    'category' => 'handheld',
     'folder' => 'gamecom',
     'icon' => '/images/consoles/Tiger - Game.com.png',
     'file_icon' => '/images/consoles/Tiger - Game.com-content.png',

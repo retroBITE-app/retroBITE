@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\MediaKind;
 use App\Enums\ThumbnailSize;
+use App\Support\Console;
 use Database\Factories\MediaFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Artwork retroBite downloaded and owns.
@@ -91,6 +93,9 @@ class Media extends Model
     /** Below this an image is a thumbnail, whatever the provider filed it as. */
     private const WALLPAPER_MIN_BYTES = 50_000;
 
+    /** How many games' key art a shelf's backdrop rotates through. */
+    private const BACKDROPS = 6;
+
     /**
      * Artwork fit to fill a whole screen.
      *
@@ -105,6 +110,41 @@ class Media extends Model
     {
         $query->whereIn('screenscraper_type', MediaKind::Backdrop->keyArtTypes())
             ->where('size_bytes', '>=', self::WALLPAPER_MIN_BYTES);
+    }
+
+    /**
+     * The best-rated games' wallpaper on a console, one each, best first.
+     *
+     * There is no artwork shipped per console, so a shelf's backdrop and a
+     * console card's banner are borrowed from the games on it. Cached for an
+     * hour so a visit costs no query, and newly scraped art joins unasked.
+     *
+     * @return array<int, string> media paths
+     */
+    public static function backdropsFor(Console $console): array
+    {
+        return Cache::remember('shelf.backdrops.'.$console->key, now()->addHour(), function () use ($console): array {
+            return static::query()
+                ->join('games', 'games.id', '=', 'media.game_id')
+                ->where('games.console', $console->key)
+                ->wallpaper()
+                // NULL first, or the unrated would head the list on MariaDB —
+                // the same trap the rating sort works around.
+                ->orderByRaw('games.rating IS NULL, games.rating DESC')
+                ->orderBy('games.id')
+                // The game's first wallpaper stands for it, so which one is
+                // not left to whatever order the database returns.
+                ->orderBy('media.id')
+                // A game can hold several wallpapers; enough rows that the
+                // first of each still reaches six games.
+                ->limit(self::BACKDROPS * 5)
+                ->get(['media.game_id', 'media.path'])
+                ->unique('game_id')
+                ->take(self::BACKDROPS)
+                ->pluck('path')
+                ->values()
+                ->all();
+        });
     }
 
     /**

@@ -5,6 +5,7 @@ return [
     'name' => 'Pokemon Mini',
     'brand' => 'Nintendo',
     'released' => 2001,
+    'category' => 'handheld',
     'folder' => 'pokemini',
     'icon' => '/images/consoles/Nintendo - Pokemon Mini.png',
     'file_icon' => '/images/consoles/Nintendo - Pokemon Mini-content.png',

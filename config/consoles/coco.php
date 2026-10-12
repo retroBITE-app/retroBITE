@@ -5,6 +5,7 @@ return [
     'name' => 'TRS-80 Color Computer',
     'brand' => 'Tandy',
     'released' => 1980,
+    'category' => 'computer',
     'folder' => 'coco',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

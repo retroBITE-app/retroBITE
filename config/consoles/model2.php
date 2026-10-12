@@ -5,6 +5,7 @@ return [
     'name' => 'Sega Model 2',
     'brand' => 'Sega',
     'released' => 1993,
+    'category' => 'arcade',
     'folder' => 'model2',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

@@ -182,21 +182,8 @@ new class extends Component
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <p class="kicker text-fg-dim">{{ __('License ID') }}</p>
 
-                <div role="radiogroup" aria-label="{{ __('License ID') }}" class="flex shrink-0 items-center gap-0.5 rounded-lg border border-line-input p-0.5">
-                    @foreach (['add' => __('Add'), 'remove' => __('Remove')] as $value => $label)
-                        <button
-                            type="button"
-                            role="radio"
-                            aria-checked="{{ $mode === $value ? 'true' : 'false' }}"
-                            wire:click="$set('mode', '{{ $value }}')"
-                            @class([
-                                'cursor-pointer rounded-md px-2.75 py-1 text-xs transition-colors',
-                                'bg-accent-tint/15 text-accent' => $mode === $value,
-                                'text-fg-dim hover:bg-hover hover:text-fg' => $mode !== $value,
-                            ])
-                        >{{ $label }}</button>
-                    @endforeach
-                </div>
+                <x-pill-choice model="mode" :value="$mode" :label="__('License ID')"
+                               :options="['add' => __('Add'), 'remove' => __('Remove')]" />
             </div>
 
             <div class="flex flex-col gap-3">

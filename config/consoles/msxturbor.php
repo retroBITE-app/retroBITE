@@ -5,6 +5,7 @@ return [
     'name' => 'Microsoft MSX turboR',
     'brand' => 'Microsoft',
     'released' => 1990,
+    'category' => 'computer',
     'folder' => 'msxturbor',
     'icon' => '/images/consoles/Microsoft - MSX2.png',
     'file_icon' => '/images/consoles/Microsoft - MSX2-content.png',

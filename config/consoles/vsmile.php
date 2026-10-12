@@ -5,6 +5,7 @@ return [
     'name' => 'V.Smile',
     'brand' => 'VTech',
     'released' => 2004,
+    'category' => 'home',
     'folder' => 'vsmile',
     'icon' => '/images/consoles/VTech - V.Smile.png',
     'file_icon' => '/images/consoles/VTech - V.Smile-content.png',

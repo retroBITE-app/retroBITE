@@ -5,6 +5,7 @@ return [
     'name' => 'Game Boy Advance',
     'brand' => 'Nintendo',
     'released' => 2001,
+    'category' => 'handheld',
     'folder' => 'gba',
     'icon' => '/images/consoles/Nintendo - Game Boy Advance.png',
     'file_icon' => '/images/consoles/Nintendo - Game Boy Advance-content.png',

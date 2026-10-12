@@ -5,6 +5,7 @@ return [
     'name' => 'Atari 2600/VCS',
     'brand' => 'Atari',
     'released' => 1977,
+    'category' => 'home',
     'folder' => 'atari2600',
     'icon' => '/images/consoles/Atari - 2600.png',
     'file_icon' => '/images/consoles/Atari - 2600-content.png',

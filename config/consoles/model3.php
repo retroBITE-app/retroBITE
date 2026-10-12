@@ -5,6 +5,7 @@ return [
     'name' => 'Sega Model 3',
     'brand' => 'Sega',
     'released' => 1996,
+    'category' => 'arcade',
     'folder' => 'model3',
     'icon' => '/images/consoles/Libretro - Pad.png',
     'file_icon' => '/images/consoles/Libretro - Pad.png',

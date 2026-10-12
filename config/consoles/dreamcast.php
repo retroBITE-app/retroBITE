@@ -5,6 +5,7 @@ return [
     'name' => 'Dreamcast',
     'brand' => 'Sega',
     'released' => 1998,
+    'category' => 'home',
     'folder' => 'dreamcast',
     'icon' => '/images/consoles/Sega - Dreamcast.png',
     'file_icon' => '/images/consoles/Sega - Dreamcast-content.png',

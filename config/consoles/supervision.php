@@ -5,6 +5,7 @@ return [
     'name' => 'Watara Supervision',
     'brand' => 'Watara',
     'released' => 1992,
+    'category' => 'handheld',
     'folder' => 'supervision',
     'icon' => '/images/consoles/Watara - Supervision.png',
     'file_icon' => '/images/consoles/Watara - Supervision-content.png',
