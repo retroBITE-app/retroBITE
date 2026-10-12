@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Number;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -55,6 +56,17 @@ new #[Title('Consoles')] class extends Component
 
     /** Set while changing the layout of a console that is already in the library. */
     public bool $editingLayout = false;
+
+    /**
+     * Each card's backdrop, by console key: drawn the first time the card is,
+     * then kept, as the shelf keeps its own. added() runs again on every
+     * request — a keystroke in the modal's search, a scan — and art that
+     * jumped under the hand would read as the page failing to load.
+     *
+     * @var array<string, string|null>
+     */
+    #[Locked]
+    public array $backdrops = [];
 
     /**
      * Whether the modal is open. Its body is rendered only then: closed, it
@@ -107,7 +119,7 @@ new #[Title('Consoles')] class extends Component
             return $consoles->map(function (Console $console) use ($heading, $identified, $totals, $bytes, $covers): array {
                 $named = (int) $identified->get($console->key, 0);
                 $size = (int) $bytes->get($console->key, 0);
-                $backdrop = Arr::first(Media::backdropsFor($console));
+                $backdrop = $this->backdropFor($console);
 
                 return [
                     'console' => $console,
@@ -123,8 +135,8 @@ new #[Title('Consoles')] class extends Component
                     'layout' => count(Layouts::keysFor($console)) > 1
                         ? ConsoleSourceFolder::layoutFor($console)->label()
                         : null,
-                    // The best-rated game's key art, the same every visit; the
-                    // shelf behind the card is the one that rotates.
+                    // One of the best-rated games' key art, a new one each
+                    // visit, as the shelf behind the card picks its own.
                     'backdrop' => $backdrop !== null
                         ? route('media.show', ['path' => $backdrop])
                         : asset('images/default-backdrop.jpg'),
@@ -644,6 +656,13 @@ new #[Title('Consoles')] class extends Component
 
         Flux::toast(text: __('Scanning :console. The library fills in as it goes.', ['console' => $console->name]));
     }
+
+    /** A card's backdrop: drawn once per visit, then the same on every redraw. */
+    private function backdropFor(Console $console): ?string
+    {
+        return $this->backdrops[$console->key] ??= Media::backdropFor($console);
+    }
+
     /**
      * The covers of the games most recently added to each console, newest first.
      *
@@ -769,10 +788,12 @@ new #[Title('Consoles')] class extends Component
                                         class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                                     ></a>
 
-                                    {{-- The best-rated game's key art, masked into the card
-                                         rather than faded into the page ground, which would
-                                         show as a seam against the card's surface. --}}
-                                    <div aria-hidden="true" class="art-fade-b pointer-events-none relative h-28 shrink-0">
+                                    {{-- One of the best-rated games' key art, masked into the
+                                         card rather than faded into the page ground, which
+                                         would show as a seam against the card's surface. Tall
+                                         enough to run on under the icon row, which is pulled
+                                         up over it by the same amount the band grew. --}}
+                                    <div aria-hidden="true" class="art-fade-b pointer-events-none relative h-40 shrink-0">
                                         <div class="absolute inset-0 bg-cover bg-[position:50%_28%] opacity-70 transition-opacity group-hover:opacity-90"
                                              style="background-image: url('{{ $row['backdrop'] }}')"></div>
                                         @scanlines
@@ -875,7 +896,9 @@ new #[Title('Consoles')] class extends Component
 
                                     {{-- The newest three covers, fanned across the seam
                                          between the art and the card, newest in front.
-                                         They spread a little under the pointer. --}}
+                                         They spread a little under the pointer, so the fan
+                                         stands far enough in from the edge that the right-hand
+                                         cover's swing is not clipped by the card. --}}
                                     @if ($row['covers'] !== [])
                                         @php
                                             $portrait = App\Support\CoverGeometry::orientation($row['console']) === 'portrait';
@@ -885,7 +908,7 @@ new #[Title('Consoles')] class extends Component
                                                 'z-1 -translate-x-[8%] rotate-8 motion-safe:group-hover:translate-x-[15%] motion-safe:group-hover:rotate-12',
                                             ];
                                         @endphp
-                                        <div aria-hidden="true" class="pointer-events-none absolute top-13 right-5 h-24 w-36">
+                                        <div aria-hidden="true" class="pointer-events-none absolute top-13 right-9 h-24 w-36">
                                             @foreach ($row['covers'] as $index => $cover)
                                                 <img src="{{ $cover }}" alt="" loading="lazy"
                                                      style="aspect-ratio: {{ $row['aspect'] }}"
@@ -894,7 +917,7 @@ new #[Title('Consoles')] class extends Component
                                         </div>
                                     @endif
 
-                                    <div class="relative -mt-9 flex items-center gap-3.5 px-4 {{ $row['covers'] !== [] ? 'pr-42' : '' }}">
+                                    <div class="relative -mt-21 flex items-center gap-3.5 px-4 {{ $row['covers'] !== [] ? 'pr-46' : '' }}">
                                         <img src="{{ $row['console']->icon }}" alt="" class="size-14 shrink-0 object-contain drop-shadow-lg" />
 
                                         <div class="min-w-0 flex-1">

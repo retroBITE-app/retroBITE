@@ -17,7 +17,6 @@ use App\Support\Scanning\FolderCounts;
 use App\Tools\ConsoleTools;
 use Flux\Flux;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Number;
@@ -138,8 +137,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
         $this->lockedConsole = $console;
 
-        $pool = Media::backdropsFor($this->lockedTo);
-        $this->heroArt = $pool === [] ? null : Arr::random($pool);
+        $this->heroArt = Media::backdropFor($this->lockedTo);
     }
 
     public function updated(string $property): void

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -145,6 +146,18 @@ class Media extends Model
                 ->values()
                 ->all();
         });
+    }
+
+    /**
+     * One of a console's backdrops at random, or null when it has none. The
+     * shelf and the console's card each draw one this way, so the art changes
+     * from visit to visit on both.
+     */
+    public static function backdropFor(Console $console): ?string
+    {
+        $pool = static::backdropsFor($console);
+
+        return $pool === [] ? null : Arr::random($pool);
     }
 
     /**
