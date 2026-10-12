@@ -124,8 +124,10 @@ workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:work \
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:work \
     --queue=media --sleep=3 --tries=3 --max-time=3600
 
-# Scans and file counts, on their own worker so they never wait for artwork.
-workers QUEUE_WORKERS_DEFAULT 1 php /app/artisan queue:work \
+# Scans and file counts, on their own workers so they never wait for artwork.
+# Two, so a scan's chunks go two at a time and a file count or a ranking
+# never waits behind a whole scan.
+workers QUEUE_WORKERS_DEFAULT 2 php /app/artisan queue:work \
     --queue=default --sleep=3 --tries=3 --max-time=3600
 
 # Cover thumbnails: CPU work, on a queue of its own so a library's backfill

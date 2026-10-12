@@ -40,9 +40,8 @@ return [
          * takes it as abandoned and runs it again, so it has to outlast the
          * longest $timeout on these queues: ScanConsoleFolder and
          * WriteConsoleExports allow themselves 1800 seconds. At the stock 90,
-         * a second default worker (QUEUE_WORKERS_DEFAULT=2) would pick up a scan
-         * still in progress and run it twice, racing the first to create the
-         * same games.
+         * the second default worker would pick up a scan still in progress
+         * and run it twice, racing the first to create the same games.
          *
          * The cost is a job whose worker was killed outright — a container
          * stopped mid-job — waits out the same half hour before it runs again.

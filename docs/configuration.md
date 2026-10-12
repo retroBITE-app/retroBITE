@@ -52,6 +52,25 @@ it with the rest of a NAS's backed-up shares. Volumes and folders survive
 | `STATE_PATH` | volume `retrobite-state` | The application key and the live-update keys. **Back it up with the database**: the stored passwords for ScreenScraper, RetroAchievements and destinations cannot be read without the key. |
 | `DOCS_PATH` | `./docs` | The markdown knowledge base, a folder beside the compose file. |
 
+## A library on an SMB share
+
+Only with `docker-compose.smb.yml`, which mounts the library from a share on
+another machine in place of `GAMES_PATH`; see
+[installing.md](installing.md#when-the-library-is-on-another-machine).
+`./retrobite up` adds the file by itself whenever `GAMES_SMB_HOST` is set.
+
+| Variable | Default | What it is |
+| --- | --- | --- |
+| `GAMES_SMB_HOST` | none | The machine with the share, by address or name. Setting it is what turns the SMB mount on. |
+| `GAMES_SMB_SHARE` | none | The share holding the library, or a folder inside it: `roms` or `roms/games`. |
+| `GAMES_SMB_USERNAME` / `GAMES_SMB_PASSWORD` | `guest` / empty | An account that can read and write the share. The password cannot contain a comma: the mount's options are split on them. |
+| `GAMES_SMB_VERSION` | `3.0` | The SMB dialect. `2.1` for an older NAS. |
+| `GAMES_SMB_UID` / `GAMES_SMB_GID` | `1000` / `1000` | Who the files belong to inside the containers, which then run as that user. Not `0`. On the share itself every write is the account's. |
+
+The mount is a Docker volume, made once with the options of its first start.
+After changing one, run `docker compose down` and remove the volume
+(`docker volume ls` shows it, named `…_games-smb`) before starting again.
+
 ## Keys
 
 | Variable | Default | What it is |
@@ -88,14 +107,14 @@ it with the rest of a NAS's backed-up shares. Volumes and folders survive
 
 ## Queue workers
 
-Background work is done by workers, one per queue unless set; `0` starts none.
+Background work is done by workers, one per queue unless the table says otherwise; `0` starts none.
 Raise them on a machine with the room.
 
 | Variable | Default | Work |
 | --- | --- | --- |
 | `QUEUE_WORKERS_SCRAPER` | 1 | Identification. Raising it adds speed up to your ScreenScraper account's threads (1 on a free account, more on a paid one); past that, workers wait. |
 | `QUEUE_WORKERS_MEDIA` | 1 | Artwork downloads. They share the scraper's threads. |
-| `QUEUE_WORKERS_DEFAULT` | 1 | Scans and file counts. |
+| `QUEUE_WORKERS_DEFAULT` | 2 | Scans and file counts. A scan is recorded in chunks, two at a time with two workers. |
 | `QUEUE_WORKERS_THUMBNAILS` | 1 | Cover thumbnails, CPU bound. |
 | `QUEUE_WORKERS_TOOLBOX` | 1 | Loader exports and licence ID reading. |
 | `QUEUE_WORKERS_CONVERSION` | 1 | Tools → Conversion, one disc at a time. |

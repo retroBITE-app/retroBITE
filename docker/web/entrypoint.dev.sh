@@ -152,7 +152,7 @@ workers QUEUE_WORKERS_SCRAPER 1 php /app/artisan queue:listen \
 workers QUEUE_WORKERS_MEDIA 1 php /app/artisan queue:listen \
     --queue=media --sleep=3 --tries=3 --timeout=960
 
-workers QUEUE_WORKERS_DEFAULT 1 php /app/artisan queue:listen \
+workers QUEUE_WORKERS_DEFAULT 2 php /app/artisan queue:listen \
     --queue=default --sleep=3 --tries=3 --timeout=1860
 
 # Cover thumbnails: CPU work, on a queue of its own so a library's backfill
