@@ -3,6 +3,7 @@
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
+use App\Enums\ThumbnailSize;
 use App\Jobs\InspectGameFile;
 use App\Jobs\MatchGame;
 use App\Jobs\MeasureLibrary;
@@ -1237,6 +1238,59 @@ it('counts the console in the shelf header', function () {
     // towards the size. No folder on disk in this test, so no files either.
     expect(Livewire::test('games.index', ['console' => 'snes'])->instance()->consoleStats)
         ->toMatchArray(['games' => 1, 'files' => 0, 'size' => '4.0 MB']);
+});
+
+it('counts the unidentified and the space they take on the console card', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    $matched = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Identified One', 'slug' => 'one']);
+    GameFile::factory()->for($matched)->create(['path' => 'snes/one.sfc', 'filename' => 'one.sfc', 'size_bytes' => 3_145_728]);
+
+    // Two tracks of one game: one game, both files towards the size.
+    $placeholder = Game::factory()->forConsole('snes')->create(['title' => 'Unknown', 'slug' => 'unknown']);
+    GameFile::factory()->for($placeholder)->create(['path' => 'snes/u1.sfc', 'filename' => 'u1.sfc', 'size_bytes' => 524_288]);
+    GameFile::factory()->for($placeholder)->create(['path' => 'snes/u2.sfc', 'filename' => 'u2.sfc', 'size_bytes' => 524_288]);
+
+    Game::factory()->forConsole('psx')->create(['title' => 'Elsewhere', 'slug' => 'elsewhere']);
+
+    expect(consoleCard('snes'))->toMatchArray(['identified' => 1, 'unidentified' => 1, 'bytes' => 4_194_304, 'size' => '4.0 MB'])
+        ->and(Livewire::test('consoles.index')->instance()->totals)->toBe(['consoles' => 1, 'games' => 1, 'size' => '4.0 MB']);
+});
+
+it('fans the covers of the newest games on each console card', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+    ConsoleSourceFolder::add(new Console('psx'));
+
+    $covers = [];
+
+    foreach (range(1, 4) as $i) {
+        $game = Game::factory()->forConsole('snes')->matched()->create(['title' => "Covered {$i}", 'slug' => "covered-{$i}"]);
+        $covers[] = Media::factory()->for($game)->ofType('box-2D', 'us')->create()->url(ThumbnailSize::Grid);
+    }
+
+    // Newer still, but with nothing to show: passed over, not a gap.
+    $bare = Game::factory()->forConsole('snes')->matched()->create(['title' => 'Bare', 'slug' => 'bare']);
+    Media::factory()->for($bare)->ofType('fanart', 'us')->create();
+
+    $other = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Other', 'slug' => 'other']);
+    $otherCover = Media::factory()->for($other)->ofType('box-2D', 'us')->create()->url(ThumbnailSize::Grid);
+
+    expect(consoleCard('snes')['covers'])->toBe([$covers[3], $covers[2], $covers[1]])
+        ->and(consoleCard('psx')['covers'])->toBe([$otherCover]);
+});
+
+it('draws the console card over its best-rated art, or the default without any', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    expect(consoleCard('snes')['backdrop'])->toBe(asset('images/default-backdrop.jpg'));
+
+    $best = shelfArt(95);
+    shelfArt(60);
+    Cache::forget('shelf.backdrops.snes');
+
+    // The same every visit: the shelf behind the card is the one that rotates.
+    expect(consoleCard('snes')['backdrop'])->toBe(route('media.show', ['path' => $best[0]]))
+        ->and(consoleCard('snes')['backdrop'])->toBe(route('media.show', ['path' => $best[0]]));
 });
 
 it('counts a multi-disc game once in the shelf header', function () {

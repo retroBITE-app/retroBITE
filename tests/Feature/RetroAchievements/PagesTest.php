@@ -2,8 +2,6 @@
 
 use App\Enums\AchievementKind;
 use App\Enums\RetroAchievementsStatus;
-use App\Models\AppSetting;
-use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\RaAchievement;
@@ -11,7 +9,6 @@ use App\Models\RaGame;
 use App\Models\RaProgress;
 use App\Models\RaUnlock;
 use App\Models\User;
-use App\Support\Console;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
@@ -219,20 +216,4 @@ it('offers a kind only to a set that marks one', function () {
     expect($component->instance()->achievementKinds)->toBe([])
         ->and($component->instance()->activeAchievementKind)->toBe('')
         ->and(panelTitles($component))->toBe(['Nothing Special']);
-});
-
-it('totals a console on the console list, hardcore unless told otherwise', function () {
-    // The list shows consoles somebody added, not every one with games.
-    ConsoleSourceFolder::add(Console::tryFrom('snes'));
-
-    gameWithProgress(31, 49);
-
-    // Hardcore, for the same reason the shelf shows it.
-    expect(Livewire::test('consoles.index')->instance()->added->first()['achievements'])
-        ->toBe(['unlocked' => 15, 'possible' => 49, 'percent' => 31, 'hardcore' => true]);
-
-    AppSetting::put(AppSetting::RA_HARDCORE_PRIMARY, false);
-
-    expect(Livewire::test('consoles.index')->instance()->added->first()['achievements'])
-        ->toBe(['unlocked' => 31, 'possible' => 49, 'percent' => 63, 'hardcore' => false]);
 });

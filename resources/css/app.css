@@ -532,6 +532,26 @@
 }
 
 /*
+ * The same fade downwards, for art across the top of a card: hero-fade-y ends
+ * in the page ground, which shows as a seam against a card's surface, where a
+ * mask lets the card's own background through.
+ */
+@utility art-fade-b {
+    -webkit-mask-image: linear-gradient(
+        180deg,
+        #000 0%,
+        rgb(0 0 0 / 0.75) 40%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        180deg,
+        #000 0%,
+        rgb(0 0 0 / 0.75) 40%,
+        transparent 100%
+    );
+}
+
+/*
  * The CRT scanline overlay. The design lays it over every piece of key art, so
  * it lives here rather than as an arbitrary value repeated at each site.
  */
