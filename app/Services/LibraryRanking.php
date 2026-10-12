@@ -6,6 +6,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * The retroBite rank: every scored game in the library in one order, across
@@ -56,6 +57,19 @@ final class LibraryRanking
         // this runs marks them stale again for the next round.
         Cache::forget(self::STALE_KEY);
 
+        try {
+            return $this->rankAll();
+        } catch (Throwable $e) {
+            // Still stale, or the next round would find nothing to do and the
+            // ranks would wait for an unrelated score to move.
+            $this->markStale();
+
+            throw $e;
+        }
+    }
+
+    private function rankAll(): int
+    {
         $changed = DB::update(<<<'SQL'
             UPDATE games
             JOIN (

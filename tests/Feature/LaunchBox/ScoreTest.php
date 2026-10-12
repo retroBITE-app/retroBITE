@@ -324,6 +324,20 @@ it('marks the ranks stale when one score moves, and works them out on the next r
         ->assertSuccessful();
 });
 
+it('keeps the ranks stale when working them out fails, so the next round tries again', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
+    app(GameScorer::class)->score(ratedSnesGame('Super Mario World'));
+
+    DB::beforeExecuting(function (string $query): void {
+        if (str_contains($query, 'ROW_NUMBER')) {
+            throw new RuntimeException('The database went away.');
+        }
+    });
+
+    expect(fn () => app(LibraryRanking::class)->rebuild())->toThrow(RuntimeException::class)
+        ->and(app(LibraryRanking::class)->isStale())->toBeTrue();
+});
+
 it('leaves the ranks alone when a score is worked out the same again', function () {
     importLaunchBox($this->dump, launchBoxSnesDump());
     $smw = ratedSnesGame('Super Mario World');
