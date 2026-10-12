@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,13 +18,44 @@ use Illuminate\Support\Facades\DB;
  * every time it is worked out.
  *
  * Worked out in one statement for the whole library: a single score moving
- * shifts everything between its old place and its new one.
+ * shifts everything between its old place and its new one. So a score that
+ * moves only marks the ranks stale, and the scheduler works them out every
+ * ten minutes when they are (`retrobite:rank --stale`). Worked out after
+ * every match instead, an identification run of thousands rewrote every
+ * game's row about once a second.
  */
 final class LibraryRanking
 {
+    private const STALE_KEY = 'library.ranking.stale';
+
+    /** Say a score has moved since the ranks were last worked out. */
+    public function markStale(): void
+    {
+        Cache::forever(self::STALE_KEY, true);
+    }
+
+    public function isStale(): bool
+    {
+        return Cache::has(self::STALE_KEY);
+    }
+
+    /**
+     * Work the ranks out again if a score has moved since they last were.
+     *
+     * @return int|null how many games changed place, or null when nothing had moved
+     */
+    public function rebuildIfStale(): ?int
+    {
+        return $this->isStale() ? $this->rebuild() : null;
+    }
+
     /** @return int how many games changed place */
     public function rebuild(): int
     {
+        // Forgotten before rather than after, so a score that moves while
+        // this runs marks them stale again for the next round.
+        Cache::forget(self::STALE_KEY);
+
         $changed = DB::update(<<<'SQL'
             UPDATE games
             JOIN (

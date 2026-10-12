@@ -3,7 +3,6 @@
 use App\Jobs\HashFile;
 use App\Jobs\MatchGame;
 use App\Jobs\PruneGame;
-use App\Jobs\RankLibrary;
 use App\Jobs\RetroAchievements\HashGame;
 use App\Jobs\RetroAchievements\IdentifyGame;
 use App\Jobs\RetroAchievements\ReconcileProgress;
@@ -36,7 +35,6 @@ it('can be pushed onto a real queue', function (string $job, array $arguments) {
     'scrape media' => [ScrapeGameMedia::class, [1, []]],
     'scan' => [ScanConsoleFolder::class, ['snes']],
     'hash' => [HashFile::class, [1]],
-    'rank' => [RankLibrary::class, []],
 
     // The RetroAchievements jobs are the first in this codebase to implement
     // ShouldBeUnique, so they are the first whose uniqueId() the framework

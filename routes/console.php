@@ -43,6 +43,11 @@ Schedule::command('retrobite:launchbox:sync')->hourly()->runInBackground()->with
     return ! DB::table('launchbox_platforms')->exists();
 });
 
+// The retroBite rank, when a score has moved since it was last worked out.
+// Not after every score: the rank is one statement that can rewrite every
+// game's row, and an identification run moves a score about once a second.
+Schedule::command('retrobite:rank --stale')->everyTenMinutes()->withoutOverlapping();
+
 // The cheap pulse: one request per person for everything unlocked lately.
 Schedule::command('retrobite:ra:sync-progress')->everyFifteenMinutes()->withoutOverlapping();
 
