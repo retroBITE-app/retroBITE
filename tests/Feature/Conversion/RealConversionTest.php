@@ -66,8 +66,9 @@ function randomImage(string $relative, int $bytes): string
 /** A row for a file on disk, as the scanner would have written it. */
 function recordOnDisk(Game $game, string $relative, FileRole $role = FileRole::Rom, ?GameFile $parent = null): GameFile
 {
-    return GameFile::factory()->for($game)->create([
-        'path' => $relative,
+    // As the scanner writes it, too: over a row a conversion already made.
+    return GameFile::query()->updateOrCreate(['path' => $relative], [
+        'game_id' => $game->id,
         'filename' => basename($relative),
         'extension' => Str::lower(pathinfo($relative, PATHINFO_EXTENSION)),
         'size_bytes' => filesize(test()->root.'/'.$relative),
