@@ -1752,7 +1752,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         class="shrink-0 rounded-md px-2 py-0.5 font-mono text-sm font-semibold tabular-nums"
                     >{{ $game->rating }}</span>
 
-                    <span class="text-fg-soft">{{ __('retroBite score') }}</span>
+                    <span class="text-fg-soft">{{ __('retroBITE score') }}</span>
 
                     @if ($game->library_rank !== null)
                         <span class="font-mono font-semibold tabular-nums text-fg-bright" title="{{ __('The retroBite rank: this game\'s place among every scored game in your library, across all consoles.') }}">#{{ $game->library_rank }}</span>
