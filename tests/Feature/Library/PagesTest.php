@@ -1276,18 +1276,49 @@ it('fans the covers of the newest games on each console card', function () {
         ->and(consoleCard('psx')['covers'])->toBe([$otherCover]);
 });
 
-it('draws the console card over its best-rated art, or the default without any', function () {
+it('draws the console card over the default backdrop until it has art', function () {
     ConsoleSourceFolder::add(new Console('snes'));
 
     expect(consoleCard('snes')['backdrop'])->toBe(asset('images/default-backdrop.jpg'));
+});
 
-    $best = shelfArt(95);
-    shelfArt(60);
-    Cache::forget('shelf.backdrops.snes');
+it('rotates the console card through the same art as its shelf', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
 
-    // The same every visit: the shelf behind the card is the one that rotates.
-    expect(consoleCard('snes')['backdrop'])->toBe(route('media.show', ['path' => $best[0]]))
-        ->and(consoleCard('snes')['backdrop'])->toBe(route('media.show', ['path' => $best[0]]));
+    $best = collect([95, 90, 85, 80, 75, 70])->flatMap(function (int $rating): array {
+        return shelfArt($rating);
+    })->map(function (string $path): string {
+        return route('media.show', ['path' => $path]);
+    })->all();
+    $worst = collect([...shelfArt(20), ...shelfArt(10)])->map(function (string $path): string {
+        return route('media.show', ['path' => $path]);
+    })->all();
+
+    $seen = collect(range(1, 40))->map(function (): string {
+        return consoleCard('snes')['backdrop'];
+    })->unique();
+
+    // The shelf's six, never the two below them, and not the same one every
+    // visit — a single one forty times running is a sixth to the thirty-ninth.
+    expect($seen->diff($best))->toBeEmpty()
+        ->and($seen->intersect($worst))->toBeEmpty()
+        ->and($seen->count())->toBeGreaterThan(1);
+});
+
+it('keeps each card\'s backdrop while the page redraws', function () {
+    ConsoleSourceFolder::add(new Console('snes'));
+
+    foreach ([95, 90, 85] as $rating) {
+        shelfArt($rating);
+    }
+
+    $page = Livewire::test('consoles.index');
+    $picked = $page->instance()->added->first()['backdrop'];
+
+    // Typed into the add-console search: every keystroke redraws the cards.
+    $page->set('search', 'mega')->set('search', 'mega drive');
+
+    expect($page->instance()->added->first()['backdrop'])->toBe($picked);
 });
 
 it('counts a multi-disc game once in the shelf header', function () {
