@@ -1,20 +1,25 @@
-# RAHasher, built exactly as Dockerfile.web builds it — see there for why each
-# of the four deviations from the documented build is needed. Repeated rather
-# than shared because this image has no other stages to hang it off, and a
-# developer with no hasher cannot identify anything.
+# RAHasher and discread, built exactly as Dockerfile.web builds them — see there
+# for why each of the five deviations from the documented build is needed.
+# Repeated rather than shared because this image has no other stages to hang
+# it off, and a developer with no hasher cannot identify anything.
 FROM alpine:3.21 AS rahasher
 
-RUN apk add --no-cache build-base git zlib-dev zlib-static
+RUN apk add --no-cache build-base git zlib-dev zlib-static lz4-dev lz4-static
 
 ARG RALIBRETRO_TAG=1.8.4
+COPY patches/rahasher-ciso.patch /src-patches/rahasher-ciso.patch
+COPY docker/web/ciso/ /ciso/
 RUN git clone --depth 1 --branch "$RALIBRETRO_TAG" \
         https://github.com/RetroAchievements/RALibretro.git /src \
     && cd /src \
     && git submodule update --init --depth 1 src/miniz src/rcheevos src/libchdr \
     && sed -i '/#include <stddef.h>/a #include <cstdio>\n#include <ctime>' src/Util.h \
     && printf '#define RA_LIBRETRO_VERSION_SHORT "%s"\n' "$RALIBRETRO_TAG" > src/RA_BuildVer.h \
-    && make -f Makefile.RAHasher HAVE_CHD=1 -j"$(nproc)" CC="gcc -DZ_HAVE_UNISTD_H" \
-    && cp "$(find /src -type f -name RAHasher -perm -u+x | head -n 1)" /usr/local/bin/RAHasher
+    && patch -p1 < /src-patches/rahasher-ciso.patch \
+    && cp /ciso/ciso.h /ciso/ciso.c /ciso/HashCISO.cpp src/ \
+    && make -f Makefile.RAHasher HAVE_CHD=1 HAVE_CISO=1 -j"$(nproc)" CC="gcc -DZ_HAVE_UNISTD_H" \
+    && cp "$(find /src -type f -name RAHasher -perm -u+x | head -n 1)" /usr/local/bin/RAHasher \
+    && gcc -O2 -Wall -static -o /usr/local/bin/discread /ciso/ciso.c /ciso/discread.c -l:libz.a -l:liblz4.a
 
 # The conversion tools, built exactly as Dockerfile.web builds them —
 # see there for why each step is as it is. Repeated for the reason RAHasher
@@ -219,7 +224,8 @@ COPY docker/web/supervisord.conf /etc/supervisord.conf
 COPY docker/web/reverb.sh /usr/local/bin/reverb.sh
 COPY docker/web/app-key.sh /usr/local/bin/app-key.sh
 COPY docker/web/entrypoint.dev.sh /entrypoint.sh
-COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/RAHasher
+COPY --from=rahasher /usr/local/bin/RAHasher /usr/local/bin/discread /usr/local/bin/
+RUN (discread 2>/dev/null; test $? -eq 2)
 # The conversion tools, on PATH, which is where config/converters.php
 # looks by default. Each is run once: they were built against the converters
 # stage's Alpine, and a runtime image that moved to another would otherwise
