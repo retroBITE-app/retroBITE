@@ -417,6 +417,20 @@ it('records how often each dump is played and what the provider flags it as', fu
         ->and($game->fresh()->provider_scrapes)->toBe(250000);
 });
 
+it('asks about a game the provider no longer holds once, not every night', function () {
+    providerMiss();
+
+    $game = psxGame();
+    $game->update(['screenscraper_id' => 19256, 'status' => GameStatus::Matched]);
+
+    $this->artisan('retrobite:dumps')->expectsOutput('1 games to ask about.')->assertSuccessful();
+
+    expect($game->fresh()->dumps_recorded_at)->not->toBeNull()
+        ->and($game->fresh()->provider_scrapes)->toBeNull();
+
+    $this->artisan('retrobite:dumps')->expectsOutput('Every identified game has been asked about already.')->assertSuccessful();
+});
+
 it('backfills the dumps of games identified before, by the id they hold, once', function () {
     providerHit([
         'roms' => [['romfilename' => 'FF9 (Disc 1).bin', 'nbscrap' => '900', 'regions' => ['regions_shortname' => ['eu']]]],

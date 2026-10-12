@@ -92,6 +92,10 @@ class RecordProviderDumps implements ShouldQueue
         if ($payload === null) {
             Log::info('The provider holds no game under this id any more.', ['game' => $this->gameId]);
 
+            // Asked, and answered: nothing to record, and nothing to gain by
+            // asking again every night.
+            $game->forceFill(['provider_scrapes' => null, 'dumps_recorded_at' => now()])->save();
+
             return;
         }
 

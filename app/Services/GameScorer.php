@@ -38,14 +38,6 @@ final class GameScorer
     /** @var array<string, float|null> */
     private array $platformMeans = [];
 
-    /**
-     * Every LaunchBox game's vote count on a platform, in order, for where
-     * one game's stands among them.
-     *
-     * @var array<string, array<int, int>>
-     */
-    private array $platformVotes = [];
-
     /** Whether the LaunchBox index holds anything, once asked. */
     private ?bool $indexed = null;
 
@@ -120,7 +112,6 @@ final class GameScorer
     {
         $this->engagement = [];
         $this->platformMeans = [];
-        $this->platformVotes = [];
         $this->indexed = null;
         $count = 0;
 
@@ -260,50 +251,25 @@ final class GameScorer
      * platform, 0 to 100: against the platform, because 700 votes is a
      * classic on the PlayStation and the whole Lynx library's worth. Ties
      * count half, so a platform's many unrated games sit low, not at zero.
+     *
+     * Counted in the database, one query a game: a scorer lives for one job,
+     * and a platform's every vote count read into each would be read again
+     * for every match of an identification run.
      */
     private function votePercentile(string $platform, int $votes): ?float
     {
-        $this->platformVotes[$platform] ??= DB::table('launchbox_games')
+        $counts = DB::table('launchbox_games')
             ->where('platform', $platform)
-            ->orderBy('votes')
-            ->pluck('votes')
-            ->map(fn ($count): int => (int) $count)
-            ->values()
-            ->all();
+            ->selectRaw('COUNT(*) AS total, SUM(votes < ?) AS below, SUM(votes = ?) AS equal', [$votes, $votes])
+            ->first();
 
-        $all = $this->platformVotes[$platform];
+        $total = (int) ($counts->total ?? 0);
 
-        if ($all === []) {
+        if ($total === 0) {
             return null;
         }
 
-        $below = self::countBelow($all, $votes);
-        $equal = self::countBelow($all, $votes + 1) - $below;
-
-        return ($below + $equal / 2) / count($all) * 100;
-    }
-
-    /**
-     * How many of an ordered list are under a value.
-     *
-     * @param  array<int, int>  $sorted  indexed from zero
-     */
-    private static function countBelow(array $sorted, int $value): int
-    {
-        $low = 0;
-        $high = count($sorted);
-
-        while ($low < $high) {
-            $middle = intdiv($low + $high, 2);
-
-            if ($sorted[$middle] < $value) {
-                $low = $middle + 1;
-            } else {
-                $high = $middle;
-            }
-        }
-
-        return $low;
+        return ((int) $counts->below + (int) $counts->equal / 2) / $total * 100;
     }
 
     private function platformMean(?string $platform): ?float

@@ -48,8 +48,9 @@ it('lets popularity move a rated game six points at most, either way', function 
     $fine = RetroBiteScore::compute(4.5, 5, 3.6, null);
     $obscure = RetroBiteScore::compute(4.5, 5, 3.6, 120, 0.0, 1.0, 5_000);
 
-    expect($famous - $infamous)->toBeLessThanOrEqual(6)
-        ->and($famous)->toBeGreaterThan($infamous)
+    expect($famous)->toBeGreaterThan($infamous)
+        ->and($famous - $infamous)->toBeLessThanOrEqual(6)
+        ->and($obscure)->toBeLessThan($fine)
         ->and($fine - $obscure)->toBeLessThanOrEqual(6);
 });
 
