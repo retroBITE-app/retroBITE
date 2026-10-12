@@ -146,7 +146,14 @@ workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:work database-long \
 # an export back. On the long connection because a conversion runs for up to
 # CONVERSION_TIMEOUT seconds, past the default connection's half-hour
 # retry_after, after which a second worker would start it again.
-workers QUEUE_WORKERS_CONVERSION 1 php /app/artisan queue:work database-long \
+# As many workers as conversions may run at once (CONVERSION_CONCURRENCY,
+# config/converters.php), unless QUEUE_WORKERS_CONVERSION says otherwise:
+# with one worker, a concurrency of three still ran one disc at a time.
+conversions=${CONVERSION_CONCURRENCY:-1}
+case "$conversions" in
+    '' | *[!0-9]* | 0) conversions=1 ;;
+esac
+workers QUEUE_WORKERS_CONVERSION "$conversions" php /app/artisan queue:work database-long \
     --queue=toolbox-conversion --sleep=3 --tries=3 --max-time=3600
 
 # RetroAchievements: identification and set downloads are HTTP and quick, so

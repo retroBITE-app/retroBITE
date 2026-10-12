@@ -168,7 +168,14 @@ workers QUEUE_WORKERS_TOOLBOX 1 php /app/artisan queue:listen database-long \
 
 # Conversions: 7000 (CONVERSION_TIMEOUT) plus the minute RunConversion adds and
 # the margin the others carry.
-workers QUEUE_WORKERS_CONVERSION 1 php /app/artisan queue:listen database-long \
+# As many workers as conversions may run at once (CONVERSION_CONCURRENCY,
+# config/converters.php), unless QUEUE_WORKERS_CONVERSION says otherwise:
+# with one worker, a concurrency of three still ran one disc at a time.
+conversions=${CONVERSION_CONCURRENCY:-1}
+case "$conversions" in
+    '' | *[!0-9]* | 0) conversions=1 ;;
+esac
+workers QUEUE_WORKERS_CONVERSION "$conversions" php /app/artisan queue:listen database-long \
     --queue=toolbox-conversion --sleep=3 --tries=3 --timeout=7090
 
 # RetroAchievements. Note that queue:listen ignores retry_after entirely — it

@@ -28,8 +28,8 @@ services:
     # cleanly, about a second apiece: past Docker's default ten seconds the
     # rest would be killed mid-job.
     stop_grace_period: 30s
-    # Anything not listed under environment below — queue workers,
-    # ScreenScraper and RetroAchievements timeouts, conversion tools — is read
+    # Anything not listed under environment below — ScreenScraper and
+    # RetroAchievements timeouts, conversion tools — is read
     # from .env when there is one. See docs/configuration.md.
     env_file:
       - path: .env
@@ -68,6 +68,22 @@ services:
       # nginx is in front, so game files and artwork are sent by it rather
       # than streamed by PHP (App\Support\NginxFile).
       SERVE_WITH_NGINX: "true"
+      # Workers per queue, and conversions at once (which the conversion
+      # workers follow when QUEUE_WORKERS_CONVERSION is unset). Listed here,
+      # not left to .env, so a stack's variables in Portainer, Dockhand or a
+      # NAS's container manager reach the entrypoint too. Empty is each
+      # queue's default; see docs/configuration.md.
+      QUEUE_WORKERS_SCRAPER: ${QUEUE_WORKERS_SCRAPER:-}
+      QUEUE_WORKERS_MEDIA: ${QUEUE_WORKERS_MEDIA:-}
+      QUEUE_WORKERS_DEFAULT: ${QUEUE_WORKERS_DEFAULT:-}
+      QUEUE_WORKERS_THUMBNAILS: ${QUEUE_WORKERS_THUMBNAILS:-}
+      QUEUE_WORKERS_TOOLBOX: ${QUEUE_WORKERS_TOOLBOX:-}
+      QUEUE_WORKERS_CONVERSION: ${QUEUE_WORKERS_CONVERSION:-}
+      QUEUE_WORKERS_RA: ${QUEUE_WORKERS_RA:-}
+      QUEUE_WORKERS_RA_PROGRESS: ${QUEUE_WORKERS_RA_PROGRESS:-}
+      QUEUE_WORKERS_HASH: ${QUEUE_WORKERS_HASH:-}
+      QUEUE_WORKERS_TRANSFER: ${QUEUE_WORKERS_TRANSFER:-}
+      CONVERSION_CONCURRENCY: ${CONVERSION_CONCURRENCY:-}
     ports:
       - "${WEB_PORT:-81}:80"
     volumes:
