@@ -1759,18 +1759,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     @endif
 
                     {{-- The figures behind the score, kept out of the line until
-                         somebody asks: a title over the icon, one per line. --}}
-                    <span
-                        tabindex="0"
-                        title="{{ implode("\n", [
-                            __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it on RetroAchievements.'),
-                            ...$this->scoreSources,
-                        ]) }}"
-                        class="cursor-help text-fg-faint transition-colors hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                    >
-                        <flux:icon.information-circle class="size-4" />
-                        <span class="sr-only">{{ implode('. ', $this->scoreSources) }}</span>
-                    </span>
+                         somebody asks, one per line. --}}
+                    <x-info class="-translate-y-px" :text="[
+                        __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it on RetroAchievements.'),
+                        ...$this->scoreSources,
+                    ]" />
                 </div>
             @endif
         </div>
