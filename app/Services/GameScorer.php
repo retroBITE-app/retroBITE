@@ -20,8 +20,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Works out a game's retroBite score and writes it to games.rating.
  *
- * Everything it reads is already in the database — the LaunchBox index and
- * the achievement sets — so scoring costs no request and is done whenever an
+ * Everything it reads is already in the database — the LaunchBox index, the
+ * achievement sets and the provider's scrape counts — so scoring costs no request and is done whenever an
  * ingredient changes: after a match, after a set sync, after the index is
  * rebuilt. The arithmetic is RetroBiteScore's; this gathers its inputs.
  */
@@ -38,6 +38,9 @@ final class GameScorer
     /** @var array<string, float|null> */
     private array $platformMeans = [];
 
+    /** Whether the LaunchBox index holds anything, once asked. */
+    private ?bool $indexed = null;
+
     public function __construct(private readonly LibraryRanking $ranking) {}
 
     /**
@@ -51,6 +54,15 @@ final class GameScorer
      */
     public function score(Game $game, bool $announce = true, bool $rank = true): ?int
     {
+        // No index yet — a new install before its first sync, or one emptied
+        // to be rebuilt. Scored now, every game would lose its LaunchBox
+        // half; the sync scores the whole library once it is in.
+        $this->indexed ??= DB::table('launchbox_platforms')->exists();
+
+        if (! $this->indexed) {
+            return $game->rating;
+        }
+
         $console = $game->console();
         $entry = $console !== null ? $this->find($game, $console) : null;
         $set = $game->retroachievements_id !== null
@@ -67,6 +79,8 @@ final class GameScorer
             platformMean: $this->platformMean($entry->platform ?? $console?->launchboxPlatforms[0] ?? null),
             players: $players,
             engagement: $set !== null && $players ? $this->engagement($set->id, $players) : null,
+            votePercentile: $entry !== null ? $this->votePercentile($entry->platform, $entry->votes) : null,
+            scrapes: $game->provider_scrapes,
         );
 
         // Compared by value rather than with isDirty(): a model just created
@@ -98,6 +112,7 @@ final class GameScorer
     {
         $this->engagement = [];
         $this->platformMeans = [];
+        $this->indexed = null;
         $count = 0;
 
         Game::query()
@@ -113,6 +128,25 @@ final class GameScorer
         $this->ranking->rebuild();
 
         return $count;
+    }
+
+    /**
+     * Score these games, without a live signal per row and without working
+     * out the ranks: one chunk of a queued `retrobite:score`, whose batch
+     * ranks once at the end.
+     *
+     * @param  list<int>  $ids
+     * @return int how many games were scored
+     */
+    public function scoreMany(array $ids): int
+    {
+        $games = Game::query()->with('raGame')->whereIn('id', $ids)->get();
+
+        foreach ($games as $game) {
+            $this->score($game, announce: false, rank: false);
+        }
+
+        return $games->count();
     }
 
     /**
@@ -138,10 +172,12 @@ final class GameScorer
      *
      * Only for an identified game: a placeholder's title is its filename,
      * and "Super Mario World (Hack)" with its tag stripped would take Super
-     * Mario World's rating. Primary names before alternate ones, the
+     * Mario World's rating. Whole names before ones with the subtitle
+     * left off, primary names before alternate ones, the
      * console's likeliest platform first, then the entry most people voted
      * on — LaunchBox lists some titles twice on one platform, and the
-     * second is a re-release nobody rates.
+     * second is a re-release nobody rates. Each of the game's names in turn
+     * (namesOf), the first that is found winning.
      */
     public function find(Game $game, Console $console): ?LaunchBoxGame
     {
@@ -149,24 +185,91 @@ final class GameScorer
             return null;
         }
 
-        $key = LaunchBoxTitle::key($game->title);
+        foreach ($this->namesOf($game) as $name) {
+            $entry = $this->findByName($name, $console->launchboxPlatforms);
+
+            if ($entry !== null) {
+                return $entry;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * What a game is called, best first: its own title, then the title of
+     * its RetroAchievements set, which is English and spelled as the
+     * community spells it — "Fire Emblem: The Binding Blade" where
+     * ScreenScraper has "Fire Emblem - Fûin No Tsurugi".
+     *
+     * Never a set marked as a hack, prototype, demo or subset: those carry
+     * the name of the game they are not, and would take its rating. An
+     * unlicensed or homebrew game is itself, so only its mark goes.
+     *
+     * @return list<string>
+     */
+    private function namesOf(Game $game): array
+    {
+        $names = [$game->title];
+        $set = $game->retroachievements_id !== null
+            ? ($game->relationLoaded('raGame') ? $game->raGame : RaGame::find($game->retroachievements_id))
+            : null;
+        $title = $set?->title;
+
+        if ($title !== null && $title !== '' && ! str_contains($title, '[Subset')
+            && preg_match('/~(?:Hack|Prototype|Demo|Test Kit)~/i', $title) !== 1) {
+            $names[] = trim((string) preg_replace('/~[^~]*~/', '', $title));
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /** @param  list<string>  $platforms */
+    private function findByName(string $name, array $platforms): ?LaunchBoxGame
+    {
+        $key = LaunchBoxTitle::key($name);
 
         if ($key === '') {
             return null;
         }
-
-        $platforms = $console->launchboxPlatforms;
 
         return LaunchBoxGame::query()
             ->select('launchbox_games.*')
             ->join('launchbox_names', 'launchbox_names.launchbox_game_id', '=', 'launchbox_games.id')
             ->whereIn('launchbox_names.platform', $platforms)
             ->where('launchbox_names.name_key', $key)
+            ->orderBy('launchbox_names.shortened')
             ->orderBy('launchbox_names.alias')
             ->orderByRaw('FIELD(launchbox_names.platform, '.implode(', ', array_fill(0, count($platforms), '?')).')', $platforms)
             ->orderByDesc('launchbox_games.votes')
             ->orderBy('launchbox_games.id')
             ->first();
+    }
+
+    /**
+     * Where a vote count stands among every game LaunchBox lists on the
+     * platform, 0 to 100: against the platform, because 700 votes is a
+     * classic on the PlayStation and the whole Lynx library's worth. Ties
+     * count half, so a platform's many unrated games sit low, not at zero.
+     *
+     * Counted in the database, one query a game: a scorer lives for one job,
+     * and a platform's every vote count read into each would be read again
+     * for every match of an identification run.
+     */
+    private function votePercentile(string $platform, int $votes): ?float
+    {
+        $counts = DB::table('launchbox_games')
+            ->where('platform', $platform)
+            ->selectRaw('COUNT(*) AS total, SUM(votes < ?) AS below, SUM(votes = ?) AS equal', [$votes, $votes])
+            ->first();
+
+        $total = (int) ($counts->total ?? 0);
+
+        if ($total === 0) {
+            return null;
+        }
+
+        return ((int) $counts->below + (int) $counts->equal / 2) / $total * 100;
     }
 
     private function platformMean(?string $platform): ?float

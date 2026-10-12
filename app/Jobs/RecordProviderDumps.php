@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Exceptions\ScreenScraper\QuotaExhausted;
 use App\Exceptions\ScreenScraper\ScreenScraperException;
 use App\Models\Game;
+use App\Services\GameScorer;
 use App\Services\ScreenScraperService;
 use App\Support\Matching\ProviderDumps;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,7 +20,8 @@ use Illuminate\Support\Facades\Log;
  *
  * A backfill: a game identified from now on has them from the answer that
  * identified it, at no extra cost, and this exists for the library identified
- * before. Asks by the provider id the
+ * before — run a share a night by the scheduler until every game has been
+ * asked, and scoring the game again with what it learns. Asks by the provider id the
  * game already holds — not a re-match, which could re-slug or merge the game.
  *
  * On the scraper queue with MatchGame: it spends the same thread allowance.
@@ -30,6 +32,13 @@ class RecordProviderDumps implements ShouldQueue
 
     /** Well under the default connection's retry_after, so a slow answer is never asked for twice. */
     public int $timeout = 60;
+
+    /**
+     * Games asked about a night by the scheduler: a tenth of a plain
+     * account's 20 000 a day, so a library of ten thousand is through in a
+     * week and the night's matching still has its share.
+     */
+    public const NIGHTLY = 2000;
 
     public int $tries = 3;
 
@@ -64,7 +73,7 @@ class RecordProviderDumps implements ShouldQueue
         return $ids->count();
     }
 
-    public function handle(ScreenScraperService $provider): void
+    public function handle(ScreenScraperService $provider, GameScorer $scorer): void
     {
         $game = Game::find($this->gameId);
 
@@ -83,10 +92,17 @@ class RecordProviderDumps implements ShouldQueue
         if ($payload === null) {
             Log::info('The provider holds no game under this id any more.', ['game' => $this->gameId]);
 
+            // Asked, and answered: nothing to record, and nothing to gain by
+            // asking again every night.
+            $game->forceFill(['provider_scrapes' => null, 'dumps_recorded_at' => now()])->save();
+
             return;
         }
 
         ProviderDumps::record($game, $payload);
+
+        // The scrape count is part of the score.
+        $scorer->score($game, announce: false);
     }
 
     /** Put the job back rather than fail it, when the provider says to wait. Named as in MatchGame. */

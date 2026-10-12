@@ -50,6 +50,7 @@ use Illuminate\Support\Collection;
  * @property int|null $launchbox_id the LaunchBox Games Database's DatabaseID, when the title was found there
  * @property string|null $media_region
  * @property Carbon|null $matched_at
+ * @property int|null $provider_scrapes how many have scraped the game's most popular dump, of every one the provider knows (ProviderDumps)
  * @property Carbon|null $dumps_recorded_at when the provider's word on each of its files' dumps was last recorded (ProviderDumps)
  * @property Carbon|null $retroachievements_matched_at
  * @property Carbon|null $created_at
@@ -79,6 +80,7 @@ class Game extends Model
             'status' => GameStatus::class,
             'matched_at' => 'datetime',
             'dumps_recorded_at' => 'datetime',
+            'provider_scrapes' => 'integer',
             'rating' => 'integer',
             'launchbox_id' => 'integer',
             'library_rank' => 'integer',

@@ -1,7 +1,9 @@
 <?php
 
 use App\Jobs\MeasureLibrary;
+use App\Jobs\RecordProviderDumps;
 use App\Models\AppSetting;
+use App\Models\Game;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +43,15 @@ Schedule::command('retrobite:ra:sync-sets --queue')->monthlyOn(1, '05:00');
 Schedule::command('retrobite:launchbox:sync')->weeklyOn(0, '02:00')->runInBackground()->withoutOverlapping();
 Schedule::command('retrobite:launchbox:sync')->hourly()->runInBackground()->withoutOverlapping()->when(function (): bool {
     return ! DB::table('launchbox_platforms')->exists();
+});
+
+// The provider's word on the dumps of games identified before it was kept —
+// the scrape count in the score among it. A share a night, under any
+// account's daily allowance, until every game has been asked; skipped while
+// the last night's share is still queued.
+Schedule::command('retrobite:dumps --queue --limit='.RecordProviderDumps::NIGHTLY)->dailyAt('03:00')->when(function (): bool {
+    return Game::query()->awaitingDumps()->exists()
+        && ! DB::table('jobs')->where('payload', 'like', '%RecordProviderDumps%')->exists();
 });
 
 // The retroBite rank, when a score has moved since it was last worked out.

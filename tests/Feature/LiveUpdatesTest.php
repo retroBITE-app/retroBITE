@@ -21,6 +21,7 @@ use App\Support\LiveUpdates;
 use App\Support\ScreenScraperQuota;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -80,6 +81,7 @@ it('tells the game page when the lookup is over', function () {
 });
 
 it('tells the game page when its score changes', function () {
+    DB::table('launchbox_platforms')->insert(['name' => 'Sony Playstation', 'mean_rating' => 3.7]);
     $set = RaGame::factory()->synced()->create(['num_distinct_players' => 5000]);
     $game = Game::factory()->forConsole('psx')->matched(19256)->create(['retroachievements_id' => $set->id]);
 
