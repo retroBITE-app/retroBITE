@@ -154,6 +154,12 @@ final class LaunchBoxIndex
 
                 $names[] = $this->nameRow($id, $platform, $name, false);
 
+                $main = LaunchBoxTitle::mainKey($name);
+
+                if ($main !== null) {
+                    $names[] = [...$this->nameRow($id, $platform, '', false), 'name_key' => mb_substr($main, 0, 255), 'shortened' => true];
+                }
+
                 if (count($games) >= self::CHUNK) {
                     DB::table('launchbox_games')->insert($games);
                     $games = [];
@@ -189,6 +195,7 @@ final class LaunchBoxIndex
         }
 
         $nameCount += $this->insertNames($names);
+        $nameCount -= $this->pruneShortened();
 
         $platforms = $this->measurePlatforms();
 
@@ -217,7 +224,7 @@ final class LaunchBoxIndex
     }
 
     /**
-     * @return array{launchbox_game_id: int, platform: string, name_key: string, alias: bool}
+     * @return array{launchbox_game_id: int, platform: string, name_key: string, alias: bool, shortened: bool}
      */
     private function nameRow(int $id, string $platform, string $name, bool $alias): array
     {
@@ -226,13 +233,36 @@ final class LaunchBoxIndex
             'platform' => $platform,
             'name_key' => mb_substr(LaunchBoxTitle::key($name), 0, 255),
             'alias' => $alias,
+            'shortened' => false,
         ];
+    }
+
+    /**
+     * Shortened names that would guess: one that two games on a platform
+     * share ("Star Wars" from a dozen), or that is some game's whole name
+     * there, which belongs to that game.
+     *
+     * @return int how many were dropped
+     */
+    private function pruneShortened(): int
+    {
+        return DB::delete(<<<'SQL'
+            DELETE s FROM launchbox_names s
+            JOIN (
+                SELECT n.platform, n.name_key
+                FROM launchbox_names n
+                GROUP BY n.platform, n.name_key
+                HAVING COUNT(DISTINCT n.launchbox_game_id) > 1
+                    OR SUM(n.shortened = 0) > 0
+            ) taken ON taken.platform = s.platform AND taken.name_key = s.name_key
+            WHERE s.shortened = 1
+            SQL);
     }
 
     /**
      * Write name rows, leaving out any that reduced to nothing.
      *
-     * @param  list<array{launchbox_game_id: int, platform: string, name_key: string, alias: bool}>  $rows
+     * @param  list<array{launchbox_game_id: int, platform: string, name_key: string, alias: bool, shortened: bool}>  $rows
      */
     private function insertNames(array $rows): int
     {

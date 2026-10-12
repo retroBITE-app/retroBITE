@@ -15,6 +15,8 @@ use Illuminate\Support\Str;
  * "The Legend of Zelda: A Link to the Past" there; "Final Fantasy 6" against
  * "Final Fantasy VI". Both sides go through key() and are compared as equals.
  *
+ * Spacing, a possessive's apostrophe, "and" against "&" or "/", and a
+ * Japanese long vowel written out or not are spelling; words are not.
  * Deliberately no fuzzier than that. A near miss gives a game somebody
  * else's rating, which is worse than none — the score falls back on
  * RetroAchievements and the platform's average, and says so.
@@ -32,6 +34,21 @@ final class LaunchBoxTitle
 
     /** Articles a library title moves to the end ("Addams Family, The") and one database drops. */
     private const ARTICLES = 'the|a|an|le|la|les|el|los|las|der|die|das';
+
+    /**
+     * The key of a title's main part, before its subtitle — "Ehrgeiz" for
+     * "Ehrgeiz: God Bless the Ring" — or null when it has none.
+     */
+    public static function mainKey(string $title): ?string
+    {
+        if (! str_contains($title, ':')) {
+            return null;
+        }
+
+        $key = self::key(Str::before($title, ':'));
+
+        return $key !== '' && $key !== self::key($title) ? $key : null;
+    }
 
     public static function key(string $title): string
     {
@@ -52,9 +69,25 @@ final class LaunchBoxTitle
             return '';
         }
 
-        return implode(' ', array_map(
+        $words = array_map(
             fn (string $word) => self::NUMERALS[$word] ?? $word,
-            explode(' ', $key),
-        ));
+            // "And" goes with "&", which a slash also stands for:
+            // "Battletoads / Double Dragon", "Lethal Enforcers I & II".
+            array_values(array_filter(explode(' ', $key), fn (string $word) => $word !== 'and')),
+        );
+
+        // Run together, so a space or a hyphen one database has and the other
+        // does not stops mattering: "Water World" and "Waterworld", "Road
+        // Rash 3-D" and "3D", "Connor's" and "Connors". Two numbers stay
+        // apart, so "Game 2 3" is not "Game 23".
+        $joined = '';
+
+        foreach ($words as $index => $word) {
+            $joined .= $index > 0 && ctype_digit($word) && ctype_digit($words[$index - 1]) ? ' '.$word : $word;
+        }
+
+        // A Japanese long vowel, written out or not: "Monshou" and "Monshô"
+        // (which ascii() makes "Monsho"), "Juuouki" and "Juu Ou Ki".
+        return str_replace(['ou', 'uu'], ['o', 'u'], $joined);
     }
 }

@@ -157,10 +157,12 @@ final class GameScorer
      *
      * Only for an identified game: a placeholder's title is its filename,
      * and "Super Mario World (Hack)" with its tag stripped would take Super
-     * Mario World's rating. Primary names before alternate ones, the
+     * Mario World's rating. Whole names before ones with the subtitle
+     * left off, primary names before alternate ones, the
      * console's likeliest platform first, then the entry most people voted
      * on — LaunchBox lists some titles twice on one platform, and the
-     * second is a re-release nobody rates.
+     * second is a re-release nobody rates. Each of the game's names in turn
+     * (namesOf), the first that is found winning.
      */
     public function find(Game $game, Console $console): ?LaunchBoxGame
     {
@@ -168,19 +170,60 @@ final class GameScorer
             return null;
         }
 
-        $key = LaunchBoxTitle::key($game->title);
+        foreach ($this->namesOf($game) as $name) {
+            $entry = $this->findByName($name, $console->launchboxPlatforms);
+
+            if ($entry !== null) {
+                return $entry;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * What a game is called, best first: its own title, then the title of
+     * its RetroAchievements set, which is English and spelled as the
+     * community spells it — "Fire Emblem: The Binding Blade" where
+     * ScreenScraper has "Fire Emblem - Fûin No Tsurugi".
+     *
+     * Never a set marked as a hack, prototype, demo or subset: those carry
+     * the name of the game they are not, and would take its rating. An
+     * unlicensed or homebrew game is itself, so only its mark goes.
+     *
+     * @return list<string>
+     */
+    private function namesOf(Game $game): array
+    {
+        $names = [$game->title];
+        $set = $game->retroachievements_id !== null
+            ? ($game->relationLoaded('raGame') ? $game->raGame : RaGame::find($game->retroachievements_id))
+            : null;
+        $title = $set?->title;
+
+        if ($title !== null && $title !== '' && ! str_contains($title, '[Subset')
+            && preg_match('/~(?:Hack|Prototype|Demo|Test Kit)~/i', $title) !== 1) {
+            $names[] = trim((string) preg_replace('/~[^~]*~/', '', $title));
+        }
+
+        return array_values(array_unique($names));
+    }
+
+    /** @param  list<string>  $platforms */
+    private function findByName(string $name, array $platforms): ?LaunchBoxGame
+    {
+        $key = LaunchBoxTitle::key($name);
 
         if ($key === '') {
             return null;
         }
-
-        $platforms = $console->launchboxPlatforms;
 
         return LaunchBoxGame::query()
             ->select('launchbox_games.*')
             ->join('launchbox_names', 'launchbox_names.launchbox_game_id', '=', 'launchbox_games.id')
             ->whereIn('launchbox_names.platform', $platforms)
             ->where('launchbox_names.name_key', $key)
+            ->orderBy('launchbox_names.shortened')
             ->orderBy('launchbox_names.alias')
             ->orderByRaw('FIELD(launchbox_names.platform, '.implode(', ', array_fill(0, count($platforms), '?')).')', $platforms)
             ->orderByDesc('launchbox_games.votes')

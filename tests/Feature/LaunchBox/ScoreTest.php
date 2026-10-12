@@ -3,9 +3,11 @@
 use App\Enums\FileRole;
 use App\Jobs\MatchGame;
 use App\Jobs\RetroAchievements\SyncSet;
+use App\Jobs\ScoreGameChunk;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\LaunchBoxGame;
+use App\Models\RaGame;
 use App\Services\GameMatcher;
 use App\Services\GameScorer;
 use App\Services\LaunchBoxIndex;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 
@@ -163,6 +166,39 @@ it('finds a game by its title however the library spells it', function () {
         ->and($scorer->find(ratedSnesGame('Never Heard Of It'), $console))->toBeNull();
 });
 
+it('finds a game the library calls by its main title, but only where one game has it', function () {
+    importLaunchBox($this->dump, launchBoxXml([
+        [21, LAUNCHBOX_SNES, 'Ehrgeiz: God Bless the Ring', 4.0, 100],
+        [22, LAUNCHBOX_SNES, 'Star Wars: Episode I', 3.5, 50],
+        [23, LAUNCHBOX_SNES, 'Star Wars: Rogue Squadron', 3.8, 60],
+        [24, LAUNCHBOX_SNES, 'Toys', 2.0, 10],
+        [25, LAUNCHBOX_SNES, 'Toys: Let the Toy Wars Begin!', 3.0, 30],
+    ]));
+    $console = new Console('snes');
+    $scorer = app(GameScorer::class);
+
+    expect($scorer->find(ratedSnesGame('Ehrgeiz'), $console)?->id)->toBe(21)
+        // Two games start that way: which one is a guess.
+        ->and($scorer->find(ratedSnesGame('Star Wars'), $console))->toBeNull()
+        // A whole name is that game's, whatever else shortens to it.
+        ->and($scorer->find(ratedSnesGame('Toys'), $console)?->id)->toBe(24)
+        ->and(DB::table('launchbox_names')->where('shortened', true)->pluck('launchbox_game_id')->all())->toBe([21]);
+});
+
+it('finds a game by its RetroAchievements title when its own is not in the index', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
+    $console = new Console('snes');
+    $scorer = app(GameScorer::class);
+    $named = fn (string $title, string $set) => ratedSnesGame($title, ['retroachievements_id' => RaGame::factory()->create(['title' => $set])->id]);
+
+    expect($scorer->find($named('Chrono Torigaa', 'Chrono Trigger'), $console)?->id)->toBe(13)
+        // An unlicensed game is itself; only the mark goes.
+        ->and($scorer->find($named('Shakku Fu', '~Unlicensed~ Shaq Fu'), $console)?->id)->toBe(11)
+        // A hack and a prototype carry the name of a game they are not.
+        ->and($scorer->find($named('Mario Hack', '~Hack~ Super Mario World'), $console))->toBeNull()
+        ->and($scorer->find($named('Early Zelda', '~Prototype~ The Legend of Zelda: A Link to the Past'), $console))->toBeNull();
+});
+
 it('does not look up a game by its filename', function () {
     importLaunchBox($this->dump, launchBoxSnesDump());
 
@@ -299,6 +335,39 @@ it('ranks the library after scoring all of it', function () {
     expect($smw->refresh()->library_rank)->toBe(1)
         ->and($zelda->refresh()->library_rank)->toBe(2)
         ->and($shaq->refresh()->library_rank)->toBe(3);
+});
+
+it('queues the scoring from the command, in chunks, and ranks once at the end', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
+
+    $zelda = ratedSnesGame('Legend Of Zelda, The - A Link To The Past');
+    $smw = ratedSnesGame('Super Mario World');
+    Game::factory()->forConsole('nes')->matched()->create(['title' => 'Not This One']);
+
+    Queue::fake()->except([ScoreGameChunk::class]);
+
+    $this->artisan('retrobite:score --console=snes')
+        ->expectsOutput('Queued 2 games to score in 1 jobs.')
+        ->assertSuccessful();
+
+    $batch = DB::table('job_batches')->sole();
+
+    expect($batch->name)->toBe('Score snes')
+        ->and($batch->total_jobs)->toBe(1)
+        ->and($batch->finished_at)->not->toBeNull()
+        ->and($smw->refresh()->library_rank)->toBe(1)
+        ->and($zelda->refresh()->library_rank)->toBe(2);
+});
+
+it('scores in the command and waits with --now', function () {
+    importLaunchBox($this->dump, launchBoxSnesDump());
+    $smw = ratedSnesGame('Super Mario World');
+    Queue::fake();
+
+    $this->artisan('retrobite:score --now')->expectsOutput('Scored 1 games.')->assertSuccessful();
+
+    expect($smw->refresh()->library_rank)->toBe(1);
+    Queue::assertNothingPushed();
 });
 
 it('marks the ranks stale when one score moves, and works them out on the next round', function () {

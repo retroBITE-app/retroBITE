@@ -81,6 +81,13 @@ it('reduces two spellings of one game to the same key', function (string $librar
     'accents' => ['Pokémon - Red Version', 'Pokemon Red Version'],
     'dump tags' => ['Super Mario World (USA) [!]', 'Super Mario World'],
     'french article' => ['Schtroumpfs, Les', 'Les Schtroumpfs'],
+    'one word or two' => ['Water World', 'Waterworld'],
+    'a hyphen' => ['Road Rash 3-d', 'Road Rash 3D'],
+    'a possessive' => ['Jimmy Connor\'s Tennis', 'Jimmy Connors Tennis'],
+    'a slash for and' => ['Battletoads And Double Dragon', 'Battletoads / Double Dragon'],
+    'numerals and an ampersand' => ['Dragon Quest 2 And 3', 'Dragon Quest II & III'],
+    'a long vowel' => ['Fire Emblem - Monshô No Nazo', 'Fire Emblem: Monshou no Nazo'],
+    'a long vowel apart' => ['Juu Ou Ki', 'Juuouki'],
 ]);
 
 it('keeps games that only look alike apart', function (string $one, string $other) {
@@ -88,4 +95,6 @@ it('keeps games that only look alike apart', function (string $one, string $othe
 })->with([
     'X is not ten' => ['Mega Man X', 'Mega Man 10'],
     'a sequel' => ['Final Fantasy 2', 'Final Fantasy 3'],
+    'two numbers' => ['Game 2 3', 'Game 23'],
+    'a different word' => ['Alundra 2', 'Alundra'],
 ]);
