@@ -1114,14 +1114,15 @@ it('shows the score with the sources it was worked out from', function () {
 
     $game = Game::factory()->forConsole('snes')->matched(101)->rated(95)->create([
         'title' => 'Super Mario World', 'slug' => 'super-mario-world',
-        'launchbox_id' => 39777, 'retroachievements_id' => $set->id,
+        'launchbox_id' => 39777, 'retroachievements_id' => $set->id, 'provider_scrapes' => 320_000,
     ]);
 
     Livewire::test('games.show', ['game' => $game])
-        ->assertSee('retroBite score')
+        ->assertSee('retroBITE score')
         ->assertDontSee('95 / 100')
         ->assertSee('LaunchBox 4.7★, 1,836 votes')
-        ->assertSee('RetroAchievements, 111,015 players');
+        ->assertSee('RetroAchievements, 111,015 players')
+        ->assertSee('ScreenScraper, 320,000 scrapes');
 });
 
 /*

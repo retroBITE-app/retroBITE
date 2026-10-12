@@ -221,7 +221,8 @@ it('scores the library against the index, best above worst', function () {
 
     expect($best->refresh()->rating)->toBeGreaterThan(85)
         ->and($best->launchbox_id)->toBe(39777)
-        ->and($worst->refresh()->rating)->toBeLessThan(35)
+        // Popular among so few games, which may lift it six points.
+        ->and($worst->refresh()->rating)->toBeLessThan(40)
         // Found, but with no votes there is nothing to score it on.
         ->and($unrated->refresh()->rating)->toBeNull()
         ->and($unrated->launchbox_id)->toBe(15)
@@ -422,14 +423,14 @@ it('shows the rank with the score under the description', function () {
     $game = ratedSnesGame('A Link to the Past', ['rating' => 93, 'library_rank' => 5, 'description' => 'Hyrule, again.']);
 
     Livewire::test('games.show', ['game' => $game])
-        ->assertSeeInOrder(['Hyrule, again.', '93', 'retroBite score', '#5'])
+        ->assertSeeInOrder(['Hyrule, again.', '93', 'retroBITE score', '#5'])
         ->assertDontSee('#5 of');
 });
 
 it('shows no score line for a game without one', function () {
     $game = ratedSnesGame('Obscure');
 
-    Livewire::test('games.show', ['game' => $game])->assertDontSee('retroBite score');
+    Livewire::test('games.show', ['game' => $game])->assertDontSee('retroBITE score');
 });
 
 it('shows the rank in the library table, but not on the cards', function () {

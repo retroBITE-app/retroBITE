@@ -22,7 +22,9 @@ use Illuminate\Support\Str;
  *
  * A file is one of those dumps by checksum, or by exact filename, which every
  * file has without being read. A file the provider does not know keeps what
- * it had, and its region is read off its name instead.
+ * it had, and its region is read off its name instead. The game keeps the
+ * most popular dump's count (games.provider_scrapes), which the retroBite
+ * score reads as popularity.
  */
 final class ProviderDumps
 {
@@ -81,8 +83,38 @@ final class ProviderDumps
         }
 
         if ($payload !== null) {
-            $game->forceFill(['dumps_recorded_at' => now()])->save();
+            $game->forceFill([
+                'provider_scrapes' => self::mostScraped([...(array) Arr::get($payload, 'roms', []), Arr::get($payload, 'raw.rom')]),
+                'dumps_recorded_at' => now(),
+            ])->save();
         }
+    }
+
+    /**
+     * The scrape count of the game's most popular dump, of every one the
+     * provider knows rather than only those on disk: a library that holds a
+     * converted copy still holds the game that many people have. Hacks,
+     * translations, betas, demos and prototypes are somebody else's.
+     *
+     * @param  array<int|string, mixed>  $roms  every dump listed, and the one the lookup matched
+     */
+    private static function mostScraped(array $roms): ?int
+    {
+        $counts = [];
+
+        foreach ($roms as $rom) {
+            if (! is_array($rom) || ! is_numeric(Arr::get($rom, 'nbscrap'))) {
+                continue;
+            }
+
+            $flags = self::facts($rom)['provider_flags'];
+
+            if (array_intersect($flags, ['hack', 'trad', 'beta', 'demo', 'proto']) === []) {
+                $counts[] = (int) $rom['nbscrap'];
+            }
+        }
+
+        return $counts === [] ? null : max($counts);
     }
 
     /**

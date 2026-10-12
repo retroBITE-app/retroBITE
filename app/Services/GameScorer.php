@@ -20,8 +20,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Works out a game's retroBite score and writes it to games.rating.
  *
- * Everything it reads is already in the database — the LaunchBox index and
- * the achievement sets — so scoring costs no request and is done whenever an
+ * Everything it reads is already in the database — the LaunchBox index, the
+ * achievement sets and the provider's scrape counts — so scoring costs no request and is done whenever an
  * ingredient changes: after a match, after a set sync, after the index is
  * rebuilt. The arithmetic is RetroBiteScore's; this gathers its inputs.
  */
@@ -37,6 +37,14 @@ final class GameScorer
 
     /** @var array<string, float|null> */
     private array $platformMeans = [];
+
+    /**
+     * Every LaunchBox game's vote count on a platform, in order, for where
+     * one game's stands among them.
+     *
+     * @var array<string, array<int, int>>
+     */
+    private array $platformVotes = [];
 
     public function __construct(private readonly LibraryRanking $ranking) {}
 
@@ -67,6 +75,8 @@ final class GameScorer
             platformMean: $this->platformMean($entry->platform ?? $console?->launchboxPlatforms[0] ?? null),
             players: $players,
             engagement: $set !== null && $players ? $this->engagement($set->id, $players) : null,
+            votePercentile: $entry !== null ? $this->votePercentile($entry->platform, $entry->votes) : null,
+            scrapes: $game->provider_scrapes,
         );
 
         // Compared by value rather than with isDirty(): a model just created
@@ -98,6 +108,7 @@ final class GameScorer
     {
         $this->engagement = [];
         $this->platformMeans = [];
+        $this->platformVotes = [];
         $count = 0;
 
         Game::query()
@@ -229,6 +240,57 @@ final class GameScorer
             ->orderByDesc('launchbox_games.votes')
             ->orderBy('launchbox_games.id')
             ->first();
+    }
+
+    /**
+     * Where a vote count stands among every game LaunchBox lists on the
+     * platform, 0 to 100: against the platform, because 700 votes is a
+     * classic on the PlayStation and the whole Lynx library's worth. Ties
+     * count half, so a platform's many unrated games sit low, not at zero.
+     */
+    private function votePercentile(string $platform, int $votes): ?float
+    {
+        $this->platformVotes[$platform] ??= DB::table('launchbox_games')
+            ->where('platform', $platform)
+            ->orderBy('votes')
+            ->pluck('votes')
+            ->map(fn ($count): int => (int) $count)
+            ->values()
+            ->all();
+
+        $all = $this->platformVotes[$platform];
+
+        if ($all === []) {
+            return null;
+        }
+
+        $below = self::countBelow($all, $votes);
+        $equal = self::countBelow($all, $votes + 1) - $below;
+
+        return ($below + $equal / 2) / count($all) * 100;
+    }
+
+    /**
+     * How many of an ordered list are under a value.
+     *
+     * @param  array<int, int>  $sorted  indexed from zero
+     */
+    private static function countBelow(array $sorted, int $value): int
+    {
+        $low = 0;
+        $high = count($sorted);
+
+        while ($low < $high) {
+            $middle = intdiv($low + $high, 2);
+
+            if ($sorted[$middle] < $value) {
+                $low = $middle + 1;
+            } else {
+                $high = $middle;
+            }
+        }
+
+        return $low;
     }
 
     private function platformMean(?string $platform): ?float

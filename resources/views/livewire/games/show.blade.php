@@ -914,6 +914,14 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             );
         }
 
+        if ($this->game->provider_scrapes !== null && $this->game->provider_scrapes > 0) {
+            $sources[] = trans_choice(
+                '{1} ScreenScraper, one scrape|[2,*] ScreenScraper, :scrapes scrapes',
+                $this->game->provider_scrapes,
+                ['scrapes' => Number::format($this->game->provider_scrapes)],
+            );
+        }
+
         return $sources;
     }
 
@@ -1761,7 +1769,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     {{-- The figures behind the score, kept out of the line until
                          somebody asks, one per line. --}}
                     <x-info class="-translate-y-px" :text="[
-                        __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it on RetroAchievements.'),
+                        __('Out of 100: players\' ratings from the LaunchBox Games Database, weighed with how many play it — votes there, players on RetroAchievements, scrapes on ScreenScraper.'),
                         ...$this->scoreSources,
                     ]" />
                 </div>

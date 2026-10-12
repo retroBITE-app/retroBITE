@@ -37,13 +37,41 @@ it('pulls a thinly voted game towards the platform average', function () {
         ->and($manyVotes)->toBe(100);
 });
 
-it('lets RetroAchievements move the score by its quarter at most', function () {
-    $alone = RetroBiteScore::compute(2.0, 5000, 3.5, null);
-    $popular = RetroBiteScore::compute(2.0, 5000, 3.5, 1_000_000, 1.0);
+it('lets popularity move a rated game six points at most, either way', function () {
+    // Shaq Fu's ratings with the most famous numbers there are: it has the
+    // votes because people know how bad it is.
+    $infamous = RetroBiteScore::compute(1.98, 74, 3.6, null);
+    $famous = RetroBiteScore::compute(1.98, 74, 3.6, 1_000_000, 1.0, 100.0, 1_000_000);
 
-    // A hundred on the RetroAchievements side, a quarter of the weight.
-    expect($popular - $alone)->toBeLessThanOrEqual(25)
-        ->and($popular)->toBeGreaterThan($alone);
+    // A fine game hardly anyone has heard of, already pulled to the middle
+    // for its few votes.
+    $fine = RetroBiteScore::compute(4.5, 5, 3.6, null);
+    $obscure = RetroBiteScore::compute(4.5, 5, 3.6, 120, 0.0, 1.0, 5_000);
+
+    expect($famous - $infamous)->toBeLessThanOrEqual(6)
+        ->and($famous)->toBeGreaterThan($infamous)
+        ->and($fine - $obscure)->toBeLessThanOrEqual(6);
+});
+
+it('reads popularity from whichever sources a game has, a scrape count for half', function () {
+    [$votesOnly, $sure] = RetroBiteScore::popularity(90.0, null);
+    [$both] = RetroBiteScore::popularity(90.0, null, null, 5_000);
+    [$scrapesOnly, $unsure] = RetroBiteScore::popularity(null, null, null, 500_000);
+
+    // A scrape count at the floor pulls a 90 down by a third, being worth
+    // half of the votes: (90 + 0.5 × 0) / 1.5.
+    expect($votesOnly)->toEqual(90.0)
+        ->and($sure)->toEqual(1.0)
+        ->and($both)->toEqualWithDelta(60.0, 0.01)
+        // Alone, it is the whole of the popularity but half as sure.
+        ->and($scrapesOnly)->toEqual(100.0)
+        ->and($unsure)->toEqual(0.5);
+});
+
+it('scores a game nothing rates but people play, as popularity allows', function () {
+    // Half as sure as a vote count: (0.7 × 62.5 + 0.15 × 100) / 0.85.
+    expect(RetroBiteScore::compute(null, 0, 3.5, null, null, null, 500_000))->toBe(69)
+        ->and(RetroBiteScore::compute(null, 0, 3.5, null, null, null, null))->toBeNull();
 });
 
 it('counts a set few have played for little', function () {
@@ -55,9 +83,9 @@ it('counts a set few have played for little', function () {
 it('keeps a game only RetroAchievements knows near the middle', function () {
     $score = RetroBiteScore::compute(null, 0, 3.5, 1_000_000, 1.0);
 
-    // Three quarters stay at the platform's average (62.5); the rest is the
+    // Seven tenths stay at the platform's average (62.5); the rest is the
     // set at its best. Popularity alone never makes a game great.
-    expect($score)->toBe(72);
+    expect($score)->toBe(74);
 });
 
 it('reads popularity on a log scale between its anchors', function () {

@@ -392,6 +392,8 @@ it('records how often each dump is played and what the provider flags it as', fu
         'rom' => ['romfilename' => 'FF9 (Disc 1).bin', 'nbscrap' => '113401', 'best' => '1', 'regions' => ['regions_shortname' => ['us']]],
         'roms' => [
             ['romfilename' => 'FF9 (Disc 1) (Traducao).bin', 'nbscrap' => '52', 'trad' => '1', 'hack' => '0'],
+            ['romfilename' => 'FF9 (Disc 1) (Europe).bin', 'nbscrap' => '250000'],
+            ['romfilename' => 'FF9 (Disc 1) (Hack).bin', 'nbscrap' => '900000', 'hack' => '1'],
         ],
     ]);
 
@@ -409,7 +411,10 @@ it('records how often each dump is played and what the provider flags it as', fu
         ->and($files['FF9 (Disc 1) (Traducao).bin']->provider_flags)->toBe(['trad'])
         // Unknown to the provider: nothing claimed for it.
         ->and($files['FF9 (Disc 1) (Japan).bin']->scrapes)->toBeNull()
-        ->and($game->fresh()->dumps_recorded_at)->not->toBeNull();
+        ->and($game->fresh()->dumps_recorded_at)->not->toBeNull()
+        // The game keeps the most popular dump the provider knows, held here
+        // or not, and never a hack's.
+        ->and($game->fresh()->provider_scrapes)->toBe(250000);
 });
 
 it('backfills the dumps of games identified before, by the id they hold, once', function () {
@@ -423,7 +428,8 @@ it('backfills the dumps of games identified before, by the id they hold, once', 
     $this->artisan('retrobite:dumps')->expectsOutput('1 games to ask about.')->assertSuccessful();
 
     expect($game->files()->sole()->scrapes)->toBe(900)
-        ->and($game->files()->sole()->region)->toBe('eu');
+        ->and($game->files()->sole()->region)->toBe('eu')
+        ->and($game->fresh()->provider_scrapes)->toBe(900);
 
     Http::assertSent(fn ($request) => str_contains($request->url(), 'gameid=19256'));
 
