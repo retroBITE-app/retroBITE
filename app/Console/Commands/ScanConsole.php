@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Exceptions\ScanAborted;
-use App\Jobs\MatchGame;
+use App\Jobs\FinishScan;
 use App\Jobs\ScanConsoleFolder;
 use App\Models\ConsoleSourceFolder;
 use App\Services\LibraryScanner;
@@ -51,12 +51,12 @@ class ScanConsole extends Command
                 continue;
             }
 
-            $queued = MatchGame::queueAwaiting($console->key);
+            $queued = FinishScan::queueFollowUps($console);
 
             $this->info($console->name);
             $this->table(
-                [...array_keys($result->toArray()), 'queued_for_lookup'],
-                [[...array_values($result->toArray()), $queued]],
+                [...array_keys($result->toArray()), ...array_keys($queued)],
+                [[...array_values($result->toArray()), ...array_values($queued)]],
             );
         }
 

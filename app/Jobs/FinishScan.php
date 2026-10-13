@@ -44,26 +44,10 @@ class FinishScan implements ShouldQueue
         // older answer.
         FolderCounts::recount($console);
 
-        // Recording what is on disk is only half of it. Without this the
-        // library fills with placeholders named after their filenames and
-        // nothing ever identifies them.
-        $queued = MatchGame::queueAwaiting($console->key);
-
-        // And what the provider cannot answer, the console might. Zero for
-        // every console without a toolbox, which is nearly all of them.
-        $inspecting = InspectGameFile::queueAwaiting($console->key);
-
-        // A file the scan has just found — a conversion's output, an upload —
-        // has no RA hash, and the game it joined may have been identified
-        // long ago, so nothing else would ever hash it.
-        $identifying = IdentifyGame::queueUnhashed($console->key);
-
         $context = [
             'console' => $console->key,
             'failed_chunks' => $this->failedChunks,
-            'queued_for_lookup' => $queued,
-            'queued_for_inspection' => $inspecting,
-            'queued_for_ra_hash' => $identifying,
+            ...self::queueFollowUps($console),
         ];
 
         $this->failedChunks > 0
@@ -73,5 +57,28 @@ class FinishScan implements ShouldQueue
         // A scan is the moment the app learns what arrived over the share,
         // which is what the disk figure has no other way of hearing about.
         LibraryStorage::changed();
+    }
+
+    /**
+     * What a scan exists to start, queued: shared with a scan run in the
+     * foreground (retrobite:scan), which has no FinishScan to do it.
+     *
+     * @return array{queued_for_lookup: int, queued_for_inspection: int, queued_for_ra_hash: int}
+     */
+    public static function queueFollowUps(Console $console): array
+    {
+        return [
+            // Recording what is on disk is only half of it. Without this the
+            // library fills with placeholders named after their filenames and
+            // nothing ever identifies them.
+            'queued_for_lookup' => MatchGame::queueAwaiting($console->key),
+            // And what the provider cannot answer, the console might. Zero for
+            // every console without a toolbox, which is nearly all of them.
+            'queued_for_inspection' => InspectGameFile::queueAwaiting($console->key),
+            // A file the scan has just found — a conversion's output, an
+            // upload — has no RA hash, and the game it joined may have been
+            // identified long ago, so nothing else would ever hash it.
+            'queued_for_ra_hash' => IdentifyGame::queueUnhashed($console->key),
+        ];
     }
 }

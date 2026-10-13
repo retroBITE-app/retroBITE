@@ -210,3 +210,12 @@ it('forgets only the failures of the games it queues, under a limit', function (
     expect(GameFile::query()->where('game_id', $queued)->value('ra_hash_size'))->toBeNull()
         ->and($other->files()->first()->ra_hash_size)->toBe(6);
 });
+
+it('hashes what a scan run in the foreground has just found', function () {
+    File::put($this->root.'/ps2/Game.zso', 'x');
+    ConsoleSourceFolder::add(new Console('ps2'));
+
+    $this->artisan('retrobite:scan', ['console' => 'ps2'])->assertSuccessful();
+
+    Queue::assertPushed(IdentifyGame::class);
+});
