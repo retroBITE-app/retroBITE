@@ -226,6 +226,20 @@ abstract class Converter
     }
 
     /**
+     * For a converter that replaces its source: what the toolbox read off the
+     * source that is no longer true of the output, written over the kept
+     * row's record. The rest stays. Null is for the next scan to read again,
+     * which is a read of the whole image; disc_key is never here, being the
+     * disc's and kept once decrypting has deleted its file.
+     *
+     * @return array<string, mixed>
+     */
+    public function factsAfterSwap(): array
+    {
+        return ['license_id' => null, 'video_mode' => null, 'encrypted' => null];
+    }
+
+    /**
      * Files beside a disc that belong to the source rather than the output,
      * relative to the library root, and go when it is replaced.
      *

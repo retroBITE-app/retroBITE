@@ -9,6 +9,7 @@ use App\Decryption\DiscKeys;
 use App\Decryption\Ps3Disc;
 use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
+use App\Enums\DecryptState;
 use App\Enums\FileArchiveReason;
 use App\Exceptions\ConversionFailed;
 use App\Exceptions\LibraryPathException;
@@ -227,8 +228,8 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
         ->and(File::glob($this->root.'/ps3/.*retrobite-replacing'))->toBe([])
         ->and(GameFile::query()->count())->toBe(1)
         ->and($file->fresh()?->md5)->toBeNull()
-        ->and($file->fresh()?->meta?->license_id)->toBeNull()
-        ->and($file->fresh()?->meta?->encrypted)->toBeNull()
+        ->and($file->fresh()?->meta?->license_id)->toBe('BLUS30001')
+        ->and($file->fresh()?->meta?->encrypted)->toBeFalse()
         ->and($file->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY)
         ->and($conversion->log)->toContain('Replaced Game (USA).iso')
         ->and($conversion->log)->toContain('Deleted Game (USA).dkey');
@@ -242,6 +243,12 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
         ->and($archived->meta?->license_id)->toBe('BLUS30001')
         ->and($file->fresh()?->source_id)->toBe($archived->id)
         ->and($file->fresh()?->scrapes)->toBe(900);
+
+    // Known decrypted at once, its serial kept: the scan that follows has no
+    // reason to read the whole image again.
+    expect(DecryptState::for($file->fresh()?->meta?->encrypted, false))->toBe(DecryptState::Decrypted)
+        ->and(InspectGameFile::queueAwaiting('ps3'))->toBe(0);
+    Queue::assertNotPushed(InspectGameFile::class);
 
     Process::assertRan(function (PendingProcess $process) use ($conversion): bool {
         $command = (array) $process->command;
@@ -385,7 +392,8 @@ it('after a restart, finishes a swap whose rename had already landed', function 
     expect($conversion->fresh()?->status)->toBe(ConversionStatus::Done)
         ->and($conversion->fresh()?->log)->toContain('Finished after a restart')
         ->and(File::exists($this->root.'/ps3/Game (USA).dkey'))->toBeFalse()
-        ->and($file->fresh()?->meta?->encrypted)->toBeNull();
+        ->and($file->fresh()?->meta?->encrypted)->toBeFalse()
+        ->and($file->fresh()?->meta?->license_id)->toBe('BLUS30538');
 });
 
 it('after a restart, renames in a disc still parked when the swap had begun', function () {

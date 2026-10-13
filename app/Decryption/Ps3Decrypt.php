@@ -135,6 +135,15 @@ final class Ps3Decrypt extends Converter
     }
 
     /**
+     * The same disc, its title ID read off the unencrypted part of it either
+     * way, and proved decrypted by confirm(): nothing for a scan to read again.
+     */
+    public function factsAfterSwap(): array
+    {
+        return ['encrypted' => false];
+    }
+
+    /**
      * The key files beside the image: left behind, ps3netsrv would decrypt the decrypted image again.
      *
      * @return list<string>

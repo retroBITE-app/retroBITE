@@ -95,12 +95,6 @@ final class ConversionRunner
         'ra_hash', 'ra_hash_size', 'ra_hash_mtime', 'ra_hashed_at',
     ];
 
-    /**
-     * What the toolbox read off the replaced bytes, for the next scan to read again.
-     * Not disc_key: it is the disc's, and kept once decrypting has deleted its file.
-     */
-    private const META_FACTS = ['license_id', 'video_mode', 'encrypted'];
-
     private string $log = '';
 
     private float $lastTick = 0.0;
@@ -639,7 +633,11 @@ final class ConversionRunner
                 'source_id' => $source->id,
                 ...array_fill_keys(self::CONTENT_FACTS, null),
             ]);
-            $file->meta()->update(array_fill_keys(self::META_FACTS, null));
+            $facts = $converter->factsAfterSwap();
+
+            if ($facts !== []) {
+                $file->meta()->update($facts);
+            }
         });
         $this->line(__('Replaced :path', ['path' => $final]));
 
