@@ -97,6 +97,7 @@ it('puts loose discs in a folder named for the set, with a playlist of their she
         ->and($plan['extras'])->toBe([[
             'url' => route('transfers.extra', ['target' => 'batocera', 'gameId' => $game->id, 'path' => "{$folder}/Final Fantasy VII (USA).m3u"]),
             'destination' => "{$folder}/Final Fantasy VII (USA).m3u",
+            'rewrite' => true,
         ]])
         ->and($target->extra($game, "{$folder}/Final Fantasy VII (USA).m3u"))
         ->toBe("Final Fantasy VII (USA) (Disc 1).cue\nFinal Fantasy VII (USA) (Disc 2).cue\n")
@@ -192,4 +193,19 @@ it('writes the folder and its playlist to a share, and lists the game once', fun
         ->and(File::get(shareDiscFile('roms/psx/images/Final Fantasy VII (USA)-thumb.png')))->toBe('png-bytes')
         ->and(File::exists(shareDiscFile('roms/psx/Final Fantasy VII (USA) (Disc 1).cue')))->toBeFalse()
         ->and(array_map('strval', $xml->xpath('/gameList/game/path')))->toBe(['./Final Fantasy VII (USA)/Final Fantasy VII (USA).m3u']);
+});
+
+it('writes the playlist over the one a share has from a set sent before a disc was added', function () {
+    $game = looseDiscs();
+    $destination = Destination::query()->create(['name' => 'Living room', 'host' => 'batocera', 'share' => 'share']);
+
+    // Sent when the library held one disc of it: the playlist names that one.
+    $folder = 'roms/psx/Final Fantasy VII (USA)';
+    File::ensureDirectoryExists(shareDiscFile($folder));
+    File::put(shareDiscFile("{$folder}/Final Fantasy VII (USA).m3u"), "Final Fantasy VII (USA) (Disc 1).cue\n");
+
+    Livewire::test('games.show', ['game' => $game])->call('sendToShare', $destination->id, 'batocera');
+
+    expect(Transfer::query()->sole()->status)->toBe(Transfer::DONE)
+        ->and(File::get(shareDiscFile("{$folder}/Final Fantasy VII (USA).m3u")))->toBe("Final Fantasy VII (USA) (Disc 1).cue\nFinal Fantasy VII (USA) (Disc 2).cue\n");
 });

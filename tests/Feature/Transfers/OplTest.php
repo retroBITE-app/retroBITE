@@ -182,6 +182,7 @@ it('adds the config and each piece of art the game has, named after its serial, 
         ->and(Arr::first($plan->extras))->toBe([
             'url' => route('transfers.extra', ['target' => 'opl', 'gameId' => $game->id, 'path' => 'CFG/SLES_503.86.cfg']),
             'destination' => 'CFG/SLES_503.86.cfg',
+            'rewrite' => false,
         ])
         ->and($plan->toArray()['gamelist'])->toBeNull();
 });

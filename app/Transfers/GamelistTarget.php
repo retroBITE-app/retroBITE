@@ -161,6 +161,12 @@ abstract class GamelistTarget implements TransferTarget
             : null;
     }
 
+    /** The playlist is the only extra, and the discs it names are the game's as it is now. */
+    public function rewritesExtra(Game $game, string $destination): bool
+    {
+        return in_array($destination, $this->extras($game), true);
+    }
+
     public function hint(): ?string
     {
         return null;
@@ -215,6 +221,7 @@ abstract class GamelistTarget implements TransferTarget
         $extras = array_map(fn (string $destination): array => [
             'url' => route('transfers.extra', ['target' => $this->key(), 'gameId' => $game->id, 'path' => $destination, ...$this->options()->query()]),
             'destination' => $destination,
+            'rewrite' => $this->rewritesExtra($game, $destination),
         ], $this->extras($game));
 
         $planned = [
