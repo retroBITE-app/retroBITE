@@ -30,10 +30,11 @@ loose game (the scan's passes, hardest first; see CLAUDE.md).
 **A scan is three kinds of job, all on `default`:**
 
 1. **`ScanConsoleFolder` plans.** `LibraryScanner::plan()` walks the whole
-   folder, reads every playlist and cuesheet, and runs the three passes over
+   folder, reads every playlist and cuesheet, and runs the passes over
    it, writing nothing. The plan is a list of units, one per game: a
-   playlist with its discs and their tracks, a sheet with its tracks, or one
-   loose file. Each file is in one unit only. The planner marks what has gone
+   playlist with its discs and their tracks, the discs of a set their names
+   number ("(Disc 2)", added with docs/adr/0008), a sheet with its tracks, or
+   one loose file. Each file is in one unit only. The planner marks what has gone
    (`markMissing`, compared in PHP and flagged a thousand at a time) and
    queues the rest as a job batch named `Scan {console}`.
 2. **`ScanFolderChunk` records** about a hundred units: their games and file

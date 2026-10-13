@@ -152,6 +152,77 @@ it('treats a cuesheet with no playlist as its own game', function () {
         ->and(GameFile::where('role', FileRole::Track)->count())->toBe(2);
 });
 
+it('makes one game of loose cuesheets that say they are discs of one set', function () {
+    foreach ([1, 2] as $disc) {
+        put("psx/Final Fantasy VII (USA) (Disc {$disc}).cue", "FILE \"Final Fantasy VII (USA) (Disc {$disc}).bin\" BINARY\n");
+        put("psx/Final Fantasy VII (USA) (Disc {$disc}).bin");
+    }
+
+    $result = scan('psx');
+    $game = Game::sole();
+
+    // Two sheets walked one at a time were two games and two lookups.
+    expect($result->gamesCreated)->toBe(1)
+        ->and($game->title)->not->toContain('Disc')
+        ->and($game->files()->where('role', FileRole::Sheet)->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2])
+        ->and($game->files()->where('role', FileRole::Track)->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2])
+        ->and($game->identifiableFile()->filename)->toBe('Final Fantasy VII (USA) (Disc 1).bin');
+
+    $track = GameFile::where('filename', 'Final Fantasy VII (USA) (Disc 2).bin')->sole();
+
+    expect($track->parent->filename)->toBe('Final Fantasy VII (USA) (Disc 2).cue');
+});
+
+it('makes one game of single-file discs of one set, numbered by name', function () {
+    put('psx/Metal Gear Solid (Europe) (Disc 2).chd');
+    put('psx/Metal Gear Solid (Europe) (Disc 1).chd');
+
+    scan('psx');
+
+    $game = Game::sole();
+
+    expect($game->files()->orderBy('disc_number')->pluck('filename')->all())
+        ->toBe(['Metal Gear Solid (Europe) (Disc 1).chd', 'Metal Gear Solid (Europe) (Disc 2).chd'])
+        ->and($game->files()->pluck('role')->unique()->all())->toBe([FileRole::Rom]);
+});
+
+it('keeps discs apart that differ in folder, kind or anything but the disc', function () {
+    put('psx/Game (Disc 1).chd');
+    put('psx/Other/Game (Disc 2).chd');
+    put('psx/Riven (Disc 1).chd');
+    put('psx/Riven (Disc 2).iso');
+    put('psx/Myst (Disc 1).chd');
+    put('psx/Myst (Disc 2) (Rev 1).chd');
+
+    $result = scan('psx');
+
+    expect($result->gamesCreated)->toBe(6)
+        ->and(GameFile::whereNotNull('disc_number')->count())->toBe(0);
+});
+
+it('does not read a console name for a disc number', function () {
+    put('amigacd32/Amiga CD32 Demo.iso');
+    put('amigacd32/Amiga CD32 Sampler.iso');
+
+    expect(scan('amigacd32')->gamesCreated)->toBe(2);
+});
+
+it('brings a set\'s discs home to the game the provider knows on a rescan', function () {
+    put('psx/Riven (Disc 1).chd');
+    put('psx/Riven (Disc 2).chd');
+
+    // As an earlier scan left them: a game per disc, the second one identified.
+    $first = Game::create(['console' => 'psx', 'title' => 'Riven (Disc 1)', 'slug' => 'riven-disc-1', 'status' => GameStatus::Unmatched]);
+    $known = Game::create(['console' => 'psx', 'title' => 'Riven', 'slug' => 'riven', 'status' => GameStatus::Matched, 'screenscraper_id' => 1]);
+    GameFile::create(['game_id' => $first->id, 'path' => 'psx/Riven (Disc 1).chd', 'filename' => 'Riven (Disc 1).chd', 'extension' => 'chd', 'role' => FileRole::Rom]);
+    GameFile::create(['game_id' => $known->id, 'path' => 'psx/Riven (Disc 2).chd', 'filename' => 'Riven (Disc 2).chd', 'extension' => 'chd', 'role' => FileRole::Rom, 'disc_number' => 2]);
+
+    scan('psx');
+
+    expect($known->files()->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2])
+        ->and($first->files()->count())->toBe(0);
+});
+
 it('reads an unquoted FILE directive', function () {
     put('psx/Game.cue', "FILE track01.bin BINARY\n");
     put('psx/track01.bin');
