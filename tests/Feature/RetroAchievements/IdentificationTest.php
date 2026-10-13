@@ -3,6 +3,7 @@
 use App\Enums\FileRole;
 use App\Enums\RetroAchievementsStatus;
 use App\Exceptions\RetroAchievements\BadCredentials;
+use App\Jobs\RetroAchievements\HashGame;
 use App\Jobs\RetroAchievements\IdentifyGame;
 use App\Jobs\RetroAchievements\SyncHashIndex;
 use App\Jobs\RetroAchievements\SyncSet;
@@ -13,6 +14,7 @@ use App\Models\RaGameHash;
 use App\Services\RetroAchievementsMatcher;
 use App\Services\RetroAchievementsService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
@@ -229,6 +231,31 @@ it('stops after one hash attempt rather than chaining again', function () {
     (new IdentifyGame($game->id, afterHash: true))->handle(app(RetroAchievementsMatcher::class));
 
     Queue::assertNothingPushed();
+});
+
+it('does not hash again a file RAHasher could not read and that has not changed', function () {
+    Queue::fake();
+    Log::spy();
+
+    $game = hashedGame('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
+    // What HashGame keeps of a failure: no hash, the fingerprint it failed on.
+    $game->files()->update(['ra_hash' => null]);
+
+    (new IdentifyGame($game->id))->handle(app(RetroAchievementsMatcher::class));
+
+    Queue::assertNothingPushed();
+    Log::shouldHaveReceived('info')->withArgs(fn (string $message): bool => str_contains($message, 'could not hash this file before'));
+});
+
+it('hashes a file again once it has changed since RAHasher failed on it', function () {
+    Queue::fake();
+
+    $game = hashedGame('ffffffffffffffffffffffffffffffff');
+    $game->files()->update(['ra_hash' => null, 'ra_hash_size' => 99]);
+
+    (new IdentifyGame($game->id))->handle(app(RetroAchievementsMatcher::class));
+
+    Queue::assertPushed(HashGame::class);
 });
 
 it('reports a failure instead of swallowing it when run from a command', function () {

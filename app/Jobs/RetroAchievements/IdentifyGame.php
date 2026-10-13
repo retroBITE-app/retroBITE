@@ -7,6 +7,7 @@ namespace App\Jobs\RetroAchievements;
 use App\Models\Game;
 use App\Services\RetroAchievementsMatcher;
 use App\Support\Console;
+use App\Support\RetroAchievements\FileFingerprint;
 use App\Support\RetroAchievements\IdentifyOutcome;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -149,6 +150,22 @@ class IdentifyGame implements ShouldBeUnique, ShouldQueue
         $result = $matcher->identify($game);
 
         if ($result->outcome === IdentifyOutcome::NeedsHash) {
+            $file = $result->file;
+
+            // RAHasher could not read this very file before (HashGame keeps the
+            // fingerprint of a failure), so hashing it again would fail again:
+            // no chain, and not "deferred", which reads as a disk to remount.
+            // A new RAHasher or a changed file forgets the failure first.
+            if ($file !== null && $file->ra_hash === null && $file->raHashAttempted()
+                && FileFingerprint::of($file)?->matches($file->ra_hash_size, $file->ra_hash_mtime)) {
+                Log::info('RetroAchievements identification skipped; RAHasher could not hash this file before, and it has not changed.', [
+                    'game' => $this->gameId,
+                    'path' => $file->path,
+                ]);
+
+                return;
+            }
+
             if ($this->afterHash) {
                 // HashGame ran and there is still no usable hash — an unmounted
                 // disk, most likely. Chaining another would chain for ever,
