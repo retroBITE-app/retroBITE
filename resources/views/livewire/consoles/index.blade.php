@@ -763,7 +763,7 @@ new #[Title('Consoles')] class extends Component
                     <section wire:key="section-{{ $loop->index }}-{{ $label }}" class="flex flex-col gap-3">
                         @if ($label !== '')
                             <div class="flex items-center gap-3">
-                                <h2 class="kicker text-fg-faint">{{ $label }}</h2>
+                                <h2 class="kicker text-accent">{{ $label }}</h2>
                                 <span class="font-mono text-xs text-fg-dim">{{ $rows->count() }}</span>
                                 <div aria-hidden="true" class="h-px flex-1 bg-line"></div>
                             </div>

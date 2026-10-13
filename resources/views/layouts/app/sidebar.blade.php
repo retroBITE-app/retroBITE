@@ -60,12 +60,13 @@
 
                         <div class="flex flex-col gap-px">
                             @foreach ($installed as $heading => $consoles)
-                                {{-- Settings → UI's grouping, as quiet headings
-                                     inside the list rather than sections that
-                                     open and close: the list is short, and a
-                                     heading is enough to find a run of rows. --}}
+                                {{-- Settings → UI's grouping, as headings inside
+                                     the list rather than sections that open and
+                                     close: the list is short, and a heading is
+                                     enough to find a run of rows. In the accent,
+                                     as on the Consoles page. --}}
                                 @if ($heading !== '')
-                                    <p @class(['kicker truncate px-3 pb-1 text-fg-faint', 'pt-2.5' => ! $loop->first, 'pt-1' => $loop->first])>{{ $heading }}</p>
+                                    <p @class(['kicker truncate px-3 pb-1 text-accent', 'pt-2.5' => ! $loop->first, 'pt-1' => $loop->first])>{{ $heading }}</p>
                                 @endif
 
                                 @foreach ($consoles as $console)
