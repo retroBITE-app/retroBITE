@@ -744,10 +744,31 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 break;
             }
 
-            $rows[] = $this->archivedRow($source->loadMissing('meta'), $depth);
+            array_push($rows, ...$this->archivedTree(
+                $source->loadMissing('meta'),
+                $depth,
+                fn (GameFile $file) => $file->children()->withTrashed()->with('meta')->orderBy('path')->get(),
+            ));
+        }
 
-            foreach ($source->children()->withTrashed()->with('meta')->orderBy('path')->get() as $child) {
-                $rows[] = $this->archivedRow($child, $depth + 1);
+        return $rows;
+    }
+
+    /**
+     * An archived file as a row, then what it named, all the way down: a
+     * playlist, its sheets, their tracks. Bounded, against a loop only a
+     * hand-edited row could make.
+     *
+     * @param  callable(GameFile): iterable<GameFile>  $childrenOf
+     * @return list<array<string, mixed>>
+     */
+    private function archivedTree(GameFile $file, int $depth, callable $childrenOf): array
+    {
+        $rows = [$this->archivedRow($file, $depth)];
+
+        if ($depth < 5) {
+            foreach ($childrenOf($file) as $child) {
+                array_push($rows, ...$this->archivedTree($child, $depth + 1, $childrenOf));
             }
         }
 
@@ -785,16 +806,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             return [];
         }
 
-        // A tree, as the files were: each sheet or playlist, then what it named.
+        // A tree, as the files were: each playlist or sheet, then what it named.
         $byParent = $this->history->groupBy(fn (GameFile $file): int => $this->history->contains('id', $file->parent_id) ? (int) $file->parent_id : 0);
         $rows = [];
 
         foreach ($byParent->get(0, collect()) as $root) {
-            $rows[] = $this->archivedRow($root, 0);
-
-            foreach ($byParent->get($root->id, collect())->sortBy('path') as $child) {
-                $rows[] = $this->archivedRow($child, 1);
-            }
+            array_push($rows, ...$this->archivedTree($root, 0, fn (GameFile $file) => $byParent->get($file->id, collect())->sortBy('path')));
         }
 
         return $rows;
