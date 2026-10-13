@@ -196,3 +196,17 @@ it('reads a failed file again when identification is forced', function () {
     // Otherwise HashGame would see the failure on record and skip the file.
     expect(GameFile::first()->ra_hash_size)->toBeNull();
 });
+
+it('forgets only the failures of the games it queues, under a limit', function () {
+    $first = ps2Game('First', RetroAchievementsStatus::HashFailed, failedHash());
+    $second = ps2Game('Second', RetroAchievementsStatus::HashFailed, failedHash());
+
+    $this->artisan('retrobite:ra:identify', ['--force' => true, '--limit' => 1])->assertSuccessful();
+
+    Queue::assertPushed(IdentifyGame::class, 1);
+    $queued = Queue::pushed(IdentifyGame::class)->first()->gameId;
+    $other = $queued === $first->id ? $second : $first;
+
+    expect(GameFile::query()->where('game_id', $queued)->value('ra_hash_size'))->toBeNull()
+        ->and($other->files()->first()->ra_hash_size)->toBe(6);
+});

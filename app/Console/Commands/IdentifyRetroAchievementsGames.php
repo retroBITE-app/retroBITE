@@ -43,12 +43,6 @@ class IdentifyRetroAchievementsGames extends Command
             $query->forConsole((string) $console);
         }
 
-        // Forced, a file that failed is read again: HashGame otherwise skips
-        // one whose failure is on record and that has not changed since.
-        if ($this->option('force')) {
-            GameFile::forgetFailedRaHashes($console ? (string) $console : null);
-        }
-
         if (($limit = (int) $this->option('limit')) > 0) {
             $query->limit($limit);
         }
@@ -59,6 +53,13 @@ class IdentifyRetroAchievementsGames extends Command
             $this->info('Nothing is waiting to be identified.');
 
             return self::SUCCESS;
+        }
+
+        // Forced, a file that failed is read again: HashGame otherwise skips
+        // one whose failure is on record and that has not changed since. Only
+        // the games queued here, so a --limit leaves the rest's on record.
+        if ($this->option('force')) {
+            GameFile::forgetFailedRaHashes(gameIds: $ids);
         }
 
         IdentifyGame::queueEach($ids);

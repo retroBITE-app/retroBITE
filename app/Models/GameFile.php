@@ -217,16 +217,21 @@ class GameFile extends Model
     /**
      * Forget the failed RA hash attempts, so those files count as never tried.
      * For when what changed is not the file: a new RAHasher, or being told to.
+     * Only those of these games, given some: the rest keep theirs.
      *
+     * @param  iterable<int>|null  $gameIds
      * @return int how many were forgotten
      */
-    public static function forgetFailedRaHashes(?string $console = null): int
+    public static function forgetFailedRaHashes(?string $console = null, ?iterable $gameIds = null): int
     {
         return static::query()
             ->whereNull('ra_hash')
             ->whereNotNull('ra_hash_size')
             ->when($console !== null, function (Builder $query) use ($console): void {
                 $query->onConsole((string) $console);
+            })
+            ->when($gameIds !== null, function (Builder $query) use ($gameIds): void {
+                $query->whereIn('game_id', [...$gameIds]);
             })
             ->update(['ra_hash_size' => null, 'ra_hash_mtime' => null, 'ra_hashed_at' => null]);
     }
