@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
+use App\Services\LibraryScanner;
 use App\Services\RetroAchievementsHasher;
 use App\Support\Console;
 use Illuminate\Support\Carbon;
@@ -243,4 +244,48 @@ it('does not queue a set whose first disc is hashed and second is not', function
     ]);
 
     expect(IdentifyGame::queueUnhashed('ps2'))->toBe(0);
+});
+
+it('hashes a failed file again once a rescan finds another file in its place', function () {
+    ConsoleSourceFolder::add(new Console('ps2'));
+    File::put($this->root.'/ps2/Game.zso', 'x');
+    app(LibraryScanner::class)->scan(new Console('ps2'));
+
+    $file = GameFile::sole();
+    $file->update(['ra_hash' => null, 'ra_hash_size' => 1, 'ra_hash_mtime' => 1, 'ra_hashed_at' => now()]);
+    expect(IdentifyGame::queueUnhashed('ps2'))->toBe(0);
+
+    // A good dump over the bad one.
+    File::put($this->root.'/ps2/Game.zso', 'a better dump');
+    app(LibraryScanner::class)->scan(new Console('ps2'));
+
+    expect($file->fresh()?->ra_hash_size)->toBeNull()
+        ->and(IdentifyGame::queueUnhashed('ps2'))->toBe(1);
+});
+
+it('has a sheet forget its RA hash when one of its tracks is replaced', function () {
+    ConsoleSourceFolder::add(new Console('psx'));
+    File::ensureDirectoryExists($this->root.'/psx');
+    File::put($this->root.'/psx/Game.cue', "FILE \"Game.bin\" BINARY\n");
+    File::put($this->root.'/psx/Game.bin', 'x');
+    app(LibraryScanner::class)->scan(new Console('psx'));
+
+    $sheet = GameFile::query()->where('extension', 'cue')->sole();
+    $sheet->update(['ra_hash' => str_repeat('a', 32), 'ra_hash_size' => 30, 'ra_hash_mtime' => 1, 'ra_hashed_at' => now()]);
+
+    File::put($this->root.'/psx/Game.bin', 'another track');
+    app(LibraryScanner::class)->scan(new Console('psx'));
+
+    expect($sheet->fresh()?->ra_hash)->toBeNull();
+});
+
+it('keeps a file\'s RA hash through a rescan that finds it unchanged', function () {
+    ConsoleSourceFolder::add(new Console('ps2'));
+    File::put($this->root.'/ps2/Game.zso', 'x');
+    app(LibraryScanner::class)->scan(new Console('ps2'));
+    GameFile::sole()->update(['ra_hash' => str_repeat('a', 32), 'ra_hash_size' => 1, 'ra_hash_mtime' => 1]);
+
+    app(LibraryScanner::class)->scan(new Console('ps2'));
+
+    expect(GameFile::sole()->ra_hash)->toBe(str_repeat('a', 32));
 });
