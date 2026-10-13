@@ -145,6 +145,26 @@ it('queues nothing for a console with no toolbox', function () {
     expect(InspectGameFile::queueAwaiting('snes'))->toBe(0);
 });
 
+it('queues nothing for a toolbox that reads none of the files', function () {
+    Process::fake();
+
+    // psx has a toolbox for its folders, and reads nothing out of a disc.
+    $game = Game::factory()->create(['console' => 'psx']);
+    GameFile::factory()->for($game)->create(['path' => 'psx/Crash.bin', 'extension' => 'bin']);
+
+    expect(InspectGameFile::queueAwaiting('psx'))->toBe(0);
+});
+
+it('queues only the files a ps2 toolbox reads', function () {
+    Process::fake();
+
+    $game = Game::factory()->create(['console' => 'ps2']);
+    GameFile::factory()->for($game)->create(['path' => 'ps2/Ico.iso', 'extension' => 'iso']);
+    GameFile::factory()->for($game)->create(['path' => 'ps2/Ico.chd', 'extension' => 'chd']);
+
+    expect(InspectGameFile::queueAwaiting('ps2'))->toBe(1);
+});
+
 it('queues an inspection per file after a ps2 scan', function () {
     Process::fake();
 
