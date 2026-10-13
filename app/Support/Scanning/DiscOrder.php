@@ -37,10 +37,13 @@ final class DiscOrder
         return $number !== '' ? (int) $number : PHP_INT_MAX;
     }
 
-    /** A name without its disc number: "MGS (Disc 1)" is "MGS". The name as it was when that leaves nothing. */
+    /**
+     * A name without its disc number: "MGS (Disc 1)" is "MGS", and so is
+     * "MGS (CD 1)". The name as it was when that leaves nothing.
+     */
     public static function strip(string $name): string
     {
-        $stripped = trim(Str::replaceMatches(self::BRACKETED, '', $name));
+        $stripped = trim(self::set($name) ?? Str::replaceMatches(self::BRACKETED, '', $name));
 
         return $stripped !== '' ? $stripped : $name;
     }
@@ -57,10 +60,10 @@ final class DiscOrder
         return $set !== null && $set !== $name ? $set : null;
     }
 
-    /** Whether the name says which disc it is. */
+    /** Whether the name says which disc it is: "Disc 2" anywhere, or "(Disk 2)" or "(CD 2)" as a set names it. */
     public static function numbered(string $name): bool
     {
-        return Str::isMatch(self::PATTERN, $name);
+        return Str::isMatch(self::SET, $name) || Str::isMatch(self::PATTERN, $name);
     }
 
     /** For a sort(): by disc number, then naturally by name. */

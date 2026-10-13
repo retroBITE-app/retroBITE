@@ -11,6 +11,7 @@ use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Console;
+use App\Support\Scanning\DiscOrder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
@@ -188,6 +189,19 @@ it('groups loose numbered discs of one folder into a set, and leaves the rest al
     expect($sets->map->label()->all())->toBe(['Crash.chd', 'MGS (Disc 1).chd'])
         ->and($sets->last()->isSet())->toBeTrue()
         ->and($sets->last()->stem())->toBe('MGS');
+});
+
+it('groups discs a set names "(CD N)" or "(Disk N)" as the scan does, and keeps "Amiga CD32" whole', function () {
+    registryGame('psx', ['Riven (CD 2).chd' => 100, 'Riven (CD 1).chd' => 100]);
+    registryGame('psx', ['Myst (Disk 1).chd' => 100, 'Myst (Disk 2).chd' => 100]);
+
+    $sets = SourceSet::forConsole(new Console('psx'))->keyBy->stem();
+
+    expect($sets->keys()->sort()->values()->all())->toBe(['Myst', 'Riven'])
+        ->and($sets['Riven']->isSet())->toBeTrue()
+        ->and($sets['Myst']->isSet())->toBeTrue()
+        ->and(DiscOrder::numbered('Amiga CD32 Collection.chd'))->toBeFalse()
+        ->and(DiscOrder::strip('Amiga CD32 (Disc 1)'))->toBe('Amiga CD32');
 });
 
 it('reads chdman\'s progress line', function () {
