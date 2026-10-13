@@ -479,3 +479,19 @@ it('brings an archived file back when the same file returns, and makes a new row
         ->and(GameFile::query()->where('filename', 'Zelda.sfc')->sole()->id)->not->toBe($zelda->id)
         ->and(GameFile::onlyTrashed()->pluck('id')->all())->toBe([$zelda->id]);
 });
+
+it('brings a returning file home to the identified game it was archived from', function () {
+    put('snes/smw.sfc', 'same');
+    scan('snes');
+
+    $file = GameFile::query()->sole();
+    // Identified since, and titled as the provider has it, not as the file is named.
+    $file->game->update(['title' => 'Super Mario World', 'slug' => 'super-mario-world', 'status' => GameStatus::Matched]);
+    $file->archive(FileArchiveReason::Deleted);
+
+    scan('snes');
+
+    expect(Game::query()->count())->toBe(1)
+        ->and(GameFile::query()->sole()->id)->toBe($file->id)
+        ->and(GameFile::query()->sole()->game_id)->toBe($file->game_id);
+});

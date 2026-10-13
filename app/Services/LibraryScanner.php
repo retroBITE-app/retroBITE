@@ -179,15 +179,30 @@ final class LibraryScanner
      * The game a unit's files are already recorded under, if any.
      *
      * An identified game first: discs a scan once took for games of their
-     * own come home to the one the provider knows. Then the unit's first file
+     * own come home to the one the provider knows. A file that is back where
+     * an archived one was counts as that one. Then the unit's first file
      * — the playlist, sheet or loose file the game was named after — and the
      * rest in order. A game left with no files is the prune's to remove.
      */
     private function ownerOf(ScanUnit $unit): ?Game
     {
-        $owners = GameFile::query()
-            ->whereIn('path', array_column($unit->files, 'path'))
+        $paths = array_column($unit->files, 'path');
+        $live = GameFile::query()->whereIn('path', $paths)->pluck('game_id', 'path');
+
+        // A file back where an archived one was, at its size, is that file
+        // (recordFile() restores it), so it goes home to the game it was
+        // archived from — identified, most likely, and titled by now as the
+        // provider has it rather than as the file is named. The latest
+        // archived at a path, as recordFile() takes.
+        $sizes = array_column($unit->files, 'size', 'path');
+        $archived = GameFile::onlyTrashed()
+            ->whereIn('path', array_diff($paths, $live->keys()->all()))
+            ->orderBy('deleted_at')
+            ->get(['path', 'size_bytes', 'game_id'])
+            ->filter(fn (GameFile $file): bool => $sizes[$file->path] !== null && $file->size_bytes === $sizes[$file->path])
             ->pluck('game_id', 'path');
+
+        $owners = $archived->merge($live);
 
         // In the order of the unit's files, each game once.
         $ids = collect($unit->files)
