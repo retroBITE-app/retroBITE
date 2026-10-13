@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -39,11 +40,23 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Back to one row a path, which means without the archive: a file that
+     * came back where an archived one was shares its path with it, and the
+     * old unique index cannot be built over both. Archived rows are what the
+     * schema before this had no place for, so they go, their facts with them;
+     * a live row made out of one, or a track of one, forgets it.
+     */
     public function down(): void
     {
+        DB::table('game_files')->whereNotNull('deleted_at')->delete();
+
         Schema::table('game_files', function (Blueprint $table) {
             $table->dropUnique(['live_path']);
             $table->dropIndex(['path']);
+            // MariaDB let go of the game_id foreign key's own index once this
+            // one could serve it, and will not drop this one until another can.
+            $table->index('game_id');
             $table->dropIndex(['game_id', 'deleted_at']);
             $table->dropConstrainedForeignId('source_id');
             $table->dropColumn(['live_path', 'archived_reason', 'deleted_at']);
