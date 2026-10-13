@@ -98,6 +98,28 @@ final class EsDeTarget extends GamelistTarget
         return self::SYSTEMS;
     }
 
+    /** Whose systems ES-DE lists .m3u for. */
+    protected function playlistConsoles(): array
+    {
+        return ['psx', 'saturn', 'megacd', 'dreamcast', 'pcenginecd'];
+    }
+
+    /**
+     * A folder named like the playlist in it, which ES-DE shows as that one
+     * file — a "directory interpreted as file" — rather than as a folder of
+     * discs.
+     */
+    protected function setFolder(string $name): string
+    {
+        return $name.'.m3u';
+    }
+
+    /** The folder itself, which ES-DE launches as the playlist of the same name inside it. */
+    protected function setEntry(string $folder, string $playlist): string
+    {
+        return $folder;
+    }
+
     protected function artwork(): array
     {
         return self::ARTWORK;

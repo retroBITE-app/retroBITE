@@ -10,6 +10,7 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Models\Media;
 use App\Support\Console;
+use App\Support\Scanning\DiscOrder;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
@@ -23,6 +24,11 @@ use Illuminate\Support\Str;
  * arrangement they have in the library under {roms folder}/{system}/, and a
  * <gameList> of <game> entries whose paths are relative to the system folder
  * and start with ./, a rating from 0 to 1, and dates as YYYYMMDDTHHMMSS.
+ *
+ * But for a game of several discs, on a console the front-end plays an .m3u
+ * for: its discs go into a folder of their own with a playlist we write,
+ * which is what the list points at, so RetroArch can change discs and the
+ * front-end shows one game (docs/adr/0008).
  *
  * What differs is each target's own: where the system folders live and what
  * they are called, where the artwork goes and under which tag, if any, the
@@ -98,20 +104,61 @@ abstract class GamelistTarget implements TransferTarget
         return $this->romsFolder().'/'.$this->system($console).'/gamelist.xml';
     }
 
+    /**
+     * The consoles this front-end plays a multi-disc game's .m3u on. Their
+     * games of several discs go as a folder with the discs and a playlist;
+     * everyone else's as the library has them.
+     *
+     * @return list<string> console keys
+     */
+    protected function playlistConsoles(): array
+    {
+        return [];
+    }
+
+    /** The folder a multi-disc game goes into, inside the system folder, for a playlist of this name. */
+    protected function setFolder(string $name): string
+    {
+        return $name;
+    }
+
+    /**
+     * What the game list points at for a multi-disc game: its playlist.
+     *
+     * @param  string  $folder  the set's folder, inside the system folder
+     * @param  string  $playlist  the playlist's path, inside the system folder
+     */
+    protected function setEntry(string $folder, string $playlist): string
+    {
+        return $playlist;
+    }
+
     public function root(): array
     {
         return [$this->romsFolder()];
     }
 
-    /** None: everything these front-ends read is copied, and their list is merged. */
+    /**
+     * The playlist of a multi-disc game, which the library may not hold and
+     * which, where it does, names the discs where they lie in the library
+     * rather than where they go. Everything else these front-ends read is
+     * copied, and their list is merged.
+     */
     public function extras(Game $game): array
     {
-        return [];
+        $playlist = $this->layout($game)['playlist'];
+
+        return $playlist !== null ? [$this->systemFolder($game).'/'.$playlist['path']] : [];
     }
 
+    /** One disc a line, relative to the playlist, LF: what every core that reads one agrees on. */
     public function extra(Game $game, string $destination): ?string
     {
-        return null;
+        $playlist = $this->layout($game)['playlist'];
+
+        return $playlist !== null && $destination === $this->systemFolder($game).'/'.$playlist['path']
+            ? implode("\n", $playlist['discs'])."\n"
+            : null;
     }
 
     public function hint(): ?string
@@ -121,8 +168,8 @@ abstract class GamelistTarget implements TransferTarget
 
     public function plan(Game $game): TransferPlan
     {
-        $system = $this->system($game->console);
-        $folder = $this->romsFolder().'/'.$system;
+        $folder = $this->systemFolder($game);
+        $layout = $this->layout($game);
         $files = [];
 
         $console = $game->console();
@@ -134,10 +181,16 @@ abstract class GamelistTarget implements TransferTarget
                 throw new TransferRejected(__('Some of this game\'s files are outside the console\'s folder.'));
             }
 
+            // The library's own playlist names the discs where they lie
+            // there; the one this set goes with is written in its place.
+            if (! isset($layout['paths'][$file->id])) {
+                continue;
+            }
+
             $files[] = new PlannedFile(
                 url: route('transfers.files', ['file' => $file->id]),
                 source: Location::library($console, $relative),
-                destination: $folder.'/'.$relative,
+                destination: $folder.'/'.$layout['paths'][$file->id],
                 size: (int) $file->size_bytes,
             );
         }
@@ -159,9 +212,17 @@ abstract class GamelistTarget implements TransferTarget
             );
         }
 
-        $planned = array_map(fn (PlannedFile $file): string => $file->destination, $files);
+        $extras = array_map(fn (string $destination): array => [
+            'url' => route('transfers.extra', ['target' => $this->key(), 'gameId' => $game->id, 'path' => $destination, ...$this->options()->query()]),
+            'destination' => $destination,
+        ], $this->extras($game));
 
-        return new TransferPlan($files, $this->gamelistFor($game->console), replaces: $this->replaced($game, $planned));
+        $planned = [
+            ...array_map(fn (PlannedFile $file): string => $file->destination, $files),
+            ...array_column($extras, 'destination'),
+        ];
+
+        return new TransferPlan($files, $this->gamelistFor($game->console), extras: $extras, replaces: $this->replaced($game, $planned));
     }
 
     /**
@@ -171,26 +232,37 @@ abstract class GamelistTarget implements TransferTarget
      * holds both otherwise, and the front-end lists the game twice. Nothing
      * this send writes itself is among them.
      *
+     * Every version, this one too, also as it went before multi-disc games
+     * had folders of their own: loose beside the other games, the list
+     * pointing at the first disc.
+     *
      * @param  list<string>  $planned  the destinations this send writes
      * @return list<string>
      */
     private function replaced(Game $game, array $planned): array
     {
-        $console = $game->console();
-        $folder = $this->romsFolder().'/'.$this->system($game->console);
+        $folder = $this->systemFolder($game);
         $paths = [];
 
-        foreach ($this->otherVersions($game) as $version) {
-            foreach ($version as $file) {
-                $relative = $this->relative($game, $file);
+        // This version as it went before only where it goes otherwise now:
+        // the same paths would be its own artwork in slots this send left out.
+        $sets = $this->layout($game)['playlist'] !== null ? [null] : [];
 
-                if ($console !== null && $relative !== null) {
-                    $paths[] = $folder.'/'.$relative;
+        foreach ([...$this->otherVersions($game), ...$sets] as $version) {
+            foreach ($version !== null ? [false, true] : [true] as $loose) {
+                $layout = $this->layout($game, $version, $loose);
+
+                foreach ($layout['paths'] as $path) {
+                    $paths[] = $folder.'/'.$path;
                 }
-            }
 
-            // Every slot, chosen or not: an earlier send may have chosen otherwise.
-            $paths = [...$paths, ...array_keys($this->artworkFiles($game, version: $version, everySlot: true))];
+                if ($layout['playlist'] !== null) {
+                    $paths[] = $folder.'/'.$layout['playlist']['path'];
+                }
+
+                // Every slot, chosen or not: an earlier send may have chosen otherwise.
+                $paths = [...$paths, ...array_keys($this->artworkFiles($game, version: $version, everySlot: true, loose: $loose))];
+            }
         }
 
         return array_values(array_diff(array_unique($paths), $planned));
@@ -247,17 +319,24 @@ abstract class GamelistTarget implements TransferTarget
         foreach ($games as $game) {
             // The game's other versions go from the drive as this one arrives
             // (plan()'s replaces), and their entries from the list with them.
-            foreach ($this->otherVersions($game) as $version) {
-                $other = $this->primaryPath($game, $version);
+            // So does this one's entry from before it had a folder of its own.
+            $entry = $this->entry($document, $game);
+            $path = trim((string) $entry->getElementsByTagName('path')->item(0)?->textContent);
 
-                if ($other !== null && isset($byPath['./'.$other])) {
+            $others = [
+                ...array_merge(...array_map(fn (array $version): array => [
+                    $this->primaryPath($game, $version),
+                    $this->primaryPath($game, $version, loose: true),
+                ], $this->otherVersions($game))),
+                $this->primaryPath($game, loose: true),
+            ];
+
+            foreach (array_unique(array_filter($others)) as $other) {
+                if ('./'.$other !== $path && isset($byPath['./'.$other])) {
                     $list->removeChild($byPath['./'.$other]);
                     unset($byPath['./'.$other]);
                 }
             }
-
-            $entry = $this->entry($document, $game);
-            $path = trim((string) $entry->getElementsByTagName('path')->item(0)?->textContent);
 
             if (isset($byPath[$path])) {
                 $list->replaceChild($entry, $byPath[$path]);
@@ -330,8 +409,9 @@ abstract class GamelistTarget implements TransferTarget
      * The file the game list points at, and the front-end launches: the
      * playlist of a multi-disc set, else the first disc's cuesheet, else the
      * ROM itself.
+     *
+     * @param  list<GameFile>|null  $version  another version's files; none for the one sent
      */
-    /** @param  list<GameFile>|null  $version  another version's files; none for the one sent */
     private function primary(Game $game, ?array $version = null): ?GameFile
     {
         $files = collect($this->filesOf($game, $version));
@@ -343,15 +423,149 @@ abstract class GamelistTarget implements TransferTarget
     }
 
     /**
-     * The primary file's path inside the system folder, or null for a game with none.
+     * What the game list points at, inside the system folder: a set's
+     * playlist, else the primary file; null for a game with none.
      *
      * @param  list<GameFile>|null  $version  another version's files; none for the one sent
+     * @param  bool  $loose  as it went before a set had a folder of its own
      */
-    private function primaryPath(Game $game, ?array $version = null): ?string
+    private function primaryPath(Game $game, ?array $version = null, bool $loose = false): ?string
     {
+        $layout = $this->layout($game, $version, $loose);
+
+        if ($layout['playlist'] !== null) {
+            return $this->setEntry($layout['playlist']['folder'], $layout['playlist']['path']);
+        }
+
         $primary = $this->primary($game, $version);
 
-        return $primary !== null ? ($this->relative($game, $primary) ?? $primary->filename) : null;
+        return $primary !== null ? ($layout['paths'][$primary->id] ?? $primary->filename) : null;
+    }
+
+    /**
+     * Where each of a version's files goes inside the system folder, by id,
+     * and the playlist written beside them, if any.
+     *
+     * A version of two discs or more, on a console this front-end plays an
+     * .m3u for, goes into a folder of its own named for the game, its files
+     * arranged under it as they are under the folder they share in the
+     * library, with a playlist of the same name listing its discs in order.
+     * The library's own playlist, if it has one, is not among the files:
+     * what it names is where the discs lie in the library.
+     *
+     * Everything else goes where it is in the console's folder, and so does
+     * every set, asked $loose — as sets went before they had folders.
+     *
+     * @param  list<GameFile>|null  $version  another version's files; none for the one sent
+     * @return array{paths: array<int, string>, playlist: array{folder: string, path: string, discs: list<string>}|null}
+     */
+    private function layout(Game $game, ?array $version = null, bool $loose = false): array
+    {
+        $files = $this->filesOf($game, $version);
+        $paths = [];
+
+        foreach ($files as $file) {
+            $relative = $this->relative($game, $file);
+
+            if ($relative !== null) {
+                $paths[$file->id] = $relative;
+            }
+        }
+
+        $discs = $this->discsOf($files);
+
+        if ($loose || count($discs) < 2 || ! in_array($game->console, $this->playlistConsoles(), true) || count($paths) !== count($files)) {
+            return ['paths' => $paths, 'playlist' => null];
+        }
+
+        $playlist = collect($files)->firstWhere('role', FileRole::Playlist);
+        $first = pathinfo($discs[0]->filename, PATHINFO_FILENAME);
+        $name = $playlist !== null
+            ? pathinfo($playlist->filename, PATHINFO_FILENAME)
+            : (DiscOrder::set($first) ?? $first);
+
+        $folder = $this->setFolder($name);
+
+        if ($playlist !== null) {
+            unset($paths[$playlist->id]);
+        }
+
+        // Under the set's folder as under the deepest folder the files share.
+        $shared = $this->sharedFolder(array_values($paths));
+
+        foreach ($paths as $id => $path) {
+            $paths[$id] = $folder.'/'.($shared === '' ? $path : substr($path, strlen($shared) + 1));
+        }
+
+        return ['paths' => $paths, 'playlist' => [
+            'folder' => $folder,
+            'path' => $folder.'/'.$name.'.m3u',
+            'discs' => array_map(fn (GameFile $disc): string => Str::after($paths[$disc->id], $folder.'/'), $discs),
+        ]];
+    }
+
+    /**
+     * A version's discs in order: the sheets and whole images at its top, or
+     * named by its playlist. A cuesheet's tracks are its disc's, not discs.
+     *
+     * @param  list<GameFile>  $files
+     * @return list<GameFile>
+     */
+    private function discsOf(array $files): array
+    {
+        $ids = array_map(fn (GameFile $file): int => $file->id, $files);
+        $playlists = array_map(
+            fn (GameFile $file): int => $file->id,
+            array_filter($files, fn (GameFile $file): bool => $file->role === FileRole::Playlist),
+        );
+
+        $discs = array_values(array_filter($files, function (GameFile $file) use ($ids, $playlists): bool {
+            $top = $file->parent_id === null || ! in_array($file->parent_id, $ids, true) || in_array($file->parent_id, $playlists, true);
+
+            return $top && in_array($file->role, [FileRole::Sheet, FileRole::Rom], true);
+        }));
+
+        usort($discs, fn (GameFile $a, GameFile $b): int => ($a->disc_number ?? DiscOrder::number($a->filename)) <=> ($b->disc_number ?? DiscOrder::number($b->filename))
+            ?: DiscOrder::compare($a->filename, $b->filename));
+
+        return $discs;
+    }
+
+    /**
+     * The deepest folder every one of these paths is in; '' for none.
+     *
+     * @param  list<string>  $paths
+     */
+    private function sharedFolder(array $paths): string
+    {
+        $shared = null;
+
+        foreach ($paths as $path) {
+            $folders = explode('/', dirname($path));
+            $folders = $folders === ['.'] ? [] : $folders;
+
+            if ($shared === null) {
+                $shared = $folders;
+
+                continue;
+            }
+
+            $common = 0;
+
+            while ($common < min(count($shared), count($folders)) && $shared[$common] === $folders[$common]) {
+                $common++;
+            }
+
+            $shared = array_slice($shared, 0, $common);
+        }
+
+        return implode('/', $shared ?? []);
+    }
+
+    /** The system folder from the drive's root. */
+    private function systemFolder(Game $game): string
+    {
+        return $this->romsFolder().'/'.$this->system($game->console);
     }
 
     /**
@@ -375,11 +589,12 @@ abstract class GamelistTarget implements TransferTarget
      *
      * @param  list<GameFile>|null  $version  another version's files, to name it after; none for the one sent
      * @param  bool  $everySlot  whatever this transfer chose to send
+     * @param  bool  $loose  named as a set's was before it had a folder of its own
      * @return array<string, Media> destination => media, keyed by slot when asked
      */
-    private function artworkFiles(Game $game, bool $bySlot = false, ?array $version = null, bool $everySlot = false): array
+    private function artworkFiles(Game $game, bool $bySlot = false, ?array $version = null, bool $everySlot = false, bool $loose = false): array
     {
-        $primary = $this->primaryPath($game, $version);
+        $primary = $this->primaryPath($game, $version, $loose);
 
         if ($primary === null) {
             return [];

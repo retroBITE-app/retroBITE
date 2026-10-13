@@ -77,6 +77,12 @@ final class RetroPieTarget extends GamelistTarget
         return self::SYSTEMS;
     }
 
+    /** Whose emulators RetroPie lists .m3u for. The discs still show, inside the game's folder. */
+    protected function playlistConsoles(): array
+    {
+        return ['psx', 'saturn', 'megacd', 'dreamcast'];
+    }
+
     protected function artwork(): array
     {
         return self::ARTWORK;

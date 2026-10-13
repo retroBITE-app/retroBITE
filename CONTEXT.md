@@ -60,7 +60,10 @@ than one somebody threw away.
 a disc the provider actually recognises.
 
 **Playlist** — a file naming the discs of a multi-disc game in order. The one
-place on disk that says "these files are one game".
+place on disk that says "these files are one game", though discs whose names
+say "(Disc N)" side by side are one game without one. A transfer writes a
+playlist of its own for a multi-disc game, beside the discs on the drive;
+that one is never a game file.
 
 **Disc** — one physical volume of a game that shipped on several. Discs are
 numbered; how many there are in total is not something the provider can be
