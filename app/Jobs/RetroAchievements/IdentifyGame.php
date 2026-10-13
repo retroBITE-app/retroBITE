@@ -11,6 +11,7 @@ use App\Support\RetroAchievements\IdentifyOutcome;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
@@ -88,21 +89,34 @@ class IdentifyGame implements ShouldBeUnique, ShouldQueue
             return 0;
         }
 
-        return self::queueEach(Game::query()
+        $ids = [];
+
+        // A chunk at a time, each with its candidates in one query: a library
+        // of twenty thousand is asked about after every scan, inside a job
+        // with ninety seconds before another worker takes it too.
+        Game::query()
             ->forConsole($console)
             ->whereHas('files', function (Builder $files): void {
                 $files->present()->neverRaHashed();
             })
-            ->get()
-            // The never-tried file has to be the one RAHasher is given: an ISO
-            // left beside its hashed ZSO, or disc two of a set, would otherwise
-            // queue its game after every scan for ever.
-            ->filter(function (Game $game): bool {
-                $file = $game->hashableFile();
+            ->select('games.id')
+            ->with(['files' => function ($files): void {
+                $files->hashableFirst();
+            }])
+            ->chunkById(500, function (Collection $games) use (&$ids): void {
+                foreach ($games as $game) {
+                    // The never-tried file has to be the one RAHasher is given:
+                    // an ISO left beside its hashed ZSO, or disc two of a set,
+                    // would otherwise queue its game after every scan for ever.
+                    $file = $game->files->first();
 
-                return $file !== null && ! $file->raHashAttempted();
-            })
-            ->pluck('id'));
+                    if ($file !== null && ! $file->raHashAttempted()) {
+                        $ids[] = $game->id;
+                    }
+                }
+            }, 'games.id', 'id');
+
+        return self::queueEach($ids);
     }
 
     /**

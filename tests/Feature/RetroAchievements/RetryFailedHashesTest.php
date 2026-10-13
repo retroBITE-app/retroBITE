@@ -10,6 +10,7 @@ use App\Models\GameFile;
 use App\Services\RetroAchievementsHasher;
 use App\Support\Console;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -218,4 +219,28 @@ it('hashes what a scan run in the foreground has just found', function () {
     $this->artisan('retrobite:scan', ['console' => 'ps2'])->assertSuccessful();
 
     Queue::assertPushed(IdentifyGame::class);
+});
+
+it('asks about a console\'s games in a few queries, not one a game', function () {
+    foreach (range(1, 20) as $n) {
+        ps2Game("Game {$n}");
+    }
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $queued = IdentifyGame::queueUnhashed('ps2');
+    $queries = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($queued)->toBe(20)
+        ->and($queries)->toBeLessThan(5);
+});
+
+it('does not queue a set whose first disc is hashed and second is not', function () {
+    $game = ps2Game('Set (Disc 1)', file: ['disc_number' => 1, 'ra_hash' => str_repeat('a', 32), 'ra_hash_size' => 6, 'ra_hash_mtime' => 1]);
+    GameFile::factory()->for($game)->create([
+        'path' => 'ps2/Set (Disc 2).zso', 'filename' => 'Set (Disc 2).zso', 'extension' => 'zso', 'role' => FileRole::Rom, 'disc_number' => 2,
+    ]);
+
+    expect(IdentifyGame::queueUnhashed('ps2'))->toBe(0);
 });

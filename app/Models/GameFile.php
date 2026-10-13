@@ -215,6 +215,24 @@ class GameFile extends Model
     }
 
     /**
+     * The files RAHasher could be given, the one it is given first
+     * (Game::hashableFile()): a playlist, then a sheet, then an image, by disc.
+     *
+     * @param  Builder<GameFile>  $query
+     */
+    public function scopeHashableFirst(Builder $query): void
+    {
+        $query->present()
+            ->whereIn('role', [FileRole::Playlist->value, FileRole::Sheet->value, FileRole::Rom->value])
+            ->orderByRaw(
+                'CASE role WHEN ? THEN 0 WHEN ? THEN 1 ELSE 2 END',
+                [FileRole::Playlist->value, FileRole::Sheet->value],
+            )
+            ->orderByRaw('disc_number IS NULL, disc_number')
+            ->orderBy('id');
+    }
+
+    /**
      * Forget the failed RA hash attempts, so those files count as never tried.
      * For when what changed is not the file: a new RAHasher, or being told to.
      * Only those of these games, given some: the rest keep theirs.
