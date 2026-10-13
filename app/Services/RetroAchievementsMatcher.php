@@ -90,7 +90,10 @@ class RetroAchievementsMatcher
     public function rematchConsole(string $consoleKey, int $raConsoleId): int
     {
         $pairs = DB::table('games')
-            ->join('game_files', 'game_files.game_id', '=', 'games.id')
+            // Archived files are no longer in the library to play.
+            ->join('game_files', function ($join) {
+                $join->on('game_files.game_id', '=', 'games.id')->whereNull('game_files.deleted_at');
+            })
             ->join('ra_game_hashes', function ($join) use ($raConsoleId) {
                 $join->on('ra_game_hashes.hash', '=', 'game_files.ra_hash')
                     ->where('ra_game_hashes.ra_console_id', '=', $raConsoleId);

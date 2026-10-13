@@ -60,10 +60,8 @@ final class ProviderDumps
         foreach ($game->files()->get() as $file) {
             $rom = $asked !== null && $file->is($asked) && is_array($matched) ? $matched : null;
 
-            foreach ([$file->crc, $file->md5, $file->sha1, $file->filename] as $key) {
-                if ($rom === null && is_string($key) && $key !== '') {
-                    $rom = $known[strtolower($key)] ?? null;
-                }
+            foreach (self::keysOf($file) as $key) {
+                $rom ??= $known[strtolower($key)] ?? null;
             }
 
             $facts = $rom !== null ? self::facts($rom) : [];
@@ -88,6 +86,32 @@ final class ProviderDumps
                 'dumps_recorded_at' => now(),
             ])->save();
         }
+    }
+
+    /**
+     * What a file could be known by, its own checksums and name first, then
+     * those of the files it was made out of and their tracks: a CHD is the
+     * Redump image it was made from, which the provider knows and the CHD's
+     * own checksums do not (docs/adr/0009).
+     *
+     * @return list<string>
+     */
+    private static function keysOf(GameFile $file): array
+    {
+        $files = [];
+
+        foreach ($file->lineage() as $member) {
+            $files[] = $member;
+
+            if (! $member->is($file)) {
+                array_push($files, ...$member->children()->withTrashed()->orderBy('path')->get()->all());
+            }
+        }
+
+        return array_values(array_filter(
+            array_merge(...array_map(fn (GameFile $member): array => [$member->crc, $member->md5, $member->sha1, $member->filename], $files)),
+            fn (?string $key): bool => is_string($key) && $key !== '',
+        ));
     }
 
     /**

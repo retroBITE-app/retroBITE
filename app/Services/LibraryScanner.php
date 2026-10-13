@@ -507,6 +507,19 @@ final class LibraryScanner
         $existing = GameFile::query()->where('path', $relative)->first();
         $returning = $existing !== null && $existing->missing_since !== null;
 
+        // A file back where an archived one was, at the same size, is taken
+        // to be that file, its checksums and the provider's word on it
+        // included. At another size it is another file, and gets a row of its own.
+        if ($existing === null && $size !== null) {
+            $archived = GameFile::onlyTrashed()->where('path', $relative)->where('size_bytes', $size)->latest('deleted_at')->first();
+
+            if ($archived !== null) {
+                $archived->forceFill(['archived_reason' => null])->restore();
+                $existing = $archived;
+                $returning = true;
+            }
+        }
+
         $file = GameFile::query()->updateOrCreate(['path' => $relative], [
             'game_id' => $game->id,
             'filename' => basename($relative),

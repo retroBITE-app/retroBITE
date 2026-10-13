@@ -9,6 +9,7 @@ use App\Decryption\DiscKeys;
 use App\Decryption\Ps3Disc;
 use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
+use App\Enums\FileArchiveReason;
 use App\Exceptions\ConversionFailed;
 use App\Exceptions\LibraryPathException;
 use App\Jobs\InspectGameFile;
@@ -214,7 +215,8 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
     config()->set('decrypters.tools.ps3dec.path', '/bin/true');
     fakePs3dec();
     $file = ps3Game();
-    $file->rememberMeta(['disc_key' => Ps3Image::KEY]);
+    $file->rememberMeta(['disc_key' => Ps3Image::KEY, 'license_id' => 'BLUS30001']);
+    $file->update(['md5' => str_repeat('e', 32), 'scrapes' => 900]);
 
     $conversion = decryptPs3($file);
 
@@ -230,6 +232,16 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
         ->and($file->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY)
         ->and($conversion->log)->toContain('Replaced Game (USA).iso')
         ->and($conversion->log)->toContain('Deleted Game (USA).dkey');
+
+    // The encrypted image's record, archived: the dump Redump lists.
+    $archived = GameFile::onlyTrashed()->with('meta')->sole();
+
+    expect($archived->archived_reason)->toBe(FileArchiveReason::Decrypted)
+        ->and($archived->path)->toBe($file->path)
+        ->and($archived->md5)->toBe(str_repeat('e', 32))
+        ->and($archived->meta?->license_id)->toBe('BLUS30001')
+        ->and($file->fresh()?->source_id)->toBe($archived->id)
+        ->and($file->fresh()?->scrapes)->toBe(900);
 
     Process::assertRan(function (PendingProcess $process) use ($conversion): bool {
         $command = (array) $process->command;

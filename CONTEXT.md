@@ -50,6 +50,18 @@ the game.
 because a file that has gone is nearly always a disk that is not mounted rather
 than one somebody threw away.
 
+**Archived** — a game file removed on purpose: converted with its source not
+kept, decrypted in place, deleted on the game page, or pruned once missing too
+long. The file is gone and the row stays, out of every list, as the record of
+which dump it was: its checksums, its name, what the provider said of it. Not
+*missing*, which may come back. Deleting the game deletes its archive
+(docs/adr/0009).
+
+**Source** — the file a game file was made out of, by a conversion or a
+decryption, usually archived. Followed back to the first one, it is the file's
+**origin**: the dump the provider knows, which a CHD's own checksums never
+match.
+
 ## The shapes a game takes on disk
 
 **Rom** — a complete game image. Identifiable on its own.

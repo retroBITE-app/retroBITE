@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Conversion;
 
+use App\Enums\FileArchiveReason;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
@@ -216,6 +217,12 @@ abstract class Converter
     public function replacesSource(): bool
     {
         return false;
+    }
+
+    /** Why a source this converter has done with is archived (docs/adr/0009). */
+    public function archiveReason(): FileArchiveReason
+    {
+        return FileArchiveReason::Converted;
     }
 
     /**

@@ -57,6 +57,23 @@ final class GameMatcher
             return MatchResult::skipped($game, 'no file that the provider could identify');
         }
 
+        // A file made out of another — a CHD of a Redump image — is asked
+        // about as the file it was made from first: the provider knows that
+        // one's name, size and checksums, and never the CHD's (docs/adr/0009).
+        // Once: the pass with checksums follows a first one that asked.
+        $origin = $file->origin();
+
+        if (! $withChecksums && ! $origin->is($file)) {
+            $criteria = $this->criteriaFor($origin, $origin->isHashed());
+            $payload = $this->provider->lookup($console, $criteria);
+
+            if ($payload !== null) {
+                $this->log($game, 'hit', $criteria, ['provider_id' => Arr::get($payload, 'provider_id'), 'by_source' => $origin->id]);
+
+                return $this->apply($game, $payload, $file);
+            }
+        }
+
         $criteria = $this->criteriaFor($file, $withChecksums);
         $payload = $this->provider->lookup($console, $criteria);
 
@@ -153,7 +170,7 @@ final class GameMatcher
         // that was made for this file has no reason to survive.
         if ($existing !== null) {
             return DB::transaction(function () use ($game, $existing, $payload, $asked) {
-                $game->files()->update(['game_id' => $existing->id]);
+                $game->files()->withTrashed()->update(['game_id' => $existing->id]);
 
                 // The files carry their RA hashes across with them, so nothing
                 // needs rehashing — but the identification itself lives on the

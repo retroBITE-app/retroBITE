@@ -5,6 +5,7 @@ use App\Conversion\SourceSet;
 use App\Decryption\DiscKeys;
 use App\Enums\AchievementKind;
 use App\Enums\DecryptState;
+use App\Enums\FileArchiveReason;
 use App\Enums\MediaKind;
 use App\Enums\ThumbnailSize;
 use App\Exceptions\LibraryFileRejected;
@@ -90,6 +91,13 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Url(as: 'doc', except: '')]
     public string $doc = '';
 
+    /**
+     * Whether the Files tab lists the archived files nothing was made out of
+     * as well. In the URL so the history can be linked.
+     */
+    #[Url(as: 'history', except: false)]
+    public bool $showHistory = false;
+
     /** The transfer to a network share this page is waiting on, if any. */
     public ?int $watchingTransfer = null;
 
@@ -126,7 +134,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     private function loadRelations(): void
     {
         $this->game->load([
-            'files' => fn ($query) => $query->with('meta')->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
+            'files' => fn ($query) => $query->with(['meta', 'source', 'derivatives:id,source_id,filename'])->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
             // Ordered because the strip, the viewer's set and its "3 / 12"
             // counter are one list, and they have to agree on it. gallery()
             // puts it in slot order from here.
@@ -522,7 +530,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {
         $this->loadRelations();
         $this->forgetArtwork();
-        unset($this->files, $this->primaryFile, $this->fileRows, $this->libraryPath, $this->moveTargets, $this->moveBlocked, $this->convertible);
+        unset($this->files, $this->primaryFile, $this->fileRows, $this->history, $this->historyRows, $this->libraryPath, $this->moveTargets, $this->moveBlocked, $this->convertible);
     }
 
     private function stopWaiting(): void
@@ -592,6 +600,10 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      * formatting decision, and a game is a set of files — one disc image, or a
      * playlist over four cuesheets and four tracks.
      *
+     * A file made out of another says so (origin), and carries the archived
+     * files it was made out of (sources), which the table folds out beneath
+     * it; a file something was made out of and kept names what (derived).
+     *
      * @return array<int, array{
      *     id: int,
      *     filename: string,
@@ -612,6 +624,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      *     flags: list<string>,
      *     decrypt: DecryptState|null,
      *     discKey: string|null,
+     *     origin: array{verb: string, name: string, more: int, when: string, archived: bool}|null,
+     *     derived: list<string>,
+     *     sources: list<array<string, mixed>>,
      * }>
      */
     #[Computed]
@@ -625,40 +640,182 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 $decryptable = $this->decryptable($file);
 
                 return [
-                    'id' => $file->id,
-                    'filename' => $file->filename,
-                    'folder' => $this->subfolder($file),
-                    'role' => $file->role->label(),
-                    'disc' => $file->disc_number !== null ? (string) $file->disc_number : '—',
-                    'size' => $file->size_bytes !== null ? Number::fileSize($file->size_bytes, 1) : '—',
-                    'format' => Str::upper($file->extension),
-                    'added' => $this->relative($file->created_at),
+                    ...$this->fileFacts($file),
                     // The library holds no last-seen stamp, so the honest answer is
                     // whether the file is there now, and how long ago it went if not.
                     'lastSeen' => $file->isPresent() ? __('Present') : $this->relative($file->missing_since),
                     'missing' => ! $file->isPresent(),
-                    'md5' => $file->md5,
-                    // Read out of the disc rather than from the provider, and the
-                    // only name Open PS2 Loader knows this game by.
-                    'licenseId' => $file->meta?->license_id,
-                    // The file's own region, which a game holding several can
-                    // differ by (CONTEXT.md: file region) — not the game's.
-                    'region' => $file->region,
-                    'regionLabel' => MediaRegions::label($file->region) ?? ($file->region !== null ? Str::upper($file->region) : null),
-                    'regionIcon' => MediaRegions::icon($file->region),
-                    // How many people the provider has seen holding this very
-                    // dump; what Send to picks the most scraped version by.
-                    'scrapes' => $file->scrapes !== null ? Number::abbreviate($file->scrapes, 1) : null,
-                    'flags' => array_values(array_diff($file->provider_flags ?? [], ['best'])),
                     // An image something decrypts: its encryption and key, as
                     // Tools → Decrypt shows them. The key is shown to hand on,
                     // and is still known once decrypting has removed the .dkey.
                     'decrypt' => $decryptable && $file->isPresent() ? $keys->state($file, in_array($file->id, $decrypting, true)) : null,
                     'discKey' => $decryptable ? $keys->known($file) : null,
+                    'origin' => $this->originOf($file),
+                    'derived' => $file->derivatives->pluck('filename')->values()->all(),
+                    'sources' => $this->sourcesOf($file),
                 ];
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * What every row shows of a file, live or archived.
+     *
+     * @return array<string, mixed>
+     */
+    private function fileFacts(GameFile $file): array
+    {
+        return [
+            'id' => $file->id,
+            'filename' => $file->filename,
+            'folder' => $this->subfolder($file),
+            'role' => $file->role->label(),
+            'disc' => $file->disc_number !== null ? (string) $file->disc_number : '—',
+            'size' => $file->size_bytes !== null ? Number::fileSize($file->size_bytes, 1) : '—',
+            'format' => Str::upper($file->extension),
+            'added' => $this->relative($file->created_at),
+            'md5' => $file->md5,
+            // Read out of the disc rather than from the provider, and the
+            // only name Open PS2 Loader knows this game by.
+            'licenseId' => $file->meta?->license_id,
+            // The file's own region, which a game holding several can
+            // differ by (CONTEXT.md: file region) — not the game's.
+            'region' => $file->region,
+            'regionLabel' => MediaRegions::label($file->region) ?? ($file->region !== null ? Str::upper($file->region) : null),
+            'regionIcon' => MediaRegions::icon($file->region),
+            // How many people the provider has seen holding this very
+            // dump; what Send to picks the most scraped version by.
+            'scrapes' => $file->scrapes !== null ? Number::abbreviate($file->scrapes, 1) : null,
+            'flags' => array_values(array_diff($file->provider_flags ?? [], ['best'])),
+        ];
+    }
+
+    /**
+     * An archived file as a row: what it was, and why and when it went.
+     *
+     * @return array<string, mixed>
+     */
+    private function archivedRow(GameFile $file, int $depth): array
+    {
+        return [
+            ...$this->fileFacts($file),
+            'reason' => $file->archived_reason?->label() ?? __('Archived'),
+            'when' => $this->relative($file->deleted_at),
+            'depth' => $depth,
+        ];
+    }
+
+    /**
+     * "Converted from X.cue + 1 track", for a file made out of another.
+     *
+     * @return array{verb: string, name: string, more: int, when: string, archived: bool}|null
+     */
+    private function originOf(GameFile $file): ?array
+    {
+        $source = $file->source;
+
+        if ($source === null) {
+            return null;
+        }
+
+        return [
+            'verb' => $source->archived_reason === FileArchiveReason::Decrypted ? __('Decrypted from') : __('Converted from'),
+            'name' => $source->filename,
+            'more' => $source->children()->withTrashed()->count(),
+            'when' => $this->relative($source->trashed() ? $source->deleted_at : $file->created_at),
+            'archived' => $source->trashed(),
+        ];
+    }
+
+    /**
+     * The archived files a file was made out of, nearest first, each with its
+     * tracks beneath it — up to the first that is still in the library, which
+     * has a row of its own.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function sourcesOf(GameFile $file): array
+    {
+        $rows = [];
+
+        foreach (array_slice($file->lineage(), 1) as $depth => $source) {
+            if (! $source->trashed()) {
+                break;
+            }
+
+            $rows[] = $this->archivedRow($source->loadMissing('meta'), $depth);
+
+            foreach ($source->children()->withTrashed()->with('meta')->orderBy('path')->get() as $child) {
+                $rows[] = $this->archivedRow($child, $depth + 1);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The archived files no live file was made out of — deleted by hand,
+     * pruned — newest first. Those a file was made out of fold out beneath it.
+     *
+     * @return EloquentCollection<int, GameFile>
+     */
+    #[Computed]
+    public function history(): EloquentCollection
+    {
+        $shown = collect($this->fileRows)->flatMap(fn (array $row): array => array_column($row['sources'], 'id'))->all();
+
+        return $this->game->archivedFiles()
+            ->with('meta')
+            ->whereNotIn('id', $shown)
+            ->orderByDesc('deleted_at')
+            ->orderBy('path')
+            ->get();
+    }
+
+    /**
+     * The history as rows, while it is open.
+     *
+     * @return list<array<string, mixed>>
+     */
+    #[Computed]
+    public function historyRows(): array
+    {
+        if (! $this->showHistory) {
+            return [];
+        }
+
+        // A tree, as the files were: each sheet or playlist, then what it named.
+        $byParent = $this->history->groupBy(fn (GameFile $file): int => $this->history->contains('id', $file->parent_id) ? (int) $file->parent_id : 0);
+        $rows = [];
+
+        foreach ($byParent->get(0, collect()) as $root) {
+            $rows[] = $this->archivedRow($root, 0);
+
+            foreach ($byParent->get($root->id, collect())->sortBy('path') as $child) {
+                $rows[] = $this->archivedRow($child, 1);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Forget an archived file for good: its row, its checksums, what the
+     * provider said of it. A file made out of it no longer says from what.
+     */
+    public function forgetFile(int $fileId): void
+    {
+        $file = $this->game->archivedFiles()->whereKey($fileId)->first();
+
+        if ($file === null) {
+            return;
+        }
+
+        $file->forceDelete();
+        $this->reloadGame();
+
+        Flux::toast(variant: 'success', text: __('Forgot :file.', ['file' => $file->filename]));
     }
 
     /** Whether something on this console decrypts the file, which gives it a state and a key. */
@@ -2038,7 +2195,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 <th class="px-4.5 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
                             </tr>
                         </thead>
-                        <tbody>
+                        {{-- A body per file, so a file and the archived files it was
+                             made out of fold open and shut together. --}}
                             @foreach ($this->fileRows as [
                                 'id' => $id,
                                 'filename' => $filename,
@@ -2059,8 +2217,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 'flags' => $flags,
                                 'decrypt' => $decrypt,
                                 'discKey' => $discKey,
+                                'origin' => $origin,
+                                'derived' => $derived,
+                                'sources' => $sources,
                             ])
-                                <tr wire:key="file-{{ $id }}" class="border-t border-raised first:border-t-0">
+                                <tbody wire:key="file-{{ $id }}" x-data="{ open: false }" class="border-t border-raised first:border-t-0">
+                                <tr>
                                     <td class="px-4.5 py-3">
                                         <div class="flex items-center gap-2">
                                             <span class="font-mono text-sm text-fg-bright">{{ $filename }}</span>
@@ -2074,6 +2236,38 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
                                         @if ($folder !== '')
                                             <p class="mt-0.5 font-mono text-xs text-fg-faint">{{ $folder }}</p>
+                                        @endif
+                                        {{-- Where the file came from: what it was made out of, folded
+                                             out beneath it when that is archived; or, for a source
+                                             kept, what was made out of it. --}}
+                                        @if ($origin !== null)
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
+                                                <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
+                                                <span>{{ $origin['verb'] }}</span>
+                                                <span class="font-mono text-fg-soft">{{ $origin['name'] }}</span>
+                                                @if ($origin['more'] > 0)
+                                                    <span>{{ trans_choice('+ :count track|+ :count tracks', $origin['more'], ['count' => $origin['more']]) }}</span>
+                                                @endif
+                                                <span class="text-fg-faint">· {{ $origin['when'] }}</span>
+                                                @if ($sources !== [])
+                                                    <button
+                                                        type="button"
+                                                        x-on:click="open = ! open"
+                                                        x-bind:aria-expanded="open"
+                                                        class="ml-1 inline-flex cursor-pointer items-center gap-0.5 text-accent hover:underline"
+                                                    >
+                                                        <span x-text="open ? @js(__('Hide')) : @js(__('Show'))">{{ __('Show') }}</span>
+                                                        <flux:icon.chevron-down variant="micro" class="size-3.5 transition-transform" x-bind:class="open && 'rotate-180'" />
+                                                    </button>
+                                                @endif
+                                            </div>
+                                        @endif
+                                        @if ($derived !== [])
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
+                                                <flux:icon.arrow-right variant="micro" class="size-3.5 text-fg-faint" />
+                                                <span>{{ __('Converted to') }}</span>
+                                                <span class="font-mono text-fg-soft">{{ implode(', ', $derived) }}</span>
+                                            </div>
                                         @endif
 
                                         {{-- One line under the filename: the disc's own name for
@@ -2178,10 +2372,37 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                         </button>
                                     </td>
                                 </tr>
+                                @foreach ($sources as $source)
+                                    <x-game-file.archived-row :row="$source" wire:key="source-{{ $id }}-{{ $source['id'] }}" x-show="open" x-cloak />
+                                @endforeach
+                                </tbody>
                             @endforeach
-                        </tbody>
+
+                            {{-- What went without anything made out of it: deleted by
+                                 hand, pruned. Asked for, under a heading of its own. --}}
+                            @if ($this->historyRows !== [])
+                                <tbody wire:key="file-history" class="border-t border-line">
+                                    <tr>
+                                        <td colspan="11" class="kicker px-4.5 pt-3.5 pb-2 text-fg-faint">{{ __('History') }}</td>
+                                    </tr>
+                                    @foreach ($this->historyRows as $row)
+                                        <x-game-file.archived-row :row="$row" :branch="$row['depth'] > 0" wire:key="history-{{ $row['id'] }}" class="border-t border-raised" />
+                                    @endforeach
+                                </tbody>
+                            @endif
                     </table>
                 </div>
+
+                @if ($this->history->isNotEmpty())
+                    <div class="flex items-center gap-2 border-t border-raised px-4.5 py-2.5 text-xs text-fg-faint">
+                        <flux:icon.archive-box variant="micro" class="size-3.5" />
+                        <span>{{ trans_choice(':count archived file|:count archived files', $this->history->count(), ['count' => $this->history->count()]) }}</span>
+                        <span aria-hidden="true">·</span>
+                        <button type="button" wire:click="$toggle('showHistory')" class="cursor-pointer text-accent hover:underline">
+                            {{ $showHistory ? __('Hide history') : __('Show history') }}
+                        </button>
+                    </div>
+                @endif
             </div>
         </section>
     @endif

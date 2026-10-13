@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Exceptions\ScanAborted;
@@ -454,4 +455,27 @@ it('queues nothing when the scan refuses to run', function () {
     (new ScanConsoleFolder('snes'))->handle(app(LibraryScanner::class));
 
     Bus::assertNotDispatched(MatchGame::class);
+});
+
+it('brings an archived file back when the same file returns, and makes a new row for another', function () {
+    put('snes/Mario.sfc', 'same');
+    put('snes/Zelda.sfc', 'same');
+    scan('snes');
+
+    $mario = GameFile::query()->where('filename', 'Mario.sfc')->sole();
+    $mario->update(['md5' => str_repeat('a', 32)]);
+    $mario->archive(FileArchiveReason::Deleted);
+    $zelda = GameFile::query()->where('filename', 'Zelda.sfc')->sole();
+    $zelda->archive(FileArchiveReason::Deleted);
+    put('snes/Zelda.sfc', 'another file');
+
+    scan('snes');
+
+    $back = GameFile::query()->where('filename', 'Mario.sfc')->sole();
+
+    expect($back->id)->toBe($mario->id)
+        ->and($back->md5)->toBe(str_repeat('a', 32))
+        ->and($back->archived_reason)->toBeNull()
+        ->and(GameFile::query()->where('filename', 'Zelda.sfc')->sole()->id)->not->toBe($zelda->id)
+        ->and(GameFile::onlyTrashed()->pluck('id')->all())->toBe([$zelda->id]);
 });

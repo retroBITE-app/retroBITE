@@ -206,7 +206,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             'select files.identified, files.bytes, progress.unlocked, progress.unlocked_hardcore, progress.possible'
             .' from (select count(distinct case when games.status = ? then games.id end) as identified,'
             .'   coalesce(sum(game_files.size_bytes), 0) as bytes'
-            .'   from games left join game_files on game_files.game_id = games.id where games.console = ?) as files'
+            .'   from games left join game_files on game_files.game_id = games.id and game_files.deleted_at is null where games.console = ?) as files'
             .' cross join (select coalesce(sum(ra_progress.unlocked_count), 0) as unlocked,'
             .'   coalesce(sum(ra_progress.unlocked_hardcore_count), 0) as unlocked_hardcore,'
             .'   coalesce(sum(ra_progress.achievements_possible), 0) as possible'
