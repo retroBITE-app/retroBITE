@@ -547,6 +547,13 @@ final class ConversionRunner
         }
 
         if ($converter->replacesSource()) {
+            // The source's checksums, while its bytes are still there: once
+            // renamed over, its archived row is all that says which dump it
+            // was, and an encrypted PS3 image is what Redump lists.
+            foreach ($plan as ['disc' => $disc]) {
+                $this->hashBeforeArchiving($disc->file);
+            }
+
             // On record before the first rename, so recovery knows a swap began.
             $conversion->update(['status' => ConversionStatus::Swapping]);
             $this->swap($console, $converter, $set, $plan);
@@ -776,9 +783,9 @@ final class ConversionRunner
     }
 
     /**
-     * Checksums for a source that has none, read before it is deleted: an
-     * archived row without them knows its dump only by name, and the output
-     * cannot be recognised by its own. A read of the source again, short
+     * Checksums for a source that has none, read before it is deleted or
+     * replaced: an archived row without them knows its dump only by name, and
+     * the output cannot be recognised by its own. A read of the source again, short
      * beside the conversion that has just read it. A file that will not read
      * is archived without them.
      */

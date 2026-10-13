@@ -259,6 +259,21 @@ it('swaps the decrypted image in under the same name, keeps the row and drops th
     });
 });
 
+it('hashes an unhashed image before swapping it out, so its archived row knows the dump', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    fakePs3dec();
+    $file = ps3Game();
+    $file->update(['crc' => null, 'md5' => null, 'sha1' => null, 'hashed_at' => null]);
+    $encrypted = md5_file($this->root.'/ps3/Game (USA).iso');
+
+    $conversion = decryptPs3($file);
+
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and(GameFile::onlyTrashed()->sole()->md5)->toBe($encrypted)
+        ->and($file->fresh()?->md5)->toBeNull()
+        ->and(md5_file($this->root.'/ps3/Game (USA).iso'))->not->toBe($encrypted);
+});
+
 it('gives ps3dec the key but never writes it into the conversion log', function () {
     config()->set('decrypters.tools.ps3dec.path', '/bin/true');
     fakePs3dec();
