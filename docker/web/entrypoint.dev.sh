@@ -123,6 +123,12 @@ su-exec "$WEB_USER" php /app/artisan conversion:recover \
 su-exec "$WEB_USER" php /app/artisan conversion:tools \
     || echo "WARNING: could not check the conversion tools; carrying on." >&2
 
+# Games RAHasher could not hash, tried again once when this image ships a
+# different RAHasher than the last boot ran — before the workers, which then
+# read them. Nothing to do on most boots; never stops one.
+su-exec "$WEB_USER" php /app/artisan retrobite:ra:retry-failed-hashes \
+    || echo "WARNING: could not check for games to hash again; carrying on." >&2
+
 # queue:listen rather than queue:work, which is the whole difference here.
 # work keeps one booted application in memory for its whole life, so a job runs
 # whatever the code was when the worker started — edit a job class and the

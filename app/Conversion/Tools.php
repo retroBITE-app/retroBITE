@@ -177,12 +177,12 @@ final class Tools
     }
 
     /**
-     * Where a tool's binary is, looked for now. A bare name is looked for on
-     * PATH; a path is taken as given.
+     * Where a configured binary is, looked for now: a bare name on PATH, a
+     * path as given. Null when there is nothing there that will run.
      */
-    private static function find(string $tool): ?string
+    public static function resolve(string $configured): ?string
     {
-        $configured = (string) Arr::get(self::registry(), $tool.'.path', '');
+        $configured = trim($configured);
 
         if ($configured === '') {
             return null;
@@ -193,6 +193,12 @@ final class Tools
         }
 
         return (new ExecutableFinder)->find($configured);
+    }
+
+    /** Where a tool's binary is, looked for now. */
+    private static function find(string $tool): ?string
+    {
+        return self::resolve((string) Arr::get(self::registry(), $tool.'.path', ''));
     }
 
     /**

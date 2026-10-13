@@ -55,6 +55,9 @@ enum RetroAchievementsStatus: string
      *
      * Unsupported is excluded because nothing will change until somebody edits
      * the console; HashFailed because the same file will fail the same way.
+     * What retries a failure is a change: the file's (a scan queues any file
+     * RAHasher has not seen) or RAHasher's own (retrobite:ra:retry-failed-hashes
+     * at boot).
      */
     public function awaitingLookup(): bool
     {

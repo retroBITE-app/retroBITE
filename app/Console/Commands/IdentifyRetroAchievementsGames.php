@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Enums\RetroAchievementsStatus;
 use App\Jobs\RetroAchievements\IdentifyGame;
 use App\Models\Game;
+use App\Models\GameFile;
 use Illuminate\Console\Command;
 
 class IdentifyRetroAchievementsGames extends Command
@@ -42,6 +43,12 @@ class IdentifyRetroAchievementsGames extends Command
             $query->forConsole((string) $console);
         }
 
+        // Forced, a file that failed is read again: HashGame otherwise skips
+        // one whose failure is on record and that has not changed since.
+        if ($this->option('force')) {
+            GameFile::forgetFailedRaHashes($console ? (string) $console : null);
+        }
+
         if (($limit = (int) $this->option('limit')) > 0) {
             $query->limit($limit);
         }
@@ -54,9 +61,7 @@ class IdentifyRetroAchievementsGames extends Command
             return self::SUCCESS;
         }
 
-        foreach ($ids as $id) {
-            IdentifyGame::dispatch($id);
-        }
+        IdentifyGame::queueEach($ids);
 
         $this->info("Queued {$ids->count()} RetroAchievements lookups.");
         $this->comment('Run workers on the ra and ra-hash queues to drain them.');

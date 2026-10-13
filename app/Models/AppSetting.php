@@ -143,6 +143,13 @@ class AppSetting extends Model
      */
     public const RA_HARDCORE_PRIMARY = 'ra_hardcore_primary';
 
+    /**
+     * The RAHasher build the library was last hashed with, as
+     * RetroAchievementsHasher::build() names it. A different one at boot
+     * retries every game the old one could not hash.
+     */
+    public const RA_HASHER_BUILD = 'ra_hasher_build';
+
     /** Days every file of a game may be missing before the game is pruned. */
     public const PRUNE_MISSING_AFTER_DAYS = 'prune_missing_after_days';
 

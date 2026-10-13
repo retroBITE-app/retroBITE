@@ -6,9 +6,11 @@ namespace App\Jobs\RetroAchievements;
 
 use App\Models\Game;
 use App\Services\RetroAchievementsMatcher;
+use App\Support\Console;
 use App\Support\RetroAchievements\IdentifyOutcome;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
@@ -68,13 +70,58 @@ class IdentifyGame implements ShouldBeUnique, ShouldQueue
             $query->limit($limit);
         }
 
-        $ids = $query->pluck('games.id');
+        return self::queueEach($query->pluck('games.id'));
+    }
+
+    /**
+     * Queue identification for every game on a console whose hashable file
+     * RAHasher has never been given: one the scan has just found, a
+     * conversion's output. Whatever the game's status — a game matched
+     * through its ISO still wants its new ZSO hashed — but never a file that
+     * already failed and has not changed since.
+     *
+     * @return int how many were queued
+     */
+    public static function queueUnhashed(string $console): int
+    {
+        if (Console::tryFrom($console)?->retroachievementsId === null) {
+            return 0;
+        }
+
+        return self::queueEach(Game::query()
+            ->forConsole($console)
+            ->whereHas('files', function (Builder $files): void {
+                $files->present()->neverRaHashed();
+            })
+            ->get()
+            // The never-tried file has to be the one RAHasher is given: an ISO
+            // left beside its hashed ZSO, or disc two of a set, would otherwise
+            // queue its game after every scan for ever.
+            ->filter(function (Game $game): bool {
+                $file = $game->hashableFile();
+
+                return $file !== null && ! $file->raHashAttempted();
+            })
+            ->pluck('id'));
+    }
+
+    /**
+     * Queue identification for each of these games. The one place every
+     * caller — the scan, the boot retry, the command — queues them from.
+     *
+     * @param  iterable<int>  $ids  game ids
+     * @return int how many were queued
+     */
+    public static function queueEach(iterable $ids): int
+    {
+        $queued = 0;
 
         foreach ($ids as $id) {
             self::dispatch($id);
+            $queued++;
         }
 
-        return $ids->count();
+        return $queued;
     }
 
     public function handle(RetroAchievementsMatcher $matcher): void

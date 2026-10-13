@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\FileRole;
+use App\Support\RetroAchievements\FileFingerprint;
 use Database\Factories\GameFileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -138,6 +139,27 @@ class GameFile extends Model
         return $this->md5 !== null || $this->sha1 !== null || $this->crc !== null;
     }
 
+    /** Whether RAHasher has been given this file, hashing it or failing to: scopeNeverRaHashed's opposite. */
+    public function raHashAttempted(): bool
+    {
+        return $this->ra_hash !== null || $this->ra_hash_size !== null;
+    }
+
+    /**
+     * Keep what RAHasher made of this file, a hash or null for a failure,
+     * against the fingerprint it was taken at — so neither is read again until
+     * the file changes.
+     */
+    public function rememberRaHash(?string $hash, FileFingerprint $fingerprint): void
+    {
+        $this->update([
+            'ra_hash' => $hash,
+            'ra_hash_size' => $fingerprint->size,
+            'ra_hash_mtime' => $fingerprint->mtime,
+            'ra_hashed_at' => now(),
+        ]);
+    }
+
     /**
      * Whether the file was present at the last scan.
      *
@@ -179,6 +201,34 @@ class GameFile extends Model
     public function scopeUnhashed(Builder $query): void
     {
         $query->whereNull('md5')->whereNull('sha1')->whereNull('crc');
+    }
+
+    /**
+     * Files RAHasher has never been given: no RA hash, and no failed attempt
+     * on record — a failure keeps the fingerprint of the file it failed on.
+     *
+     * @param  Builder<GameFile>  $query
+     */
+    public function scopeNeverRaHashed(Builder $query): void
+    {
+        $query->whereNull('ra_hash')->whereNull('ra_hash_size');
+    }
+
+    /**
+     * Forget the failed RA hash attempts, so those files count as never tried.
+     * For when what changed is not the file: a new RAHasher, or being told to.
+     *
+     * @return int how many were forgotten
+     */
+    public static function forgetFailedRaHashes(?string $console = null): int
+    {
+        return static::query()
+            ->whereNull('ra_hash')
+            ->whereNotNull('ra_hash_size')
+            ->when($console !== null, function (Builder $query) use ($console): void {
+                $query->onConsole((string) $console);
+            })
+            ->update(['ra_hash_size' => null, 'ra_hash_mtime' => null, 'ra_hashed_at' => null]);
     }
 
     /**
