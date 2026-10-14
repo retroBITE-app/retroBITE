@@ -79,8 +79,11 @@ class HashGame implements ShouldBeUnique, ShouldQueue
         // is what makes the job safe to dispatch more than once: every
         // ScreenScraper retry that ends Unmatched dispatches the RA chain
         // again, and reading a four-gigabyte image to learn what we already
-        // know is the one cost worth never paying twice.
-        if ($file->ra_hash !== null && $fingerprint->matches($file->ra_hash_size, $file->ra_hash_mtime)) {
+        // know is the one cost worth never paying twice. That goes for a
+        // failure as much as a hash: the fingerprint is kept either way, and
+        // the same file fails the same way until it, or RAHasher, changes
+        // (GameFile::forgetFailedRaHashes()).
+        if ($fingerprint->matches($file->ra_hash_size, $file->ra_hash_mtime)) {
             return;
         }
 
@@ -89,8 +92,11 @@ class HashGame implements ShouldBeUnique, ShouldQueue
         try {
             $hash = $hasher->hash($console->retroachievementsId, $path);
         } catch (HashFailed $e) {
-            // About this file, so it is recorded against the game.
+            // About this file, so it is recorded against the game, and the
+            // attempt against the file: with no hash, but its fingerprint, so
+            // the next scan does not read it again unless it has changed.
             $game->update(['retroachievements_status' => RetroAchievementsStatus::HashFailed]);
+            $file->rememberRaHash(null, $fingerprint);
 
             Log::warning('RAHasher could not hash a file.', [
                 'game' => $game->id,
@@ -113,12 +119,7 @@ class HashGame implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $file->update([
-            'ra_hash' => $hash,
-            'ra_hash_size' => $fingerprint->size,
-            'ra_hash_mtime' => $fingerprint->mtime,
-            'ra_hashed_at' => now(),
-        ]);
+        $file->rememberRaHash($hash, $fingerprint);
 
         Log::info('RA hash computed.', [
             'game' => $game->id,

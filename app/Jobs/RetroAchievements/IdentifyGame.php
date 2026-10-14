@@ -6,9 +6,13 @@ namespace App\Jobs\RetroAchievements;
 
 use App\Models\Game;
 use App\Services\RetroAchievementsMatcher;
+use App\Support\Console;
+use App\Support\RetroAchievements\FileFingerprint;
 use App\Support\RetroAchievements\IdentifyOutcome;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
@@ -68,13 +72,71 @@ class IdentifyGame implements ShouldBeUnique, ShouldQueue
             $query->limit($limit);
         }
 
-        $ids = $query->pluck('games.id');
+        return self::queueEach($query->pluck('games.id'));
+    }
+
+    /**
+     * Queue identification for every game on a console whose hashable file
+     * RAHasher has never been given: one the scan has just found, a
+     * conversion's output. Whatever the game's status — a game matched
+     * through its ISO still wants its new ZSO hashed — but never a file that
+     * already failed and has not changed since.
+     *
+     * @return int how many were queued
+     */
+    public static function queueUnhashed(string $console): int
+    {
+        if (Console::tryFrom($console)?->retroachievementsId === null) {
+            return 0;
+        }
+
+        $ids = [];
+
+        // A chunk at a time, each with its candidates in one query: a library
+        // of twenty thousand is asked about after every scan, inside a job
+        // with ninety seconds before another worker takes it too.
+        Game::query()
+            ->forConsole($console)
+            ->whereHas('files', function (Builder $files): void {
+                $files->present()->neverRaHashed();
+            })
+            ->select('games.id')
+            ->with(['files' => function ($files): void {
+                $files->hashableFirst();
+            }])
+            ->chunkById(500, function (Collection $games) use (&$ids): void {
+                foreach ($games as $game) {
+                    // The never-tried file has to be the one RAHasher is given:
+                    // an ISO left beside its hashed ZSO, or disc two of a set,
+                    // would otherwise queue its game after every scan for ever.
+                    $file = $game->files->first();
+
+                    if ($file !== null && ! $file->raHashAttempted()) {
+                        $ids[] = $game->id;
+                    }
+                }
+            }, 'games.id', 'id');
+
+        return self::queueEach($ids);
+    }
+
+    /**
+     * Queue identification for each of these games. The one place every
+     * caller — the scan, the boot retry, the command — queues them from.
+     *
+     * @param  iterable<int>  $ids  game ids
+     * @return int how many were queued
+     */
+    public static function queueEach(iterable $ids): int
+    {
+        $queued = 0;
 
         foreach ($ids as $id) {
             self::dispatch($id);
+            $queued++;
         }
 
-        return $ids->count();
+        return $queued;
     }
 
     public function handle(RetroAchievementsMatcher $matcher): void
@@ -88,6 +150,22 @@ class IdentifyGame implements ShouldBeUnique, ShouldQueue
         $result = $matcher->identify($game);
 
         if ($result->outcome === IdentifyOutcome::NeedsHash) {
+            $file = $result->file;
+
+            // RAHasher could not read this very file before (HashGame keeps the
+            // fingerprint of a failure), so hashing it again would fail again:
+            // no chain, and not "deferred", which reads as a disk to remount.
+            // A new RAHasher or a changed file forgets the failure first.
+            if ($file !== null && $file->ra_hash === null && $file->raHashAttempted()
+                && FileFingerprint::of($file)?->matches($file->ra_hash_size, $file->ra_hash_mtime)) {
+                Log::info('RetroAchievements identification skipped; RAHasher could not hash this file before, and it has not changed.', [
+                    'game' => $this->gameId,
+                    'path' => $file->path,
+                ]);
+
+                return;
+            }
+
             if ($this->afterHash) {
                 // HashGame ran and there is still no usable hash — an unmounted
                 // disk, most likely. Chaining another would chain for ever,

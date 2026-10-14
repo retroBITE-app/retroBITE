@@ -164,6 +164,48 @@ it('marks the game when RAHasher cannot read the file', function () {
     expect($game->refresh()->retroachievements_status)->toBe(RetroAchievementsStatus::HashFailed);
 });
 
+it('remembers a failure against the file, and does not read it again until it changes', function () {
+    Process::fake(['*' => Process::result(output: 'Could not determine sector size', exitCode: 1)]);
+
+    $game = Game::factory()->forConsole('psx')->create();
+    $file = GameFile::factory()->for($game)->create([
+        'path' => writeFile('psx/Game.chd', 'abcdef'), 'filename' => 'Game.chd',
+        'extension' => 'chd', 'role' => FileRole::Rom,
+    ]);
+
+    $hash = function () use ($game): void {
+        try {
+            (new HashGame($game->id))->handle(app(RetroAchievementsHasher::class));
+        } catch (HashFailed) {
+            // Raised for a command to report; the row is what is tested.
+        }
+    };
+
+    $hash();
+
+    // No hash, but the fingerprint of the file it failed on.
+    expect($file->refresh()->ra_hash)->toBeNull()
+        ->and($file->ra_hash_size)->toBe(6)
+        ->and($file->ra_hashed_at)->not->toBeNull();
+
+    // The same file fails the same way: a scan or a ScreenScraper retry that
+    // asks again costs nothing.
+    $hash();
+    Process::assertRanTimes(function (): bool {
+        return true;
+    }, 1);
+
+    // A new dump in its place is worth reading.
+    file_put_contents($this->root.'/psx/Game.chd', 'a different dump');
+    touch($this->root.'/psx/Game.chd', time() + 60);
+    clearstatcache();
+
+    $hash();
+    Process::assertRanTimes(function (): bool {
+        return true;
+    }, 2);
+});
+
 it('leaves the game alone when the binary itself is missing', function () {
     Process::fake(['*' => Process::result(output: '', errorOutput: 'not found', exitCode: 127)]);
 
