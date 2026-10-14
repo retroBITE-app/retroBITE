@@ -91,6 +91,12 @@ su-exec "$WEB_USER" php /app/artisan conversion:recover \
 su-exec "$WEB_USER" php /app/artisan conversion:tools \
     || echo "WARNING: could not check the conversion tools; carrying on." >&2
 
+# Games RAHasher could not hash, tried again once when this image ships a
+# different RAHasher than the last boot ran — before the workers, which then
+# read them. Nothing to do on most boots; never stops one.
+su-exec "$WEB_USER" php /app/artisan retrobite:ra:retry-failed-hashes \
+    || echo "WARNING: could not check for games to hash again; carrying on." >&2
+
 # Queue workers, split by what actually limits them. One per queue unless
 # .env says otherwise (see docs/configuration.md): the smallest footprint that still
 # works every queue, on hardware nobody here has measured.

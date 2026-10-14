@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Conversion\Tools;
 use App\Exceptions\RetroAchievements\HasherUnavailable;
 use App\Exceptions\RetroAchievements\HashFailed;
 use Illuminate\Support\Facades\Process;
@@ -26,6 +27,24 @@ class RetroAchievementsHasher
 {
     /** What RAHasher prints instead of a hash when it cannot read a file. */
     private const FAILURE_MARKER = '????????????????????????????????';
+
+    /**
+     * Which RAHasher is installed: the sha1 of its binary, so an image that
+     * ships a different build reads as a new one without anybody bumping a
+     * version. Null when there is no binary to read.
+     */
+    public function build(): ?string
+    {
+        $path = Tools::resolve((string) config('retroachievements.hasher_path'));
+
+        if ($path === null || ! is_readable($path)) {
+            return null;
+        }
+
+        $sha1 = sha1_file($path);
+
+        return $sha1 === false ? null : $sha1;
+    }
 
     /**
      * Hash one file as one console.

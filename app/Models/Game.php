@@ -320,16 +320,7 @@ class Game extends Model
      */
     public function hashableFile(): ?GameFile
     {
-        return $this->files()
-            ->present()
-            ->whereIn('role', [FileRole::Playlist->value, FileRole::Sheet->value, FileRole::Rom->value])
-            ->orderByRaw(
-                'CASE role WHEN ? THEN 0 WHEN ? THEN 1 ELSE 2 END',
-                [FileRole::Playlist->value, FileRole::Sheet->value],
-            )
-            ->orderByRaw('disc_number IS NULL, disc_number')
-            ->orderBy('id')
-            ->first();
+        return $this->files()->hashableFirst()->first();
     }
 
     /**

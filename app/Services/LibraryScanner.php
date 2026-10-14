@@ -46,6 +46,9 @@ use SplFileInfo;
  */
 final class LibraryScanner
 {
+    /** What a file row knows of RAHasher's last look at it, cleared when the file is replaced. */
+    private const FORGET_RA_HASH = ['ra_hash' => null, 'ra_hash_size' => null, 'ra_hash_mtime' => null, 'ra_hashed_at' => null];
+
     /** Files that name other files, in the order they are resolved. */
     private const PLAYLIST_EXTENSIONS = ['m3u'];
 
@@ -547,6 +550,18 @@ final class LibraryScanner
             // identification survive, which is the point of not deleting it.
             'missing_since' => null,
         ]);
+
+        // Another file at the same path: what RAHasher made of the old one,
+        // a hash or a failure, is no longer about it, and kept it would hold
+        // the new one out of IdentifyGame::queueUnhashed() for good. A track
+        // counts towards its sheet's fingerprint (FileFingerprint), so the
+        // sheet forgets too. Only a size tells here; a file changed at the
+        // same size is HashGame's to notice, by its mtime.
+        if ($existing !== null && $size !== null && $existing->size_bytes !== null && $existing->size_bytes !== $size) {
+            GameFile::query()
+                ->whereIn('id', array_filter([$file->id, $parentId]))
+                ->update(self::FORGET_RA_HASH);
+        }
 
         $result = $result->with('filesSeen');
 
