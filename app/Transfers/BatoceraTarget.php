@@ -12,8 +12,8 @@ use App\Models\Media;
  * The system folder is the console's own key — ours were named after
  * Batocera's systems to begin with — but for the few in {@see SYSTEMS}. A
  * game's files keep the arrangement they have in the library, relative to the
- * console's folder, so a multi-disc set arrives as its playlist, cuesheets and
- * tracks, and Batocera launches the playlist. Its artwork goes to images/
+ * console's folder, but for a multi-disc set, which arrives in a folder of its
+ * own with a playlist, and Batocera launches the playlist. Its artwork goes to images/
  * beside it, one file per kind Batocera knows ({@see ARTWORK}), named after the
  * file the game list points at, as Batocera's own scraper names them; a video
  * goes to videos/.
@@ -107,6 +107,12 @@ final class BatoceraTarget extends GamelistTarget
     protected function systems(): array
     {
         return self::SYSTEMS;
+    }
+
+    /** Whose cores read an .m3u; Batocera hides the discs one names beside it. */
+    protected function playlistConsoles(): array
+    {
+        return ['psx', 'saturn', 'megacd', 'dreamcast'];
     }
 
     protected function artwork(): array

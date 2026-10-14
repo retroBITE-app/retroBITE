@@ -50,6 +50,18 @@ the game.
 because a file that has gone is nearly always a disk that is not mounted rather
 than one somebody threw away.
 
+**Archived** — a game file removed on purpose: converted with its source not
+kept, decrypted in place, deleted on the game page, or pruned once missing too
+long. The file is gone and the row stays, out of every list, as the record of
+which dump it was: its checksums, its name, what the provider said of it. Not
+*missing*, which may come back. Deleting the game deletes its archive
+(docs/adr/0009).
+
+**Source** — the file a game file was made out of, by a conversion or a
+decryption, usually archived. Followed back to the first one, it is the file's
+**origin**: the dump the provider knows, which a CHD's own checksums never
+match.
+
 ## The shapes a game takes on disk
 
 **Rom** — a complete game image. Identifiable on its own.
@@ -60,7 +72,10 @@ than one somebody threw away.
 a disc the provider actually recognises.
 
 **Playlist** — a file naming the discs of a multi-disc game in order. The one
-place on disk that says "these files are one game".
+place on disk that says "these files are one game", though discs whose names
+say "(Disc N)" side by side are one game without one. A transfer writes a
+playlist of its own for a multi-disc game, beside the discs on the drive;
+that one is never a game file.
 
 **Disc** — one physical volume of a game that shipped on several. Discs are
 numbered; how many there are in total is not something the provider can be

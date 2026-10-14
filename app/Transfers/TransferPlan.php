@@ -14,8 +14,8 @@ final class TransferPlan
      * @param  list<PlannedFile>  $files
      * @param  string|null  $gamelist  relative to the drive's root, e.g. roms/psx/gamelist.xml;
      *                                 null for a system that keeps none
-     * @param  list<array{url: string, destination: string}>  $extras  the target's own
-     *                                                                 files, see TransferTarget::extras()
+     * @param  list<array{url: string, destination: string, rewrite: bool}>  $extras  the target's own
+     *                                                                                files, see TransferTarget::extras()
      * @param  list<string>  $replaces  where the game's other versions would be on the drive:
      *                                  removed, where they are, once this version has arrived
      */
@@ -51,7 +51,7 @@ final class TransferPlan
         return array_sum(array_map(fn (PlannedFile $file): int => $file->size, $this->files));
     }
 
-    /** @return array{files: list<array{url: string, destination: string, size: int}>, extras: list<array{url: string, destination: string}>, replaces: list<string>, gamelist: string|null, bytes: int, games: int} */
+    /** @return array{files: list<array{url: string, destination: string, size: int}>, extras: list<array{url: string, destination: string, rewrite: bool}>, replaces: list<string>, gamelist: string|null, bytes: int, games: int} */
     public function toArray(): array
     {
         return [

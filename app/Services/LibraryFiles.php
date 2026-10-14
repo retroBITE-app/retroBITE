@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\FileArchiveReason;
 use App\Enums\LibraryFileRejection;
 use App\Enums\TransferFailure;
 use App\Enums\TransferMode;
@@ -146,14 +147,16 @@ final class LibraryFiles
     }
 
     /**
-     * Delete one of a game's files from disk, and its row.
+     * Delete one of a game's files from disk, and archive its row.
      *
-     * The game itself, its details and its artwork stay, even when this was
-     * its last file. A file already gone from disk only loses its row.
+     * The row stays as the record of which dump the file was (docs/adr/0009),
+     * out of the library's lists. The game itself, its details and its
+     * artwork stay, even when this was its last file. A file already gone
+     * from disk only has its row archived.
      *
      * @throws LibraryFileRejected
      */
-    public function deleteFile(Game $game, int $fileId): void
+    public function deleteFile(Game $game, int $fileId, FileArchiveReason $reason = FileArchiveReason::Deleted): void
     {
         $file = $game->files()->whereKey($fileId)->first();
 
@@ -168,7 +171,7 @@ final class LibraryFiles
             $this->deleteFromDisk($console, $file);
         }
 
-        $file->delete();
+        $file->archive($reason);
 
         if ($console !== null) {
             FolderCounts::recount($console);

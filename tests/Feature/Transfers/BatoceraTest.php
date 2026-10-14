@@ -70,7 +70,7 @@ it('lays a single-file game out under roms/{system}', function () {
         ->and($plan['bytes'])->toBe(9);
 });
 
-it('keeps a multi-disc set as it is in the library, and points the list at its playlist', function () {
+it('keeps a multi-disc set in its folder, with a playlist of its own the list points at', function () {
     ConsoleSourceFolder::add(new Console('psx'));
     $game = Game::factory()->forConsole('psx')->matched()->create(['title' => 'Final Fantasy IX', 'slug' => 'ff9']);
 
@@ -86,13 +86,19 @@ it('keeps a multi-disc set as it is in the library, and points the list at its p
 
     $target = app(BatoceraTarget::class);
 
-    expect(array_column($target->plan($game)->toArray()['files'], 'destination'))->toBe([
+    $plan = $target->plan($game)->toArray();
+
+    // The library's playlist is not copied: the one written names the discs
+    // where they are on the drive, and only their sheets.
+    expect(array_column($plan['files'], 'destination'))->toBe([
         'roms/psx/Final Fantasy IX/Disc 1.bin',
         'roms/psx/Final Fantasy IX/Disc 1.cue',
         'roms/psx/Final Fantasy IX/Disc 2.bin',
         'roms/psx/Final Fantasy IX/Disc 2.cue',
-        'roms/psx/Final Fantasy IX/Final Fantasy IX.m3u',
-    ])->and($target->mergeGamelist(null, $game))->toContain('<path>./Final Fantasy IX/Final Fantasy IX.m3u</path>');
+    ])
+        ->and(array_column($plan['extras'], 'destination'))->toBe(['roms/psx/Final Fantasy IX/Final Fantasy IX.m3u'])
+        ->and($target->extra($game, 'roms/psx/Final Fantasy IX/Final Fantasy IX.m3u'))->toBe("Disc 1.cue\nDisc 2.cue\n")
+        ->and($target->mergeGamelist(null, $game))->toContain('<path>./Final Fantasy IX/Final Fantasy IX.m3u</path>');
 });
 
 it('sends one version of a game that holds several, and only lists that one', function () {

@@ -636,7 +636,8 @@ export default () => ({
     /**
      * The target's own files, once the game's are on the drive — OPL's config
      * and art — each fetched as the server makes it and written, unless the
-     * drive has one already: somebody may have tuned it there.
+     * drive has one already: somebody may have tuned it there. One the
+     * target rewrites (a generated playlist) is written over regardless.
      */
     async writeExtras(job, tree, extras) {
         for (const extra of extras) {
@@ -645,7 +646,7 @@ export default () => ({
             const folder = parts.join('/');
             job.current = extra.destination;
 
-            if ((await tree.names(folder)).has(name)) {
+            if (!extra.rewrite && (await tree.names(folder)).has(name)) {
                 job.skipped++;
                 continue;
             }

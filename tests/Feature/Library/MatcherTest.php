@@ -9,6 +9,7 @@ use App\Models\GameFile;
 use App\Models\Media;
 use App\Services\GameMatcher;
 use App\Support\Matching\MatchOutcome;
+use App\Support\Matching\ProviderDumps;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
@@ -415,6 +416,51 @@ it('records how often each dump is played and what the provider flags it as', fu
         // The game keeps the most popular dump the provider knows, held here
         // or not, and never a hack's.
         ->and($game->fresh()->provider_scrapes)->toBe(250000);
+});
+
+/** A CHD made out of FF9's Redump track, which is archived and was hashed. */
+function convertedPsxGame(): Game
+{
+    $game = Game::factory()->forConsole('psx')->create(['title' => 'FF9 (Disc 1)', 'slug' => 'ff9-disc-1']);
+    $sheet = GameFile::factory()->for($game)->create(['path' => 'psx/FF9 (Disc 1).cue', 'filename' => 'FF9 (Disc 1).cue', 'extension' => 'cue', 'role' => FileRole::Sheet]);
+    GameFile::factory()->for($game)->create([
+        'path' => 'psx/FF9 (Disc 1).bin', 'filename' => 'FF9 (Disc 1).bin', 'extension' => 'bin',
+        'role' => FileRole::Track, 'parent_id' => $sheet->id, 'size_bytes' => 700000000,
+        'crc' => 'aabbccdd', 'md5' => str_repeat('a', 32), 'sha1' => str_repeat('b', 40),
+    ]);
+    GameFile::withTrashed()->where('game_id', $game->id)->update(['deleted_at' => now(), 'archived_reason' => 'converted']);
+    GameFile::factory()->for($game)->create([
+        'path' => 'psx/FF9 (Disc 1).chd', 'filename' => 'FF9 (Disc 1).chd', 'extension' => 'chd',
+        'role' => FileRole::Rom, 'source_id' => $sheet->id, 'size_bytes' => 400000000,
+    ]);
+
+    return $game;
+}
+
+it('asks about a converted file as the dump it was made from', function () {
+    providerHit();
+    $game = convertedPsxGame();
+
+    $result = matcher()->match($game);
+
+    expect($result->outcome)->toBe(MatchOutcome::Matched);
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'romnom=FF9%20%28Disc%201%29.bin')
+        && str_contains($request->url(), 'romtaille=700000000')
+        && str_contains($request->url(), 'md5='.str_repeat('a', 32)));
+});
+
+it('records the provider\'s word on a converted file by the dump it was made from', function () {
+    providerHit([
+        'roms' => [['romfilename' => 'FF9 (Disc 1).bin', 'nbscrap' => '113401', 'best' => '1']],
+    ]);
+    $game = convertedPsxGame();
+
+    ProviderDumps::record($game, ['roms' => [['romfilename' => 'FF9 (Disc 1).bin', 'nbscrap' => '113401', 'best' => '1']]]);
+
+    $chd = $game->files()->sole();
+
+    expect($chd->scrapes)->toBe(113401)
+        ->and($chd->provider_flags)->toBe(['best']);
 });
 
 it('asks about a game the provider no longer holds once, not every night', function () {

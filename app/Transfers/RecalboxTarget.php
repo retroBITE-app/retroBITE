@@ -61,6 +61,12 @@ final class RecalboxTarget extends GamelistTarget
         return self::SYSTEMS;
     }
 
+    /** Whose cores read an .m3u; Recalbox hides the discs one names beside it. */
+    protected function playlistConsoles(): array
+    {
+        return ['psx', 'saturn', 'megacd', 'dreamcast', 'pcenginecd'];
+    }
+
     protected function artwork(): array
     {
         return self::ARTWORK;

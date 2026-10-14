@@ -7,6 +7,7 @@ namespace App\Transfers;
 use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\RomRegions;
+use App\Support\Scanning\DiscOrder;
 use App\Support\TransferRegions;
 use Illuminate\Support\Str;
 
@@ -129,10 +130,9 @@ final class GameVersions
      */
     private static function setName(GameFile $root): ?string
     {
-        $name = pathinfo($root->path, PATHINFO_DIRNAME).'/'.pathinfo($root->filename, PATHINFO_FILENAME);
-        $set = preg_replace('/\s*\((?:disc|disk|cd)\s*\d+(?:\s*of\s*\d+)?\)/i', '', $name);
+        $set = DiscOrder::set(pathinfo($root->path, PATHINFO_DIRNAME).'/'.pathinfo($root->filename, PATHINFO_FILENAME));
 
-        return $set !== null && $set !== $name ? 'set:'.$set : null;
+        return $set !== null ? 'set:'.$set : null;
     }
 
     /**

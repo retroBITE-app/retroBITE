@@ -115,7 +115,16 @@ class InspectGameFile implements ShouldQueue
     {
         $consoleObject = Console::tryFrom($console);
 
-        if ($consoleObject === null || ConsoleTools::for($consoleObject) === null) {
+        if ($consoleObject === null) {
+            return 0;
+        }
+
+        // Only what the toolbox reads (handles()): the CD consoles have one to
+        // lay out folders and read nothing, and every one of their files
+        // queued a job that did nothing, after every scan.
+        $extensions = array_map('strtolower', $consoleObject->toolboxFileExtensions);
+
+        if ($extensions === [] || ConsoleTools::for($consoleObject) === null) {
             return 0;
         }
 
@@ -123,6 +132,7 @@ class InspectGameFile implements ShouldQueue
             ->onConsole($console)
             ->identifiable()
             ->present()
+            ->whereIn('extension', $extensions)
             ->when(! $force, function ($query): void {
                 $query->uninspected();
             })

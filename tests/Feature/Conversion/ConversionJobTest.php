@@ -6,6 +6,7 @@ use App\Conversion\Converter;
 use App\Conversion\SourceSet;
 use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Exceptions\ConversionFailed;
 use App\Jobs\RunConversion;
@@ -313,6 +314,47 @@ it('deletes the source only once the output is in, when keep-source is off', fun
         ->and(File::exists($this->root.'/ps2/Game.iso'))->toBeFalse()
         // The output in its place, under the same game.
         ->and($game->files()->pluck('path')->all())->toBe(['ps2/Game.chd']);
+});
+
+it('carries the provider\'s word on the dump to the output, the source deleted', function () {
+    fakeTools();
+    $game = convertibleGame('psx', ['Crash (USA).cue' => 80, 'Crash (USA).bin' => 2352]);
+    // Known by its track, as the provider most often knows a cuesheet's.
+    $game->files()->where('extension', 'bin')->update(['region' => 'us', 'scrapes' => 4321, 'provider_flags' => json_encode(['best'])]);
+
+    $conversion = runConversion(queueConversion($game, 'chd-cd', [Converter::KEEP_SOURCE => false]));
+    $output = $game->files()->sole();
+
+    expect($conversion->status)->toBe(ConversionStatus::Done)
+        ->and($output->filename)->toBe('Crash (USA).chd')
+        ->and($output->region)->toBe('us')
+        ->and($output->scrapes)->toBe(4321)
+        ->and($output->provider_flags)->toBe(['best'])
+        ->and($output->md5)->toBeNull();
+
+    // The source is archived, hashed before it went, and the output knows it came from it.
+    $archived = GameFile::onlyTrashed()->where('game_id', $game->id)->get()->keyBy('extension');
+
+    expect($archived->keys()->sort()->values()->all())->toBe(['bin', 'cue'])
+        ->and($archived->every(fn (GameFile $file): bool => $file->archived_reason === FileArchiveReason::Converted))->toBeTrue()
+        ->and($archived['bin']->md5)->toBe(md5(str_repeat("\0", 2352)))
+        ->and($output->source_id)->toBe($archived['cue']->id)
+        ->and($output->origin()->id)->toBe($archived['bin']->id);
+});
+
+it('links an output to a source it keeps', function () {
+    fakeTools();
+    $game = convertibleGame('ps2', ['Game.iso' => 4096]);
+    $game->files()->first()->rememberMeta(['license_id' => 'SLES_503.86', 'video_mode' => 'PAL']);
+
+    runConversion(queueConversion($game, 'chd-dvd'));
+
+    $files = $game->files()->with('meta')->get()->keyBy('extension');
+
+    expect($files['chd']->source_id)->toBe($files['iso']->id)
+        ->and($files['chd']->meta?->license_id)->toBe('SLES_503.86')
+        ->and($files['chd']->meta?->video_mode)->toBe('PAL')
+        ->and(GameFile::onlyTrashed()->count())->toBe(0);
 });
 
 it('puts the output on the game it was made from, a missing row of the same name included', function () {

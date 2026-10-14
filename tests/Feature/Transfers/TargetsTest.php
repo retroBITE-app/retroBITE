@@ -167,13 +167,27 @@ it('lays a game out for Daijishō, in the folders its import asks for', function
         ->and($target->hint())->toContain('Import Preview Media');
 });
 
-it('names ES-DE\'s artwork after the playlist with its folder, and the others\' without', function () {
+it('sends a multi-disc game to ES-DE as a folder it reads as the playlist inside, its artwork named for it', function () {
+    $game = finalFantasyIx();
+    $target = app(EsDeTarget::class);
+
+    expect(destinations($target, $game))->toBe([
+        'roms/psx/Final Fantasy IX.m3u/Disc 1.chd',
+        'roms/psx/Final Fantasy IX.m3u/Disc 2.chd',
+        'roms/downloaded_media/psx/covers/Final Fantasy IX.png',
+    ])
+        ->and($target->extras($game))->toBe(['roms/psx/Final Fantasy IX.m3u/Final Fantasy IX.m3u'])
+        ->and($target->mergeGamelist(null, $game))->toContain('<path>./Final Fantasy IX.m3u</path>');
+});
+
+it('names the others\' artwork after the playlist, and leaves Daijishō the library\'s own', function () {
     $game = finalFantasyIx();
 
-    expect(destinations(app(EsDeTarget::class), $game))->toContain('roms/downloaded_media/psx/covers/Final Fantasy IX/Final Fantasy IX.png')
-        ->and(destinations(app(DaijishouTarget::class), $game))->toContain('roms/psx/media/box2dfront/Final Fantasy IX.png')
+    // Daijishō reads no playlist, so it gets the set as the library has it.
+    expect(destinations(app(DaijishouTarget::class), $game))->toContain('roms/psx/Final Fantasy IX/Final Fantasy IX.m3u', 'roms/psx/media/box2dfront/Final Fantasy IX.png')
+        ->and(app(DaijishouTarget::class)->extras($game))->toBe([])
         ->and(destinations(app(RecalboxTarget::class), $game))->toContain('roms/psx/Final Fantasy IX/Disc 2.chd', 'roms/psx/media/images/Final Fantasy IX.png')
-        ->and(app(EsDeTarget::class)->mergeGamelist(null, $game))->toContain('<path>./Final Fantasy IX/Final Fantasy IX.m3u</path>');
+        ->and(destinations(app(RetroPieTarget::class), $game))->toContain('roms/psx/Final Fantasy IX/Disc 2.chd', 'roms/psx/images/Final Fantasy IX-image.png');
 });
 
 it('uses each front-end\'s name for a system', function () {

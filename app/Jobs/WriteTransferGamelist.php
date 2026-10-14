@@ -162,8 +162,9 @@ class WriteTransferGamelist implements ShouldQueue
 
     /**
      * Each game's extras that the share does not have yet, made now and
-     * written; one already there is somebody's, and stays. Each folder is
-     * made once, the first time one of them goes into it.
+     * written; one already there is somebody's, and stays, unless it is one
+     * the target rewrites (a generated playlist). Each folder is made once,
+     * the first time one of them goes into it.
      *
      * @param  Collection<int, Transfer>  $arrived
      *
@@ -175,7 +176,7 @@ class WriteTransferGamelist implements ShouldQueue
 
         foreach ($arrived as $transfer) {
             foreach ($target->extras($transfer->game) as $destination) {
-                if ($share->sizeOf($destination) !== null) {
+                if (! $target->rewritesExtra($transfer->game, $destination) && $share->sizeOf($destination) !== null) {
                     continue;
                 }
 

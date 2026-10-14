@@ -13,6 +13,7 @@ use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\Layouts\ConsoleLayout;
 use App\Support\Scanning\CueSheet;
+use App\Support\Scanning\DiscOrder;
 use App\Support\Scanning\Playlist;
 use App\Support\Scanning\ScanPlan;
 use App\Support\Scanning\ScanResult;
@@ -121,7 +122,10 @@ final class LibraryScanner
 
         $units = [
             ...$this->planPlaylists($files),
+            ...$this->planSheetSets($files),
             ...$this->planSheets($files),
+            // After every sheet, so a track no set names is never taken for a disc.
+            ...$this->planImageSets($console, $files),
         ];
 
         [$loose, $skipped] = $this->planLooseFiles($console, $files);
@@ -177,24 +181,48 @@ final class LibraryScanner
     /**
      * The game a unit's files are already recorded under, if any.
      *
-     * The unit's first file decides — the playlist, sheet or loose file the
-     * game was named after — then the rest in order.
+     * An identified game first: discs a scan once took for games of their
+     * own come home to the one the provider knows. A file that is back where
+     * an archived one was counts as that one. Then the unit's first file
+     * — the playlist, sheet or loose file the game was named after — and the
+     * rest in order. A game left with no files is the prune's to remove.
      */
     private function ownerOf(ScanUnit $unit): ?Game
     {
-        $owners = GameFile::query()
-            ->whereIn('path', array_column($unit->files, 'path'))
+        $paths = array_column($unit->files, 'path');
+        $live = GameFile::query()->whereIn('path', $paths)->pluck('game_id', 'path');
+
+        // A file back where an archived one was, at its size, is that file
+        // (recordFile() restores it), so it goes home to the game it was
+        // archived from — identified, most likely, and titled by now as the
+        // provider has it rather than as the file is named. The latest
+        // archived at a path, as recordFile() takes.
+        $sizes = array_column($unit->files, 'size', 'path');
+        $archived = GameFile::onlyTrashed()
+            ->whereIn('path', array_diff($paths, $live->keys()->all()))
+            ->orderBy('deleted_at')
+            ->get(['path', 'size_bytes', 'game_id'])
+            ->filter(fn (GameFile $file): bool => $sizes[$file->path] !== null && $file->size_bytes === $sizes[$file->path])
             ->pluck('game_id', 'path');
 
-        foreach ($unit->files as $file) {
-            $game = isset($owners[$file['path']]) ? Game::query()->find((int) $owners[$file['path']]) : null;
+        $owners = $archived->merge($live);
 
-            if ($game !== null) {
-                return $game;
-            }
+        // In the order of the unit's files, each game once.
+        $ids = collect($unit->files)
+            ->map(fn (array $file): ?int => isset($owners[$file['path']]) ? (int) $owners[$file['path']] : null)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return null;
         }
 
-        return null;
+        $games = Game::query()->whereIn('id', $ids)->get()->keyBy('id');
+        $ordered = $ids->map(fn (int $id): ?Game => $games->get($id))->filter();
+
+        return $ordered->first(fn (Game $game): bool => $game->status === GameStatus::Matched)
+            ?? $ordered->first();
     }
 
     /**
@@ -288,7 +316,36 @@ final class LibraryScanner
     }
 
     /**
-     * Pass two: cuesheets nothing has claimed, and their tracks.
+     * Pass two: discs with no playlist over them, told apart by their names.
+     *
+     * "FF7 (Disc 1).cue" and "FF7 (Disc 2).cue" side by side are one game,
+     * numbered as their names say: what a playlist would have said, read off
+     * the names instead. Walked one sheet at a time they were two games, two
+     * lookups, and a merge once the provider had answered both.
+     *
+     * @param  array<string, int|null>  $files
+     * @return list<ScanUnit>
+     */
+    private function planSheetSets(array $files): array
+    {
+        $units = [];
+
+        foreach ($this->discSets($files, fn (string $relative): bool => $this->extensionIn($relative, self::SHEET_EXTENSIONS)) as ['title' => $title, 'discs' => $discs]) {
+            $planned = [];
+
+            foreach ($discs as $disc => $relative) {
+                $planned[] = $this->planned($relative, $files[$relative], FileRole::Sheet, null, $disc);
+                array_push($planned, ...$this->planTracks($relative, $files, $disc));
+            }
+
+            $units[] = new ScanUnit($title, $planned);
+        }
+
+        return $units;
+    }
+
+    /**
+     * Pass three: cuesheets nothing has claimed, and their tracks.
      *
      * @param  array<string, int|null>  $files
      * @return list<ScanUnit>
@@ -312,7 +369,82 @@ final class LibraryScanner
     }
 
     /**
-     * Pass three: whatever is left and carries a playable extension.
+     * Pass four: pass two for discs that are one file each — "(Disc 1).chd"
+     * and "(Disc 2).chd" — once every sheet has claimed its tracks.
+     *
+     * @param  array<string, int|null>  $files
+     * @return list<ScanUnit>
+     */
+    private function planImageSets(Console $console, array $files): array
+    {
+        $units = [];
+
+        $images = fn (string $relative): bool => $this->isPlayable($console, $relative)
+            && ! $this->extensionIn($relative, [...self::PLAYLIST_EXTENSIONS, ...self::SHEET_EXTENSIONS]);
+
+        foreach ($this->discSets($files, $images) as ['title' => $title, 'discs' => $discs]) {
+            $planned = [];
+
+            foreach ($discs as $disc => $relative) {
+                $planned[] = $this->planned($relative, $files[$relative], FileRole::Rom, null, $disc);
+            }
+
+            $units[] = new ScanUnit($title, $planned);
+        }
+
+        return $units;
+    }
+
+    /**
+     * Unclaimed files that are the discs of one set: in one folder, of one
+     * kind, named alike but for "(Disc N)", each number once. Two at least —
+     * a lone "(Disc 1)" is whatever it would have been anyway.
+     *
+     * @param  array<string, int|null>  $files
+     * @param  callable(string): bool  $accepts
+     * @return list<array{title: string, discs: array<int, string>}> each set's discs by number, in order
+     */
+    private function discSets(array $files, callable $accepts): array
+    {
+        $groups = [];
+
+        foreach (array_keys($files) as $relative) {
+            if (isset($this->claimed[$relative]) || ! $accepts($relative)) {
+                continue;
+            }
+
+            $set = DiscOrder::set(pathinfo($relative, PATHINFO_FILENAME));
+
+            if ($set !== null) {
+                $groups[dirname($relative).'/'.$set.'.'.$this->extension($relative)][] = $relative;
+            }
+        }
+
+        $sets = [];
+
+        foreach ($groups as $members) {
+            $discs = [];
+
+            foreach ($members as $relative) {
+                $discs[DiscOrder::number(basename($relative))] = $relative;
+            }
+
+            // Two files claiming one number are not a set anyone can play in order.
+            if (count($members) < 2 || count($discs) !== count($members)) {
+                continue;
+            }
+
+            ksort($discs);
+
+            $title = $this->titleFrom($members[0]);
+            $sets[] = ['title' => DiscOrder::set($title) ?? $title, 'discs' => $discs];
+        }
+
+        return $sets;
+    }
+
+    /**
+     * Pass five: whatever is left and carries a playable extension.
      *
      * @param  array<string, int|null>  $files
      * @return array{0: list<ScanUnit>, 1: int} the units, and how many files were not playable
@@ -392,6 +524,19 @@ final class LibraryScanner
     ): array {
         $existing = GameFile::query()->where('path', $relative)->first();
         $returning = $existing !== null && $existing->missing_since !== null;
+
+        // A file back where an archived one was, at the same size, is taken
+        // to be that file, its checksums and the provider's word on it
+        // included. At another size it is another file, and gets a row of its own.
+        if ($existing === null && $size !== null) {
+            $archived = GameFile::onlyTrashed()->where('path', $relative)->where('size_bytes', $size)->latest('deleted_at')->first();
+
+            if ($archived !== null) {
+                $archived->forceFill(['archived_reason' => null])->restore();
+                $existing = $archived;
+                $returning = true;
+            }
+        }
 
         $file = GameFile::query()->updateOrCreate(['path' => $relative], [
             'game_id' => $game->id,

@@ -90,6 +90,14 @@ interface TransferTarget
     public function extra(Game $game, string $destination): ?string;
 
     /**
+     * Whether one of those files is written over one already on the drive:
+     * one made of nothing but the game's files — the playlist of a
+     * multi-disc game — which a disc added since makes wrong, and nobody
+     * tunes. Not OPL's config, which somebody may have.
+     */
+    public function rewritesExtra(Game $game, string $destination): bool;
+
+    /**
      * The game list with these games' entries added or brought up to date —
      * one game from its page, a console's worth when a console is sent. All
      * of them share one list: they are one console's games.

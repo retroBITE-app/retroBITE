@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Exceptions\ScanAborted;
@@ -150,6 +151,77 @@ it('treats a cuesheet with no playlist as its own game', function () {
     expect($result->gamesCreated)->toBe(1)
         ->and(Game::sole()->title)->toBe('Tekken 3')
         ->and(GameFile::where('role', FileRole::Track)->count())->toBe(2);
+});
+
+it('makes one game of loose cuesheets that say they are discs of one set', function () {
+    foreach ([1, 2] as $disc) {
+        put("psx/Final Fantasy VII (USA) (Disc {$disc}).cue", "FILE \"Final Fantasy VII (USA) (Disc {$disc}).bin\" BINARY\n");
+        put("psx/Final Fantasy VII (USA) (Disc {$disc}).bin");
+    }
+
+    $result = scan('psx');
+    $game = Game::sole();
+
+    // Two sheets walked one at a time were two games and two lookups.
+    expect($result->gamesCreated)->toBe(1)
+        ->and($game->title)->not->toContain('Disc')
+        ->and($game->files()->where('role', FileRole::Sheet)->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2])
+        ->and($game->files()->where('role', FileRole::Track)->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2])
+        ->and($game->identifiableFile()->filename)->toBe('Final Fantasy VII (USA) (Disc 1).bin');
+
+    $track = GameFile::where('filename', 'Final Fantasy VII (USA) (Disc 2).bin')->sole();
+
+    expect($track->parent->filename)->toBe('Final Fantasy VII (USA) (Disc 2).cue');
+});
+
+it('makes one game of single-file discs of one set, numbered by name', function () {
+    put('psx/Metal Gear Solid (Europe) (Disc 2).chd');
+    put('psx/Metal Gear Solid (Europe) (Disc 1).chd');
+
+    scan('psx');
+
+    $game = Game::sole();
+
+    expect($game->files()->orderBy('disc_number')->pluck('filename')->all())
+        ->toBe(['Metal Gear Solid (Europe) (Disc 1).chd', 'Metal Gear Solid (Europe) (Disc 2).chd'])
+        ->and($game->files()->pluck('role')->unique()->all())->toBe([FileRole::Rom]);
+});
+
+it('keeps discs apart that differ in folder, kind or anything but the disc', function () {
+    put('psx/Game (Disc 1).chd');
+    put('psx/Other/Game (Disc 2).chd');
+    put('psx/Riven (Disc 1).chd');
+    put('psx/Riven (Disc 2).iso');
+    put('psx/Myst (Disc 1).chd');
+    put('psx/Myst (Disc 2) (Rev 1).chd');
+
+    $result = scan('psx');
+
+    expect($result->gamesCreated)->toBe(6)
+        ->and(GameFile::whereNotNull('disc_number')->count())->toBe(0);
+});
+
+it('does not read a console name for a disc number', function () {
+    put('amigacd32/Amiga CD32 Demo.iso');
+    put('amigacd32/Amiga CD32 Sampler.iso');
+
+    expect(scan('amigacd32')->gamesCreated)->toBe(2);
+});
+
+it('brings a set\'s discs home to the game the provider knows on a rescan', function () {
+    put('psx/Riven (Disc 1).chd');
+    put('psx/Riven (Disc 2).chd');
+
+    // As an earlier scan left them: a game per disc, the second one identified.
+    $first = Game::create(['console' => 'psx', 'title' => 'Riven (Disc 1)', 'slug' => 'riven-disc-1', 'status' => GameStatus::Unmatched]);
+    $known = Game::create(['console' => 'psx', 'title' => 'Riven', 'slug' => 'riven', 'status' => GameStatus::Matched, 'screenscraper_id' => 1]);
+    GameFile::create(['game_id' => $first->id, 'path' => 'psx/Riven (Disc 1).chd', 'filename' => 'Riven (Disc 1).chd', 'extension' => 'chd', 'role' => FileRole::Rom]);
+    GameFile::create(['game_id' => $known->id, 'path' => 'psx/Riven (Disc 2).chd', 'filename' => 'Riven (Disc 2).chd', 'extension' => 'chd', 'role' => FileRole::Rom, 'disc_number' => 2]);
+
+    scan('psx');
+
+    expect($known->files()->orderBy('disc_number')->pluck('disc_number')->all())->toBe([1, 2])
+        ->and($first->files()->count())->toBe(0);
 });
 
 it('reads an unquoted FILE directive', function () {
@@ -383,4 +455,43 @@ it('queues nothing when the scan refuses to run', function () {
     (new ScanConsoleFolder('snes'))->handle(app(LibraryScanner::class));
 
     Bus::assertNotDispatched(MatchGame::class);
+});
+
+it('brings an archived file back when the same file returns, and makes a new row for another', function () {
+    put('snes/Mario.sfc', 'same');
+    put('snes/Zelda.sfc', 'same');
+    scan('snes');
+
+    $mario = GameFile::query()->where('filename', 'Mario.sfc')->sole();
+    $mario->update(['md5' => str_repeat('a', 32)]);
+    $mario->archive(FileArchiveReason::Deleted);
+    $zelda = GameFile::query()->where('filename', 'Zelda.sfc')->sole();
+    $zelda->archive(FileArchiveReason::Deleted);
+    put('snes/Zelda.sfc', 'another file');
+
+    scan('snes');
+
+    $back = GameFile::query()->where('filename', 'Mario.sfc')->sole();
+
+    expect($back->id)->toBe($mario->id)
+        ->and($back->md5)->toBe(str_repeat('a', 32))
+        ->and($back->archived_reason)->toBeNull()
+        ->and(GameFile::query()->where('filename', 'Zelda.sfc')->sole()->id)->not->toBe($zelda->id)
+        ->and(GameFile::onlyTrashed()->pluck('id')->all())->toBe([$zelda->id]);
+});
+
+it('brings a returning file home to the identified game it was archived from', function () {
+    put('snes/smw.sfc', 'same');
+    scan('snes');
+
+    $file = GameFile::query()->sole();
+    // Identified since, and titled as the provider has it, not as the file is named.
+    $file->game->update(['title' => 'Super Mario World', 'slug' => 'super-mario-world', 'status' => GameStatus::Matched]);
+    $file->archive(FileArchiveReason::Deleted);
+
+    scan('snes');
+
+    expect(Game::query()->count())->toBe(1)
+        ->and(GameFile::query()->sole()->id)->toBe($file->id)
+        ->and(GameFile::query()->sole()->game_id)->toBe($file->game_id);
 });

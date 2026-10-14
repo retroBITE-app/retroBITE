@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Conversion;
 
+use App\Enums\FileArchiveReason;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
@@ -216,6 +217,26 @@ abstract class Converter
     public function replacesSource(): bool
     {
         return false;
+    }
+
+    /** Why a source this converter has done with is archived (docs/adr/0009). */
+    public function archiveReason(): FileArchiveReason
+    {
+        return FileArchiveReason::Converted;
+    }
+
+    /**
+     * For a converter that replaces its source: what the toolbox read off the
+     * source that is no longer true of the output, written over the kept
+     * row's record. The rest stays. Null is for the next scan to read again,
+     * which is a read of the whole image; disc_key is never here, being the
+     * disc's and kept once decrypting has deleted its file.
+     *
+     * @return array<string, mixed>
+     */
+    public function factsAfterSwap(): array
+    {
+        return ['license_id' => null, 'video_mode' => null, 'encrypted' => null];
     }
 
     /**

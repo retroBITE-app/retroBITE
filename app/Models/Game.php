@@ -105,6 +105,17 @@ class Game extends Model
         return $this->hasMany(GameFile::class);
     }
 
+    /**
+     * The files no longer in the library, kept as the record of what they
+     * were (docs/adr/0009).
+     *
+     * @return HasMany<GameFile, $this>
+     */
+    public function archivedFiles(): HasMany
+    {
+        return $this->hasMany(GameFile::class)->onlyTrashed();
+    }
+
     /** @return HasMany<Media, $this> */
     public function media(): HasMany
     {

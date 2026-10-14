@@ -114,6 +114,7 @@ final class OplTarget implements TransferTarget
             return [
                 'url' => route('transfers.extra', ['target' => $this->key(), 'gameId' => $game->id, 'path' => $destination, ...$this->options()->query()]),
                 'destination' => $destination,
+                'rewrite' => $this->rewritesExtra($game, $destination),
             ];
         }, $this->extras($game));
 
@@ -162,6 +163,12 @@ final class OplTarget implements TransferTarget
             ->all();
 
         return [$this->ps2->configPathFor($serial), ...$art];
+    }
+
+    /** Somebody may have tuned the config on the drive; the art is theirs to change too. */
+    public function rewritesExtra(Game $game, string $destination): bool
+    {
+        return false;
     }
 
     /** Made by the PS2 toolbox, as its own export writes them into a library. */

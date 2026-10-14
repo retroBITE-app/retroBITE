@@ -6,6 +6,7 @@ namespace App\Conversion;
 
 use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Enums\TransferFailure;
 use App\Enums\TransferMode;
@@ -24,6 +25,7 @@ use App\Services\LibraryFiles;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\LiveUpdates;
+use App\Support\Scanning\Checksums;
 use App\Support\Scanning\LibraryFolders;
 use App\Transfers\FileTransfer;
 use App\Transfers\Location;
@@ -33,6 +35,7 @@ use Illuminate\Process\FakeInvokedProcess;
 use Illuminate\Process\InvokedProcess;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
@@ -84,18 +87,13 @@ final class ConversionRunner
 
     /**
      * What a file row knows about the bytes in it, and no longer knows once
-     * they are replaced: hashes and the provider's word on the dump.
+     * they are replaced: their hashes. Not the provider's word on the dump
+     * (dumpFacts()), which a repacking leaves true.
      */
     private const CONTENT_FACTS = [
-        'crc', 'md5', 'sha1', 'hashed_at', 'scrapes', 'provider_flags',
+        'crc', 'md5', 'sha1', 'hashed_at',
         'ra_hash', 'ra_hash_size', 'ra_hash_mtime', 'ra_hashed_at',
     ];
-
-    /**
-     * What the toolbox read off the replaced bytes, for the next scan to read again.
-     * Not disc_key: it is the disc's, and kept once decrypting has deleted its file.
-     */
-    private const META_FACTS = ['license_id', 'video_mode', 'encrypted'];
 
     private string $log = '';
 
@@ -549,6 +547,13 @@ final class ConversionRunner
         }
 
         if ($converter->replacesSource()) {
+            // The source's checksums, while its bytes are still there: once
+            // renamed over, its archived row is all that says which dump it
+            // was, and an encrypted PS3 image is what Redump lists.
+            foreach ($plan as ['disc' => $disc]) {
+                $this->hashBeforeArchiving($disc->file);
+            }
+
             // On record before the first rename, so recovery knows a swap began.
             $conversion->update(['status' => ConversionStatus::Swapping]);
             $this->swap($console, $converter, $set, $plan);
@@ -619,11 +624,28 @@ final class ConversionRunner
      */
     private function finishSwap(Console $console, Converter $converter, Disc $disc, string $final): void
     {
-        $disc->file->update([
-            'size_bytes' => (int) filesize($this->paths->absolute($console, $final)),
-            ...array_fill_keys(self::CONTENT_FACTS, null),
-        ]);
-        $disc->file->meta()->update(array_fill_keys(self::META_FACTS, null));
+        DB::transaction(function () use ($console, $converter, $disc, $final): void {
+            $file = $disc->file;
+            $source = $file->source;
+
+            // The replaced bytes' record, archived before it is cleared: they
+            // were the dump the provider and Redump know (docs/adr/0009). Not
+            // twice — a recovery runs this again on a row already done.
+            if ($source === null || ! $source->trashed() || $source->path !== $file->path) {
+                $source = $this->archiveCopy($file, $converter->archiveReason());
+            }
+
+            $file->update([
+                'size_bytes' => (int) filesize($this->paths->absolute($console, $final)),
+                'source_id' => $source->id,
+                ...array_fill_keys(self::CONTENT_FACTS, null),
+            ]);
+            $facts = $converter->factsAfterSwap();
+
+            if ($facts !== []) {
+                $file->meta()->update($facts);
+            }
+        });
         $this->line(__('Replaced :path', ['path' => $final]));
 
         foreach ($converter->companions($disc, $this->paths->root()) as $companion) {
@@ -640,6 +662,25 @@ final class ConversionRunner
                 $this->line(__('Kept :path: it could not be deleted.', ['path' => $relative]));
             }
         }
+    }
+
+    /**
+     * An archived copy of a row whose bytes are about to be replaced in
+     * place, with everything known about them: hashes, the provider's word,
+     * the toolbox's.
+     */
+    private function archiveCopy(GameFile $file, FileArchiveReason $reason): GameFile
+    {
+        // Not live_path, which the database works out; archived from the
+        // start, so the copy never holds the live row's path as its own.
+        $copy = $file->replicate(['live_path']);
+        $copy->forceFill(['archived_reason' => $reason, 'deleted_at' => now()])->save();
+
+        if ($file->meta !== null) {
+            $copy->meta()->create($file->meta->replicate(['game_file_id'])->getAttributes());
+        }
+
+        return $copy;
     }
 
     /**
@@ -717,9 +758,10 @@ final class ConversionRunner
     }
 
     /**
-     * With keep-source off, delete what was converted, now the output is in.
-     * A source that will not go is logged and left: two copies is a nuisance,
-     * and the conversion itself succeeded.
+     * With keep-source off, delete what was converted, now the output is in,
+     * and archive its rows (docs/adr/0009). A source that will not go is
+     * logged and left: two copies is a nuisance, and the conversion itself
+     * succeeded.
      */
     private function removeSources(Conversion $conversion, SourceSet $set): void
     {
@@ -728,14 +770,46 @@ final class ConversionRunner
         }
 
         foreach ($set->files() as $file) {
+            $this->hashBeforeArchiving($file);
+
             try {
-                $this->files->deleteFile($set->game, $file->id);
+                $this->files->deleteFile($set->game, $file->id, FileArchiveReason::Converted);
                 $this->line(__('Deleted :path', ['path' => $file->filename]));
             } catch (LibraryFileRejected $e) {
                 Log::warning('A converted source could not be deleted.', ['conversion' => $conversion->id, 'file' => $file->id, 'reason' => $e->reason->value]);
                 $this->line(__('Kept :path: it could not be deleted.', ['path' => $file->filename]));
             }
         }
+    }
+
+    /**
+     * Checksums for a source that has none, read before it is deleted or
+     * replaced: an archived row without them knows its dump only by name, and
+     * the output cannot be recognised by its own. A read of the source again, short
+     * beside the conversion that has just read it. A file that will not read
+     * is archived without them.
+     */
+    private function hashBeforeArchiving(GameFile $file): void
+    {
+        if ($file->isHashed()) {
+            return;
+        }
+
+        try {
+            $sums = Checksums::of(LibraryFolders::pathOf($file));
+        } catch (Throwable $e) {
+            Log::warning('A converted source could not be hashed before archiving.', ['file' => $file->id, 'reason' => $e->getMessage()]);
+
+            return;
+        }
+
+        $file->update([
+            'crc' => $sums->crc,
+            'md5' => $sums->md5,
+            'sha1' => $sums->sha1,
+            'hashed_at' => now(),
+        ]);
+        $this->line(__('Hashed :path to archive it', ['path' => $file->filename]));
     }
 
     /**
@@ -795,10 +869,12 @@ final class ConversionRunner
             return;
         }
 
-        $record = function (string $name, FileRole $role, ?int $disc = null, ?int $parent = null) use ($console, $set): GameFile {
+        /** @param  array<string, mixed>  $facts */
+        $record = function (string $name, FileRole $role, ?int $disc = null, ?int $parent = null, array $facts = []) use ($console, $set): GameFile {
             $relative = $this->paths->within($console, self::join($set->directory, $name));
 
             return GameFile::query()->updateOrCreate(['path' => $relative], [
+                ...$facts,
                 'game_id' => $set->game->id,
                 'filename' => basename($relative),
                 'extension' => strtolower(pathinfo($relative, PATHINFO_EXTENSION)),
@@ -815,23 +891,61 @@ final class ConversionRunner
         $playlist = null;
 
         foreach (array_diff($conversion->outputs ?? [], self::outputs($plan)->all()) as $name) {
-            $playlist = $record($name, FileRole::Playlist)->id;
+            $playlist = $record($name, FileRole::Playlist, null, null, ['source_id' => $set->playlist?->id])->id;
         }
 
         // In the set's order, which is the discs' own: counted from one, as the scan does.
         foreach ($plan as $index => $step) {
             $disc = $set->isSet() ? $index + 1 : null;
+            $source = $step['disc']->file;
+            $facts = self::dumpFacts($step['disc']);
             $sheet = Arr::first($step['outputs'], fn (string $name): bool => in_array(strtolower(pathinfo($name, PATHINFO_EXTENSION)), ['cue', 'gdi'], true));
-            $sheetId = $sheet === null ? null : $record($sheet, FileRole::Sheet, $disc, $playlist)->id;
+            // The disc's root — its sheet or its image — is made out of the
+            // source disc's; tracks hang off their sheet.
+            $root = $sheet === null ? null : $record($sheet, FileRole::Sheet, $disc, $playlist, [...$facts, 'source_id' => $source->id]);
 
             foreach ($step['outputs'] as $name) {
-                if ($name !== $sheet) {
-                    $sheetId === null
-                        ? $record($name, FileRole::Rom, $disc, $playlist)
-                        : $record($name, FileRole::Track, $disc, $sheetId);
+                if ($name === $sheet) {
+                    continue;
+                }
+
+                if ($root === null) {
+                    $root = $record($name, FileRole::Rom, $disc, $playlist, [...$facts, 'source_id' => $source->id]);
+                } else {
+                    $record($name, FileRole::Track, $disc, $root->id, $facts);
                 }
             }
+
+            // The disc's own name for itself is the same disc's, in whatever format.
+            $meta = $source->meta;
+
+            if ($root !== null && $meta !== null && $meta->license_id !== null) {
+                $root->rememberMeta(array_filter(['license_id' => $meta->license_id, 'video_mode' => $meta->video_mode]));
+            }
         }
+    }
+
+    /**
+     * What the provider said about the dump a disc is, for its output: a
+     * conversion repacks the dump rather than changes it, and the provider
+     * cannot recognise the output by its checksum. Without them Send to stops
+     * preferring the popular dump and the game page forgets it. Gathered from
+     * every file of the disc — the provider knows a cuesheet's tracks more
+     * often than the sheet — as the region first found, the highest count
+     * and every flag; nothing where nothing was said.
+     *
+     * @return array<string, mixed>
+     */
+    private static function dumpFacts(Disc $disc): array
+    {
+        $members = collect($disc->members);
+        $flags = $members->flatMap(fn (GameFile $file): array => $file->provider_flags ?? [])->unique()->values()->all();
+
+        return array_filter([
+            'region' => $members->pluck('region')->first(fn (?string $region): bool => $region !== null && $region !== ''),
+            'scrapes' => $members->pluck('scrapes')->filter(fn (?int $scrapes): bool => $scrapes !== null)->max(),
+            'provider_flags' => $flags !== [] ? $flags : null,
+        ], fn (mixed $value): bool => $value !== null);
     }
 
     /**

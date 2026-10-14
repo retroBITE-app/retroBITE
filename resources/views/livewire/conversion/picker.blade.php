@@ -833,7 +833,7 @@ new class extends Component
                             @if (in_array(Converter::KEEP_SOURCE, $options, true))
                                 <div class="flex items-center gap-2">
                                     <flux:checkbox wire:model="keepSource" :label="__('Keep source')" />
-                                    <x-info :text="__('Off, the source files are deleted once the output is written and verified.')" />
+                                    <x-info :text="__('Off, the source files are deleted once the output is written and verified. Their checksums are kept on record, so the output is still known by the dump it came from.')" />
                                 </div>
                             @endif
 

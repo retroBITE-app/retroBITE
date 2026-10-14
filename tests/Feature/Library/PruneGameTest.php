@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ConversionStatus;
+use App\Enums\FileArchiveReason;
 use App\Jobs\PruneGame;
 use App\Models\Conversion;
 use App\Models\Game;
@@ -69,6 +70,20 @@ it('takes only the missing entry off a game that still has another ROM', functio
     expect(Game::query()->find($game->id))->not->toBeNull()
         ->and($game->files()->count())->toBe(1)
         ->and($game->files()->first()->missing_since)->toBeNull();
+});
+
+it('archives a ROM it forgets, and deletes the archive with the game', function () {
+    $kept = gameMissingFor([40, null]);
+    $gone = gameMissingFor([40]);
+
+    pruneGame($kept);
+    pruneGame($gone);
+
+    $archived = $kept->archivedFiles()->sole();
+
+    expect($archived->archived_reason)->toBe(FileArchiveReason::Pruned)
+        ->and($archived->missing_since)->not->toBeNull()
+        ->and(GameFile::withTrashed()->where('game_id', $gone->id)->count())->toBe(0);
 });
 
 it('removes a game once every one of its ROMs is past the cutoff', function () {

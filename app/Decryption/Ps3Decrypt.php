@@ -8,6 +8,7 @@ use App\Conversion\Converter;
 use App\Conversion\Disc;
 use App\Conversion\SourceSet;
 use App\Enums\ConversionFailure;
+use App\Enums\FileArchiveReason;
 use App\Exceptions\ConversionFailed;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
@@ -125,6 +126,21 @@ final class Ps3Decrypt extends Converter
     public function replacesSource(): bool
     {
         return true;
+    }
+
+    /** The encrypted image, archived under its old checksums: the dump Redump lists. */
+    public function archiveReason(): FileArchiveReason
+    {
+        return FileArchiveReason::Decrypted;
+    }
+
+    /**
+     * The same disc, its title ID read off the unencrypted part of it either
+     * way, and proved decrypted by confirm(): nothing for a scan to read again.
+     */
+    public function factsAfterSwap(): array
+    {
+        return ['encrypted' => false];
     }
 
     /**

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Enums\MediaKind;
 use App\Models\AppSetting;
@@ -39,6 +40,21 @@ it('refuses two files at the same path', function () {
 
     GameFile::factory()->create(['path' => 'snes/mario.sfc']);
 })->throws(QueryException::class);
+
+it('lets a file take the path of an archived one, and keeps archived files out of the game\'s', function () {
+    $game = Game::factory()->create();
+    $old = GameFile::factory()->for($game)->create(['path' => 'snes/Mario.sfc']);
+    $old->archive(FileArchiveReason::Deleted);
+
+    $new = GameFile::factory()->for($game)->create(['path' => 'snes/Mario.sfc']);
+
+    expect($game->files()->pluck('id')->all())->toBe([$new->id])
+        ->and($game->archivedFiles()->pluck('id')->all())->toBe([$old->id])
+        ->and(GameFile::withTrashed()->find($old->id)?->archived_reason)->toBe(FileArchiveReason::Deleted);
+
+    // Two live files at one path are still refused.
+    expect(fn () => GameFile::factory()->for($game)->create(['path' => 'snes/Mario.sfc']))->toThrow(QueryException::class);
+});
 
 it('allows two files with identical content at different paths', function () {
     // The same dump copied into a backup folder is not an error, and a unique
@@ -201,11 +217,16 @@ it('counts a file as uninspected until its facts hold a serial', function () {
     expect(GameFile::query()->uninspected()->orderBy('id')->pluck('id')->all())->toBe([$unread->id, $keyOnly->id]);
 });
 
-it('drops a file\'s facts with it, however the file goes', function () {
+it('keeps an archived file\'s facts, and drops them with a file deleted for good', function () {
     $file = GameFile::factory()->withMeta(['license_id' => 'SLES_503.86'])->create();
 
-    // A bulk delete, as PruneGame's: no model events, only the database's cascade.
+    // Archived: the row is the record of the dump, serial included.
     GameFile::query()->whereKey($file->id)->delete();
+
+    expect(GameFileMeta::query()->count())->toBe(1);
+
+    // Deleted for good — with its game, or forgotten by hand: the database's cascade.
+    GameFile::withTrashed()->whereKey($file->id)->forceDelete();
 
     expect(GameFileMeta::query()->count())->toBe(0);
 });

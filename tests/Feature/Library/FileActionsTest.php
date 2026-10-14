@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Enums\LibraryFileRejection;
 use App\Exceptions\LibraryFileRejected;
@@ -174,7 +175,7 @@ describe('delete', function () {
         ConsoleSourceFolder::add(new Console('snes'));
     });
 
-    it('deletes the file and its row, and nothing about the game', function () {
+    it('deletes the file and archives its row, and nothing about the game', function () {
         Storage::fake('media');
 
         $game = gameWithFiles('snes', ['snes/Mario.sfc']);
@@ -186,6 +187,7 @@ describe('delete', function () {
 
         expect(File::exists($this->root.'/snes/Mario.sfc'))->toBeFalse()
             ->and(GameFile::query()->count())->toBe(0)
+            ->and(GameFile::onlyTrashed()->sole()->archived_reason)->toBe(FileArchiveReason::Deleted)
             ->and($game->fresh()?->title)->toBe('Super Mario World')
             ->and(Media::query()->whereKey($media->id)->exists())->toBeTrue();
 
@@ -274,5 +276,54 @@ describe('the game page', function () {
         expect($game->files()->pluck('filename')->all())->toBe(['Mario (Rev 1).sfc'])
             ->and(File::exists($this->root.'/snes/Mario.sfc'))->toBeFalse()
             ->and(File::exists($this->root.'/snes/Mario (Rev 1).sfc'))->toBeTrue();
+    });
+
+    it('shows what a file was made out of, its history on asking, and forgets an archived file', function () {
+        ConsoleSourceFolder::add(new Console('psx'));
+        $game = Game::factory()->forConsole('psx')->create();
+        $sheet = GameFile::factory()->for($game)->create(['path' => 'psx/Crash (USA).cue', 'filename' => 'Crash (USA).cue', 'extension' => 'cue', 'role' => FileRole::Sheet]);
+        GameFile::factory()->for($game)->create(['path' => 'psx/Crash (USA).bin', 'filename' => 'Crash (USA).bin', 'extension' => 'bin', 'role' => FileRole::Track, 'parent_id' => $sheet->id, 'md5' => str_repeat('c', 32)]);
+        GameFile::query()->where('game_id', $game->id)->update(['deleted_at' => now(), 'archived_reason' => 'converted']);
+        GameFile::factory()->for($game)->create(['path' => 'psx/Crash (USA).chd', 'filename' => 'Crash (USA).chd', 'extension' => 'chd', 'source_id' => $sheet->id]);
+        $deleted = GameFile::factory()->for($game)->create(['path' => 'psx/Old.chd', 'filename' => 'Old.chd', 'extension' => 'chd']);
+        $deleted->archive(FileArchiveReason::Deleted);
+
+        $page = Livewire::test('games.show', ['game' => $game])
+            ->set('tab', 'files')
+            ->assertSee('Converted from')
+            ->assertSee('Crash (USA).cue')
+            ->assertSee('+ 1 track')
+            ->assertSee(str_repeat('c', 32))
+            ->assertSee('1 archived file')
+            ->assertDontSee('Old.chd');
+
+        $page->set('showHistory', true)
+            ->assertSee('Old.chd')
+            ->call('forgetFile', $deleted->id)
+            ->assertDontSee('Old.chd');
+
+        expect(GameFile::withTrashed()->find($deleted->id))->toBeNull()
+            ->and($game->files()->pluck('filename')->all())->toBe(['Crash (USA).chd']);
+    });
+
+    it('shows an archived playlist with its sheets and their tracks, in the history and under what was made of it', function () {
+        ConsoleSourceFolder::add(new Console('psx'));
+        $game = Game::factory()->forConsole('psx')->create();
+        $playlist = GameFile::factory()->for($game)->create(['path' => 'psx/FF7.m3u', 'filename' => 'FF7.m3u', 'extension' => 'm3u', 'role' => FileRole::Playlist]);
+        $sheet = GameFile::factory()->for($game)->create(['path' => 'psx/FF7 (Disc 1).cue', 'filename' => 'FF7 (Disc 1).cue', 'extension' => 'cue', 'role' => FileRole::Sheet, 'parent_id' => $playlist->id, 'disc_number' => 1]);
+        GameFile::factory()->for($game)->create(['path' => 'psx/FF7 (Disc 1).bin', 'filename' => 'FF7 (Disc 1).bin', 'extension' => 'bin', 'role' => FileRole::Track, 'parent_id' => $sheet->id, 'disc_number' => 1]);
+        GameFile::query()->where('game_id', $game->id)->update(['deleted_at' => now(), 'archived_reason' => 'deleted']);
+
+        Livewire::test('games.show', ['game' => $game])
+            ->set('tab', 'files')
+            ->set('showHistory', true)
+            ->assertSeeInOrder(['FF7.m3u', 'FF7 (Disc 1).cue', 'FF7 (Disc 1).bin']);
+
+        // Converted: the new playlist made out of the old one folds the whole old tree out.
+        GameFile::factory()->for($game)->create(['path' => 'psx/FF7 (CHD).m3u', 'filename' => 'FF7 (CHD).m3u', 'extension' => 'm3u', 'role' => FileRole::Playlist, 'source_id' => $playlist->id]);
+
+        Livewire::test('games.show', ['game' => $game])
+            ->set('tab', 'files')
+            ->assertSeeInOrder(['FF7 (CHD).m3u', 'FF7.m3u', 'FF7 (Disc 1).cue', 'FF7 (Disc 1).bin']);
     });
 });

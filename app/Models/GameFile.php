@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\FileArchiveReason;
 use App\Enums\FileRole;
 use App\Support\RetroAchievements\FileFingerprint;
 use Database\Factories\GameFileFactory;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -25,6 +27,14 @@ use Illuminate\Support\Collection;
  *
  * Carries facts, never state. Whether a game has been identified is recorded
  * once, on the game.
+ *
+ * A row outlives its file. A file removed on purpose — converted with its
+ * source not kept, decrypted in place, deleted on the game page, pruned — is
+ * archived (soft-deleted, with archived_reason), not deleted: the row is the
+ * only record of which dump the file was. A file made out of another points
+ * at it (source_id), so a converted copy the provider has never seen is still
+ * known by the dump it came from (docs/adr/0009). Deleting the game deletes
+ * them for good.
  *
  * @property int $id
  * @property int $game_id
@@ -46,24 +56,31 @@ use Illuminate\Support\Collection;
  * @property int|null $scrapes how many times the provider has had this very dump scraped; null for one it does not know
  * @property list<string>|null $provider_flags the provider's flags for the dump: beta, demo, proto, trad, hack, unl, alt, best
  * @property int|null $parent_id
+ * @property int|null $source_id the file this one was made out of, by a conversion or decryption
  * @property Carbon|null $missing_since
+ * @property Carbon|null $deleted_at when the file was archived
+ * @property FileArchiveReason|null $archived_reason
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Game $game
  * @property-read GameFile|null $parent
  * @property-read Collection<int, GameFile> $children
  * @property-read GameFileMeta|null $meta what the toolbox read off the disc; null until something has
+ * @property-read GameFile|null $source
+ * @property-read Collection<int, GameFile> $derivatives
  */
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
     'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'scrapes', 'provider_flags',
-    'parent_id', 'missing_since', 'ra_hash', 'ra_hash_size',
+    'parent_id', 'source_id', 'missing_since', 'archived_reason', 'ra_hash', 'ra_hash_size',
     'ra_hash_mtime', 'ra_hashed_at',
 ])]
 class GameFile extends Model
 {
     /** @use HasFactory<GameFileFactory> */
     use HasFactory;
+
+    use SoftDeletes;
 
     /**
      * @return array<string, string>
@@ -81,6 +98,7 @@ class GameFile extends Model
             'ra_hash_mtime' => 'integer',
             'ra_hashed_at' => 'datetime',
             'missing_since' => 'datetime',
+            'archived_reason' => FileArchiveReason::class,
         ];
     }
 
@@ -108,6 +126,86 @@ class GameFile extends Model
     public function children(): HasMany
     {
         return $this->hasMany(GameFile::class, 'parent_id');
+    }
+
+    /**
+     * The file this one was made out of, archived or not.
+     *
+     * @return BelongsTo<GameFile, $this>
+     */
+    public function source(): BelongsTo
+    {
+        return $this->belongsTo(GameFile::class, 'source_id')->withTrashed();
+    }
+
+    /**
+     * The files made out of this one.
+     *
+     * @return HasMany<GameFile, $this>
+     */
+    public function derivatives(): HasMany
+    {
+        return $this->hasMany(GameFile::class, 'source_id');
+    }
+
+    /**
+     * Archive the row: the file is gone from the library on purpose, and the
+     * row stays as the record of which dump it was.
+     */
+    public function archive(FileArchiveReason $reason): void
+    {
+        // Saved first: a soft delete writes deleted_at alone.
+        $this->forceFill(['archived_reason' => $reason])->save();
+        $this->delete();
+    }
+
+    /**
+     * The file and the files it was made out of, nearest first. Bounded, and
+     * safe against a loop, which only a hand-edited row could make.
+     *
+     * @return list<GameFile>
+     */
+    public function lineage(int $depth = 5): array
+    {
+        $chain = [$this];
+        $seen = [$this->id => true];
+        $file = $this;
+
+        while (count($chain) <= $depth && $file->source_id !== null && ! isset($seen[$file->source_id])) {
+            $file = $file->source;
+
+            if ($file === null) {
+                break;
+            }
+
+            $seen[$file->id] = true;
+            $chain[] = $file;
+        }
+
+        return $chain;
+    }
+
+    /**
+     * The file the provider would know this one as: the first of the files it
+     * was made out of — a Redump image before it was compressed or decrypted
+     * — or, where that is a sheet, its first track, which is what the
+     * provider indexes. A track goes by its sheet's. This file itself when
+     * it was made out of nothing.
+     */
+    public function origin(): GameFile
+    {
+        if ($this->source_id === null && $this->parent?->source_id !== null) {
+            return $this->parent->origin();
+        }
+
+        $chain = $this->lineage();
+        $first = $chain[count($chain) - 1];
+
+        if ($first->role !== FileRole::Sheet || $first->is($this)) {
+            return $first;
+        }
+
+        return $first->children()->withTrashed()->orderBy('path')->first() ?? $first;
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\FileArchiveReason;
 use App\Models\AppSetting;
 use App\Models\Conversion;
 use App\Models\Game;
@@ -25,9 +26,9 @@ use Illuminate\Support\Facades\Log;
  * listed:
  *
  * 1. Each of the game's file rows missing for longer than the cutoff is
- *    deleted. Other files, and ones gone only lately, stay.
- * 2. If that leaves the game with no file rows — or it never had any — the
- *    game goes, with its details and artwork.
+ *    archived (docs/adr/0009). Other files, and ones gone only lately, stay.
+ * 2. If that leaves the game with no live file rows — or it never had any —
+ *    the game goes, with its details, artwork and archived files.
  *
  * A game a conversion still queued or running points at is left alone until
  * that conversion is over. Safe to run twice: a game already gone, or with
@@ -121,7 +122,10 @@ class PruneGame implements ShouldQueue
             return;
         }
 
-        $files = $game->files()->where('missing_since', '<=', self::cutoff($this->days))->delete();
+        $files = $game->files()->where('missing_since', '<=', self::cutoff($this->days))->update([
+            'archived_reason' => FileArchiveReason::Pruned,
+            'deleted_at' => now(),
+        ]);
 
         if ($game->files()->exists()) {
             $this->record($game, $files, false);
