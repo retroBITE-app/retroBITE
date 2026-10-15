@@ -8,6 +8,7 @@
     use App\Support\Console;
     use App\Support\LibraryStorage;
     use App\Support\Scanning\FolderCounts;
+    use Illuminate\Support\Arr;
     use Illuminate\Support\Number;
 
     // Media rides along because both the hero and the cards behind it are key
@@ -27,24 +28,28 @@
         ->keyBy('ra_game_id');
 
     $recent = $recent
-        ->map(fn (Game $game) => [
-            'title' => $game->title,
-            'console' => $game->console()?->name ?? $game->console,
-            'path' => $game->console()?->libraryPath() ?? $game->console,
-            'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
-            'added' => $game->created_at?->diffForHumans() ?? '',
-            'url' => route('games.show', $game->routeParameters()),
-            'cover' => $game->artwork(MediaKind::Cover)?->url(App\Enums\ThumbnailSize::Grid),
-            'backdrop' => ($backdrop = $game->artwork(MediaKind::Backdrop)) ? route('media.show', ['path' => $backdrop->path]) : null,
-            'achievements' => ($p = $recentProgress->get($game->retroachievements_id)) !== null && $p->achievements_possible > 0
-                ? ['unlocked' => $p->unlocked_count, 'possible' => $p->achievements_possible,
-                   'percent' => (int) round($p->unlocked_count / $p->achievements_possible * 100)]
-                : null,
-        ])
+        ->map(function (Game $game) use ($recentProgress): array {
+            $backdrop = $game->artwork(MediaKind::Backdrop);
+            $progress = $recentProgress->get($game->retroachievements_id);
+
+            return [
+                'title' => $game->title,
+                'console' => $game->console()?->name ?? $game->console,
+                'path' => $game->console()?->libraryPath() ?? $game->console,
+                'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
+                'added' => $game->created_at?->diffForHumans() ?? '',
+                'url' => route('games.show', $game->routeParameters()),
+                'cover' => $game->artwork(MediaKind::Cover)?->url(App\Enums\ThumbnailSize::Grid),
+                'backdrop' => $backdrop !== null ? route('media.show', ['path' => $backdrop->path]) : null,
+                'achievements' => $progress !== null && $progress->achievements_possible > 0
+                    ? ['unlocked' => $progress->unlocked_count, 'possible' => $progress->achievements_possible]
+                    : null,
+            ];
+        })
         ->all();
 
     // The hero is left out of the cards, or the newest game shows up twice.
-    $hero = $recent[0] ?? null;
+    $hero = Arr::first($recent);
     $others = array_slice($recent, 1);
 
     // The consoles somebody put in their library, not every directory that
@@ -57,7 +62,9 @@
     // provider has not answered for yet is neither a game nor worth hiding.
     $games = Game::where('status', GameStatus::Matched)->count();
     $unmatched = Game::count() - $games;
-    $files = $consoles->sum(fn (Console $console): int => FolderCounts::gamesIn($console));
+    $files = $consoles->sum(function (Console $console): int {
+        return FolderCounts::gamesIn($console);
+    });
 
     // What the identified games take, against what is free, so the figure says
     // what room is left. Both are stored readings (see LibraryStorage): the
@@ -79,16 +86,16 @@
         ->first();
 
     $cells = [
-        ['label' => 'Games', 'value' => Number::format($games), 'sub' => __(':count still unmatched', ['count' => Number::format($unmatched)])],
-        ['label' => 'Files', 'value' => Number::format($files), 'sub' => trans_choice('across :count console|across :count consoles', $consoles->count(), ['count' => $consoles->count()])],
-        ['label' => 'Consoles', 'value' => (string) $consoles->count(), 'sub' => __('in your library')],
-        ['label' => 'Achievements', 'value' => Number::format((int) $ra->unlocked), 'sub' => __('of :count tracked', ['count' => Number::format((int) $ra->possible)])],
-        ['label' => 'Points', 'value' => Number::format((int) $ra->points), 'sub' => __('hardcore :count', ['count' => Number::format((int) $ra->points_hardcore)])],
+        ['label' => __('Games'), 'value' => Number::format($games), 'sub' => __(':count still unmatched', ['count' => Number::format($unmatched)])],
+        ['label' => __('Files'), 'value' => Number::format($files), 'sub' => trans_choice('across :count console|across :count consoles', $consoles->count(), ['count' => $consoles->count()])],
+        ['label' => __('Consoles'), 'value' => (string) $consoles->count(), 'sub' => __('in your library')],
+        ['label' => __('Achievements'), 'value' => Number::format((int) $ra->unlocked), 'sub' => __('of :count tracked', ['count' => Number::format((int) $ra->possible)])],
+        ['label' => __('Points'), 'value' => Number::format((int) $ra->points), 'sub' => __('hardcore :count', ['count' => Number::format((int) $ra->points_hardcore)])],
         // Dashed rather than dropped when the mount cannot be read: this grid
         // is six cells over two and three columns, and removing one leaves a
         // hole in it.
         [
-            'label' => 'Storage',
+            'label' => __('Storage'),
             'value' => $storage === null ? __('—') : Number::fileSize($storage->used, 1),
             'sub' => $storage === null
                 ? __('library folder unreadable')
@@ -107,15 +114,19 @@
         ->orderByDesc('unlocked_at')
         ->take(5)
         ->get()
-        ->filter(fn (RaUnlock $unlock) => $unlock->achievement !== null)
-        ->map(fn (RaUnlock $unlock) => [
-            'id' => $unlock->id,
-            'title' => $unlock->achievement->title,
-            'game' => $unlock->achievement->game?->title ?? '',
-            'points' => $unlock->achievement->points,
-            'badge' => $unlock->achievement->badgeUrl(),
-            'when' => $unlock->unlocked_at?->diffForHumans(short: true) ?? '',
-        ])
+        ->filter(function (RaUnlock $unlock): bool {
+            return $unlock->achievement !== null;
+        })
+        ->map(function (RaUnlock $unlock): array {
+            return [
+                'id' => $unlock->id,
+                'title' => $unlock->achievement->title,
+                'game' => $unlock->achievement->game?->title ?? '',
+                'points' => $unlock->achievement->points,
+                'badge' => $unlock->achievement->badgeUrl(),
+                'when' => $unlock->unlocked_at?->diffForHumans(short: true) ?? '',
+            ];
+        })
         ->values();
 
     $pointsThisWeek = (int) RaUnlock::query()
@@ -128,17 +139,21 @@
     // filename as a stand-in title, which is what makes them recognisable here.
     $unmatched = Game::query()
         ->where('status', GameStatus::Unmatched)
-        ->with(['files' => fn ($q) => $q->whereNull('missing_since')])
+        ->with(['files' => function ($query): void {
+            $query->whereNull('missing_since');
+        }])
         ->latest('id')
         ->take(5)
         ->get()
-        ->map(fn (Game $game) => [
-            'file' => $game->files->first()?->filename ?? $game->title,
-            'console' => $game->console,
-            'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
-            'added' => $game->created_at?->diffForHumans() ?? '',
-            'url' => route('games.show', $game->routeParameters()),
-        ])
+        ->map(function (Game $game): array {
+            return [
+                'file' => $game->files->first()?->filename ?? $game->title,
+                'console' => $game->console,
+                'size' => Number::fileSize((int) $game->files->sum('size_bytes'), 1),
+                'added' => $game->created_at?->diffForHumans() ?? '',
+                'url' => route('games.show', $game->routeParameters()),
+            ];
+        })
         ->all();
 
     // The hour where the library's owner is, per APP_TIMEZONE — the server's
@@ -151,28 +166,21 @@
 
 <x-layouts::app :title="__('Dashboard')">
     <div class="flex flex-col gap-6">
-        <div class="-mb-2 flex items-center justify-between gap-4">
-            <div class="min-w-0">
-                <p class="kicker mb-1.5 text-fg-faint">{{ __(':greeting, :name', ['greeting' => $greeting, 'name' => $name]) }}</p>
-                <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Your collection') }}</h1>
-            </div>
-        </div>
+        <x-page-header
+            :kicker="__(':greeting, :name', ['greeting' => $greeting, 'name' => $name])"
+            :title="__('Your collection')"
+            class="-mb-2!"
+        />
 
         <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
             <div class="relative flex h-[300px] overflow-hidden rounded-xl border border-line-strong bg-sunken">
-                @if ($hero !== null && $hero['backdrop'] !== null)
-                    <div class="absolute inset-0 bg-cover bg-[position:50%_20%]"
-                         style="background-image: url('{{ $hero['backdrop'] }}')"></div>
-                @else
+                @if (Arr::get($hero ?? [], 'backdrop') === null)
                     {{-- The design's no-backdrop state: the glyph on the sunken ground. --}}
                     <flux:icon.photo class="absolute top-1/2 right-8 size-10 -translate-y-1/2 text-line-bright" aria-hidden="true" />
                 @endif
 
                 {{-- Reads left-to-right, so the text side is darkened hardest. --}}
-                <div class="hero-fade-x pointer-events-none absolute inset-0"></div>
-                @scanlines
-                    <div class="scanlines absolute inset-0"></div>
-                @endscanlines
+                <x-backdrop :src="Arr::get($hero ?? [], 'backdrop')" fade="hero-x" position="50% 20%" />
 
                 <div class="relative mt-auto w-full p-6">
                     @if ($hero === null)
@@ -194,14 +202,11 @@
                         </p>
 
                         @if ($hero['achievements'] !== null)
-                            <div class="mt-4 flex max-w-85 items-center gap-3">
-                                <div class="h-1.25 flex-1 overflow-hidden rounded-sm bg-scrim/40">
-                                    <div class="h-full rounded-sm bg-accent" style="width: {{ $hero['achievements']['percent'] }}%"></div>
-                                </div>
-                                <span class="shrink-0 font-mono text-xs text-accent">
-                                    {{ $hero['achievements']['unlocked'] }} / {{ $hero['achievements']['possible'] }}
-                                </span>
-                            </div>
+                            <x-achievement-progress
+                                :unlocked="Arr::get($hero, 'achievements.unlocked')"
+                                :possible="Arr::get($hero, 'achievements.possible')"
+                                class="mt-4 max-w-85"
+                            />
                         @endif
                     @endif
 
@@ -209,14 +214,14 @@
                         {{-- The hero is a game, so this goes to that game. With
                              nothing scanned yet there is none to go to, and the
                              only useful next step is adding a console. --}}
-                        <a
-                            href="{{ $hero === null ? route('consoles.index') : $hero['url'] }}"
+                        <flux:button
+                            variant="primary"
+                            :href="$hero === null ? route('consoles.index') : $hero['url']"
+                            icon:trailing="arrow-right"
                             wire:navigate
-                            class="inline-flex items-center gap-1.5 rounded-lg border border-accent-tint/60 px-3.5 py-2 text-sm text-accent transition-colors hover:bg-accent-tint/14 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                         >
                             {{ $hero === null ? __('Add a console') : __('View details') }}
-                            <flux:icon.arrow-right variant="micro" />
-                        </a>
+                        </flux:button>
                     </div>
                 </div>
             </div>
@@ -226,29 +231,16 @@
                     <a
                         href="{{ $game['url'] }}"
                         wire:navigate
-                        class="relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border border-line bg-surface p-2.5 transition-colors hover:border-line-input hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                        class="relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-xl border border-line bg-surface p-2.5 transition-colors hover:border-accent-tint/55 hover:bg-hover focus-ring"
                     >
                         {{-- The game's own key art, faded out before it reaches the
                              text. The mask covers the scanlines too, so they stop
                              where the art does. --}}
                         @if ($game['backdrop'] !== null)
-                            <span aria-hidden="true" class="art-fade-l pointer-events-none absolute inset-0">
-                                <span class="absolute inset-0 bg-cover bg-center"
-                                      style="background-image: url('{{ $game['backdrop'] }}')"></span>
-                                @scanlines
-                                    <span class="scanlines absolute inset-0"></span>
-                                @endscanlines
-                            </span>
+                            <x-backdrop :src="$game['backdrop']" fade="art-l" position="center" />
                         @endif
 
-                        @if ($game['cover'] !== null)
-                            <img src="{{ $game['cover'] }}" alt=""
-                                 class="relative h-18 w-13 shrink-0 rounded-md border border-line-input object-cover" />
-                        @else
-                            <span aria-hidden="true" class="relative grid h-18 w-13 shrink-0 place-items-center rounded-md border border-line-input bg-sunken">
-                                <flux:icon.photo class="size-4.5 text-fg-faint" />
-                            </span>
-                        @endif
+                        <x-cover-frame :src="$game['cover']" size="poster" />
 
                         <span class="relative min-w-0 flex-1">
                             <span class="block truncate text-sm text-fg">{{ $game['title'] }}</span>
@@ -265,28 +257,25 @@
                  per-cell border classes: the cell count changed once and the
                  index arithmetic behind those classes did not survive it. --}}
             <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line lg:grid-cols-3">
-                @foreach ($cells as $cell)
-                    <div class="bg-sunken px-4.5 py-4">
-                        <dt class="kicker text-fg-faint">{{ $cell['label'] }}</dt>
-                        <dd class="mt-2 text-[22px] font-medium tracking-display text-fg-bright">{{ $cell['value'] }}</dd>
-                        <dd class="mt-1 text-sm text-fg-dim">{{ $cell['sub'] }}</dd>
-                    </div>
+                @foreach ($cells as ['label' => $label, 'value' => $value, 'sub' => $sub])
+                    <x-stat :label="$label" :sub="$sub" size="lg" class="bg-sunken px-4.5 py-4">{{ $value }}</x-stat>
                 @endforeach
             </dl>
         </section>
 
         @if ($unlockFeed->isNotEmpty())
             <section>
-                <div class="mb-3.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-                    <h2 class="text-lg font-medium text-fg-bright">{{ __('Latest achievements') }}</h2>
-                    <p class="font-mono text-sm text-accent">
-                        {{ __('+:points pts this week', ['points' => Number::format($pointsThisWeek)]) }}
-                    </p>
-                </div>
+                <x-section-header :title="__('Latest achievements')">
+                    <x-slot:aside>
+                        <p class="font-mono text-sm text-accent">
+                            {{ __('+:points pts this week', ['points' => Number::format($pointsThisWeek)]) }}
+                        </p>
+                    </x-slot:aside>
+                </x-section-header>
 
-                <ul class="overflow-hidden rounded-xl border border-line bg-sunken">
+                <x-panel as="ul" tone="sunken" divided>
                     @foreach ($unlockFeed as $unlock)
-                        <li class="flex items-center gap-3.25 border-b border-raised px-3.5 py-2.75 last:border-0">
+                        <li class="flex items-center gap-3.25 px-3.5 py-2.75">
                             <div class="grid size-9.5 shrink-0 place-items-center overflow-hidden rounded-lg border border-accent/35 bg-accent-tint/10">
                                 @if ($unlock['badge'] !== null)
                                     <img src="{{ $unlock['badge'] }}" alt="" loading="lazy" class="size-full object-cover" />
@@ -306,7 +295,7 @@
                             </div>
                         </li>
                     @endforeach
-                </ul>
+                </x-panel>
             </section>
         @endif
 
@@ -314,35 +303,31 @@
              heading with nothing under it. --}}
         @if (count($unmatched) > 0)
             <section>
-                <div class="mb-3.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-                    <h2 class="text-lg font-medium text-fg-bright">{{ __('Needs identifying') }}</h2>
-                    <p class="text-sm text-fg-dim">
-                        {{ count($unmatched) }} {{ __('files scanned but not matched to a title') }}
-                    </p>
-                </div>
+                <x-section-header :title="__('Needs identifying')">
+                    <x-slot:aside>
+                        <p class="text-sm text-fg-dim">
+                            {{ count($unmatched) }} {{ __('files scanned but not matched to a title') }}
+                        </p>
+                    </x-slot:aside>
+                </x-section-header>
 
-                <ul class="overflow-hidden rounded-xl border border-line bg-sunken">
+                <x-panel as="ul" tone="sunken" divided>
                     @foreach ($unmatched as $game)
-                        <li class="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-line/70 px-4 py-3 transition-colors last:border-b-0 hover:bg-hover">
+                        <li class="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3 transition-colors hover:bg-hover">
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate font-mono text-sm text-fg-soft">{{ $game['file'] }}</span>
                                 <span class="mt-1.5 flex items-center gap-2.5">
-                                    <span class="kicker rounded border border-line-strong px-1.5 py-0.5 text-accent-muted">{{ $game['console'] }}</span>
+                                    <x-badge>{{ $game['console'] }}</x-badge>
                                     <span class="font-mono text-xs text-fg-faint">{{ $game['size'] }} · {{ $game['added'] }}</span>
                                 </span>
                             </span>
 
-                            <a
-                                href="{{ $game['url'] }}"
-                                wire:navigate
-                                class="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-tint/50 px-2.5 py-1.5 text-sm text-accent transition-colors hover:bg-accent-tint/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                            >
-                                <flux:icon.sparkles variant="micro" />
+                            <flux:button size="sm" variant="primary" icon="sparkles" :href="$game['url']" wire:navigate>
                                 {{ __('Identify') }}
-                            </a>
+                            </flux:button>
                         </li>
                     @endforeach
-                </ul>
+                </x-panel>
             </section>
         @endif
 

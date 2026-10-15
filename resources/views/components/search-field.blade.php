@@ -23,11 +23,11 @@
         x-on:keydown.slash.window="if (! $event.target.closest('input, textarea, select, [contenteditable]')) { $event.preventDefault(); $el.focus(); $el.select() }"
         x-on:keydown.escape="$el.blur()"
         {{ $attributes->except('class') }}
-        class="peer w-full rounded-lg border border-line-input bg-scrim/60 py-1.5 pr-10 pl-8 text-sm text-fg-soft backdrop-blur-sm transition-colors placeholder:text-fg-dim hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep [&::-webkit-search-cancel-button]:hidden"
+        class="peer w-full rounded-lg border border-line-input bg-scrim/60 py-1.5 pr-10 pl-8 text-sm text-fg-soft backdrop-blur-sm transition-colors placeholder:text-fg-dim hover:border-line-bright focus-ring [&::-webkit-search-cancel-button]:hidden"
     />
 
     {{-- Hidden while typing, where it would sit on top of the text. --}}
-    <kbd aria-hidden="true" x-show="! filled" class="pointer-events-none absolute right-2.75 hidden font-sans text-xs text-fg-dim peer-focus:hidden sm:block">/</kbd>
+    <x-kbd keys="/" aria-hidden="true" x-show="! filled" class="pointer-events-none absolute right-2.75 hidden peer-focus:hidden sm:block" />
 
     {{-- An input event, as typing sends, so wire:model hears it empty. --}}
     <button
