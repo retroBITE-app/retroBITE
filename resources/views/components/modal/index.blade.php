@@ -16,7 +16,9 @@
      x-modal.content. With event, a window event of that name opens it, and
      then is a line of JS run after, such as $wire.open($event.detail.id).
      x-data and x-init go to the body, so the footer is inside their scope;
-     everything else (wire:close, :dismissible) goes to flux:modal. --}}
+     everything else (wire:close, :dismissible) goes to flux:modal. Always
+     one wrapping element, with or without the listener: a conditional one
+     leaves Blade's block markers ahead of a Livewire component's root. --}}
 @php
     $widths = [
         'md' => 'max-w-md',
@@ -29,25 +31,20 @@
     $body = $attributes->only(['x-data', 'x-init']);
     $modal = $attributes->except(['x-data', 'x-init'])->class(['w-full', Arr::get($widths, $width, 'max-w-lg')]);
     $open = '$flux.modal('.Illuminate\Support\Js::from($name).').show()'.(filled($then) ? '; '.$then : '');
+    $listener = new Illuminate\View\ComponentAttributeBag(filled($event) ? ['x-on:'.$event.'.window' => $open] : []);
 @endphp
 
-@if (filled($event))
-    <div x-on:{{ $event }}.window="{{ $open }}">
-@endif
-
-<flux:modal :name="$name" :attributes="$modal">
-    <x-modal.content
-        :heading="$heading"
-        :subheading="$subheading"
-        :mono="$mono"
-        :submit="$submit"
-        :cancel="$cancel"
-        :footer="$footer"
-        :footer-start="$footerStart"
-        :attributes="$body"
-    >{{ $slot }}</x-modal.content>
-</flux:modal>
-
-@if (filled($event))
-    </div>
-@endif
+<div {{ $listener }}>
+    <flux:modal :name="$name" :attributes="$modal">
+        <x-modal.content
+            :heading="$heading"
+            :subheading="$subheading"
+            :mono="$mono"
+            :submit="$submit"
+            :cancel="$cancel"
+            :footer="$footer"
+            :footer-start="$footerStart"
+            :attributes="$body"
+        >{{ $slot }}</x-modal.content>
+    </flux:modal>
+</div>

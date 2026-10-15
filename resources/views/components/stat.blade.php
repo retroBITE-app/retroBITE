@@ -5,11 +5,15 @@
     'mono' => null,
     'percent' => null,
     'sub' => null,
+    'truncate' => false,
+    'title' => null,
 ])
 
 {{-- One figure under its kicker label, as a dt/dd pair for the caller's
      <dl>. md is a mono count; lg the sans figure of a stat grid, which can
-     carry a bar for how far along it is and a line of detail under it. --}}
+     carry a bar for how far along it is and a line of detail under it.
+     Truncate holds the figure to one line; the title, its whole text, then
+     shows on hover over the figure. --}}
 @php
     $mono ??= $size !== 'lg';
 @endphp
@@ -17,8 +21,9 @@
 <div {{ $attributes }}>
     <dt class="kicker text-fg-faint">{{ $label }}</dt>
 
-    <dd @class([
+    <dd @if (filled($title)) title="{{ $title }}" @endif @class([
         'tabular-nums',
+        'truncate' => $truncate,
         'mt-1 text-lg' => $size !== 'lg',
         'mt-1.5 text-[19px] font-medium tracking-display' => $size === 'lg',
         'font-mono' => $mono,

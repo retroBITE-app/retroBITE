@@ -32,11 +32,17 @@ it('renders a panel, with the header strip only when it has something to hold', 
     expect(Blade::render('<x-panel padded class="mt-2">Body</x-panel>'))
         ->toContain('bg-surface p-5 mt-2')
         ->not->toContain('border-b border-raised');
+
+    expect(Blade::render('<x-panel title="Fetch" align="end">Body</x-panel>'))
+        ->toContain('flex flex-wrap gap-3 border-b border-raised px-4.5 py-3.5 items-end')
+        ->not->toContain('align=');
+
+    expect($html)->toContain('flex flex-wrap gap-3 border-b border-raised px-4.5 py-3.5 items-center');
 });
 
 it('renders a standalone panel header with its title and actions', function () {
     $html = Blade::render(<<<'BLADE'
-        <x-panel.header title="Fetch another region" class="items-end">
+        <x-panel.header title="Fetch another region" align="end" class="extra">
             <span>Extra</span>
 
             <x-slot:actions>
@@ -46,7 +52,8 @@ it('renders a standalone panel header with its title and actions', function () {
         BLADE);
 
     expect($html)
-        ->toContain('flex flex-wrap items-center gap-3 border-b border-raised px-4.5 py-3.5 items-end')
+        ->toContain('flex flex-wrap gap-3 border-b border-raised px-4.5 py-3.5 items-end extra')
+        ->not->toContain('items-center gap-3')
         ->toContain('Fetch another region')
         ->toContain('<span>Extra</span>')
         ->toContain('<div class="ml-auto flex items-center gap-2">');
@@ -113,6 +120,16 @@ it('renders a stat as a dt and dd pair, mono at md and sans with a bar at lg', f
         ->toContain('role="progressbar"')
         ->toContain('h-[3px]')
         ->toContain('width: 42%');
+
+    $held = Blade::render('<x-stat label="Publisher" :title="$value" truncate class="min-w-0">{{ $value }}</x-stat>', ['value' => 'Capcom & Clover']);
+
+    expect($held)
+        ->toMatch('/<dd\s+title="Capcom &amp; Clover"\s+class="tabular-nums truncate mt-1 text-lg/')
+        ->toContain('<div class="min-w-0">');
+
+    expect(Blade::render('<x-stat label="Size">4 GB</x-stat>'))
+        ->not->toContain('truncate')
+        ->not->toContain('title=');
 });
 
 it('renders a key/value row', function () {
@@ -153,7 +170,7 @@ it('renders a modal with its heading, form, footer and opening event', function 
         BLADE);
 
     expect($html)
-        ->toContain('x-on:disc-key.window="$flux.modal(&#039;disc-key&#039;).show(); $wire.open($event.detail.fileId)"')
+        ->toContain('x-on:disc-key.window="$flux.modal(\'disc-key\').show(); $wire.open($event.detail.fileId)"')
         ->toContain('data-modal="disc-key"')
         ->toContain('w-full max-w-2xl')
         ->toContain('wire:close="closed"')
@@ -348,6 +365,19 @@ it('renders a cover frame with its art, or the console icon in its place', funct
     expect(Blade::render('<x-cover-frame size="md" />'))
         ->toContain('size-12 rounded-md')
         ->toContain('<svg');
+
+    $fallback = Blade::render('<x-cover-frame as="span" size="sm" icon="document-text" />');
+
+    expect($fallback)
+        ->toStartWith('<span')
+        ->toContain('size-8 rounded-md border-line-strong')
+        ->toContain('size-4 text-fg-muted')
+        ->not->toContain('<div')
+        ->not->toContain('text-fg-faint');
+
+    expect(Blade::render('<x-cover-frame size="sm" src="/thumb.jpg" icon="document-text" />'))
+        ->toContain('src="/thumb.jpg"')
+        ->not->toContain('<svg');
 });
 
 it('renders a region flag, or its code where there is no flag', function () {

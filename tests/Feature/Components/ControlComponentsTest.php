@@ -70,10 +70,18 @@ it('renders a copy button as an icon alone, labelled for a screen reader', funct
         ->toContain('x-text="copied ? \'Copied\' : \'\'"')
         ->toContain('-my-1')
         ->toContain('focus-ring');
+});
 
-    expect(Blade::render('<x-copy-button text="abc" variant="menu" label="Copy path"><b>i</b></x-copy-button>'))
-        ->toContain('<b>i</b>')
-        ->toContain('\'Copy path\'')
+it('renders a copy button inside a menu as one of its items', function (): void {
+    $html = Blade::render('<flux:menu><x-copy-button text="ps2/okami.iso" variant="menu" label="Copy path" /></flux:menu>');
+
+    expect($html)
+        ->toContain('data-flux-menu-item')
+        ->toContain('data-flux-menu-item-icon')
+        ->toContain('rounded-md text-start text-sm font-medium')
+        ->toContain('x-data="{ copied: false }"')
+        ->toContain('ps2\\/okami.iso')
+        ->toContain('x-text="copied ? \'Copied\' : \'Copy path\'"')
         ->not->toContain('aria-label');
 });
 

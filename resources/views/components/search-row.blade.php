@@ -23,13 +23,7 @@
     @if ($href !== null) href="{{ $href }}" @else type="button" @endif
     {{ $attributes->class('flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.75 text-left text-sm text-fg-soft transition-colors hover:bg-hover') }}
 >
-    <span class="grid size-8 shrink-0 place-items-center overflow-hidden rounded-md border border-line-strong bg-sunken">
-        @if (filled($image))
-            <img src="{{ $image }}" alt="" loading="lazy" class="size-full object-contain" />
-        @elseif (filled($icon))
-            <flux:icon :icon="$icon" variant="micro" class="size-4 text-fg-muted" />
-        @endif
-    </span>
+    <x-cover-frame as="span" size="sm" :src="$image" :icon="$icon" />
 
     <span class="min-w-0 flex-1 truncate">{{ $label }}</span>
 

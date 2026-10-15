@@ -6,14 +6,17 @@
     'alt' => '',
     'lightbox' => null,
     'overlay' => null,
+    'icon' => null,
+    'as' => 'div',
 ])
 
 {{-- A game's cover in a frame of fixed shape, or, while it has none, the
-     console's own icon faded on the frame's ground (a photo glyph for a
-     console config no longer carries). sm and md are list thumbnails, poster
-     a small portrait one; lg fills a shelf column at the console's cover
-     shape, hero stands at the game page's height. The overlay slot sits
-     over the art: a pick box, the console's logo, actions. --}}
+     console's own icon faded on the frame's ground. Without a console it
+     shows the icon given, such as a search row's page or doc, or else a
+     photo glyph. sm and md are list thumbnails, poster a small portrait one;
+     lg fills a shelf column at the console's cover shape, hero stands at the
+     game page's height. The overlay slot sits over the art: a pick box, the
+     console's logo, actions. As span keeps the frame valid inside a button. --}}
 @php
     $hero = $size === 'hero';
     $shelf = $size === 'lg';
@@ -27,7 +30,7 @@
         default => null,
     };
 
-    $icon = Arr::get([
+    $iconSize = Arr::get([
         'sm' => 'size-5',
         'md' => 'size-7',
         'poster' => 'size-8',
@@ -38,7 +41,7 @@
     $glyph = in_array($size, ['lg', 'hero'], true) ? 'size-8' : 'size-4';
 @endphp
 
-<div
+<{{ $as }}
     @if ($style !== null) style="{{ $style }}" @endif
     {{ $attributes->class([
         'relative flex shrink-0 items-center justify-center overflow-hidden border bg-sunken',
@@ -75,12 +78,14 @@
             ])
         />
     @else
-        <div @class([
+        <{{ $as }} @class([
             'flex size-full flex-col items-center justify-center gap-3',
             'bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]' => $shelf,
         ])>
             @if ($console !== null)
-                <img src="{{ $console->fileIcon }}" alt="{{ $console->name }}" class="{{ $icon }} object-contain opacity-25" />
+                <img src="{{ $console->fileIcon }}" alt="{{ $console->name }}" class="{{ $iconSize }} object-contain opacity-25" />
+            @elseif (filled($icon))
+                <flux:icon :icon="$icon" :variant="$glyph === 'size-4' ? 'micro' : 'outline'" class="{{ $glyph }} text-fg-muted" />
             @else
                 <flux:icon.photo class="{{ $glyph }} text-fg-faint" />
             @endif
@@ -88,8 +93,8 @@
             @if (filled($label))
                 <span class="kicker text-fg-faint">{{ $label }}</span>
             @endif
-        </div>
+        </{{ $as }}>
     @endif
 
     {{ $overlay }}
-</div>
+</{{ $as }}>

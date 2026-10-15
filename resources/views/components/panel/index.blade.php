@@ -6,11 +6,13 @@
     'title' => null,
     'header' => null,
     'actions' => null,
+    'align' => 'center',
 ])
 
 {{-- A bordered, rounded box that holds a list, a table or a block of
      content. With a title, a header slot or actions it gains the header
-     strip, and the padding and rules move to the body under it. --}}
+     strip, and the padding and rules move to the body under it. Align is
+     the strip's: center, or end for a header that runs to two lines. --}}
 @php
     $headed = filled($title)
         || ($header instanceof Illuminate\View\ComponentSlot ? $header->hasActualContent() : filled($header))
@@ -35,6 +37,7 @@
         <x-panel.header
             :title="$title"
             :actions="$actions"
+            :align="$align"
             :attributes="$header instanceof Illuminate\View\ComponentSlot ? $header->attributes : new Illuminate\View\ComponentAttributeBag"
         >{{ $header }}</x-panel.header>
 

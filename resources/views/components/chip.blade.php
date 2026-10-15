@@ -1,5 +1,6 @@
 @props([
     'active' => false,
+    'xActive' => null,
     'count' => null,
     'mono' => false,
     'dashed' => false,
@@ -8,16 +9,28 @@
 
 {{-- A toggle pill in a filter row: pressed narrows the list, pressing it
      again widens it back out. Dashed is the row's "add" or "show more" chip,
-     an action rather than a filter, so it is never pressed. --}}
+     an action rather than a filter, so it is never pressed. x-active is an
+     Alpine expression for a chip whose state lives in the browser. --}}
+@php
+    $on = 'border-accent-tint/55 bg-accent-tint/10 text-accent';
+    $off = 'border-line-input text-fg-dim hover:bg-hover hover:text-fg';
+    $alpine = ! $dashed && filled($xActive);
+@endphp
+
 <button
     type="button"
-    @unless ($dashed) aria-pressed="{{ $active ? 'true' : 'false' }}" @endunless
+    @if ($alpine)
+        x-bind:aria-pressed="({{ $xActive }}) ? 'true' : 'false'"
+        x-bind:class="({{ $xActive }}) ? @js($on) : @js($off)"
+    @elseif (! $dashed)
+        aria-pressed="{{ $active ? 'true' : 'false' }}"
+    @endif
     {{ $attributes->class([
         'inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors focus-ring',
         'font-mono' => $mono,
         'border-dashed border-line-bright text-fg-dim hover:bg-hover hover:text-fg' => $dashed,
-        'border-accent-tint/55 bg-accent-tint/10 text-accent' => ! $dashed && $active,
-        'border-line-input text-fg-dim hover:bg-hover hover:text-fg' => ! $dashed && ! $active,
+        $on => ! $dashed && ! $alpine && $active,
+        $off => ! $dashed && ! $alpine && ! $active,
     ]) }}
 >
     @if ($icon)
