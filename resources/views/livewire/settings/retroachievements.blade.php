@@ -74,12 +74,14 @@ new #[Title('RetroAchievements')] class extends Component
         $synced = RaConsoleSync::query()->get()->keyBy('ra_console_id');
 
         return LibraryConsoles::mapped()
-            ->map(fn (array $keys, $raConsoleId) => [
-                'id' => (int) $raConsoleId,
-                'consoles' => implode(', ', $keys),
-                'synced' => $synced->get((int) $raConsoleId)?->synced_at?->diffForHumans(),
-                'games' => (int) ($synced->get((int) $raConsoleId)?->games ?? 0),
-            ])
+            ->map(function (array $keys, int|string $raConsoleId) use ($synced): array {
+                return [
+                    'id' => (int) $raConsoleId,
+                    'consoles' => implode(', ', $keys),
+                    'synced' => $synced->get((int) $raConsoleId)?->synced_at?->diffForHumans(),
+                    'games' => (int) ($synced->get((int) $raConsoleId)?->games ?? 0),
+                ];
+            })
             ->values();
     }
 
@@ -230,140 +232,109 @@ new #[Title('RetroAchievements')] class extends Component
             @if ($onboarding)
                 <flux:button variant="ghost" type="button" wire:click="finishOnboarding">{{ __('Skip for now') }}</flux:button>
             @endif
-            <flux:button variant="primary" type="submit" form="retroachievements-settings">{{ $onboarding ? __('Finish setup') : __('Save') }}</flux:button>
+            <x-settings.save form="retroachievements-settings" :label="$onboarding ? __('Finish setup') : null" />
         </x-slot>
 
         <form id="retroachievements-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div @class(['flex flex-col gap-6', 'lg:col-span-6' => ! $onboarding, 'lg:col-span-12' => $onboarding])>
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <div class="mb-4 flex items-center gap-2.5">
-                        <flux:icon.trophy class="size-[17px] text-accent" />
-                        {{-- Not 'RetroAchievements': the screen is called that
-                             now, and this card is the account within it. --}}
-                        <p class="flex-1 text-sm text-fg-bright">{{ __('Account') }}</p>
-                        <span @class([
-                            'kicker rounded-md border px-1.75 py-0.75',
-                            'border-accent/40 text-accent' => $this->linked,
-                            'border-line-input text-fg-faint' => ! $this->linked,
-                        ])>{{ $this->linked ? __('Linked') : __('Not linked') }}</span>
-                    </div>
-
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('RetroAchievements adds achievements to retro games. retroBITE matches your library against its sets and follows what you have unlocked. It needs your account name and a web API key, both free.') }}
-                    </p>
+                {{-- Not 'RetroAchievements': the screen is called that now,
+                     and this card is the account within it. --}}
+                <x-settings.card
+                    icon="trophy"
+                    :title="__('Account')"
+                    :description="__('RetroAchievements adds achievements to retro games. retroBITE matches your library against its sets and follows what you have unlocked. It needs your account name and a web API key, both free.')"
+                >
+                    <x-slot name="badge">
+                        <x-settings.linked-badge :linked="$this->linked" />
+                    </x-slot>
 
                     {{-- Straight to the tab the key is on. It is not on the
                          profile and not on the front of Settings, and hunting
                          for it is the step people write in to ask about. --}}
-                    <div class="mb-4">
+                    <x-settings.action class="mb-4" :hint="__('Opens Settings → Applications on retroachievements.org, where the web API key is shown. Signing up is free.')">
                         <flux:button size="xs" variant="ghost" icon-trailing="arrow-top-right-on-square"
                                      href="https://retroachievements.org/settings?tab=applications" target="_blank" rel="noopener">
                             {{ __('Find your API key') }}
                         </flux:button>
-                        <p class="mt-1.5 text-xs text-fg-faint">
-                            {{ __('Opens Settings → Applications on retroachievements.org, where the web API key is shown. Signing up is free.') }}
-                        </p>
-                    </div>
+                    </x-settings.action>
 
                     <div class="flex flex-col gap-4">
                         <flux:input wire:model="username" :label="__('Username')"
                                     :placeholder="__('Your account name, not your key')"
                                     :description="__('The name on your RetroAchievements profile — the last part of retroachievements.org/user/…. Achievement sets are fetched whatever this says; progress needs it to be right.')" />
 
-                        <flux:input wire:model="apiKey" type="password" :label="__('API key')"
-                                    :placeholder="$this->hasKey ? __('Stored — type to replace it') : __('From Settings → Applications on retroachievements.org')"
-                                    :description="__('Kept encrypted in the database and never shown again once saved.')" />
-
-                        @if ($this->hasKey)
-                            <div>
-                                <flux:button size="xs" variant="danger" wire:click="forgetKey" type="button">
-                                    {{ __('Remove stored key') }}
-                                </flux:button>
-                            </div>
-                        @endif
+                        <x-settings.secret-input
+                            model="apiKey"
+                            :label="__('API key')"
+                            :stored="$this->hasKey"
+                            :placeholder="__('From Settings → Applications on retroachievements.org')"
+                            forget="forgetKey"
+                            :forget-label="__('Remove stored key')"
+                        />
 
                         <flux:switch wire:model="hardcorePrimary"
                                      :label="__('Lead with hardcore')"
                                      :description="__('Show your hardcore score rather than your softcore one.')" />
                     </div>
-                </div>
+                </x-settings.card>
             </div>
 
             {{-- Nothing to read back on an install being set up. --}}
             @unless ($onboarding)
             <div class="flex flex-col gap-6 lg:col-span-6">
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-1 text-fg-faint">{{ __('Hash index') }}</p>
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('Downloaded once per console so that identifying a game costs no request. Refreshed nightly.') }}
-                    </p>
-
+                <x-settings.card
+                    :kicker="__('Hash index')"
+                    :description="__('Downloaded once per console so that identifying a game costs no request. Refreshed nightly.')"
+                >
                     @if ($this->indexes->isEmpty())
-                        <p class="text-sm text-fg-faint">{{ __('No console in the library is on RetroAchievements.') }}</p>
+                        <x-empty-state variant="inline" :title="__('No console in the library is on RetroAchievements.')" />
                     @else
                         <dl class="flex flex-col gap-2.5">
-                            @foreach ($this->indexes as $index)
-                                <div wire:key="idx-{{ $index['id'] }}" class="flex items-baseline gap-3 border-b border-raised pb-2.5 last:border-0 last:pb-0">
-                                    <dt class="font-mono text-xs text-fg-soft">{{ $index['consoles'] }}</dt>
-                                    <dd class="ml-auto font-mono text-xs text-fg-dim">
-                                        {{ $index['synced'] ?? __('never') }}
-                                        @if ($index['games'] > 0)
-                                            <span class="text-fg-faint">· {{ $index['games'] }}</span>
-                                        @endif
-                                    </dd>
-                                </div>
+                            @foreach ($this->indexes as ['id' => $id, 'consoles' => $consoles, 'synced' => $synced, 'games' => $games])
+                                <x-kv-row wire:key="idx-{{ $id }}" :label="$consoles" mono>
+                                    {{ $synced ?? __('never') }}
+                                    @if ($games > 0)
+                                        <span class="text-fg-faint">· {{ $games }}</span>
+                                    @endif
+                                </x-kv-row>
                             @endforeach
                         </dl>
 
-                        <div class="mt-4">
+                        <x-settings.action class="mt-4" :hint="__('Queues the nightly download for every console listed. Games that had no match are checked again once it lands.')">
                             <flux:button size="sm" variant="filled" type="button" wire:click="syncIndex">
                                 {{ __('Refresh indexes now') }}
                             </flux:button>
-                            <p class="mt-1.5 text-xs text-fg-faint">
-                                {{ __('Queues the nightly download for every console listed. Games that had no match are checked again once it lands.') }}
-                            </p>
-                        </div>
+                        </x-settings.action>
 
-                        <div class="mt-3">
+                        <x-settings.action class="mt-3" :hint="__('Downloads the achievements for every game identified but not fetched yet — run it after refreshing the indexes. The same job runs nightly, half an hour after them.')">
                             <flux:button size="sm" variant="ghost" type="button" wire:click="syncMissingSets">
                                 {{ __('Fetch missing sets') }}
                             </flux:button>
-                            <p class="mt-1.5 text-xs text-fg-faint">
-                                {{ __('Downloads the achievements for every game identified but not fetched yet — run it after refreshing the indexes. The same job runs nightly, half an hour after them.') }}
-                            </p>
-                        </div>
+                        </x-settings.action>
                     @endif
-                </div>
+                </x-settings.card>
 
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-1 text-fg-faint">{{ __('Progress') }}</p>
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('Both run on a schedule — recent unlocks every quarter of an hour, the reconcile overnight. These queue the same work now.') }}
-                    </p>
-
+                <x-settings.card
+                    :kicker="__('Progress')"
+                    :description="__('Both run on a schedule — recent unlocks every quarter of an hour, the reconcile overnight. These queue the same work now.')"
+                >
                     {{-- Two buttons because they answer different questions,
                          and one of them is dear. Said on the page rather than
                          left to be guessed from the labels. --}}
                     <div class="flex flex-col gap-3">
-                        <div>
+                        <x-settings.action :hint="__('One request for everything you have unlocked since the last run. Cheap, and what the schedule uses.')">
                             <flux:button size="sm" variant="filled" type="button" wire:click="syncProgress(false)">
                                 {{ __('Sync recent unlocks') }}
                             </flux:button>
-                            <p class="mt-1.5 text-xs text-fg-faint">
-                                {{ __('One request for everything you have unlocked since the last run. Cheap, and what the schedule uses.') }}
-                            </p>
-                        </div>
+                        </x-settings.action>
 
-                        <div>
+                        <x-settings.action :hint="__('Compares every game against RetroAchievements and re-fetches the ones that disagree. Catches revoked unlocks, re-scored sets and anything a long outage missed.')">
                             <flux:button size="sm" variant="ghost" type="button" wire:click="syncProgress(true)">
                                 {{ __('Reconcile everything') }}
                             </flux:button>
-                            <p class="mt-1.5 text-xs text-fg-faint">
-                                {{ __('Compares every game against RetroAchievements and re-fetches the ones that disagree. Catches revoked unlocks, re-scored sets and anything a long outage missed.') }}
-                            </p>
-                        </div>
+                        </x-settings.action>
                     </div>
-                </div>
+                </x-settings.card>
             </div>
             @endunless
         </form>

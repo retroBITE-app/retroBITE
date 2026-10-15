@@ -79,32 +79,27 @@ new #[Title('Library settings')] class extends Component
     <x-settings.layout :heading="__('Library')" :subheading="__('Housekeeping for the games retroBITE keeps track of')">
         {{-- Outside the form, bound back to it by id, as on the Media tab. --}}
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="library-settings">{{ __('Save') }}</flux:button>
+            <x-settings.save form="library-settings" />
         </x-slot>
 
         <form id="library-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-7">
-                <div class="mb-2 flex items-center gap-2.5">
-                    <flux:icon.trash class="size-[17px] text-accent" />
-                    <p class="flex-1 text-sm text-fg-bright">{{ __('Remove games whose ROMs are gone') }}</p>
-                </div>
-
-                <p class="mb-5 text-sm text-fg-soft">
-                    {{ __('A ROM missing from the library this long is taken off its game. A game left with no ROMs — or that never had any — is removed with its details and artwork.') }}
-                </p>
-
+            <x-settings.card
+                class="lg:col-span-7"
+                icon="trash"
+                :title="__('Remove games whose ROMs are gone')"
+                :description="__('A ROM missing from the library this long is taken off its game. A game left with no ROMs — or that never had any — is removed with its details and artwork.')"
+            >
                 <div class="flex flex-col gap-5">
-                    <flux:field>
-                        <div class="flex items-center gap-2">
-                            <flux:label>{{ __('Missing for') }}</flux:label>
-                            <x-info :text="__('A scan marks a ROM missing the first time it cannot find it. Put the ROM back before then and the game keeps everything.')" />
-                        </div>
+                    <x-field
+                        :label="__('Missing for')"
+                        :info="__('A scan marks a ROM missing the first time it cannot find it. Put the ROM back before then and the game keeps everything.')"
+                        name="days"
+                    >
                         <flux:input.group>
                             <flux:input type="number" min="1" max="3650" wire:model="days" class="max-w-32" />
                             <flux:input.group.suffix>{{ __('days') }}</flux:input.group.suffix>
                         </flux:input.group>
-                        <flux:error name="days" />
-                    </flux:field>
+                    </x-field>
 
                     <flux:switch wire:model="auto"
                                  :label="__('Prune automatically every night')"
@@ -128,22 +123,14 @@ new #[Title('Library settings')] class extends Component
                         </p>
                     </div>
                 </div>
-            </div>
+            </x-settings.card>
 
-            <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-5">
-                <p class="kicker mb-3 text-fg-faint">{{ __('Kept, whatever the setting') }}</p>
-
+            <x-settings.card class="lg:col-span-5" :kicker="__('Kept, whatever the setting')">
                 <ul class="flex flex-col gap-3 text-sm text-fg-soft">
-                    <li class="flex gap-2.5">
-                        <flux:icon.document variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
-                        <span>{{ __('A game with any ROM still on the disk — only its missing ones go.') }}</span>
-                    </li>
-                    <li class="flex gap-2.5">
-                        <flux:icon.arrow-path variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
-                        <span>{{ __('A game or ROM with a conversion still queued or running.') }}</span>
-                    </li>
+                    <x-icon-note icon="document">{{ __('A game with any ROM still on the disk — only its missing ones go.') }}</x-icon-note>
+                    <x-icon-note icon="arrow-path">{{ __('A game or ROM with a conversion still queued or running.') }}</x-icon-note>
                 </ul>
-            </div>
+            </x-settings.card>
         </form>
     </x-settings.layout>
 </section>

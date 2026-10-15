@@ -22,23 +22,19 @@
         {{-- Scraped key art once the library has some. Until then the scene
              that ships in public/images, so a fresh install's sign-in and
              onboarding are not a bare ground. --}}
-        <div class="fixed inset-0 bg-cover bg-[position:50%_22%]" style="background-image: url('{{ filled($backdrop) ? $backdrop : asset('images/default-backdrop.jpg') }}')"></div>
-
-        <div
-            class="fixed inset-0"
-            style="
-                background: radial-gradient(
-                    ellipse 75% 65% at 50% 45%,
-                    color-mix(in srgb, var(--color-ground) 88%, transparent) 0%,
-                    color-mix(in srgb, var(--color-ground) 62%, transparent) 55%,
-                    color-mix(in srgb, var(--color-ground) 28%, transparent) 100%
-                );
-            "
-        ></div>
-
-        @scanlines
-            <div class="scanlines fixed inset-0"></div>
-        @endscanlines
+        <x-backdrop fixed :src="filled($backdrop) ? $backdrop : asset('images/default-backdrop.jpg')" position="50% 22%">
+            <div
+                class="absolute inset-0"
+                style="
+                    background: radial-gradient(
+                        ellipse 75% 65% at 50% 45%,
+                        color-mix(in srgb, var(--color-ground) 88%, transparent) 0%,
+                        color-mix(in srgb, var(--color-ground) 62%, transparent) 55%,
+                        color-mix(in srgb, var(--color-ground) 28%, transparent) 100%
+                    );
+                "
+            ></div>
+        </x-backdrop>
 
         <div
             class="pointer-events-none fixed inset-0"
@@ -68,7 +64,7 @@
                  and scrolls with the form instead of sitting on top of it. --}}
             @if (! empty($stats))
                 <div class="relative z-10 mt-12 shrink-0 text-center">
-                    <p class="kicker-sans text-fg-dim uppercase">{{ __('On this host') }}</p>
+                    <p class="kicker-sans text-fg-faint uppercase">{{ __('On this host') }}</p>
 
                     <dl class="mt-3 flex flex-wrap justify-center gap-x-9 gap-y-3">
                         @foreach ($stats as ['value' => $value, 'label' => $label])

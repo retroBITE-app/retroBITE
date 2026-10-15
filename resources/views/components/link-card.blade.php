@@ -11,7 +11,7 @@
     href="{{ $url }}"
     target="_blank"
     rel="noopener noreferrer"
-    {{ $attributes->class('flex items-center gap-2.5 rounded-lg border border-line-strong px-2.5 py-2.5 transition-colors hover:border-accent-tint/50 hover:bg-accent-tint/6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep') }}
+    {{ $attributes->class('flex items-center gap-2.5 rounded-lg border border-line-strong px-2.5 py-2.5 transition-colors hover:border-accent-tint/50 hover:bg-accent-tint/6 focus-ring') }}
 >
     <flux:icon :icon="$icon" class="size-4 shrink-0 text-accent" />
     <span class="min-w-0 flex-1">
