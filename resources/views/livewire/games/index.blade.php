@@ -1106,7 +1106,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 ])
                             >
                                 <span class="absolute top-4 left-4 rounded bg-scrim/80">
-                                    <x-conversion.check :state="$cardPicked ? 'on' : 'off'" />
+                                    <x-check :state="$cardPicked ? 'on' : 'off'" />
                                 </span>
                             </button>
                         @endif
@@ -1232,7 +1232,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                     <div class="relative flex size-12 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-sunken">
                                         @if ($picking)
                                             <span class="absolute top-1 left-1 z-10 rounded bg-scrim/80">
-                                                <x-conversion.check :state="$rowPicked ? 'on' : 'off'" />
+                                                <x-check :state="$rowPicked ? 'on' : 'off'" />
                                             </span>
                                         @endif
 

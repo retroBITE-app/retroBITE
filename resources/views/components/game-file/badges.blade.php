@@ -12,24 +12,24 @@
     {{-- The disc's own name for itself: on an OPL drive the file can be
          called anything and the serial cannot. --}}
     @if ($row['licenseId'])
-        <x-game-file.badge :tip="__('License ID')">{{ $row['licenseId'] }}</x-game-file.badge>
+        <x-game-file.badge :archived="$archived" :tip="__('License ID')">{{ $row['licenseId'] }}</x-game-file.badge>
     @endif
 
     {{-- A flag where one depicts the region, as on the game card; else
          its code, with the region named in the tooltip. --}}
     @if ($row['region'] !== null)
         @if ($row['regionIcon'] !== null)
-            <x-game-file.badge :tip="__('Region')">
+            <x-game-file.badge :archived="$archived" :tip="__('Region')">
                 <img src="{{ $row['regionIcon'] }}" alt="{{ $row['regionLabel'] }}" @class(['w-4.5 border border-line-input', 'opacity-70' => $archived]) />
                 <span aria-hidden="true">{{ $row['regionLabel'] }}</span>
             </x-game-file.badge>
         @else
-            <x-game-file.badge :tip="__('Region: :name', ['name' => $row['regionLabel']])">{{ Str::upper($row['region']) }}</x-game-file.badge>
+            <x-game-file.badge :archived="$archived" :tip="__('Region: :name', ['name' => $row['regionLabel']])">{{ Str::upper($row['region']) }}</x-game-file.badge>
         @endif
     @endif
 
     @if ($row['scrapes'] !== null)
-        <x-game-file.badge :tip="__('How many times this very dump has been scraped on ScreenScraper. Send to picks the most scraped version of a region.')">
+        <x-game-file.badge :archived="$archived" :tip="__('How many times this very dump has been scraped on ScreenScraper. Send to picks the most scraped version of a region.')">
             {{ __(':count scrapes', ['count' => $row['scrapes']]) }}
         </x-game-file.badge>
     @endif
@@ -42,31 +42,31 @@
         </x-game-file.badge>
     @endforeach
 
-    <x-game-file.badge :tip="__('Role')">{{ $row['role'] }}</x-game-file.badge>
+    <x-game-file.badge :archived="$archived" :tip="__('Role')">{{ $row['role'] }}</x-game-file.badge>
 
     @if ($row['disc'] !== '—')
-        <x-game-file.badge :tip="__('Disc number')">{{ __('Disc :number', ['number' => $row['disc']]) }}</x-game-file.badge>
+        <x-game-file.badge :archived="$archived" :tip="__('Disc number')">{{ __('Disc :number', ['number' => $row['disc']]) }}</x-game-file.badge>
     @endif
 
     @if ($row['size'] !== '—')
-        <x-game-file.badge :tip="__('Size')" :class="Arr::toCssClasses(['text-fg-bright' => ! $archived])">{{ $row['size'] }}</x-game-file.badge>
+        <x-game-file.badge :archived="$archived" :tip="__('Size')" :class="Arr::toCssClasses(['text-fg-bright!' => ! $archived])">{{ $row['size'] }}</x-game-file.badge>
     @endif
 
-    <x-game-file.badge :tip="__('Format')">{{ $row['format'] }}</x-game-file.badge>
+    <x-game-file.badge :archived="$archived" :tip="__('Format')">{{ $row['format'] }}</x-game-file.badge>
 
-    <x-game-file.badge :tip="__('When it was added to the library')">{{ __('Added :when', ['when' => $row['added']]) }}</x-game-file.badge>
+    <x-game-file.badge :archived="$archived" :tip="__('When it was added to the library')">{{ __('Added :when', ['when' => $row['added']]) }}</x-game-file.badge>
 
-    {{-- Whether the disc will start, in x-decrypt.state's colours but a
-         footer badge's shape, held apart at the right end from the facts
+    {{-- Whether the disc will start, in DecryptState::tone()'s colours but
+         a footer badge's shape, held apart at the right end from the facts
          about the dump. Archived rows have no state to show. --}}
     @if ($decrypt !== null)
         <div class="ml-auto flex">
-            <x-game-file.badge :tip="$decrypt->hint()" :warn="$decrypt === DecryptState::NeedsKey" :class="Arr::toCssClasses([
-                'border-accent-tint/55! text-accent' => in_array($decrypt, [DecryptState::Ready, DecryptState::Decrypting], true),
-                'animate-pulse' => $decrypt === DecryptState::Decrypting,
-                'text-fg-muted' => $decrypt === DecryptState::Decrypted,
-                'border-dashed text-fg-faint' => $decrypt === DecryptState::Unchecked,
-            ])">
+            <x-game-file.badge
+                :tip="$decrypt->hint()"
+                :tone="$decrypt->tone()"
+                :dashed="$decrypt->dashed()"
+                :class="Arr::toCssClasses(['animate-pulse' => $decrypt === DecryptState::Decrypting])"
+            >
                 <x-decrypt.icon :state="$decrypt" />
                 <span>{{ $decrypt->label() }}</span>
             </x-game-file.badge>

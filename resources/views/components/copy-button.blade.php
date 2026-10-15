@@ -10,6 +10,8 @@
     'label' => null,
     // `menu` is a dropdown row; `plain` a bare control beside a value.
     'variant' => 'plain',
+    // Just the copy icon, the label kept for a screen reader.
+    'icon' => false,
 ])
 
 @php
@@ -53,11 +55,20 @@
             setTimeout(() => copied = false, 1500);
         }
     "
+    @if ($icon)
+        aria-label="{{ $label ?: __('Copy') }}"
+    @endif
     {{ $attributes->class([
-        'shrink-0 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+        'shrink-0 cursor-pointer transition-colors focus-ring',
         \Illuminate\Support\Arr::get($variants, $variant, \Illuminate\Support\Arr::get($variants, 'plain')),
     ]) }}
 >
-    {{ $slot }}
-    <span x-text="copied ? @js(__('Copied')) : @js($label ?? __('Copy'))"></span>
+    @if ($icon)
+        <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
+        {{-- Says so only once it has copied, as the label="" callers did. --}}
+        <span x-text="copied ? @js(__('Copied')) : ''"></span>
+    @else
+        {{ $slot }}
+        <span x-text="copied ? @js(__('Copied')) : @js($label ?? __('Copy'))"></span>
+    @endif
 </button>

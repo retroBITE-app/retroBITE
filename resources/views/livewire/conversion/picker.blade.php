@@ -617,7 +617,7 @@ new class extends Component
                         title="{{ $pickState === 'on' ? __('Clear all') : __('Select all') }}"
                         class="shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        <x-conversion.check :state="$pickState" />
+                        <x-check :state="$pickState" />
                     </button>
 
                     @if ($gameId === null)
@@ -699,7 +699,7 @@ new class extends Component
                                         'cursor-not-allowed opacity-40' => $blocked,
                                     ])
                                 >
-                                    <x-conversion.check :state="$picked ? 'on' : 'off'" />
+                                    <x-check :state="$picked ? 'on' : 'off'" />
 
                                     {{-- The file on one line, its folder in front of it. --}}
                                     <span class="flex min-w-0 flex-1 items-baseline">

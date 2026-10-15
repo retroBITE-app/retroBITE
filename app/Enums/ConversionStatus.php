@@ -37,6 +37,17 @@ enum ConversionStatus: string
         };
     }
 
+    /** The badge's tone, as x-badge takes it: the accent while a worker holds it. */
+    public function tone(): string
+    {
+        return match ($this) {
+            self::Running, self::Verifying, self::Swapping => 'accent',
+            self::Done => 'success',
+            self::Failed => 'danger',
+            self::Queued, self::Cancelled => 'neutral',
+        };
+    }
+
     /** Over, one way or another: nothing is working on it. */
     public function finished(): bool
     {

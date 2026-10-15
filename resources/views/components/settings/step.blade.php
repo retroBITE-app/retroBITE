@@ -10,9 +10,7 @@
 ])
 
 <div {{ $attributes->class('flex gap-3.5') }}>
-    <span class="mt-px grid size-5 shrink-0 place-items-center rounded-full border border-accent-tint/55 bg-accent-tint/15 font-mono text-[10px] text-accent">
-        {{ $number }}
-    </span>
+    <x-step-ring :number="$number" class="mt-px" />
 
     <div class="min-w-0 flex-1">
         <p class="text-sm text-fg-bright">{{ $title }}</p>

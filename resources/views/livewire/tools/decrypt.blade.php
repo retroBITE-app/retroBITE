@@ -338,7 +338,7 @@ new #[Title('Decrypt')] class extends Component
                     title="{{ __('Pick every image that is ready') }}"
                     class="shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    <x-conversion.check :state="match (true) {
+                    <x-check :state="match (true) {
                         $picked === [] => 'off',
                         count($picked) === count($this->ready) => 'on',
                         default => 'some',
@@ -385,7 +385,7 @@ new #[Title('Decrypt')] class extends Component
                                 'cursor-not-allowed opacity-30' => ! $pickable && $state !== DecryptState::NeedsKey,
                             ])
                         >
-                            <x-conversion.check :state="$isPicked ? 'on' : 'off'" />
+                            <x-check :state="$isPicked ? 'on' : 'off'" />
                         </button>
 
                         <div class="min-w-0 flex-1">
