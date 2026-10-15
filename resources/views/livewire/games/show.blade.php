@@ -2251,7 +2251,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 @endif
                                 @if ($derived !== [])
                                     <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
-                                        <flux:icon.arrow-right variant="micro" class="size-3.5 text-fg-faint" />
+                                        <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
                                         <span>{{ __('Converted to') }}</span>
                                         <span class="font-mono break-all text-fg-soft">{{ implode(', ', $derived) }}</span>
                                     </div>
