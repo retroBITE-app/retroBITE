@@ -13,4 +13,4 @@
     };
 @endphp
 
-<x-progress-bar :percent="$percent" :tone="$tone" :attributes="$attributes" />
+<x-progress-bar :percent="$max > 0 ? $percent : null" :tone="$tone" :attributes="$attributes" />
