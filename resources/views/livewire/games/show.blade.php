@@ -26,7 +26,6 @@ use App\Resources\DocResource;
 use App\Services\DocLinks;
 use App\Services\DocRenderer;
 use App\Services\LibraryFiles;
-use App\Support\CoverGeometry;
 use App\Support\MediaRegions;
 use App\Tools\ConsoleTools;
 use App\Transfers\SendToShare;
@@ -35,6 +34,7 @@ use App\Transfers\TransferTargets;
 use Carbon\CarbonInterface;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Number;
@@ -134,11 +134,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     private function loadRelations(): void
     {
         $this->game->load([
-            'files' => fn ($query) => $query->with(['meta', 'source', 'derivatives:id,source_id,filename'])->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id'),
+            'files' => function (Relation $query): void {
+                $query->with(['meta', 'source', 'derivatives:id,source_id,filename'])->orderByRaw('disc_number IS NULL, disc_number')->orderBy('id');
+            },
             // Ordered because the strip, the viewer's set and its "3 / 12"
             // counter are one list, and they have to agree on it. gallery()
             // puts it in slot order from here.
-            'media' => fn ($query) => $query->orderBy('id'),
+            'media' => function (Relation $query): void {
+                $query->orderBy('id');
+            },
         ]);
     }
 
@@ -747,7 +751,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             array_push($rows, ...$this->archivedTree(
                 $source->loadMissing('meta'),
                 $depth,
-                fn (GameFile $file) => $file->children()->withTrashed()->with('meta')->orderBy('path')->get(),
+                function (GameFile $file): Collection {
+                    return $file->children()->withTrashed()->with('meta')->orderBy('path')->get();
+                },
             ));
         }
 
@@ -784,7 +790,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     #[Computed]
     public function history(): EloquentCollection
     {
-        $shown = collect($this->fileRows)->flatMap(fn (array $row): array => array_column($row['sources'], 'id'))->all();
+        $shown = collect($this->fileRows)->flatMap(function (array $row): array {
+            return array_column($row['sources'], 'id');
+        })->all();
 
         return $this->game->archivedFiles()
             ->with('meta')
@@ -807,11 +815,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }
 
         // A tree, as the files were: each playlist or sheet, then what it named.
-        $byParent = $this->history->groupBy(fn (GameFile $file): int => $this->history->contains('id', $file->parent_id) ? (int) $file->parent_id : 0);
+        $byParent = $this->history->groupBy(function (GameFile $file): int {
+            return $this->history->contains('id', $file->parent_id) ? (int) $file->parent_id : 0;
+        });
         $rows = [];
 
         foreach ($byParent->get(0, collect()) as $root) {
-            array_push($rows, ...$this->archivedTree($root, 0, fn (GameFile $file) => $byParent->get($file->id, collect())->sortBy('path')));
+            array_push($rows, ...$this->archivedTree($root, 0, function (GameFile $file) use ($byParent): Collection {
+                return $byParent->get($file->id, collect())->sortBy('path');
+            }));
         }
 
         return $rows;
@@ -919,15 +931,23 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
         return $this->game->media
             ->sortBy([
-                fn (Media $a, Media $b) => $this->slot($a, $slots) <=> $this->slot($b, $slots),
-                fn (Media $a, Media $b) => $a->screenscraper_type <=> $b->screenscraper_type,
-                fn (Media $a, Media $b) => $a->id <=> $b->id,
+                function (Media $a, Media $b) use ($slots): int {
+                    return $this->slot($a, $slots) <=> $this->slot($b, $slots);
+                },
+                function (Media $a, Media $b): int {
+                    return $a->screenscraper_type <=> $b->screenscraper_type;
+                },
+                function (Media $a, Media $b): int {
+                    return $a->id <=> $b->id;
+                },
             ])
-            ->map(fn (Media $media) => [
-                'key' => $media->path,
-                'src' => route('media.show', ['path' => $media->path]),
-                'caption' => $this->caption($media),
-            ])
+            ->map(function (Media $media): array {
+                return [
+                    'key' => $media->path,
+                    'src' => route('media.show', ['path' => $media->path]),
+                    'caption' => $this->caption($media),
+                ];
+            })
             ->values()
             ->all();
     }
@@ -961,23 +981,27 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         $shown = $this->showingRegion;
 
         $keys = array_keys($byRegion);
-        usort($keys, fn (string $a, string $b) => [
-            $a === '' ? 2 : 0, $order[$a] ?? count($order), $a,
-        ] <=> [
-            $b === '' ? 2 : 0, $order[$b] ?? count($order), $b,
-        ]);
+        usort($keys, function (string $a, string $b) use ($order): int {
+            return [
+                $a === '' ? 2 : 0, $order[$a] ?? count($order), $a,
+            ] <=> [
+                $b === '' ? 2 : 0, $order[$b] ?? count($order), $b,
+            ];
+        });
 
         $images = collect($this->gallery)->keyBy('key');
 
-        return array_map(fn (string $key) => [
-            'region' => $key === '' ? null : $key,
-            'label' => $key === ''
-                ? __('No region')
-                : (MediaRegions::label($key) ?? $key),
-            'icon' => $key === '' ? null : MediaRegions::icon($key),
-            'selected' => $key !== '' && $key === $shown,
-            'images' => $images->only($byRegion[$key])->values()->all(),
-        ], $keys);
+        return array_map(function (string $key) use ($shown, $images, $byRegion): array {
+            return [
+                'region' => $key === '' ? null : $key,
+                'label' => $key === ''
+                    ? __('No region')
+                    : (MediaRegions::label($key) ?? $key),
+                'icon' => $key === '' ? null : MediaRegions::icon($key),
+                'selected' => $key !== '' && $key === $shown,
+                'images' => $images->only($byRegion[$key])->values()->all(),
+            ];
+        }, $keys);
     }
 
     /**
@@ -1135,30 +1159,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             ->all();
     }
 
-    /**
-     * How tall the cover stands, in pixels: the same on every console's page.
-     *
-     * A SNES box is wide and flat where a PS2 case is tall, so the page is
-     * levelled by height and each cover keeps its own width.
-     */
-    #[Computed]
-    public function coverHeight(): int
-    {
-        return CoverGeometry::HERO_HEIGHT;
-    }
-
-    /**
-     * How wide a placeholder stands at that height.
-     *
-     * Nothing is there to give the box a width of its own, so the console's
-     * ratio supplies one and the empty slot occupies the space its cover would.
-     */
-    #[Computed]
-    public function coverPlaceholderWidth(): int
-    {
-        return CoverGeometry::heroWidth($this->game->console());
-    }
-
     /** The region flag, or null when no picture depicts this code. */
     #[Computed]
     public function regionIcon(): ?string
@@ -1188,9 +1188,11 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }
 
         return RaGame::query()
-            ->with(['achievements' => fn ($query) => $query->counting()
-                ->orderBy('display_order')
-                ->orderBy('id')])
+            ->with(['achievements' => function (Relation $query): void {
+                $query->counting()
+                    ->orderBy('display_order')
+                    ->orderBy('id');
+            }])
             ->find($this->game->retroachievements_id);
     }
 
@@ -1332,8 +1334,10 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         $players = (int) $set->num_distinct_players;
 
         return $set->achievements
-            ->filter(fn ($achievement) => $this->matchesState($achievement, $this->activeAchievementFilter)
-                && $this->matchesKind($achievement, $this->activeAchievementKind))
+            ->filter(function (RaAchievement $achievement): bool {
+                return $this->matchesState($achievement, $this->activeAchievementFilter)
+                    && $this->matchesKind($achievement, $this->activeAchievementKind);
+            })
             ->map(function ($achievement) use ($players) {
                 $unlock = $this->unlocks->get($achievement->id);
                 $unlockedAt = $this->unlockedAt($achievement);
@@ -1374,11 +1378,17 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {
         $kind = $this->activeAchievementKind;
 
-        $of = $this->countingAchievements->filter(fn ($achievement) => $this->matchesKind($achievement, $kind));
+        $of = $this->countingAchievements->filter(function (RaAchievement $achievement) use ($kind): bool {
+            return $this->matchesKind($achievement, $kind);
+        });
 
-        $count = fn (string $state): int => $of
-            ->filter(fn ($achievement) => $this->matchesState($achievement, $state))
-            ->count();
+        $count = function (string $state) use ($of): int {
+            return $of
+                ->filter(function (RaAchievement $achievement) use ($state): bool {
+                    return $this->matchesState($achievement, $state);
+                })
+                ->count();
+        };
 
         return [
             ['key' => 'all', 'label' => __('All :count', ['count' => $of->count()])],
@@ -1402,7 +1412,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     public function achievementKinds(): array
     {
         $all = $this->countingAchievements;
-        $of = $all->filter(fn ($achievement) => $this->matchesState($achievement, $this->activeAchievementFilter));
+        $of = $all->filter(function (RaAchievement $achievement): bool {
+            return $this->matchesState($achievement, $this->activeAchievementFilter);
+        });
 
         $kinds = [
             'missable' => __('Missable'),
@@ -1412,11 +1424,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         $offered = [];
 
         foreach ($kinds as $key => $label) {
-            if ($all->contains(fn ($achievement) => $this->matchesKind($achievement, $key))) {
+            $isKind = function (RaAchievement $achievement) use ($key): bool {
+                return $this->matchesKind($achievement, $key);
+            };
+
+            if ($all->contains($isKind)) {
                 $offered[] = [
                     'key' => $key,
                     'label' => $label,
-                    'count' => $of->filter(fn ($achievement) => $this->matchesKind($achievement, $key))->count(),
+                    'count' => $of->filter($isKind)->count(),
                 ];
             }
         }
@@ -1656,14 +1672,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     {{-- A decryption of one of its files starting or ending, so its badge and
          buttons follow the queue. --}}
     @if (collect($this->fileRows)->whereNotNull('decrypt')->isNotEmpty())
-        <div
-            hidden
-            x-data="{
-                stop: null,
-                init() { this.stop = live.system('conversion', () => this.$wire.discKeySaved()) },
-                destroy() { this.stop?.() },
-            }"
-        ></div>
+        <x-live-system signal="conversion" call="discKeySaved" hidden />
     @endif
 
     {{-- Hero: the backdrop runs to the edges and the detail block is pulled up
@@ -1672,18 +1681,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
          -mt-[250px] / lg:-mt-[570px], which is each of these minus the intended
          overlap. Change one and change the other. --}}
     <div class="relative h-[360px] lg:h-[680px]">
-        @if ($this->backdrop)
-            <div class="absolute inset-0 bg-cover bg-[position:50%_28%]"
-                 style="background-image: url('{{ route('media.show', ['path' => $this->backdrop]) }}')"></div>
-        @endif
-
-        <div class="absolute inset-0 hero-fade-y"></div>
-
-        @if ($this->backdrop)
-            @scanlines
-                <div class="scanlines absolute inset-0"></div>
-            @endscanlines
-        @endif
+        <x-backdrop :src="$this->backdrop ? route('media.show', ['path' => $this->backdrop]) : null" fade="hero-y" />
 
         {{-- pl-14 clears the floating hamburger, which sits at top-4 left-4. --}}
         <div class="absolute top-4 right-4 left-4 flex items-center gap-3.5 pl-14 lg:top-5.5 lg:inset-x-7.5 lg:pl-0">
@@ -1697,119 +1695,42 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             @php($mediaBlocked = $game->blockedFromMediaScrape())
             @php($manualBlocked = $game->blockedFromManualLookup())
 
-            {{-- Hand-written rather than flux:dropdown: the panel's ground,
-                 border, radius, padding and shadow all differ from flux:menu's,
-                 and its popover geometry ignores the offsets this design needs. --}}
-            <div
-                x-data="{ open: false }"
-                x-on:click.outside="open = false"
-                x-on:keydown.escape.window="open = false"
-                wire:key="actions"
-                class="relative ml-auto"
-            >
-                <button
-                    type="button"
-                    x-on:click="open = ! open"
-                    x-bind:aria-expanded="open"
-                    aria-haspopup="menu"
-                    class="flex cursor-pointer items-center gap-1.75 rounded-lg border border-line-input bg-scrim/60 px-3 py-1.75 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                >
-                    <flux:icon.ellipsis-horizontal class="size-3.5" />
-                    {{ __('Actions') }}
-                    <flux:icon.chevron-down class="size-[11px] text-fg-dim" />
-                </button>
+            <flux:dropdown position="bottom" align="end" wire:key="actions" class="ml-auto">
+                <x-glass-button icon="ellipsis-horizontal" chevron>{{ __('Actions') }}</x-glass-button>
 
-                {{-- Hand-rolled, so its open is Alpine's rather than the
-                     popover transition the Flux menus get from app.css. The
-                     same distance and the same twelfth of a second, so the two
-                     kinds of menu open alike. --}}
-                <div
-                    x-show="open"
-                    x-cloak
-                    x-transition:enter="transition ease-out duration-[120ms]"
-                    x-transition:enter-start="opacity-0 -translate-y-1 scale-[0.98]"
-                    x-transition:enter-end="opacity-100 translate-y-0 scale-100"
-                    x-transition:leave="transition ease-in duration-75"
-                    x-transition:leave-start="opacity-100 translate-y-0 scale-100"
-                    x-transition:leave-end="opacity-0 -translate-y-1 scale-[0.98]"
-                    role="menu"
-                    class="absolute top-10 right-0 z-20 w-[214px] origin-top-right rounded-xl border border-line-input bg-surface p-1.25 shadow-2xl"
-                >
-                    <button
-                        type="button"
-                        role="menuitem"
-                        @disabled($identifyBlocked !== null)
-                        @if ($identifyBlocked !== null) title="{{ $identifyBlocked }}" @else wire:click="identify" @endif
-                        @class([
-                            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                            'cursor-pointer hover:bg-raised' => $identifyBlocked === null,
-                            'cursor-not-allowed opacity-45' => $identifyBlocked !== null,
-                        ])
-                    >
-                        <flux:icon.sparkles class="size-[15px] text-fg-muted" />
-                        {{-- A game the provider could not name is exactly where a
-                             rename or a fresh dump makes another try worth it. --}}
+                {{-- Each item is drawn whether or not it can run, disabled and
+                     carrying the reason, so the menu holds still and says why. --}}
+                <flux:menu>
+                    {{-- A game the provider could not name is exactly where a
+                         rename or a fresh dump makes another try worth it. --}}
+                    <flux:menu.item icon="sparkles" :disabled="$identifyBlocked !== null" :title="$identifyBlocked" wire:click="identify">
                         {{ $game->status === App\Enums\GameStatus::Unmatched ? __('Try identifying again') : __('Identify game') }}
-                    </button>
+                    </flux:menu.item>
 
                     {{-- Offered on a matched game too: a wrong match is exactly
                          what a hand-picked one is for. --}}
-                    <button
-                        type="button"
-                        role="menuitem"
-                        @disabled($manualBlocked !== null)
-                        @if ($manualBlocked !== null) title="{{ $manualBlocked }}" @else x-on:click="open = false; $dispatch('identify-game')" @endif
-                        @class([
-                            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                            'cursor-pointer hover:bg-raised' => $manualBlocked === null,
-                            'cursor-not-allowed opacity-45' => $manualBlocked !== null,
-                        ])
-                    >
-                        <flux:icon.magnifying-glass class="size-[15px] text-fg-muted" />
+                    <flux:menu.item icon="magnifying-glass" :disabled="$manualBlocked !== null" :title="$manualBlocked" x-on:click="$dispatch('identify-game')">
                         {{ __('Identify manually') }}
-                    </button>
+                    </flux:menu.item>
 
-                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+                    <flux:menu.separator />
 
                     {{-- A walkthrough, a repair note: shown under this game's Docs tab. --}}
-                    <button
-                        type="button"
-                        role="menuitem"
-                        x-on:click="open = false; $flux.modal('new-doc').show()"
-                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                    >
-                        <flux:icon.pencil-square class="size-[15px] text-fg-muted" />
+                    <flux:menu.item icon="pencil-square" x-on:click="$flux.modal('new-doc').show()">
                         {{ __('Write a doc about it') }}
-                    </button>
+                    </flux:menu.item>
 
-                    <button
-                        type="button"
-                        role="menuitem"
-                        x-on:click="open = false; $flux.modal('link-doc').show()"
-                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                    >
-                        <flux:icon.link class="size-[15px] text-fg-muted" />
+                    <flux:menu.item icon="link" x-on:click="$flux.modal('link-doc').show()">
                         {{ __('Link a doc') }}
-                    </button>
+                    </flux:menu.item>
 
-                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+                    <flux:menu.separator />
 
-                    <button
-                        type="button"
-                        role="menuitem"
-                        @disabled($mediaBlocked !== null)
-                        @if ($mediaBlocked !== null) title="{{ $mediaBlocked }}" @else wire:click="fetchMedia" @endif
-                        @class([
-                            'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                            'cursor-pointer hover:bg-raised' => $mediaBlocked === null,
-                            'cursor-not-allowed opacity-45' => $mediaBlocked !== null,
-                        ])
-                    >
-                        <flux:icon.photo class="size-[15px] text-fg-muted" />
+                    <flux:menu.item icon="photo" :disabled="$mediaBlocked !== null" :title="$mediaBlocked" wire:click="fetchMedia">
                         {{ $game->media->isEmpty() ? __('Fetch artwork') : __('Fetch artwork again') }}
-                    </button>
+                    </flux:menu.item>
 
-                    <div class="my-1.25 mx-2 h-px bg-line"></div>
+                    <flux:menu.separator />
 
                     {{-- The whole game at once: a cuesheet and its tracks, or a
                          playlist and its discs, name each other by filename and
@@ -1817,62 +1738,37 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                          the same ones an upload may land in. --}}
                     @if ($this->moveBlocked === null)
                         @foreach ($this->moveTargets as $folder => $label)
-                            <button
-                                type="button"
-                                role="menuitem"
-                                wire:click="moveTo(@js((string) $folder))"
+                            <flux:menu.item
+                                icon="folder-open"
+                                wire:click="moveTo({{ Illuminate\Support\Js::from((string) $folder) }})"
                                 wire:confirm="{{ __('Move every file of :title to :folder?', ['title' => $game->title, 'folder' => $label]) }}"
-                                x-on:click="open = false"
-                                class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
                             >
-                                <flux:icon.folder-open class="size-[15px] text-fg-muted" />
                                 <span class="min-w-0 truncate">{{ __('Move to') }} <span class="font-mono text-xs">{{ $label }}</span></span>
-                            </button>
+                            </flux:menu.item>
                         @endforeach
                     @else
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled
-                            title="{{ $this->moveBlocked }}"
-                            class="flex w-full cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft opacity-45 transition-colors"
-                        >
-                            <flux:icon.folder-open class="size-[15px] text-fg-muted" />
+                        <flux:menu.item icon="folder-open" disabled :title="$this->moveBlocked">
                             {{ __('Move to folder') }}
-                        </button>
+                        </flux:menu.item>
                     @endif
 
                     {{-- Opens a preview first, so it needs no confirm of its own. --}}
                     @if ($this->canRename)
-                        <button
-                            type="button"
-                            role="menuitem"
-                            x-on:click="open = false; $dispatch('rename-files')"
-                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                        >
-                            <flux:icon.pencil-square class="size-[15px] text-fg-muted" />
+                        <flux:menu.item icon="pencil-square" x-on:click="$dispatch('rename-files')">
                             {{ __('Rename file') }}
-                        </button>
+                        </flux:menu.item>
                     @endif
 
-                    <x-copy-button variant="menu" role="menuitem" :text="$this->libraryPath" :label="__('Copy path')">
-                        <flux:icon.document-duplicate class="size-[15px] text-fg-muted" />
-                    </x-copy-button>
+                    <x-copy-button variant="menu" :text="$this->libraryPath" :label="__('Copy path')" />
 
                     {{-- Copies the game to a USB drive or a network share, laid
                          out for another system, Batocera first. The library
                          is read, never changed. --}}
-                    <button
-                        type="button"
-                        role="menuitem"
-                        x-on:click="open = false; $flux.modal('transfer').show()"
-                        class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                    >
-                        <flux:icon.arrow-up-tray class="size-[15px] text-fg-muted" />
+                    <flux:menu.item icon="arrow-up-tray" x-on:click="$flux.modal('transfer').show()">
                         {{ __('Send to…') }}
-                    </button>
-                </div>
-            </div>
+                    </flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
         </div>
     </div>
 
@@ -1881,30 +1777,15 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
              art, so a shelf of SNES boxes lines up without any of them being
              stretched. A placeholder has no art to take a width from, so the
              console's ratio supplies one. --}}
-        <div class="w-fit max-w-full">
-            @if ($this->cover)
-                {{-- alt stays the game's name, which is what a reader needs
-                     here; the viewer captions it from the gallery instead. --}}
-                <img
-                    data-lightbox="{{ $this->cover }}"
-                    src="{{ $this->coverUrl }}"
-                    alt="{{ $game->title }}"
-                    style="height: {{ $this->coverHeight }}px"
-                    class="block w-auto max-w-full rounded-xl border border-line-input object-contain shadow-lift"
-                />
-            @else
-                <div
-                    style="height: {{ $this->coverHeight }}px; width: {{ $this->coverPlaceholderWidth }}px"
-                    class="flex max-w-full items-center justify-center rounded-xl border border-line-input bg-sunken shadow-lift"
-                >
-                    @if ($console !== null)
-                        <img src="{{ $console->fileIcon }}" alt="{{ $console->name }}" class="h-20 w-20 object-contain opacity-25" />
-                    @else
-                        <flux:icon.photo class="size-8 text-fg-faint" />
-                    @endif
-                </div>
-            @endif
-        </div>
+        {{-- alt stays the game's name, which is what a reader needs here; the
+             viewer captions it from the gallery instead. --}}
+        <x-cover-frame
+            :src="$this->cover ? $this->coverUrl : null"
+            :lightbox="$this->cover"
+            :console="$console"
+            size="hero"
+            :alt="$game->title"
+        />
 
         <div class="min-w-0">
             {{-- One or the other, per Settings → UI. The logo stays inside the
@@ -1929,10 +1810,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                  The badge is the shelf's, so a game keeps its colour here. --}}
             @if ($game->rating !== null)
                 <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
-                    <span
-                        style="background-color: {{ App\Support\RatingBand::color($game->rating) }}; color: {{ App\Support\RatingBand::ink() }}"
-                        class="shrink-0 rounded-md px-2 py-0.5 font-mono text-sm font-semibold tabular-nums"
-                    >{{ $game->rating }}</span>
+                    <x-rating-badge :rating="$game->rating" size="md" />
 
                     <span class="text-fg-soft">{{ __('retroBITE score') }}</span>
 
@@ -1960,80 +1838,75 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
          draws its top and start edge and is pulled back over them by a pixel,
          so the ones on the outside fall under the grid's own border and are
          clipped by overflow-hidden. --}}
-    <section class="relative z-1 px-4 pt-6.5 lg:px-8 lg:pt-10">
+    <x-band pad="lg" class="lg:pt-10">
         <dl class="grid grid-cols-2 overflow-hidden rounded-xl border border-line-input bg-scrim/60 backdrop-blur-sm sm:grid-cols-4">
             @foreach ($this->details as ['key' => $key, 'label' => $label, 'value' => $value])
-                <div wire:key="detail-{{ $key }}" class="-ms-px -mt-px min-w-0 border-s border-t border-line-input px-4.5 py-4">
-                    <dt class="kicker text-fg-faint">{{ $label }}</dt>
-
+                {{-- Each value held to one line, the whole of it on hover. --}}
+                <x-stat
+                    :label="$label"
+                    :mono="in_array($key, ['released', 'size'], true)"
+                    :title="$value"
+                    truncate
+                    wire:key="detail-{{ $key }}"
+                    class="-ms-px -mt-px min-w-0 border-s border-t border-line-input px-4.5 py-4"
+                >
                     @if ($key === 'region' && $this->regionIcon)
-                        {{-- The width follows, since region flags are not all one shape. --}}
-                        <dd class="mt-2 flex items-center gap-2 text-[15px] text-fg-bright">
-                            <img src="{{ $this->regionIcon }}" alt="" class="h-4 w-auto shrink-0 border border-line-input" />
+                        <span class="flex items-center gap-2">
+                            <x-region-flag :icon="$this->regionIcon" />
                             <span class="truncate">{{ $value }}</span>
-                        </dd>
+                        </span>
                     @else
-                        <dd @class([
-                            'mt-2 truncate text-[15px] text-fg-bright',
-                            'font-mono tabular-nums' => in_array($key, ['released', 'size'], true),
-                        ]) title="{{ $value }}">{{ $value }}</dd>
+                        {{ $value }}
                     @endif
-                </div>
+                </x-stat>
             @endforeach
         </dl>
-    </section>
+    </x-band>
 
     @if ($awaiting !== null || $fetchingFrom !== null || $watchingTransfer !== null)
-        <section class="relative z-1 flex flex-col gap-3 px-4 pt-6.5 lg:px-8 lg:pt-10">
+        <x-band pad="lg" class="flex flex-col gap-3 lg:pt-10">
             @if ($watchingTransfer !== null && ($sending = $this->latestTransfer) !== null)
                 {{-- A copy to a network share, on the queue. An hour to the
                      timeout: FileTransferJob's own, for a disc on a slow link. --}}
-                <x-live-wait :game="$game->id" on="transfer" check="checkTransfer" :since="$sending->created_at?->timestamp" :timeout="3600"
-                             class="flex flex-wrap items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
-                    <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-                    <p class="text-sm text-accent">
+                <x-live-wait :game="$game->id" on="transfer" check="checkTransfer" :since="$sending->created_at?->timestamp" :timeout="3600">
+                    <x-notice tone="accent" busy :count="$sending->files_done.' / '.$sending->files_total">
                         {{ $sending->status === App\Models\Transfer::QUEUED
                             ? __('Waiting to send to :name…', ['name' => $sending->destination->name ?? __('the share')])
                             : __('Sending to :name…', ['name' => $sending->destination->name ?? __('the share')]) }}
-                    </p>
-                    <p class="ml-auto font-mono text-xs text-accent">{{ $sending->files_done }} / {{ $sending->files_total }}</p>
 
-                    {{-- Queued and untouched for half a minute means no worker
-                         is on the transfer queue — a container started before
-                         it existed, or QUEUE_WORKERS_TRANSFER=0. Said, rather
-                         than spinning for an hour. One re-check at the mark. --}}
-                    @if ($sending->status === App\Models\Transfer::QUEUED)
-                        @if (now()->diffInSeconds($sending->created_at, true) >= 30)
-                            <p class="basis-full text-xs text-fg-soft">{{ __('Nothing has picked this up yet. Is a worker running for the transfer queue? Restarting retroBite starts one.') }}</p>
-                        @else
-                            <span x-init="setTimeout(() => $wire.checkTransfer(), {{ (31 - (int) now()->diffInSeconds($sending->created_at, true)) * 1000 }})"></span>
+                        {{-- Queued and untouched for half a minute means no worker
+                             is on the transfer queue — a container started before
+                             it existed, or QUEUE_WORKERS_TRANSFER=0. Said, rather
+                             than spinning for an hour. One re-check at the mark. --}}
+                        @if ($sending->status === App\Models\Transfer::QUEUED)
+                            @if (now()->diffInSeconds($sending->created_at, true) >= 30)
+                                <x-slot:note>{{ __('Nothing has picked this up yet. Is a worker running for the transfer queue? Restarting retroBite starts one.') }}</x-slot:note>
+                            @else
+                                <span x-init="setTimeout(() => $wire.checkTransfer(), {{ (31 - (int) now()->diffInSeconds($sending->created_at, true)) * 1000 }})"></span>
+                            @endif
                         @endif
-                    @endif
+                    </x-notice>
                 </x-live-wait>
             @endif
 
             @if ($awaiting !== null)
-                <x-live-wait :game="$game->id" on="identified" check="checkAnswer" :since="$awaitingSince" :timeout="$this::WAIT_SECONDS"
-                             class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
-                    <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-                    <p class="text-sm text-accent">{{ __('Waiting for ScreenScraper…') }}</p>
+                <x-live-wait :game="$game->id" on="identified" check="checkAnswer" :since="$awaitingSince" :timeout="$this::WAIT_SECONDS">
+                    <x-notice tone="accent" busy>{{ __('Waiting for ScreenScraper…') }}</x-notice>
                 </x-live-wait>
             @endif
 
             @if ($fetchingFrom !== null)
-                <x-live-wait :game="$game->id" on="artwork" check="checkMedia" :since="$fetchingSince" :timeout="$this::WAIT_SECONDS"
-                             class="flex items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3">
-                    <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-                    <p class="text-sm text-accent">{{ __('Fetching artwork…') }}</p>
+                <x-live-wait :game="$game->id" on="artwork" check="checkMedia" :since="$fetchingSince" :timeout="$this::WAIT_SECONDS">
+                    <x-notice tone="accent" busy>{{ __('Fetching artwork…') }}</x-notice>
                 </x-live-wait>
             @endif
-        </section>
+        </x-band>
     @endif
 
     {{-- One heading row for everything below it. Each panel drops the title
          it used to carry, since the tab now says it, and keeps only what is
          its own: the filter, the folder, the source. --}}
-    <section class="relative z-1 px-4 pt-6.5 lg:px-8">
+    <x-band pad="lg">
         <x-tabs>
             @foreach ($this->contentTabs as ['key' => $tabKey, 'label' => $tabLabel, 'icon' => $tabIcon, 'count' => $tabCount])
                 <x-tabs.item
@@ -2045,85 +1918,67 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 >{{ $tabLabel }}</x-tabs.item>
             @endforeach
         </x-tabs>
-    </section>
+    </x-band>
 
     @if ($this->activeTab === 'achievements')
-        <section class="relative z-1 px-4 pt-4.5 lg:px-8">
-            <div class="overflow-hidden rounded-xl border border-line bg-sunken">
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-raised px-4.5 py-3.75">
-                    <span class="font-mono text-xs text-fg-dim">{{ __('RetroAchievements') }}</span>
-
+        <x-band>
+            <x-panel tone="sunken" :title="__('RetroAchievements')">
+                <x-slot:header>
                     @if (App\Models\AppSetting::enabled(App\Models\AppSetting::RA_HARDCORE_PRIMARY))
-                        <span class="kicker rounded-md border border-accent/40 bg-accent-tint/10 px-1.75 py-0.75 text-accent">
-                            {{ __('Hardcore') }}
-                        </span>
+                        <x-badge tone="accent" fill>{{ __('Hardcore') }}</x-badge>
                     @endif
+                </x-slot:header>
 
-                    {{-- Two axes, ANDed, in two groups so it reads as two
-                         questions: where a thing stands, and what it is for.
-                         One row of pills would read as one choice. --}}
-                    <div class="ml-auto flex flex-wrap items-center gap-2">
-                        <div class="flex flex-wrap gap-1 rounded-lg border border-line-input bg-ground p-0.75">
-                            {{-- Not $tab: that is the component's own property,
-                                 naming the panel this row sits in. --}}
-                            @foreach ($this->achievementTabs as $filter)
-                                <button
-                                    type="button"
-                                    wire:click="filterAchievements('{{ $filter['key'] }}')"
-                                    @class([
-                                        'cursor-pointer rounded-md px-2.5 py-1 text-xs transition-colors',
-                                        'bg-raised text-fg-bright' => $this->activeAchievementFilter === $filter['key'],
-                                        'text-fg-muted hover:text-fg' => $this->activeAchievementFilter !== $filter['key'],
-                                    ])
-                                >{{ $filter['label'] }}</button>
-                            @endforeach
-                        </div>
+                {{-- Two axes, ANDed, in two groups so it reads as two
+                     questions: where a thing stands, and what it is for.
+                     One row of pills would read as one choice. --}}
+                <x-slot:actions>
+                    <div class="flex flex-wrap items-center gap-2">
+                        {{-- Not $tab: that is the component's own property,
+                             naming the panel this row sits in. --}}
+                        <x-pill-choice
+                            method="filterAchievements"
+                            :value="$this->activeAchievementFilter"
+                            :label="__('Achievements')"
+                            :options="Arr::pluck($this->achievementTabs, 'label', 'key')"
+                        />
 
                         @if ($this->achievementKinds !== [])
-                            <div class="flex flex-wrap gap-1 rounded-lg border border-line-input bg-ground p-0.75">
-                                @foreach ($this->achievementKinds as $kind)
-                                    {{-- A toggle, not a tab: pressed says the
-                                         list is narrowed, and pressing it
-                                         again widens it back out. --}}
-                                    <button
-                                        type="button"
-                                        wire:click="toggleKind('{{ $kind['key'] }}')"
-                                        aria-pressed="{{ $this->activeAchievementKind === $kind['key'] ? 'true' : 'false' }}"
-                                        @class([
-                                            'cursor-pointer rounded-md border px-2.5 py-1 text-xs transition-colors',
-                                            'border-accent/40 bg-accent-tint/10 text-accent' => $this->activeAchievementKind === $kind['key'],
-                                            'border-transparent text-fg-muted hover:text-fg' => $this->activeAchievementKind !== $kind['key'],
-                                        ])
-                                    >{{ $kind['label'] }} {{ $kind['count'] }}</button>
+                            {{-- Toggles, not tabs: pressed says the list is
+                                 narrowed, and pressing it again widens it back out. --}}
+                            <div class="flex flex-wrap gap-1">
+                                @foreach ($this->achievementKinds as ['key' => $kindKey, 'label' => $kindLabel, 'count' => $kindCount])
+                                    <x-chip
+                                        wire:click="toggleKind('{{ $kindKey }}')"
+                                        :active="$this->activeAchievementKind === $kindKey"
+                                        :count="$kindCount"
+                                    >{{ $kindLabel }}</x-chip>
                                 @endforeach
                             </div>
                         @endif
                     </div>
-                </div>
+                </x-slot:actions>
 
                 <dl class="grid grid-cols-2 border-b border-raised sm:grid-cols-4">
-                    @foreach ($this->achievementStats as $stat)
-                        <div @class([
-                            'px-4.5 py-3.5',
-                            'border-r border-raised' => ! $loop->last,
-                        ])>
-                            <dt class="kicker text-fg-faint">{{ $stat['label'] }}</dt>
-                            <dd class="mt-1.5 text-[19px] font-medium tracking-display text-fg-bright">{{ $stat['value'] }}</dd>
-                            <div class="mt-2.5 h-[3px] overflow-hidden rounded-sm bg-raised">
-                                <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" style="width: {{ $stat['percent'] }}%"></div>
-                            </div>
-                        </div>
+                    @foreach ($this->achievementStats as ['label' => $statLabel, 'value' => $statValue, 'percent' => $statPercent])
+                        <x-stat
+                            :label="$statLabel"
+                            size="lg"
+                            :percent="$statPercent"
+                            @class(['px-4.5 py-3.5', 'border-r border-raised' => ! $loop->last])
+                        >{{ $statValue }}</x-stat>
                     @endforeach
                 </dl>
 
                 @if ($this->achievements === [])
-                    <p class="px-4.5 py-8 text-center text-sm text-fg-faint">
-                        {{-- Two ways to be empty, and only one of them is
-                             something to wait for. --}}
-                        {{ $this->countingAchievements->isEmpty()
+                    {{-- Two ways to be empty, and only one of them is
+                         something to wait for. --}}
+                    <x-empty-state
+                        variant="inline"
+                        :title="$this->countingAchievements->isEmpty()
                             ? __('Nothing here yet. The set is fetched in the background.')
-                            : __('No achievement matches both filters.') }}
-                    </p>
+                            : __('No achievement matches both filters.')"
+                    />
                 @else
                     <ul class="grid gap-2.5 p-4.5 [grid-template-columns:repeat(auto-fill,minmax(268px,1fr))]">
                         @foreach ($this->achievements as $achievement)
@@ -2180,12 +2035,12 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         @endforeach
                     </ul>
                 @endif
-            </div>
-        </section>
+            </x-panel>
+        </x-band>
     @endif
 
     @if ($this->activeTab === 'files')
-        <section class="relative z-1 px-4 pt-4.5 lg:px-8">
+        <x-band>
             {{-- The console's folder, not a file's: each card carries its own
                  subfolder, since one game can straddle several. --}}
             <p class="font-mono text-xs break-all text-fg-dim">{{ $console?->libraryPath() ?? '—' }}</p>
@@ -2216,45 +2071,32 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                     @if ($missing)
                                         {{-- Kept rather than deleted: usually an unmounted disk, and
                                              throwing the card away would mean identifying it again. --}}
-                                        <span class="shrink-0 rounded-md border border-warn/50 px-2 py-0.5 font-mono text-xs text-warn">{{ __('Missing') }}</span>
+                                        <x-badge size="sm" tone="warn">{{ __('Missing') }}</x-badge>
                                     @endif
                                 </div>
 
-                                @if ($folder !== '')
-                                    <p class="mt-0.5 font-mono text-xs break-all text-fg-faint">{{ $folder }}</p>
-                                @endif
+                                <x-game-file.folder :path="$folder" class="mt-0.5" />
 
                                 {{-- Where the file came from: what it was made out of, folded
                                      out beneath it when that is archived; or, for a source
                                      kept, what was made out of it. --}}
                                 @if ($origin !== null)
-                                    <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
-                                        <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
-                                        <span>{{ $origin['verb'] }}</span>
-                                        <span class="font-mono break-all text-fg-soft">{{ $origin['name'] }}</span>
-                                        @if ($origin['more'] > 0)
-                                            <span>{{ trans_choice('+ :count track|+ :count tracks', $origin['more'], ['count' => $origin['more']]) }}</span>
-                                        @endif
-                                        <span class="text-fg-faint">· {{ $origin['when'] }}</span>
+                                    <x-game-file.lineage
+                                        :verb="Arr::get($origin, 'verb')"
+                                        :name="Arr::get($origin, 'name')"
+                                        :more="Arr::get($origin, 'more', 0)"
+                                        :when="Arr::get($origin, 'when')"
+                                        class="mt-1.5"
+                                    >
                                         @if ($sources !== [])
-                                            <button
-                                                type="button"
-                                                x-on:click="open = ! open"
-                                                x-bind:aria-expanded="open"
-                                                class="ml-1 inline-flex cursor-pointer items-center gap-0.5 text-accent hover:underline"
-                                            >
+                                            <x-text-link chevron="open" x-on:click="open = ! open" class="ml-1">
                                                 <span x-text="open ? @js(__('Hide')) : @js(__('Show'))">{{ __('Show') }}</span>
-                                                <flux:icon.chevron-down variant="micro" class="size-3.5 transition-transform" x-bind:class="open && 'rotate-180'" />
-                                            </button>
+                                            </x-text-link>
                                         @endif
-                                    </div>
+                                    </x-game-file.lineage>
                                 @endif
                                 @if ($derived !== [])
-                                    <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
-                                        <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
-                                        <span>{{ __('Converted to') }}</span>
-                                        <span class="font-mono break-all text-fg-soft">{{ implode(', ', $derived) }}</span>
-                                    </div>
+                                    <x-game-file.lineage :verb="__('Converted to')" :name="implode(', ', $derived)" class="mt-1.5" />
                                 @endif
                             </div>
 
@@ -2346,18 +2188,18 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     <flux:icon.archive-box variant="micro" class="size-3.5" />
                     <span>{{ trans_choice(':count archived file|:count archived files', $this->history->count(), ['count' => $this->history->count()]) }}</span>
                     <span aria-hidden="true">·</span>
-                    <button type="button" wire:click="$toggle('showHistory')" class="cursor-pointer text-accent hover:underline">
+                    <x-text-link wire:click="$toggle('showHistory')">
                         {{ $showHistory ? __('Hide history') : __('Show history') }}
-                    </button>
+                    </x-text-link>
                 </div>
             @endif
-        </section>
+        </x-band>
     @endif
 
     {{-- The same picker as Tools → Conversion, held to this game. The queue
          is that page's: what was queued here is followed there. --}}
     @if ($this->activeTab === 'conversion')
-        <section class="relative z-1 flex flex-col gap-4 px-4 pt-4.5 lg:px-8">
+        <x-band class="flex flex-col gap-4">
             <livewire:conversion.picker :console-key="$game->console" :game-id="$game->id" wire:key="conversion-picker-{{ $game->id }}" />
 
             <div class="flex justify-end">
@@ -2365,7 +2207,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     {{ __('Open the queue in Tools → Conversion') }}
                 </flux:button>
             </div>
-        </section>
+        </x-band>
     @endif
 
     {{-- The docs about this game, read here and written on the Docs page.
@@ -2373,7 +2215,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
          this page has one already and two cannot nest. --}}
     @if ($this->activeTab === 'docs' && $this->openDoc !== null)
         @php($reading = $this->openDoc)
-        <section class="relative z-1 px-4 pt-4.5 lg:px-8">
+        <x-band>
             {{-- The list sits right on a wide screen, and above the doc on a
                  narrow one, where it is the first thing to choose from; hidden
                  with the same toggle, and the same remembered choice, as the
@@ -2404,8 +2246,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                     </nav>
                 @endif
 
-                <article class="overflow-hidden rounded-xl border border-line bg-sunken">
-                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+                <x-panel as="article" tone="sunken">
+                    <x-slot:header>
                         <div class="min-w-0">
                             <p class="truncate text-base text-fg-bright">{{ $reading->title }}</p>
                             <p class="mt-0.5 text-xs text-fg-faint">
@@ -2415,21 +2257,21 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                 {{ __('Edited :when', ['when' => $reading->updatedAt->diffForHumans()]) }}
                             </p>
                         </div>
+                    </x-slot:header>
 
-                        <div class="flex shrink-0 items-center gap-2">
-                            @if ($hasList)
-                                <x-docs.rail-toggle class="size-8" />
-                            @endif
-                            <flux:button size="sm" variant="ghost" icon="book-open" :href="route('docs.index', ['doc' => $reading->path])" wire:navigate>
-                                {{ __('Open in Documents') }}
-                            </flux:button>
-                        </div>
-                    </div>
+                    <x-slot:actions>
+                        @if ($hasList)
+                            <x-docs.rail-toggle class="size-8" />
+                        @endif
+                        <flux:button size="sm" variant="ghost" icon="book-open" :href="route('docs.index', ['doc' => $reading->path])" wire:navigate>
+                            {{ __('Open in Documents') }}
+                        </flux:button>
+                    </x-slot:actions>
 
                     <div data-doc-body class="px-5 py-4">{!! $this->openDocHtml !!}</div>
-                </article>
+                </x-panel>
             </div>
-        </section>
+        </x-band>
     @endif
 
     {{-- Opened from the Actions menu; neither draws a trigger here. --}}
@@ -2437,19 +2279,21 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     <livewire:docs.link-doc-modal :game-id="$game->id" wire:key="link-doc-for-{{ $game->id }}" />
 
     @if ($this->activeTab === 'artwork')
-        <section class="relative z-1 px-4 pt-4.5 lg:px-8">
-            <div class="overflow-hidden rounded-xl border border-line bg-sunken">
+        <x-band>
+            <x-panel tone="sunken" align="end">
                 {{-- Fetching another region is additive: what is here stays,
                      and the group below is what chooses between them. --}}
-                <div class="flex flex-wrap items-end gap-3 border-b border-raised px-4.5 py-3.75">
+                <x-slot:header>
                     <div class="min-w-0">
                         <p class="kicker mb-1.5 text-fg-faint">{{ __('Fetch another region') }}</p>
                         <p class="max-w-[64ch] text-xs text-fg-faint">
                             {{ __('Downloads that region\'s copies alongside the ones already here. A type that region has nothing for is left as it is.') }}
                         </p>
                     </div>
+                </x-slot:header>
 
-                    <div class="ml-auto flex flex-wrap items-center gap-2">
+                <x-slot:actions>
+                    <div class="flex flex-wrap items-center gap-2">
                         <flux:select wire:model="fetchRegion" size="sm" class="min-w-44">
                             <flux:select.option value="">{{ __('Choose a region') }}</flux:select.option>
                             @foreach ($this->fetchableRegions as $code => $label)
@@ -2461,28 +2305,26 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                             {{ __('Fetch') }}
                         </flux:button>
                     </div>
-                </div>
+                </x-slot:actions>
 
-                @foreach ($this->galleryByRegion as $group)
-                    <div wire:key="region-{{ $group['region'] ?? 'none' }}" class="border-b border-raised last:border-0">
+                @foreach ($this->galleryByRegion as ['region' => $groupRegion, 'icon' => $groupIcon, 'label' => $groupLabel, 'images' => $groupImages, 'selected' => $groupSelected])
+                    <div wire:key="region-{{ $groupRegion ?? 'none' }}" class="border-b border-raised last:border-0">
                         <div class="flex flex-wrap items-center gap-2.5 px-4.5 pt-3.5">
-                            @if ($group['icon'] !== null)
-                                <img src="{{ $group['icon'] }}" alt="" class="h-4.5 w-auto border border-line-input" />
-                            @endif
+                            <x-region-flag :icon="$groupIcon" size="md" />
 
-                            <p class="text-sm text-fg-bright">{{ $group['label'] }}</p>
-                            <span class="font-mono text-xs text-fg-dim">{{ count($group['images']) }}</span>
+                            <p class="text-sm text-fg-bright">{{ $groupLabel }}</p>
+                            <span class="font-mono text-xs text-fg-dim">{{ count($groupImages) }}</span>
 
                             {{-- Region-less artwork cannot be chosen: there is
                                  no other copy of it to choose instead. --}}
-                            @if ($group['region'] !== null)
-                                @if ($group['selected'])
-                                    <span class="kicker ml-auto rounded-md border border-accent/40 bg-accent-tint/10 px-1.75 py-0.75 text-accent">
+                            @if ($groupRegion !== null)
+                                @if ($groupSelected)
+                                    <x-badge tone="accent" fill class="ml-auto">
                                         {{ $game->media_region === null ? __('Shown · from settings') : __('Shown') }}
-                                    </span>
+                                    </x-badge>
                                 @else
                                     <flux:button class="ml-auto" size="xs" variant="ghost" type="button"
-                                                 wire:click="useRegion('{{ $group['region'] }}')">
+                                                 wire:click="useRegion('{{ $groupRegion }}')">
                                         {{ __('Show this region') }}
                                     </flux:button>
                                 @endif
@@ -2490,7 +2332,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         </div>
 
                         <div class="flex flex-wrap gap-3 px-4.5 py-3.5">
-                            @foreach ($group['images'] as ['key' => $key, 'src' => $src, 'caption' => $caption])
+                            @foreach ($groupImages as ['key' => $key, 'src' => $src, 'caption' => $caption])
                                 <img
                                     wire:key="media-{{ $key }}"
                                     data-lightbox="{{ $key }}"
@@ -2511,8 +2353,8 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                         </flux:button>
                     </div>
                 @endif
-            </div>
-        </section>
+            </x-panel>
+        </x-band>
     @endif
     <livewire:games.identify-modal :game-id="$game->id" wire:key="identify-modal" />
 
