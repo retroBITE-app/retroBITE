@@ -348,7 +348,7 @@ it('shows each file\'s own region, as a flag where one depicts it', function () 
         ->and($rows['a.sfc'])->toMatchArray(['region' => null, 'regionLabel' => null, 'regionIcon' => null]);
 
     $component->assertSeeHtml('src="/images/regions/japan.png" alt="Japan"')
-        ->assertSeeHtml('title="Sweden"');
+        ->assertSee('Region: Sweden');
 });
 
 it('puts the panels behind tabs, offering only the ones the game has', function () {

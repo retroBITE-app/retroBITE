@@ -118,7 +118,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      * order the table hands it over. That is usually insertion order and is
      * not promised to be — a deleted row, which a replaced piece of artwork
      * now leaves behind, is enough to change it. The visible result was a
-     * strip and a file table that reshuffled between a click and a reload.
+     * strip and a file list that reshuffled between a click and a reload.
      */
     public function booted(): void
     {
@@ -594,14 +594,14 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
-     * One row per file, ready for the table.
+     * One row per file, ready for its card on the Files tab.
      *
-     * Built here rather than in the markup because every column is a small
+     * Built here rather than in the markup because every field is a small
      * formatting decision, and a game is a set of files — one disc image, or a
      * playlist over four cuesheets and four tracks.
      *
      * A file made out of another says so (origin), and carries the archived
-     * files it was made out of (sources), which the table folds out beneath
+     * files it was made out of (sources), which its card folds out beneath
      * it; a file something was made out of and kept names what (derived).
      *
      * @return array<int, array{
@@ -1917,7 +1917,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                 @endif
             </h1>
 
-            {{-- No filename here: the Files table below names every one of them,
+            {{-- No filename here: the Files tab below names every one of them,
                  and a multi-disc game has no single one to show. --}}
             <p class="mt-4 max-w-[100ch] text-sm leading-relaxed text-fg-muted text-pretty">
                 {{ $game->description ?? __('No metadata yet — use Identify to fetch it.') }}
@@ -2186,241 +2186,171 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
     @if ($this->activeTab === 'files')
         <section class="relative z-1 px-4 pt-4.5 lg:px-8">
-            <div class="overflow-hidden rounded-xl border border-line bg-sunken">
-                <div class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-raised px-4.5 py-3.75">
-                    {{-- The console's folder, not a file's: each row carries its own
-                         subfolder, since one game can straddle several. --}}
-                    <span class="font-mono text-xs break-all text-fg-dim">{{ $console?->libraryPath() ?? '—' }}</span>
-                </div>
+            {{-- The console's folder, not a file's: each card carries its own
+                 subfolder, since one game can straddle several. --}}
+            <p class="font-mono text-xs break-all text-fg-dim">{{ $console?->libraryPath() ?? '—' }}</p>
 
-                {{-- Scrolls rather than wraps: eight columns of mono do not fold into
-                     a phone, and a hash that has rewrapped is unreadable anyway. --}}
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-raised text-left">
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('File') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Region') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint" title="{{ __('How many times this very dump has been scraped on ScreenScraper. Send to picks the most scraped version of a region.') }}">{{ __('Scrapes') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Role') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Disc') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Size') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Format') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Added') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('Last seen') }}</th>
-                                <th class="kicker px-4.5 py-2.5 font-normal text-fg-faint">{{ __('MD5') }}</th>
-                                <th class="px-4.5 py-2.5"><span class="sr-only">{{ __('Actions') }}</span></th>
-                            </tr>
-                        </thead>
-                        {{-- A body per file, so a file and the archived files it was
-                             made out of fold open and shut together. --}}
-                            @foreach ($this->fileRows as [
-                                'id' => $id,
-                                'filename' => $filename,
-                                'folder' => $folder,
-                                'role' => $role,
-                                'disc' => $disc,
-                                'size' => $size,
-                                'format' => $format,
-                                'added' => $added,
-                                'lastSeen' => $lastSeen,
-                                'missing' => $missing,
-                                'md5' => $md5,
-                                'licenseId' => $licenseId,
-                                'region' => $region,
-                                'regionLabel' => $regionLabel,
-                                'regionIcon' => $regionIcon,
-                                'scrapes' => $scrapes,
-                                'flags' => $flags,
-                                'decrypt' => $decrypt,
-                                'discKey' => $discKey,
-                                'origin' => $origin,
-                                'derived' => $derived,
-                                'sources' => $sources,
-                            ])
-                                <tbody wire:key="file-{{ $id }}" x-data="{ open: false }" class="border-t border-raised first:border-t-0">
-                                <tr>
-                                    <td class="px-4.5 py-3">
-                                        <div class="flex items-center gap-2">
-                                            <span class="font-mono text-sm text-fg-bright">{{ $filename }}</span>
+            {{-- A card per file rather than a table: eleven columns of mono had a
+                 phone scrolling sideways to reach a file's own delete button. --}}
+            <ul class="mt-3 flex flex-col gap-2.5">
+                @foreach ($this->fileRows as $index => [
+                    'id' => $id,
+                    'filename' => $filename,
+                    'folder' => $folder,
+                    'lastSeen' => $lastSeen,
+                    'missing' => $missing,
+                    'md5' => $md5,
+                    'decrypt' => $decrypt,
+                    'discKey' => $discKey,
+                    'origin' => $origin,
+                    'derived' => $derived,
+                    'sources' => $sources,
+                ])
+                    {{-- The archived files it was made out of fold open and shut inside it. --}}
+                    <li wire:key="file-{{ $id }}" x-data="{ open: false }" class="flex flex-col gap-3 rounded-lg border border-line bg-surface px-4 py-3.5">
+                        <div class="flex items-start gap-3">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <x-game-file.name :filename="$filename" class="text-base font-semibold text-fg-bright" />
 
-                                            @if ($missing)
-                                                {{-- Kept rather than deleted: usually an unmounted disk, and
-                                                     throwing the row away would mean identifying it again. --}}
-                                                <span class="shrink-0 rounded-md border border-warn/50 px-2 py-0.5 font-mono text-xs text-warn">{{ __('Missing') }}</span>
-                                            @endif
-                                        </div>
+                                    @if ($missing)
+                                        {{-- Kept rather than deleted: usually an unmounted disk, and
+                                             throwing the card away would mean identifying it again. --}}
+                                        <span class="shrink-0 rounded-md border border-warn/50 px-2 py-0.5 font-mono text-xs text-warn">{{ __('Missing') }}</span>
+                                    @endif
+                                </div>
 
-                                        @if ($folder !== '')
-                                            <p class="mt-0.5 font-mono text-xs text-fg-faint">{{ $folder }}</p>
+                                @if ($folder !== '')
+                                    <p class="mt-0.5 font-mono text-xs break-all text-fg-faint">{{ $folder }}</p>
+                                @endif
+
+                                {{-- Where the file came from: what it was made out of, folded
+                                     out beneath it when that is archived; or, for a source
+                                     kept, what was made out of it. --}}
+                                @if ($origin !== null)
+                                    <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
+                                        <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
+                                        <span>{{ $origin['verb'] }}</span>
+                                        <span class="font-mono break-all text-fg-soft">{{ $origin['name'] }}</span>
+                                        @if ($origin['more'] > 0)
+                                            <span>{{ trans_choice('+ :count track|+ :count tracks', $origin['more'], ['count' => $origin['more']]) }}</span>
                                         @endif
-                                        {{-- Where the file came from: what it was made out of, folded
-                                             out beneath it when that is archived; or, for a source
-                                             kept, what was made out of it. --}}
-                                        @if ($origin !== null)
-                                            <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
-                                                <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
-                                                <span>{{ $origin['verb'] }}</span>
-                                                <span class="font-mono text-fg-soft">{{ $origin['name'] }}</span>
-                                                @if ($origin['more'] > 0)
-                                                    <span>{{ trans_choice('+ :count track|+ :count tracks', $origin['more'], ['count' => $origin['more']]) }}</span>
-                                                @endif
-                                                <span class="text-fg-faint">· {{ $origin['when'] }}</span>
-                                                @if ($sources !== [])
-                                                    <button
-                                                        type="button"
-                                                        x-on:click="open = ! open"
-                                                        x-bind:aria-expanded="open"
-                                                        class="ml-1 inline-flex cursor-pointer items-center gap-0.5 text-accent hover:underline"
-                                                    >
-                                                        <span x-text="open ? @js(__('Hide')) : @js(__('Show'))">{{ __('Show') }}</span>
-                                                        <flux:icon.chevron-down variant="micro" class="size-3.5 transition-transform" x-bind:class="open && 'rotate-180'" />
-                                                    </button>
-                                                @endif
-                                            </div>
+                                        <span class="text-fg-faint">· {{ $origin['when'] }}</span>
+                                        @if ($sources !== [])
+                                            <button
+                                                type="button"
+                                                x-on:click="open = ! open"
+                                                x-bind:aria-expanded="open"
+                                                class="ml-1 inline-flex cursor-pointer items-center gap-0.5 text-accent hover:underline"
+                                            >
+                                                <span x-text="open ? @js(__('Hide')) : @js(__('Show'))">{{ __('Show') }}</span>
+                                                <flux:icon.chevron-down variant="micro" class="size-3.5 transition-transform" x-bind:class="open && 'rotate-180'" />
+                                            </button>
                                         @endif
-                                        @if ($derived !== [])
-                                            <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
-                                                <flux:icon.arrow-right variant="micro" class="size-3.5 text-fg-faint" />
-                                                <span>{{ __('Converted to') }}</span>
-                                                <span class="font-mono text-fg-soft">{{ implode(', ', $derived) }}</span>
-                                            </div>
+                                    </div>
+                                @endif
+                                @if ($derived !== [])
+                                    <div class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-fg-muted">
+                                        <flux:icon.arrow-turn-down-right variant="micro" class="size-3.5 text-fg-faint" />
+                                        <span>{{ __('Converted to') }}</span>
+                                        <span class="font-mono break-all text-fg-soft">{{ implode(', ', $derived) }}</span>
+                                    </div>
+                                @endif
+                            </div>
+
+                            {{-- One menu for whatever the file offers, so a PS3 card and a
+                                 plain one keep the same corner and the same shape. --}}
+                            <flux:dropdown position="bottom" align="end" class="-mt-1 -mr-1.5 shrink-0">
+                                <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal"
+                                             :aria-label="__('Actions for :file', ['file' => $filename])" />
+
+                                <flux:menu>
+                                    {{-- The key and the decrypt it unlocks, offered only
+                                         while there is something left to do with them. --}}
+                                    @if (in_array($decrypt, [DecryptState::NeedsKey, DecryptState::Ready], true))
+                                        <flux:menu.item icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $id }} })">
+                                            {{ $decrypt === DecryptState::Ready ? __('Change key') : __('Add key') }}
+                                        </flux:menu.item>
+
+                                        @if ($decrypt === DecryptState::Ready)
+                                            <flux:menu.item icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: [{{ $id }}] })">
+                                                {{ __('Decrypt') }}
+                                            </flux:menu.item>
                                         @endif
 
-                                        {{-- One line under the filename: the disc's own name for
-                                             itself — shown because on an OPL drive the file can be
-                                             called anything and the serial cannot — then, for a PS3
-                                             image, whether it is still encrypted and the next step
-                                             towards playing it: its key, then decrypting. --}}
-                                        @if ($licenseId || $decrypt !== null)
-                                            <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                                                @if ($licenseId)
-                                                    <span class="rounded-md border border-line-strong bg-surface px-2 py-0.5 font-mono text-xs text-fg-muted">{{ $licenseId }}</span>
-                                                @endif
+                                        <flux:menu.separator />
+                                    @endif
 
-                                                @if ($decrypt !== null)
-                                                    <x-decrypt.state :state="$decrypt" />
-
-                                                    @if (in_array($decrypt, [DecryptState::NeedsKey, DecryptState::Ready], true))
-                                                        <flux:button size="xs" variant="ghost" icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $id }} })">
-                                                            {{ $decrypt === DecryptState::Ready ? __('Change key') : __('Add key') }}
-                                                        </flux:button>
-                                                    @endif
-
-                                                    @if ($decrypt === DecryptState::Ready)
-                                                        <flux:button size="xs" variant="ghost" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: [{{ $id }}] })">
-                                                            {{ __('Decrypt') }}
-                                                        </flux:button>
-                                                    @endif
-                                                @endif
-                                            </div>
-                                        @endif
-
-                                        {{-- The disc key, to hand to someone with the same disc.
-                                             Kept on record, so it stays after decrypting. --}}
-                                        @if ($discKey !== null)
-                                            <div class="mt-1.5 flex items-center gap-1.5">
-                                                <span class="kicker text-fg-faint">{{ __('Disc key') }}</span>
-                                                <span class="font-mono text-xs text-fg-soft select-all">{{ $discKey }}</span>
-                                                <x-copy-button :text="$discKey" label="">
-                                                    <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
-                                                </x-copy-button>
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td class="px-4.5 py-3 whitespace-nowrap">
-                                        {{-- A flag where one depicts the region, as on the
-                                             game card; else its code, named on hover. --}}
-                                        @if ($regionIcon !== null)
-                                            <img src="{{ $regionIcon }}" alt="{{ $regionLabel }}" title="{{ $regionLabel }}" class="w-6 border border-line-input" />
-                                        @elseif ($region !== null)
-                                            <span title="{{ $regionLabel }}" class="font-mono text-xs text-fg-muted">{{ Str::upper($region) }}</span>
-                                        @else
-                                            <span class="font-mono text-fg-muted">—</span>
-                                        @endif
-                                    </td>
-                                    <td class="px-4.5 py-3 whitespace-nowrap">
-                                        <span class="font-mono text-fg-muted">{{ $scrapes ?? '—' }}</span>
-                                        {{-- What the provider says the dump is, whatever its
-                                             name does. A beta, a hack or a translation
-                                             is never what Send to picks. --}}
-                                        @foreach ($flags as $flag)
-                                            <span class="ml-1 rounded-md border border-warn/50 px-1.5 py-0.5 font-mono text-xs text-warn">{{ __(Str::headline($flag === 'trad' ? 'translation' : $flag)) }}</span>
-                                        @endforeach
-                                    </td>
-                                    <td class="px-4.5 py-3 whitespace-nowrap text-fg-soft">{{ $role }}</td>
-                                    <td class="px-4.5 py-3 font-mono text-fg-muted">{{ $disc }}</td>
-                                    <td class="px-4.5 py-3 font-mono whitespace-nowrap text-fg-bright">{{ $size }}</td>
-                                    <td class="px-4.5 py-3 font-mono text-fg-muted">{{ $format }}</td>
-                                    <td class="px-4.5 py-3 font-mono whitespace-nowrap text-fg-muted">{{ $added }}</td>
-                                    <td @class([
-                                        'px-4.5 py-3 font-mono whitespace-nowrap',
-                                        'text-warn' => $missing,
-                                        'text-fg-muted' => ! $missing,
-                                    ])>{{ $lastSeen }}</td>
-                                    <td class="px-4.5 py-3">
-                                        @if ($md5)
-                                            <div class="flex items-center gap-2">
-                                                <span class="font-mono text-xs text-fg-soft">{{ $md5 }}</span>
-                                                {{-- Icon only: a "Copy" beside every hash is noise in a
-                                                     column that already repeats. It still says "Copied". --}}
-                                                <x-copy-button :text="$md5" label="">
-                                                    <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
-                                                </x-copy-button>
-                                            </div>
-                                        @else
-                                            <span class="font-mono text-xs text-fg-faint">{{ __('Not hashed yet') }}</span>
-                                        @endif
-                                    </td>
                                     {{-- One file, not the game: the game, its details and its
                                          artwork stay even when this is the last one. --}}
-                                    <td class="px-4.5 py-3 text-right">
-                                        <button
-                                            type="button"
-                                            wire:click="deleteFile({{ $id }})"
-                                            wire:confirm="{{ $missing
-                                                ? __('Remove :file from the list? It is already gone from disk.', ['file' => $filename])
-                                                : __('Delete :file from disk? The game, its details and artwork stay.', ['file' => $filename]) }}"
-                                            aria-label="{{ __('Delete :file', ['file' => $filename]) }}"
-                                            title="{{ __('Delete file') }}"
-                                            class="cursor-pointer rounded-md p-1 text-fg-faint transition-colors hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                                        >
-                                            <flux:icon.trash class="size-3.5" />
-                                        </button>
-                                    </td>
-                                </tr>
+                                    <flux:menu.item icon="trash" variant="danger"
+                                                    wire:click="deleteFile({{ $id }})"
+                                                    wire:confirm="{{ $missing
+                                                        ? __('Remove :file from the list? It is already gone from disk.', ['file' => $filename])
+                                                        : __('Delete :file from disk? The game, its details and artwork stay.', ['file' => $filename]) }}">
+                                        {{ $missing ? __('Remove from list') : __('Delete file') }}
+                                    </flux:menu.item>
+                                </flux:menu>
+                            </flux:dropdown>
+                        </div>
+
+                        {{-- The values to copy, in one recessed block so the hex lines up:
+                             a PS3 image's key, to hand to someone with the same disc and
+                             kept on record after decrypting; the checksum; and, since the
+                             library holds no last-seen stamp, only for a missing file how
+                             long ago it went. Left out when it would hold none of them. --}}
+                        @if ($discKey !== null || $md5 || $missing)
+                            <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 rounded-md border border-line bg-sunken px-3 py-2">
+                                @if ($discKey !== null)
+                                    <x-game-file.field :label="__('Disc key')" :copy="$discKey" class="text-fg-soft">{{ $discKey }}</x-game-file.field>
+                                @endif
+
+                                @if ($md5)
+                                    <x-game-file.field :label="__('MD5')" :copy="$md5" class="text-fg-soft">{{ $md5 }}</x-game-file.field>
+                                @endif
+
+                                @if ($missing)
+                                    <x-game-file.field :label="__('Last seen')" class="text-warn">{{ $lastSeen }}</x-game-file.field>
+                                @endif
+                            </dl>
+                        @endif
+
+                        <x-game-file.badges :row="$this->fileRows[$index]" class="border-t border-raised pt-3 text-fg-muted" />
+
+                        @if ($sources !== [])
+                            <ul x-show="open" x-cloak class="flex flex-col gap-2 border-t border-raised pt-3">
                                 @foreach ($sources as $source)
-                                    <x-game-file.archived-row :row="$source" wire:key="source-{{ $id }}-{{ $source['id'] }}" x-show="open" x-cloak />
+                                    <x-game-file.archived-card :row="$source" wire:key="source-{{ $id }}-{{ $source['id'] }}" />
                                 @endforeach
-                                </tbody>
-                            @endforeach
+                            </ul>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
 
-                            {{-- What went without anything made out of it: deleted by
-                                 hand, pruned. Asked for, under a heading of its own. --}}
-                            @if ($this->historyRows !== [])
-                                <tbody wire:key="file-history" class="border-t border-line">
-                                    <tr>
-                                        <td colspan="11" class="kicker px-4.5 pt-3.5 pb-2 text-fg-faint">{{ __('History') }}</td>
-                                    </tr>
-                                    @foreach ($this->historyRows as $row)
-                                        <x-game-file.archived-row :row="$row" :branch="$row['depth'] > 0" wire:key="history-{{ $row['id'] }}" class="border-t border-raised" />
-                                    @endforeach
-                                </tbody>
-                            @endif
-                    </table>
+            {{-- What went without anything made out of it: deleted by
+                 hand, pruned. Asked for, under a heading of its own. --}}
+            @if ($this->historyRows !== [])
+                <div wire:key="file-history" class="mt-5">
+                    <p class="kicker pb-2.5 text-fg-faint">{{ __('History') }}</p>
+                    <ul class="flex flex-col gap-2">
+                        @foreach ($this->historyRows as $row)
+                            <x-game-file.archived-card :row="$row" :branch="$row['depth'] > 0" wire:key="history-{{ $row['id'] }}" />
+                        @endforeach
+                    </ul>
                 </div>
+            @endif
 
-                @if ($this->history->isNotEmpty())
-                    <div class="flex items-center gap-2 border-t border-raised px-4.5 py-2.5 text-xs text-fg-faint">
-                        <flux:icon.archive-box variant="micro" class="size-3.5" />
-                        <span>{{ trans_choice(':count archived file|:count archived files', $this->history->count(), ['count' => $this->history->count()]) }}</span>
-                        <span aria-hidden="true">·</span>
-                        <button type="button" wire:click="$toggle('showHistory')" class="cursor-pointer text-accent hover:underline">
-                            {{ $showHistory ? __('Hide history') : __('Show history') }}
-                        </button>
-                    </div>
-                @endif
-            </div>
+            @if ($this->history->isNotEmpty())
+                <div class="mt-3 flex items-center gap-2 text-xs text-fg-faint">
+                    <flux:icon.archive-box variant="micro" class="size-3.5" />
+                    <span>{{ trans_choice(':count archived file|:count archived files', $this->history->count(), ['count' => $this->history->count()]) }}</span>
+                    <span aria-hidden="true">·</span>
+                    <button type="button" wire:click="$toggle('showHistory')" class="cursor-pointer text-accent hover:underline">
+                        {{ $showHistory ? __('Hide history') : __('Show history') }}
+                    </button>
+                </div>
+            @endif
         </section>
     @endif
 
