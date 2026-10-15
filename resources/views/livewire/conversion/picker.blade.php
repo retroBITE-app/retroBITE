@@ -593,13 +593,14 @@ new class extends Component
     }
 }; ?>
 
+
 {{--
     The source list beside the output panel. The console tabs, when there are
     any, belong to the page around it.
 --}}
 <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
     {{-- Sources --}}
-    <section class="flex min-w-0 flex-col rounded-xl border border-line bg-surface">
+    <x-panel as="section" class="flex min-w-0 flex-col">
                 @php($games = $this->games)
                 @php($shown = $this->shown)
                 @php($pickState = $this->pickState)
@@ -608,17 +609,13 @@ new class extends Component
                 {{-- Select all sits at the head of the list's own column of
                      checkboxes, px-3.5 like the rows so the boxes line up,
                      and picks what the search and type beside it show. --}}
-                <div class="flex items-center gap-3 border-b border-line px-3.5 py-3">
-                    <button
-                        type="button"
+                <x-slot:header class="px-3.5! py-3!">
+                    <x-pick-all
+                        :state="$pickState"
+                        :label="$pickState === 'on' ? __('Clear all') : __('Select all')"
                         wire:click="toggleAll"
-                        @disabled($shown->isEmpty())
-                        aria-label="{{ $pickState === 'on' ? __('Clear all') : __('Select all') }}"
-                        title="{{ $pickState === 'on' ? __('Clear all') : __('Select all') }}"
-                        class="shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <x-check :state="$pickState" />
-                    </button>
+                        :disabled="$shown->isEmpty()"
+                    />
 
                     @if ($gameId === null)
                         <x-search-field wire:model.live.debounce.300ms="search" :placeholder="__('Search games')" class="min-w-0 flex-1" />
@@ -638,10 +635,10 @@ new class extends Component
                     @if ($this->selected->isNotEmpty())
                         <span class="flex shrink-0 items-baseline gap-2 text-xs leading-none">
                             <span class="font-mono text-fg-faint">{{ __(':count picked', ['count' => $this->selected->count()]) }}</span>
-                            <button type="button" wire:click="clearSelection" class="cursor-pointer text-fg-faint transition-colors hover:text-fg-soft">{{ __('Clear') }}</button>
+                            <button type="button" wire:click="clearSelection" class="cursor-pointer rounded-sm text-fg-faint transition-colors hover:text-fg-soft focus-ring">{{ __('Clear') }}</button>
                         </span>
                     @endif
-                </div>
+                </x-slot:header>
 
                 <ul class="max-h-[28rem] divide-y divide-line overflow-y-auto">
                     @forelse ($games->take($this::LIST_LIMIT) as ['key' => $key, 'title' => $title, 'sets' => $gameSets])
@@ -668,7 +665,7 @@ new class extends Component
                                     <span class="size-4 shrink-0" aria-hidden="true"></span>
                                     <span class="flex min-w-0 flex-1 items-center gap-1.5">
                                         <span @class(['truncate text-sm', 'text-accent' => $holdsPick, 'text-fg' => ! $holdsPick])>{{ $title }}</span>
-                                        <flux:icon.chevron-down class="size-3 shrink-0 text-fg-dim transition-transform duration-200" x-bind:class="open && '-rotate-180'" />
+                                        <x-chevron class="text-fg-dim" />
                                     </span>
                                     <span class="shrink-0 font-mono text-[10px] tracking-kicker text-fg-faint uppercase">
                                         {{ trans_choice(':count file|:count files', $gameSets->count(), ['count' => $gameSets->count()]) }}
@@ -708,9 +705,7 @@ new class extends Component
                                     </span>
 
                                     @if ($set->isSet())
-                                        <span class="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 font-mono text-[10px] tracking-kicker text-fg-muted uppercase">
-                                            {{ trans_choice(':count disc|:count discs', count($set->discs), ['count' => count($set->discs)]) }}
-                                        </span>
+                                        <x-badge>{{ trans_choice(':count disc|:count discs', count($set->discs), ['count' => count($set->discs)]) }}</x-badge>
                                     @endif
 
                                     <span class="shrink-0 font-mono text-xs text-fg-dim uppercase">{{ implode('/', $set->extensions()) }}</span>
@@ -719,12 +714,14 @@ new class extends Component
                             @endforeach
                         </li>
                     @empty
-                        <li class="px-4 py-8 text-center text-sm text-fg-faint">
-                            {{ match (true) {
-                                $search !== '' || $type !== '' => __('No game matches the search.'),
-                                $gameId !== null => __('Nothing here any of this console\'s conversions reads.'),
-                                default => __('Nothing on this console can be converted. Scan the folder if files were added.'),
-                            } }}
+                        <li>
+                            <x-empty-state variant="inline">
+                                {{ match (true) {
+                                    $search !== '' || $type !== '' => __('No game matches the search.'),
+                                    $gameId !== null => __('Nothing here any of this console\'s conversions reads.'),
+                                    default => __('Nothing on this console can be converted. Scan the folder if files were added.'),
+                                } }}
+                            </x-empty-state>
                         </li>
                     @endforelse
                 </ul>
@@ -734,18 +731,17 @@ new class extends Component
                         {{ __('Showing :shown of :count games. Search to find the rest.', ['shown' => $this::LIST_LIMIT, 'count' => $games->count()]) }}
                     </p>
                 @endif
-            </section>
+            </x-panel>
 
             {{-- Output --}}
-            <section class="flex min-w-0 flex-col gap-5 rounded-xl border border-line bg-surface p-4">
+            <x-panel as="section" padded class="flex min-w-0 flex-col gap-5">
                 @php($selected = $this->selected)
                 @php($set = $this->single)
 
                 @if ($selected->isEmpty())
-                    <p class="py-10 text-center text-sm text-fg-faint">{{ __('Pick a file to see what it can become, or several to convert them all at once.') }}</p>
+                    <x-empty-state variant="inline" :title="__('Pick a file to see what it can become, or several to convert them all at once.')" />
                 @else
-                    <div>
-                        <p class="kicker mb-1 text-fg-faint">{{ $set !== null ? __('Source') : __('Sources') }}</p>
+                    <x-field-group :label="$set !== null ? __('Source') : __('Sources')">
                         @if ($set !== null)
                             <p class="truncate text-sm text-fg-soft" title="{{ $set->label() }}">{{ $set->label() }}</p>
                             @if ($set->isSet())
@@ -762,11 +758,9 @@ new class extends Component
                             </p>
                             <p class="mt-0.5 text-xs text-fg-faint">{{ __('Each is queued as a conversion of its own, with the options below.') }}</p>
                         @endif
-                    </div>
+                    </x-field-group>
 
-                    <div>
-                        <p class="kicker mb-2 text-fg-faint">{{ __('Output format') }}</p>
-
+                    <x-field-group :label="__('Output format')">
                         @if ($this->formats === [])
                             <p class="text-sm text-fg-faint">{{ __('Nothing this console reads can be made from it.') }}</p>
                         @else
@@ -774,77 +768,61 @@ new class extends Component
                                 @foreach ($this->formats as ['converter' => $converter, 'available' => $available, 'missing' => $missing, 'hint' => $hint, 'fits' => $fits])
                                     @php($on = $available && $format === $converter->key())
 
-                                    <button
-                                        type="button"
+                                    <x-option-card
+                                        radio
+                                        mono
+                                        :active="$on"
+                                        :disabled="! $available"
+                                        :label="'.'.$converter->to()"
+                                        :description="$available ? $converter->description() : __(':tool is not installed', ['tool' => $missing])"
                                         wire:key="format-{{ $converter->key() }}"
-                                        wire:click="selectFormat(@js($converter->key()))"
-                                        @disabled(! $available)
-                                        @class([
-                                            'flex items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left transition-colors',
-                                            'cursor-pointer border-accent-tint/55 bg-accent-tint/10' => $on,
-                                            'cursor-pointer border-line-input hover:bg-hover' => $available && ! $on,
-                                            'cursor-not-allowed border-line opacity-50' => ! $available,
-                                        ])
+                                        wire:click="selectFormat({{ Js::from($converter->key()) }})"
                                     >
-                                        <span @class([
-                                            'grid size-4 shrink-0 place-items-center rounded-full border',
-                                            'border-accent' => $on,
-                                            'border-line-bright' => ! $on,
-                                        ])>
-                                            @if ($on)
-                                                <span class="size-2 rounded-full bg-accent"></span>
-                                            @endif
-                                        </span>
+                                        <x-slot:badge>
+                                            <span class="text-sm text-fg-faint">· {{ $converter->label() }}</span>
+                                        </x-slot:badge>
 
-                                        <span class="min-w-0 flex-1">
-                                            <span @class(['block text-sm', 'text-accent' => $on, 'text-fg-soft' => ! $on])>
-                                                .{{ $converter->to() }} <span class="text-fg-faint">· {{ $converter->label() }}</span>
-                                            </span>
-                                            <span class="block font-mono text-xs text-fg-faint">
-                                                {{ $available ? $converter->description() : __(':tool is not installed', ['tool' => $missing]) }}
-                                            </span>
-                                            @if ($fits < $selected->count())
-                                                <span class="block text-xs text-warn">{{ __('Fits :fits of :count picked; the rest are left out.', ['fits' => $fits, 'count' => $selected->count()]) }}</span>
-                                            @endif
-                                        </span>
+                                        @if ($fits < $selected->count())
+                                            <x-slot:meta class="text-warn">{{ __('Fits :fits of :count picked; the rest are left out.', ['fits' => $fits, 'count' => $selected->count()]) }}</x-slot:meta>
+                                        @endif
 
                                         @if ($hint !== null)
-                                            <span class="shrink-0 font-mono text-xs text-fg-faint" title="{{ __('Going by what this conversion has made of this console\'s discs so far') }}">≈ {{ $hint }}</span>
+                                            <x-slot:trailing class="font-mono text-xs text-fg-faint" :title="__('Going by what this conversion has made of this console\'s discs so far')">≈ {{ $hint }}</x-slot:trailing>
                                         @endif
-                                    </button>
+                                    </x-option-card>
                                 @endforeach
                             </div>
                         @endif
-                    </div>
+                    </x-field-group>
 
                     @if ($this->chosen !== null)
                         @php($options = $this->chosen->options())
 
-                        <div class="flex flex-col gap-3">
-                            <p class="kicker text-fg-faint">{{ __('Options') }}</p>
+                        <x-field-group :label="__('Options')">
+                            <div class="flex flex-col gap-3">
+                                @if (in_array(Converter::VERIFY, $options, true))
+                                    <div class="flex items-center gap-2">
+                                        <flux:checkbox wire:model="verify" :label="__('Verify checksum')" />
+                                        <x-info :text="__('Check the written file with :tool\'s own verifier before keeping it.', ['tool' => $this->chosen->tool()])" />
+                                    </div>
+                                @endif
 
-                            @if (in_array(Converter::VERIFY, $options, true))
-                                <div class="flex items-center gap-2">
-                                    <flux:checkbox wire:model="verify" :label="__('Verify checksum')" />
-                                    <x-info :text="__('Check the written file with :tool\'s own verifier before keeping it.', ['tool' => $this->chosen->tool()])" />
-                                </div>
-                            @endif
+                                @if (in_array(Converter::KEEP_SOURCE, $options, true))
+                                    <div class="flex items-center gap-2">
+                                        <flux:checkbox wire:model="keepSource" :label="__('Keep source')" />
+                                        <x-info :text="__('Off, the source files are deleted once the output is written and verified. Their checksums are kept on record, so the output is still known by the dump it came from.')" />
+                                    </div>
+                                @endif
 
-                            @if (in_array(Converter::KEEP_SOURCE, $options, true))
-                                <div class="flex items-center gap-2">
-                                    <flux:checkbox wire:model="keepSource" :label="__('Keep source')" />
-                                    <x-info :text="__('Off, the source files are deleted once the output is written and verified. Their checksums are kept on record, so the output is still known by the dump it came from.')" />
-                                </div>
-                            @endif
-
-                            @if (in_array(Converter::COMPRESSION, $options, true))
-                                <flux:select wire:model="compression" size="sm" :label="__('Compression')">
-                                    @foreach ($this->chosen->compressions() as $value => $label)
-                                        <flux:select.option :value="$value">{{ $label }}</flux:select.option>
-                                    @endforeach
-                                </flux:select>
-                            @endif
-                        </div>
+                                @if (in_array(Converter::COMPRESSION, $options, true))
+                                    <flux:select wire:model="compression" size="sm" :label="__('Compression')">
+                                        @foreach ($this->chosen->compressions() as $value => $label)
+                                            <flux:select.option :value="$value">{{ $label }}</flux:select.option>
+                                        @endforeach
+                                    </flux:select>
+                                @endif
+                            </div>
+                        </x-field-group>
 
                         {{-- The tool's own flags, folded away: every one has a
                              default that is right for nearly everybody. --}}
@@ -854,39 +832,29 @@ new class extends Component
                                     type="button"
                                     x-on:click="open = ! open"
                                     x-bind:aria-expanded="open"
-                                    class="kicker flex cursor-pointer items-center gap-1.5 text-fg-faint transition-colors hover:text-fg-soft"
+                                    class="kicker flex cursor-pointer items-center gap-1.5 rounded-sm text-fg-faint transition-colors hover:text-fg-soft focus-ring"
                                 >
-                                    <flux:icon.chevron-right class="size-3 transition-transform duration-200" x-bind:class="open && 'rotate-90'" />
                                     {{ __('Advanced options') }}
+                                    <x-chevron />
                                 </button>
 
                                 <div x-show="open" x-cloak class="flex flex-col gap-3">
                                     @foreach ($this->chosen->settings() as $setting)
                                         {{-- Label and info badge, as the options above; the
                                              select keeps Flux's own field spacing. --}}
-                                        <flux:field wire:key="setting-{{ $setting->key }}">
-                                            <div class="flex items-center gap-2">
-                                                <flux:label>{{ $setting->label }}</flux:label>
-                                                <x-info :text="$setting->description" />
-                                            </div>
-
+                                        <x-field :label="$setting->label" :info="$setting->description" wire:key="setting-{{ $setting->key }}">
                                             <flux:select wire:model="advanced.{{ $setting->key }}" size="sm">
                                                 @foreach ($setting->choices as $value => $label)
                                                     <flux:select.option :value="$value">{{ $label }}</flux:select.option>
                                                 @endforeach
                                             </flux:select>
-                                        </flux:field>
+                                        </x-field>
                                     @endforeach
                                 </div>
                             </div>
                         @endif
 
-                        <div>
-                            <p class="kicker mb-1 text-fg-faint">{{ __('Writes to') }}</p>
-                            <p class="truncate font-mono text-xs text-fg-soft">
-                                {{ $this->writesTo }}
-                            </p>
-                        </div>
+                        <x-path-preview :value="$this->writesTo" />
                     @endif
 
                     @php($fitting = $this->fitsChosen)
@@ -895,5 +863,5 @@ new class extends Component
                         {{ $selected->count() > 1 ? __('Add :count to queue', ['count' => $fitting]) : __('Add to queue') }}
                     </flux:button>
                 @endif
-            </section>
+            </x-panel>
 </div>

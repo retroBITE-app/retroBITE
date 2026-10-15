@@ -39,20 +39,17 @@ new #[Title('Conversion')] class extends Component
 <div class="flex flex-col gap-6">
     {{-- Heading, and the one thing about the whole page rather than one
          conversion: which tools are here. --}}
-    <div class="flex flex-wrap items-end justify-between gap-3">
-        <div>
-            <p class="kicker mb-1.5 text-fg-faint">{{ __('Tools') }}</p>
-            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Conversion') }}</h1>
-        </div>
-
-        <livewire:conversion.tool-paths :only="App\Conversion\Tools::onPage(null)" />
-    </div>
+    <x-page-header :kicker="__('Tools')" :title="__('Conversion')" class="mb-0!">
+        <x-slot:actions>
+            <livewire:conversion.tool-paths :only="App\Conversion\Tools::onPage(null)" />
+        </x-slot:actions>
+    </x-page-header>
 
     @if ($this->consoles->isEmpty())
-        <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
-            <p class="text-sm text-fg-soft">{{ __('No console there are conversions for is set up yet.') }}</p>
-            <p class="mt-1 text-sm text-fg-faint">{{ __('Add a console whose config lists conversions on the Consoles page to convert its discs.') }}</p>
-        </div>
+        <x-empty-state
+            :title="__('No console there are conversions for is set up yet.')"
+            :hint="__('Add a console whose config lists conversions on the Consoles page to convert its discs.')"
+        />
     @else
         <x-console-tabs :consoles="$this->consoles" :selected="$consoleKey" />
 

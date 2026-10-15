@@ -156,69 +156,45 @@ new class extends Component
         <flux:button size="sm" variant="ghost" icon="arrow-up-tray">{{ __('Import') }}</flux:button>
     </flux:modal.trigger>
 
-    <flux:modal :name="$this::MODAL" class="w-full max-w-lg">
-        <form wire:submit="import" class="space-y-5">
-            <div>
-                <flux:heading size="lg">{{ $this->archives ? __('Import a doc') : __('Import markdown') }}</flux:heading>
-                <p class="mt-0.5 text-xs text-fg-faint">
-                    {{ $this->archives
-                        ? __('A .md file, or a .zip exported from here with its images alongside.')
-                        : __('Front matter is read if the file has any; otherwise the first heading becomes the title.') }}
-                </p>
-            </div>
-
-            <label class="grid cursor-pointer place-items-center gap-1 rounded-xl border border-dashed border-line-input px-6 py-8 text-center transition-colors hover:bg-hover">
-                <input
-                    type="file"
-                    wire:model="upload"
-                    accept="{{ $this->archives ? '.md,.markdown,.zip,text/markdown,text/plain,application/zip' : '.md,.markdown,text/markdown,text/plain' }}"
-                    class="sr-only"
-                />
-
-                <flux:icon.document-text class="size-6 text-fg-faint" />
-
-                <span class="text-sm text-fg-soft">
-                    {{ $upload?->getClientOriginalName() ?? ($this->archives ? __('Choose or drop a .md or .zip') : __('Choose or drop a .md file')) }}
+    <x-modal
+        :name="$this::MODAL"
+        submit="import"
+        :heading="$this->archives ? __('Import a doc') : __('Import markdown')"
+        :subheading="$this->archives
+            ? __('A .md file, or a .zip exported from here with its images alongside.')
+            : __('Front matter is read if the file has any; otherwise the first heading becomes the title.')"
+    >
+        <x-file-drop
+            icon="document-text"
+            :label="$upload?->getClientOriginalName() ?? ($this->archives ? __('Choose or drop a .md or .zip') : __('Choose or drop a .md file'))"
+            :accept="$this->archives ? '.md,.markdown,.zip,text/markdown,text/plain,application/zip' : '.md,.markdown,text/markdown,text/plain'"
+            wire:model="upload"
+        >
+            @if ($attachments > 0)
+                <span class="font-mono text-xs text-accent">
+                    {{ trans_choice(':count image in the archive|:count images in the archive', $attachments, ['count' => $attachments]) }}
                 </span>
-
-                @if ($attachments > 0)
-                    <span class="font-mono text-xs text-accent">
-                        {{ trans_choice(':count image in the archive|:count images in the archive', $attachments, ['count' => $attachments]) }}
-                    </span>
-                @endif
-            </label>
-
-            <flux:error name="upload" />
-
-            @if ($this->ready)
-                <flux:input wire:model="title" :label="__('Title')" />
-
-                <div>
-                    <p class="kicker mb-2 text-fg-faint">{{ __('Console') }}</p>
-                    <p class="mb-2 text-xs text-fg-faint">{{ __('Decides the folder it is written to, and where its images go.') }}</p>
-
-                    <x-docs.console-picker :selected="$console" key-prefix="import-console" />
-
-                    <flux:error name="console" />
-                </div>
-
-                <flux:input wire:model="category" :label="__('Category')" :placeholder="__('modding')" />
-
-                <div>
-                    <p class="kicker mb-2 text-fg-faint">{{ __('Writes to') }}</p>
-                    <p class="rounded-lg border border-line-input bg-sunken px-3 py-2 font-mono text-xs text-fg-dim">
-                        docs/{{ $console !== '' ? $console.'/' : '' }}{{ App\Support\DocPath::slug($title) }}.md
-                    </p>
-                </div>
             @endif
+        </x-file-drop>
 
-            <div class="flex justify-end gap-2">
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
-                </flux:modal.close>
+        <flux:error name="upload" />
 
-                <flux:button type="submit" variant="primary" :disabled="! $this->ready">{{ __('Import') }}</flux:button>
-            </div>
-        </form>
-    </flux:modal>
+        @if ($this->ready)
+            <flux:input wire:model="title" :label="__('Title')" />
+
+            <x-field-group :label="__('Console')" :hint="__('Decides the folder it is written to, and where its images go.')">
+                <x-docs.console-picker :selected="$console" key-prefix="import-console" />
+
+                <flux:error name="console" />
+            </x-field-group>
+
+            <flux:input wire:model="category" :label="__('Category')" :placeholder="__('modding')" />
+
+            <x-path-preview :value="'docs/'.($console !== '' ? $console.'/' : '').App\Support\DocPath::slug($title).'.md'" />
+        @endif
+
+        <x-slot:footer>
+            <flux:button type="submit" variant="primary" :disabled="! $this->ready">{{ __('Import') }}</flux:button>
+        </x-slot:footer>
+    </x-modal>
 </div>
