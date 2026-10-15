@@ -30,7 +30,7 @@
                     <a
                         href="{{ $href }}"
                         wire:navigate
-                        class="rounded-sm text-fg-soft transition-colors hover:text-fg-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                        class="rounded-sm text-fg-soft transition-colors hover:text-fg-bright focus-ring"
                     >{{ $label }}</a>
                 @endif
             </li>

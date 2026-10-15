@@ -30,7 +30,9 @@ new #[Title('Media settings')] class extends Component
         $chosen = MediaTypes::enabled();
 
         $this->enabled = Collection::make(MediaTypes::offered())
-            ->mapWithKeys(fn (string $type): array => [$type => in_array($type, $chosen, true)])
+            ->mapWithKeys(function (string $type) use ($chosen): array {
+                return [$type => in_array($type, $chosen, true)];
+            })
             ->all();
 
         $this->autoQueue = AppSetting::enabled(AppSetting::AUTO_QUEUE_MEDIA_SCRAPE);
@@ -69,8 +71,12 @@ new #[Title('Media settings')] class extends Component
     public function roles(): Collection
     {
         return collect(MediaKind::cases())
-            ->flatMap(fn (MediaKind $kind) => collect($kind->screenScraperTypes())
-                ->mapWithKeys(fn (string $type) => [$type => $kind->label()]));
+            ->flatMap(function (MediaKind $kind): Collection {
+                return collect($kind->screenScraperTypes())
+                    ->mapWithKeys(function (string $type) use ($kind): array {
+                        return [$type => $kind->label()];
+                    });
+            });
     }
 
     /**
@@ -82,7 +88,9 @@ new #[Title('Media settings')] class extends Component
     public function targets(): array
     {
         return collect(TransferTargets::all())
-            ->mapWithKeys(fn (TransferTarget $target): array => [$target->key() => $target->label()])
+            ->mapWithKeys(function (TransferTarget $target): array {
+                return [$target->key() => $target->label()];
+            })
             ->all();
     }
 
@@ -105,7 +113,9 @@ new #[Title('Media settings')] class extends Component
         }
 
         // A title screen can be Batocera's image and its title shot at once.
-        return array_map(fn (array $names): string => implode(', ', array_unique($names)), $labels);
+        return array_map(function (array $names): string {
+            return implode(', ', array_unique($names));
+        }, $labels);
     }
 
     /**
@@ -148,20 +158,20 @@ new #[Title('Media settings')] class extends Component
         {{-- Outside the form, bound back to it by id: the header row is where
              the control belongs, and the whole pane sits between them. --}}
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="media-settings">{{ __('Save') }}</flux:button>
+            <x-settings.save form="media-settings" />
         </x-slot>
 
         <form id="media-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {{-- The short cards stack in their own column so the tall one
                  beside them has something to sit next to. --}}
             <div class="flex flex-col gap-6 lg:col-span-5">
-                <div class="rounded-xl border border-line bg-surface p-5">
+                <x-settings.card>
                     <flux:switch wire:model="autoQueue"
                                  :label="__('Fetch artwork automatically')"
                                  :description="__('Queues a download as soon as a game is identified. Turn it off to fetch on demand instead.')" />
-                </div>
+                </x-settings.card>
 
-                <div class="rounded-xl border border-line bg-surface p-5">
+                <x-settings.card>
                     <flux:select wire:model="region" :label="__('Preferred region')"
                                  :description="__('Artwork often exists for several regions. One copy is kept — this one when it exists, otherwise World, Europe, the United States and Japan in that order.')">
                         <flux:select.option value="">{{ __('No preference') }}</flux:select.option>
@@ -169,12 +179,19 @@ new #[Title('Media settings')] class extends Component
                             <flux:select.option value="{{ $code }}">{{ $label }}</flux:select.option>
                         @endforeach
                     </flux:select>
-                </div>
+                </x-settings.card>
             </div>
 
-            <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-7">
-                <div class="mb-1 flex items-center justify-between gap-3">
-                    <p class="kicker text-fg-faint">{{ __('Types to fetch') }}</p>
+            @php
+                $targetLabel = Arr::get($this->targets, $this->target, $this->target);
+            @endphp
+
+            <x-settings.card
+                class="lg:col-span-7"
+                :kicker="__('Types to fetch')"
+                :description="__('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account. The first tag says what retroBite shows it as; the second, what it becomes when a game is sent to :target.', ['target' => $targetLabel])"
+            >
+                <x-slot name="actions">
                     <flux:dropdown position="bottom" align="end">
                         <flux:button size="xs" variant="ghost" type="button" icon:trailing="chevron-down">
                             {{ __('Recommended for…') }}
@@ -186,10 +203,8 @@ new #[Title('Media settings')] class extends Component
                             @endforeach
                         </flux:menu>
                     </flux:dropdown>
-                </div>
-                <p class="mb-4 text-sm text-fg-soft">
-                    {{ __('Each one switched on is another download per game, at 128 KB/s on a free ScreenScraper account. The first tag says what retroBite shows it as; the second, what it becomes when a game is sent to :target.', ['target' => $this->targets[$this->target] ?? $this->target]) }}
-                </p>
+                </x-slot>
+
                 <div class="mb-4 max-w-xs">
                     <flux:select wire:model.live="target" size="sm" :label="__('Tags for')">
                         @foreach ($this->targets as $key => $label)
@@ -199,36 +214,38 @@ new #[Title('Media settings')] class extends Component
                 </div>
 
                 @foreach ($this->groups as ['label' => $label, 'types' => $types])
-                    <p class="kicker mt-5 mb-2 text-fg-dim first:mt-0">{{ __($label) }}</p>
-
-                    <div class="flex flex-col gap-3.5">
-                        @foreach ($types as $type)
-                            @php $described = App\Support\MediaTypes::describe($type); @endphp
-                            <label wire:key="type-{{ $type }}" class="flex cursor-pointer items-start gap-3">
-                                <flux:checkbox wire:model="enabled.{{ $type }}" class="mt-0.5" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                        <span class="text-sm text-fg-bright">{{ __($described['name'] ?? $type) }}</span>
+                    <x-field-group :label="__($label)" class="mt-5">
+                        <div class="flex flex-col gap-3.5">
+                            @foreach ($types as $type)
+                                @php
+                                    $described = App\Support\MediaTypes::describe($type);
+                                    $becomes = Arr::get($this->targetSlots, $type);
+                                @endphp
+                                <label wire:key="type-{{ $type }}" class="flex cursor-pointer items-start gap-3">
+                                    <flux:checkbox wire:model="enabled.{{ $type }}" class="mt-0.5" />
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                            <span class="text-sm text-fg-bright">{{ __(Arr::get($described, 'name', $type)) }}</span>
+                                            @if ($described !== null)
+                                                <span class="font-mono text-xs text-fg-faint">{{ $type }}</span>
+                                            @endif
+                                            @if ($this->roles->has($type))
+                                                <x-badge>{{ $this->roles->get($type) }}</x-badge>
+                                            @endif
+                                            @if ($becomes !== null)
+                                                <x-badge tone="accent">{{ __(':target: :what', ['target' => $targetLabel, 'what' => $becomes]) }}</x-badge>
+                                            @endif
+                                        </span>
                                         @if ($described !== null)
-                                            <span class="font-mono text-xs text-fg-faint">{{ $type }}</span>
-                                        @endif
-                                        @if ($this->roles->has($type))
-                                            <span class="kicker rounded-md border border-line-input px-1.5 py-0.5 text-fg-dim">{{ $this->roles[$type] }}</span>
-                                        @endif
-                                        @if (isset($this->targetSlots[$type]))
-                                            <span class="kicker rounded-md border border-accent/40 px-1.5 py-0.5 text-accent">{{ __(':target: :what', ['target' => $this->targets[$this->target] ?? $this->target, 'what' => $this->targetSlots[$type]]) }}</span>
+                                            <span class="mt-0.5 block text-xs text-fg-soft">{{ __(Arr::get($described, 'description')) }}</span>
                                         @endif
                                     </span>
-                                    @if ($described !== null)
-                                        <span class="mt-0.5 block text-xs text-fg-soft">{{ __($described['description']) }}</span>
-                                    @endif
-                                </span>
-                            </label>
-                        @endforeach
-                    </div>
+                                </label>
+                            @endforeach
+                        </div>
+                    </x-field-group>
                 @endforeach
-            </div>
-
+            </x-settings.card>
         </form>
     </x-settings.layout>
 </section>

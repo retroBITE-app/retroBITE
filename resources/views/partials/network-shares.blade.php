@@ -16,19 +16,17 @@
     share-rows.js, remembers which are open). On a phone a row folds into two
     lines: the protocol and its status, then ports · login · shares.
 --}}
-<section class="space-y-3" x-data="shareRows">
-    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 class="text-lg font-medium text-fg-bright">{{ __('Network shares') }}</h2>
+<section x-data="shareRows">
+    <x-section-header :title="__('Network shares')">
+        <x-slot:aside>
+            <span class="flex items-center font-mono text-sm text-fg-soft">
+                {{ $hostIp }}
+                <x-copy-button :text="$hostIp" icon />
+            </span>
+        </x-slot:aside>
+    </x-section-header>
 
-        <span class="flex items-center font-mono text-sm text-fg-soft">
-            {{ $hostIp }}
-            <x-copy-button :text="$hostIp" label="">
-                <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
-            </x-copy-button>
-        </span>
-    </div>
-
-    <div class="divide-y divide-line overflow-hidden rounded-xl border border-line bg-sunken">
+    <x-panel tone="sunken" divided>
         <div class="kicker hidden grid-cols-[8rem_7.5rem_7rem_minmax(0,1fr)_7rem] gap-x-4 px-4 py-2 text-fg-faint md:grid">
             <span>{{ __('Protocol') }}</span>
             <span>{{ __('Status') }}</span>
@@ -51,20 +49,9 @@
                 >
                     <span class="text-sm text-fg-bright">{{ $protocol->label() }}</span>
 
-                    <span class="flex items-center gap-2 justify-self-end md:justify-self-start">
-                        <span @class([
-                            'h-2 w-2 shrink-0 rounded-full',
-                            'animate-pulse bg-fg-faint' => $online === null,
-                            'bg-accent shadow-glow' => $online === true,
-                            'bg-danger' => $online === false,
-                        ])></span>
-                        <span @class([
-                            'text-sm',
-                            'text-fg-dim' => $online === null,
-                            'text-accent' => $online === true,
-                            'text-danger' => $online === false,
-                        ])>{{ match ($online) { null => __('Checking…'), true => __('Online'), false => __('Offline') } }}</span>
-                    </span>
+                    <x-status :state="match ($online) { null => 'pending', true => 'ok', false => 'error' }" class="justify-self-end md:justify-self-start">
+                        {{ match ($online) { null => __('Checking…'), true => __('Online'), false => __('Offline') } }}
+                    </x-status>
 
                     {{-- Every row the same two lines on a phone: ports · login on one
                          line that never wraps, the share count pinned beside it. From
@@ -91,7 +78,7 @@
                                         $whitelist === '' => __('anyone on the LAN'),
                                         default => __('not started'),
                                     } }}</span>
-                                    <span class="shrink-0 rounded-md border border-line-strong px-1.5 py-0.5 font-mono text-[10px] tracking-kicker text-fg-muted uppercase">{{ __('Read-only') }}</span>
+                                    <x-badge>{{ __('Read-only') }}</x-badge>
                                 @endif
                             @endif
                         </span>
@@ -99,19 +86,19 @@
 
                     <span class="flex items-center gap-1 justify-self-end text-sm whitespace-nowrap text-fg-muted">
                         {{ trans_choice(':count share|:count shares', $served->count(), ['count' => $served->count()]) }}
-                        <flux:icon.chevron-down variant="micro" class="size-4 transition-transform duration-200" x-bind:class="isOpen(@js($key)) && '-rotate-180'" />
+                        <x-chevron open="isOpen('{{ $key }}')" />
                     </span>
                 </button>
 
                 {{-- Why a row is not well, said under it rather than hidden in the list. --}}
                 @if ($online === false)
-                    <p class="px-4 pb-3 text-xs text-danger">{{ __('Not answering on :port. Is the share container running?', ['port' => $protocol->port()]) }}</p>
+                    <x-notice tone="danger" class="mx-4 mb-3">{{ __('Not answering on :port. Is the share container running?', ['port' => $protocol->port()]) }}</x-notice>
                 @endif
 
                 @if ($protocol === ShareProtocol::Ps3netsrv && $whitelist === '')
-                    <p class="px-4 pb-3 text-xs text-warn">{{ __('Readable by everyone on the network. Limit it with PS3NETSRV_WHITELIST.') }}</p>
+                    <x-notice tone="warn" class="mx-4 mb-3">{{ __('Readable by everyone on the network. Limit it with PS3NETSRV_WHITELIST.') }}</x-notice>
                 @elseif ($protocol === ShareProtocol::Ps3netsrv && ! $whitelistValid)
-                    <p class="px-4 pb-3 text-xs text-danger">{{ __('PS3NETSRV_WHITELIST=:whitelist is not an address ps3netsrv takes (one address, * for any part), so it is not started.', ['whitelist' => $whitelist]) }}</p>
+                    <x-notice tone="danger" class="mx-4 mb-3">{{ __('PS3NETSRV_WHITELIST=:whitelist is not an address ps3netsrv takes (one address, * for any part), so it is not started.', ['whitelist' => $whitelist]) }}</x-notice>
                 @endif
 
                 <div x-show="isOpen(@js($key))" x-cloak class="px-4 pb-3">
@@ -120,9 +107,7 @@
                     @endif
 
                     @if ($served->isEmpty())
-                        <p class="rounded-md border border-dashed border-line-input px-4 py-4 text-center text-sm text-fg-soft">
-                            {{ $shares->isEmpty() ? __('No consoles installed yet.') : __('None of the consoles it serves is installed.') }}
-                        </p>
+                        <x-empty-state variant="inline" :title="$shares->isEmpty() ? __('No consoles installed yet.') : __('None of the consoles it serves is installed.')" />
                     @else
                         <ul class="space-y-1">
                             @foreach ($served as $share)
@@ -137,9 +122,7 @@
                                             <flux:icon.exclamation-triangle variant="micro" class="size-4 shrink-0 text-warn" />
                                         @else
                                             <span class="min-w-0 shrink truncate font-mono text-xs text-fg-dim">{{ $connection }}</span>
-                                            <x-copy-button :text="$connection" label="" class="px-1!">
-                                                <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
-                                            </x-copy-button>
+                                            <x-copy-button :text="$connection" icon class="px-1!" />
                                         @endif
                                     </div>
                                     @if ($misplaced !== null)
@@ -153,5 +136,5 @@
                 </div>
             </div>
         @endforeach
-    </div>
+    </x-panel>
 </section>

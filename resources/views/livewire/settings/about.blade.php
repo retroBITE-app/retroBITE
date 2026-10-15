@@ -26,25 +26,17 @@ new #[Title('About')] class extends Component
 
     <x-settings.layout :heading="__('About')" :subheading="__('What this install is, what it runs on, and who made it possible')">
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div class="overflow-hidden rounded-xl border border-line bg-surface">
-                <div class="border-b border-line px-4.5 py-4">
-                    <p class="kicker text-fg-faint">{{ __('Version') }}</p>
-                    <p class="mt-1.5 font-mono text-xl text-fg-bright">{{ $version }}</p>
-                </div>
+            <x-settings.card :kicker="__('Version')">
+                <p class="font-mono text-xl text-fg-bright">{{ $version }}</p>
 
-                <dl>
+                <dl class="mt-4 flex flex-col gap-2.5">
                     @foreach ($build as ['key' => $key, 'value' => $value])
-                        <div class="flex justify-between gap-3 border-b border-line/70 px-4.5 py-2.5 text-sm">
-                            <dt class="text-fg-dim">{{ __($key) }}</dt>
-                            <dd class="truncate font-mono text-fg-soft">{{ $value }}</dd>
-                        </div>
+                        <x-kv-row :label="__($key)">{{ $value }}</x-kv-row>
                     @endforeach
                 </dl>
 
-                <div class="px-4.5 py-4">
-                    <x-link-card :icon="Arr::get($website, 'icon')" :label="__(Arr::get($website, 'label'))" :url="Arr::get($website, 'url')" />
-                </div>
-            </div>
+                <x-link-card class="mt-5" :icon="Arr::get($website, 'icon')" :label="__(Arr::get($website, 'label'))" :url="Arr::get($website, 'url')" />
+            </x-settings.card>
 
             <div class="flex flex-col gap-2">
                 @foreach ($links as ['icon' => $icon, 'label' => $label, 'url' => $url])

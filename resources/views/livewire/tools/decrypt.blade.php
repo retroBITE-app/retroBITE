@@ -265,92 +265,73 @@ new #[Title('Decrypt')] class extends Component
     }
 }; ?>
 
-<div
-    class="flex flex-col gap-6"
-    x-data="{
-        stop: null,
-        init() { this.stop = live.system('conversion', () => $wire.refreshImages()) },
-        destroy() { this.stop?.() },
-    }"
->
-    <div>
-        <div class="flex flex-wrap items-end justify-between gap-3">
-            <div>
-                <p class="kicker mb-1.5 text-fg-faint">{{ __('Tools') }}</p>
-                <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Decrypt') }}</h1>
-            </div>
-
+<x-live-system signal="conversion" call="refreshImages" class="flex flex-col gap-6">
+    <x-page-header
+        :kicker="__('Tools')"
+        :title="__('Decrypt')"
+        :description="__('Some images are encrypted and will not start without their disc key. Here you can add the keys or decrypt the images.')"
+        class="mb-0!"
+    >
+        <x-slot:actions>
             <livewire:conversion.tool-paths :only="Tools::onPage(Converter::PAGE_DECRYPT)" />
-        </div>
-        <p class="mt-2 max-w-3xl text-sm text-fg-muted">
-            {{ __('Some images are encrypted and will not start without their disc key. Here you can add the keys or decrypt the images.') }}
-        </p>
-    </div>
+        </x-slot:actions>
+    </x-page-header>
 
     @if ($this->consoles->isEmpty())
-        <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
-            <p class="text-sm text-fg-soft">{{ __('No console with encrypted discs is in the library yet.') }}</p>
-            <p class="mt-1 text-sm text-fg-faint">{{ __('Add one on the Consoles page — PlayStation 3, for one — and its disc images show up here.') }}</p>
-        </div>
+        <x-empty-state
+            :title="__('No console with encrypted discs is in the library yet.')"
+            :hint="__('Add one on the Consoles page — PlayStation 3, for one — and its disc images show up here.')"
+        />
     @else
         <x-console-tabs :consoles="$this->consoles" :selected="$consoleKey" />
 
         @if ($this->missingTool !== null)
-            <div class="rounded-xl border border-warn/50 bg-surface px-4 py-3 text-sm text-warn">
+            <x-notice tone="warn">
                 {{ __(':tool is not installed, so nothing can be decrypted. Keys can still be added.', ['tool' => $this->missingTool]) }}
-            </div>
+            </x-notice>
         @endif
 
-        <section class="flex min-w-0 flex-col rounded-xl border border-line bg-surface">
+        <x-panel as="section" class="flex min-w-0 flex-col">
             {{-- One chip per state, with how many are in it. --}}
-            <div class="flex flex-wrap items-center gap-1.5 border-b border-line px-3.5 py-3">
+            <x-slot:header class="gap-1.5! px-3.5! py-3!">
                 @foreach ($this->chips as $value => $label)
                     @php($count = $value === '' ? $this->images->count() : (int) Arr::get($this->counts, $value, 0))
 
-                    <button
-                        type="button"
+                    <x-chip
+                        :active="$show === $value"
+                        :count="$count"
                         wire:key="chip-{{ $value ?: 'all' }}"
-                        wire:click="filter(@js($value))"
-                        @class([
-                            'flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors',
-                            'border-accent-tint/55 bg-accent-tint/10 text-accent' => $show === $value,
-                            'border-line text-fg-muted hover:border-line-bright hover:text-fg-soft' => $show !== $value,
-                        ])
-                    >
-                        {{ $label }}
-                        <span class="font-mono text-fg-faint">{{ $count }}</span>
-                    </button>
+                        wire:click="filter({{ Js::from($value) }})"
+                    >{{ $label }}</x-chip>
                 @endforeach
+            </x-slot:header>
 
-                @if (Arr::get($this->counts, DecryptState::Unchecked->value, 0) > 0)
-                    <flux:button size="xs" variant="ghost" icon="magnifying-glass" wire:click="checkAll" class="ml-auto">
+            @if (Arr::get($this->counts, DecryptState::Unchecked->value, 0) > 0)
+                <x-slot:actions>
+                    <flux:button size="xs" variant="ghost" icon="magnifying-glass" wire:click="checkAll">
                         {{ __('Check unread') }}
                     </flux:button>
-                @endif
-            </div>
+                </x-slot:actions>
+            @endif
 
-            <div class="flex items-center gap-3 border-b border-line px-3.5 py-3">
-                <button
-                    type="button"
-                    wire:click="toggleAll"
-                    @disabled($this->ready === [])
-                    aria-label="{{ __('Pick every image that is ready') }}"
-                    title="{{ __('Pick every image that is ready') }}"
-                    class="shrink-0 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    <x-conversion.check :state="match (true) {
+            <x-panel.header class="px-3.5! py-3!">
+                <x-pick-all
+                    :label="__('Pick every image that is ready')"
+                    :state="match (true) {
                         $picked === [] => 'off',
                         count($picked) === count($this->ready) => 'on',
                         default => 'some',
-                    }" />
-                </button>
+                    }"
+                    wire:click="toggleAll"
+                    :disabled="$this->ready === []"
+                />
 
                 <x-search-field wire:model.live.debounce.300ms="search" :placeholder="__('Search games, files or title IDs')" class="min-w-0 flex-1" />
 
                 <flux:button variant="primary" size="sm" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: $wire.picked })" :disabled="$picked === [] || $this->missingTool !== null">
                     {{ $picked === [] ? __('Decrypt') : __('Decrypt :count', ['count' => count($picked)]) }}
                 </flux:button>
-            </div>
+            </x-panel.header>
 
             <ul class="max-h-[32rem] divide-y divide-line overflow-y-auto">
                 @forelse ($this->shown as ['file' => $file, 'state' => $state])
@@ -385,7 +366,7 @@ new #[Title('Decrypt')] class extends Component
                                 'cursor-not-allowed opacity-30' => ! $pickable && $state !== DecryptState::NeedsKey,
                             ])
                         >
-                            <x-conversion.check :state="$isPicked ? 'on' : 'off'" />
+                            <x-check :state="$isPicked ? 'on' : 'off'" />
                         </button>
 
                         <div class="min-w-0 flex-1">
@@ -414,14 +395,16 @@ new #[Title('Decrypt')] class extends Component
                         </div>
                     </li>
                 @empty
-                    <li class="px-4 py-8 text-center text-sm text-fg-faint">
-                        {{ $this->images->isEmpty()
-                            ? __('No :console disc images in the library. Scan the folder if files were added.', ['console' => $this->console?->name])
-                            : __('No image matches.') }}
+                    <li>
+                        <x-empty-state variant="inline">
+                            {{ $this->images->isEmpty()
+                                ? __('No :console disc images in the library. Scan the folder if files were added.', ['console' => $this->console?->name])
+                                : __('No image matches.') }}
+                        </x-empty-state>
                     </li>
                 @endforelse
             </ul>
-        </section>
+        </x-panel>
     @endif
 
     @if ($this->converter !== null)
@@ -431,4 +414,4 @@ new #[Title('Decrypt')] class extends Component
     <livewire:decrypt.key-modal />
 
     <livewire:decrypt.confirm-modal />
-</div>
+</x-live-system>

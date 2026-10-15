@@ -54,6 +54,22 @@ enum DecryptState: string
         };
     }
 
+    /** The badge's tone, as x-badge takes it: warn for the one that will not start. */
+    public function tone(): string
+    {
+        return match ($this) {
+            self::NeedsKey => 'warn',
+            self::Ready, self::Decrypting => 'accent',
+            self::Decrypted, self::Unchecked => 'muted',
+        };
+    }
+
+    /** A dashed outline for the one nothing is known about yet. */
+    public function dashed(): bool
+    {
+        return $this === self::Unchecked;
+    }
+
     /** One line on what the state means for playing the game. */
     public function hint(): string
     {

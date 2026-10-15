@@ -70,32 +70,24 @@ new class extends Component
 
 <div>
     <flux:modal.trigger :name="$this::MODAL">
-        <button type="button" class="flex h-7 cursor-pointer items-center rounded-md border border-dashed border-accent-tint/55 px-2.5 text-xs text-accent transition-colors hover:bg-accent-tint/10">
-            {{ __('+ Link game') }}
-        </button>
+        <x-chip dashed>{{ __('+ Link game') }}</x-chip>
     </flux:modal.trigger>
 
-    <flux:modal :name="$this::MODAL" class="w-full max-w-md">
-        <div class="space-y-4">
-            <flux:heading size="lg">{{ __('Link a game') }}</flux:heading>
-
-            <flux:input wire:model.live.debounce.200ms="search" icon="magnifying-glass" :placeholder="__('Search games by title')" autofocus />
-
-            <div class="max-h-80 overflow-y-auto">
-                @forelse ($this->matches as $game)
-                    <x-search-row
-                        :label="$game->title"
-                        :detail="$game->console()?->name"
-                        :image="$game->listThumbnail()"
-                        wire:key="link-game-{{ $game->id }}"
-                        wire:click="link({{ $game->id }})"
-                    />
-                @empty
-                    <p class="px-2 py-6 text-center text-sm text-fg-faint">
-                        {{ mb_strlen(trim($search)) < 2 ? __('Type at least two letters of a title.') : __('No game matches that.') }}
-                    </p>
-                @endforelse
-            </div>
-        </div>
-    </flux:modal>
+    <x-search-modal
+        :name="$this::MODAL"
+        :heading="__('Link a game')"
+        :placeholder="__('Search games by title')"
+        :has-results="$this->matches->isNotEmpty()"
+        :empty="mb_strlen(trim($search)) < 2 ? __('Type at least two letters of a title.') : __('No game matches that.')"
+    >
+        @foreach ($this->matches as $game)
+            <x-search-row
+                :label="$game->title"
+                :detail="$game->console()?->name"
+                :image="$game->listThumbnail()"
+                wire:key="link-game-{{ $game->id }}"
+                wire:click="link({{ $game->id }})"
+            />
+        @endforeach
+    </x-search-modal>
 </div>

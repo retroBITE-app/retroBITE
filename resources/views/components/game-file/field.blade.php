@@ -7,8 +7,6 @@
     <span @class(['min-w-0 break-all', 'select-all' => $copy !== null])>{{ $slot }}</span>
 
     @if ($copy !== null)
-        <x-copy-button :text="$copy" label="" class="-my-1">
-            <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
-        </x-copy-button>
+        <x-copy-button :text="$copy" icon class="-my-1" />
     @endif
 </dd>

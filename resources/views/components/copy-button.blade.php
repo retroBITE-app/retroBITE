@@ -8,23 +8,16 @@
 @props([
     'text',
     'label' => null,
-    // `menu` is a dropdown row; `plain` a bare control beside a value.
+    // `menu` is a flux:menu.item, for a row inside a flux:menu, so it takes
+    // the menu's look, hover and keyboard handling; `plain` a bare control
+    // beside a value.
     'variant' => 'plain',
+    // Just the copy icon, the label kept for a screen reader.
+    'icon' => false,
 ])
 
 @php
-    $variants = [
-        // Inline-flex so an icon in the slot and the label sit on one line.
-        'plain' => 'inline-flex items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-sm text-fg-faint hover:bg-hover hover:text-fg-soft',
-        'menu' => 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-soft hover:bg-raised',
-    ];
-@endphp
-
-<button
-    type="button"
-    x-data="{ copied: false }"
-    x-on:click="
-        const value = @js($text);
+    $copy = 'const value = '.Illuminate\Support\Js::from($text).';
         let done = false;
 
         try {
@@ -37,27 +30,48 @@
         }
 
         if (! done) {
-            const field = document.createElement('textarea');
+            const field = document.createElement(\'textarea\');
             field.value = value;
-            field.setAttribute('readonly', '');
-            field.style.position = 'fixed';
-            field.style.opacity = '0';
+            field.setAttribute(\'readonly\', \'\');
+            field.style.position = \'fixed\';
+            field.style.opacity = \'0\';
             document.body.appendChild(field);
             field.select();
-            done = document.execCommand('copy');
+            done = document.execCommand(\'copy\');
             document.body.removeChild(field);
         }
 
         if (done) {
             copied = true;
             setTimeout(() => copied = false, 1500);
-        }
-    "
-    {{ $attributes->class([
-        'shrink-0 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-        \Illuminate\Support\Arr::get($variants, $variant, \Illuminate\Support\Arr::get($variants, 'plain')),
-    ]) }}
->
-    {{ $slot }}
-    <span x-text="copied ? @js(__('Copied')) : @js($label ?? __('Copy'))"></span>
-</button>
+        }';
+
+    $behaviour = ['x-data' => '{ copied: false }', 'x-on:click' => $copy];
+@endphp
+
+@if ($variant === 'menu')
+    <flux:menu.item icon="document-duplicate" :attributes="$attributes->merge($behaviour)">
+        {{ $slot }}
+        <span x-text="copied ? @js(__('Copied')) : @js($label ?? __('Copy'))"></span>
+    </flux:menu.item>
+@else
+    <button
+        type="button"
+        @if ($icon)
+            aria-label="{{ $label ?: __('Copy') }}"
+        @endif
+        {{ $attributes->merge($behaviour)->class([
+            // Inline-flex so an icon in the slot and the label sit on one line.
+            'inline-flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-sm text-fg-faint transition-colors hover:bg-hover hover:text-fg-soft focus-ring',
+        ]) }}
+    >
+        @if ($icon)
+            <flux:icon.document-duplicate class="size-3.5 text-fg-faint" />
+            {{-- Says so only once it has copied, as the label="" callers did. --}}
+            <span x-text="copied ? @js(__('Copied')) : ''"></span>
+        @else
+            {{ $slot }}
+            <span x-text="copied ? @js(__('Copied')) : @js($label ?? __('Copy'))"></span>
+        @endif
+    </button>
+@endif

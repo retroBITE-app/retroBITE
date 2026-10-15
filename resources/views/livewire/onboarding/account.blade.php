@@ -106,13 +106,8 @@ new class extends Component
             viewable
         />
 
-        <button
-            type="submit"
-            data-test="create-account-button"
-            class="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-accent-tint/55 bg-accent-tint/10 px-4 py-3 text-base text-accent transition-colors hover:bg-accent-tint/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-        >
+        <x-cta-button icon-trailing="arrow-right" data-test="create-account-button">
             {{ __('Create account') }}
-            <flux:icon.arrow-right variant="micro" />
-        </button>
+        </x-cta-button>
     </form>
 </div>

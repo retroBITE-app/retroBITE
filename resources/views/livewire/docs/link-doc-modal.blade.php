@@ -70,27 +70,21 @@ new class extends Component
 }; ?>
 
 <div>
-    <flux:modal :name="$this::MODAL" class="w-full max-w-md">
-        <div class="space-y-4">
-            <flux:heading size="lg">{{ __('Link a doc') }}</flux:heading>
-
-            <flux:input wire:model.live.debounce.200ms="search" icon="magnifying-glass" :placeholder="__('Search docs')" autofocus />
-
-            <div class="max-h-80 overflow-y-auto">
-                @forelse ($this->matches as $doc)
-                    <x-search-row
-                        :label="$doc->title"
-                        :detail="$doc->subtitle()"
-                        icon="document-text"
-                        wire:key="link-doc-{{ md5($doc->path) }}"
-                        wire:click="link(@js($doc->path))"
-                    />
-                @empty
-                    <p class="px-2 py-6 text-center text-sm text-fg-faint">
-                        {{ trim($search) === '' ? __('No docs left to link. Write one from the Actions menu.') : __('No doc matches that.') }}
-                    </p>
-                @endforelse
-            </div>
-        </div>
-    </flux:modal>
+    <x-search-modal
+        :name="$this::MODAL"
+        :heading="__('Link a doc')"
+        :placeholder="__('Search docs')"
+        :has-results="$this->matches->isNotEmpty()"
+        :empty="trim($search) === '' ? __('No docs left to link. Write one from the Actions menu.') : __('No doc matches that.')"
+    >
+        @foreach ($this->matches as $doc)
+            <x-search-row
+                :label="$doc->title"
+                :detail="$doc->subtitle()"
+                icon="document-text"
+                wire:key="link-doc-{{ md5($doc->path) }}"
+                wire:click="link({{ Js::from($doc->path) }})"
+            />
+        @endforeach
+    </x-search-modal>
 </div>

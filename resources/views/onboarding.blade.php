@@ -17,6 +17,15 @@
     ];
 
     $current = array_search($step, array_keys($steps), true);
+
+    // Where a step stands against the current one, for its ring.
+    $stateOf = function (int $index) use ($current): string {
+        if ($index === $current) {
+            return 'current';
+        }
+
+        return $index < $current ? 'done' : 'todo';
+    };
 @endphp
 
 <x-layouts::auth :title="__('Set up retroBITE')" wide>
@@ -31,19 +40,7 @@
                     'text-fg-faint' => $index > $current,
                 ])
             >
-                <span
-                    @class([
-                        'grid size-5 shrink-0 place-items-center rounded-full border font-mono text-[10px]',
-                        'border-accent-tint/55 bg-accent-tint/15' => $index === $current,
-                        'border-line-bright' => $index !== $current,
-                    ])
-                >
-                    @if ($index < $current)
-                        <flux:icon.check variant="micro" class="size-3" />
-                    @else
-                        {{ $index + 1 }}
-                    @endif
-                </span>
+                <x-step-ring :number="$index + 1" :state="$stateOf($index)" />
                 <span @class(['sm:inline', 'hidden' => $index !== $current])>{{ $label }}</span>
             </li>
         @endforeach

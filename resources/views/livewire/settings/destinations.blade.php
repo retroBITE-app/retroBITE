@@ -73,7 +73,9 @@ new #[Title('Destinations')] class extends Component
         $known = array_keys(TransferRegions::besides([]));
         $regions = array_values(array_unique(array_filter(
             array_map(strval(...), $this->regions),
-            fn (string $code): bool => in_array($code, $known, true),
+            function (string $code) use ($known): bool {
+                return in_array($code, $known, true);
+            },
         )));
 
         if ($regions === []) {
@@ -290,16 +292,11 @@ new #[Title('Destinations')] class extends Component
     <x-settings.layout :heading="__('Destinations')" :subheading="__('Network shares games can be sent to')" wide>
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div class="flex flex-col gap-6 lg:col-span-7">
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <div class="mb-2 flex items-center gap-2.5">
-                        <flux:icon.server-stack class="size-[17px] text-accent" />
-                        <p class="flex-1 text-sm text-fg-bright">{{ $editing !== null ? __('Edit :name', ['name' => $name]) : __('Add a share') }}</p>
-                    </div>
-
-                    <p class="mb-6 text-sm text-fg-soft">
-                        {{ __('A shared folder on another machine — a Batocera box, a NAS — that Send to can copy games onto. Four steps, top to bottom.') }}
-                    </p>
-
+                <x-settings.card
+                    icon="server-stack"
+                    :title="$editing !== null ? __('Edit :name', ['name' => $name]) : __('Add a share')"
+                    :description="__('A shared folder on another machine — a Batocera box, a NAS — that Send to can copy games onto. Four steps, top to bottom.')"
+                >
                     <form wire:submit="save" class="flex flex-col gap-7">
                         {{-- Step one: find the machine, so nobody has to know its address. --}}
                         <x-settings.step number="1" :title="__('Find the machine')"
@@ -309,21 +306,16 @@ new #[Title('Destinations')] class extends Component
                             </flux:button>
 
                             @if ($searchToken !== null)
-                                <div
+                                <x-live-system
+                                    signal="discovery"
+                                    call="checkSearch"
+                                    :timeout="($this::WAIT_SECONDS + 1) * 1000"
                                     wire:key="search-{{ $searchToken }}"
-                                    x-data="{
-                                        stop: null, timer: null,
-                                        init() {
-                                            this.stop = live.system('discovery', () => $wire.checkSearch());
-                                            this.timer = setTimeout(() => $wire.checkSearch(), {{ ($this::WAIT_SECONDS + 1) * 1000 }});
-                                        },
-                                        destroy() { this.stop?.(); clearTimeout(this.timer); },
-                                    }"
                                     class="mt-3 flex items-center gap-2 text-sm text-fg-soft"
                                 >
                                     <flux:icon.loading class="size-4" />
                                     {{ __('Asking the network who shares files…') }}
-                                </div>
+                                </x-live-system>
                             @elseif ($found !== null)
                                 @if ($found === [])
                                     <p class="mt-3 text-sm text-fg-faint">
@@ -341,17 +333,17 @@ new #[Title('Destinations')] class extends Component
                                 @else
                                     <p class="mt-3 text-xs text-fg-faint">{{ __('Pick one to fill in its address and list its shares.') }}</p>
                                     <ul class="mt-1.5 flex flex-col gap-1.5">
-                                        @foreach ($found as $index => $machine)
-                                            <li wire:key="found-{{ $machine['address'] }}">
+                                        @foreach ($found as $index => ['name' => $machine, 'address' => $address])
+                                            <li wire:key="found-{{ $address }}">
                                                 <button
                                                     type="button"
                                                     wire:click="pick({{ $index }})"
-                                                    class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-line-input bg-sunken px-3 py-2 text-left text-sm transition-colors hover:border-accent/40"
+                                                    class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-line-input bg-sunken px-3 py-2 text-left text-sm transition-colors hover:border-accent-tint/55 focus-ring"
                                                 >
                                                     <flux:icon.computer-desktop class="size-4 text-fg-muted" />
-                                                    <span class="font-mono text-fg-bright">{{ $machine['name'] }}</span>
-                                                    @if ($machine['name'] !== $machine['address'])
-                                                        <span class="ml-auto font-mono text-xs text-fg-faint">{{ $machine['address'] }}</span>
+                                                    <span class="font-mono text-fg-bright">{{ $machine }}</span>
+                                                    @if ($machine !== $address)
+                                                        <span class="ml-auto font-mono text-xs text-fg-faint">{{ $address }}</span>
                                                     @endif
                                                 </button>
                                             </li>
@@ -360,39 +352,28 @@ new #[Title('Destinations')] class extends Component
                                 @endif
                             @endif
 
-                            <div class="mt-4">
-                                <flux:field>
-                                    <div class="flex items-center gap-2">
-                                        <flux:label>{{ __('Machine') }}</flux:label>
-                                        <x-info :text="__('A name like batocera, or an address like 192.168.1.20.')" />
-                                    </div>
-                                    <flux:input wire:model="host" placeholder="batocera" />
-                                    <flux:error name="host" />
-                                </flux:field>
-                            </div>
+                            <x-field
+                                class="mt-4"
+                                :label="__('Machine')"
+                                :info="__('A name like batocera, or an address like 192.168.1.20.')"
+                                name="host"
+                            >
+                                <flux:input wire:model="host" placeholder="batocera" />
+                            </x-field>
                         </x-settings.step>
 
                         {{-- Step two: only when the share is not open to guests. --}}
                         <x-settings.step number="2" :title="__('Sign in, if it asks')"
                                          :hint="__('Batocera shares to guests: leave both empty. A NAS usually wants its own account.')">
                             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <flux:field>
-                                    <div class="flex items-center gap-2">
-                                        <flux:label>{{ __('Username') }}</flux:label>
-                                        <x-info :text="__('Leave empty for a guest share.')" />
-                                    </div>
+                                <x-field :label="__('Username')" :info="__('Leave empty for a guest share.')" name="username">
                                     <flux:input wire:model="username" :placeholder="__('Optional')" autocomplete="off" />
-                                    <flux:error name="username" />
-                                </flux:field>
-                                <flux:field>
-                                    <div class="flex items-center gap-2">
-                                        <flux:label>{{ __('Password') }}</flux:label>
-                                        <x-info :text="__('Kept encrypted, and never sent back to the browser.')" />
-                                    </div>
+                                </x-field>
+
+                                <x-field :label="__('Password')" :info="__('Kept encrypted, and never sent back to the browser.')" name="password">
                                     <flux:input wire:model="password" type="password" autocomplete="new-password"
                                                 :placeholder="$editing !== null ? __('Unchanged unless typed') : __('Optional')" />
-                                    <flux:error name="password" />
-                                </flux:field>
+                                </x-field>
                             </div>
                         </x-settings.step>
 
@@ -403,54 +384,41 @@ new #[Title('Destinations')] class extends Component
                                 {{ __('List its shares') }}
                             </flux:button>
 
+                            @php($shares = Arr::get($listing ?? [], 'shares', []))
+
                             @if ($listToken !== null)
-                                <div
+                                <x-live-system
+                                    signal="discovery"
+                                    call="checkListing"
+                                    :timeout="($this::WAIT_SECONDS + 1) * 1000"
                                     wire:key="list-{{ $listToken }}"
-                                    x-data="{
-                                        stop: null, timer: null,
-                                        init() {
-                                            this.stop = live.system('discovery', () => $wire.checkListing());
-                                            this.timer = setTimeout(() => $wire.checkListing(), {{ ($this::WAIT_SECONDS + 1) * 1000 }});
-                                        },
-                                        destroy() { this.stop?.(); clearTimeout(this.timer); },
-                                    }"
                                     class="mt-3 flex items-center gap-2 text-sm text-fg-soft"
                                 >
                                     <flux:icon.loading class="size-4" />
                                     {{ __('Asking :host for its shares…', ['host' => $host]) }}
-                                </div>
+                                </x-live-system>
                             @elseif ($this->listingProblem() !== null)
                                 <p class="mt-3 text-sm text-danger">{{ $this->listingProblem() }}</p>
-                            @elseif ($listing !== null && $listing['shares'] === [])
+                            @elseif ($listing !== null && $shares === [])
                                 <p class="mt-3 text-sm text-fg-faint">{{ __('It answered, but shares nothing this account can see.') }}</p>
                             @endif
 
                             <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <flux:field>
-                                    <div class="flex items-center gap-2">
-                                        <flux:label>{{ __('Share') }}</flux:label>
-                                        <x-info :text="__('Just the share\'s name, without slashes. A folder inside it goes in Folder.')" />
-                                    </div>
-                                    @if (($listing['shares'] ?? []) !== [])
+                                <x-field :label="__('Share')" :info="__('Just the share\'s name, without slashes. A folder inside it goes in Folder.')" name="share">
+                                    @if ($shares !== [])
                                         <flux:select wire:model="share" :placeholder="__('Choose a share')">
-                                            @foreach ($listing['shares'] as $shareName)
+                                            @foreach ($shares as $shareName)
                                                 <flux:select.option value="{{ $shareName }}">{{ $shareName }}</flux:select.option>
                                             @endforeach
                                         </flux:select>
                                     @else
                                         <flux:input wire:model="share" placeholder="share" />
                                     @endif
-                                    <flux:error name="share" />
-                                </flux:field>
+                                </x-field>
 
-                                <flux:field>
-                                    <div class="flex items-center gap-2">
-                                        <flux:label>{{ __('Folder') }}</flux:label>
-                                        <x-info :text="__('Empty for Batocera. Elsewhere, the folder that holds roms/ — not roms/ itself.')" />
-                                    </div>
+                                <x-field :label="__('Folder')" :info="__('Empty for Batocera. Elsewhere, the folder that holds roms/ — not roms/ itself.')" name="folder">
                                     <flux:input wire:model="folder" :placeholder="__('Optional — the share\'s root')" />
-                                    <flux:error name="folder" />
-                                </flux:field>
+                                </x-field>
                             </div>
                         </x-settings.step>
 
@@ -467,15 +435,13 @@ new #[Title('Destinations')] class extends Component
                             </div>
                         </x-settings.step>
                     </form>
-                </div>
+                </x-settings.card>
             </div>
 
             <div class="flex flex-col gap-6 lg:col-span-5">
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-3 text-fg-faint">{{ __('Saved') }}</p>
-
+                <x-settings.card :kicker="__('Saved')">
                     @if ($this->destinations->isEmpty())
-                        <p class="text-sm text-fg-faint">{{ __('None yet. Add one on the left and it shows up in Send to.') }}</p>
+                        <x-empty-state variant="inline" :title="__('None yet. Add one on the left and it shows up in Send to.')" />
                     @else
                         <ul class="flex flex-col gap-2.5">
                             @foreach ($this->destinations as $destination)
@@ -495,39 +461,26 @@ new #[Title('Destinations')] class extends Component
                             @endforeach
                         </ul>
                     @endif
-                </div>
+                </x-settings.card>
 
                 {{-- Which version goes, for a game that holds several: the
                      library's order, which a console can have its own of
                      (Settings → Consoles) and Send to can lead with one. --}}
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-1 text-fg-faint">{{ __('Region order') }}</p>
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('A game held in several regions sends one version: the first region here it has, else any other. A console can have its own order under Settings → Consoles, and Send to can sort one for a single send.') }}
-                    </p>
-
+                <x-settings.card
+                    :kicker="__('Region order')"
+                    :description="__('A game held in several regions sends one version: the first region here it has, else any other. A console can have its own order under Settings → Consoles, and Send to can sort one for a single send.')"
+                >
                     <x-region-order wire:model.live="regions" keep-one />
-                </div>
+                </x-settings.card>
 
                 {{-- What people ask before they add one. --}}
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-3 text-fg-faint">{{ __('Good to know') }}</p>
-
+                <x-settings.card :kicker="__('Good to know')">
                     <ul class="flex flex-col gap-3 text-sm text-fg-soft">
-                        <li class="flex gap-2.5">
-                            <flux:icon.document-duplicate variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
-                            <span>{{ __('Send to copies. Your library keeps every file.') }}</span>
-                        </li>
-                        <li class="flex gap-2.5">
-                            <flux:icon.computer-desktop variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
-                            <span>{{ __('A USB drive on this computer needs no setting up: Send to always offers it.') }}</span>
-                        </li>
-                        <li class="flex gap-2.5">
-                            <flux:icon.folder variant="micro" class="mt-0.5 size-4 shrink-0 text-fg-muted" />
-                            <span>{{ __('Send to adds roms/ to every path itself, so point Folder above it, never at it.') }}</span>
-                        </li>
+                        <x-icon-note icon="document-duplicate">{{ __('Send to copies. Your library keeps every file.') }}</x-icon-note>
+                        <x-icon-note icon="computer-desktop">{{ __('A USB drive on this computer needs no setting up: Send to always offers it.') }}</x-icon-note>
+                        <x-icon-note icon="folder">{{ __('Send to adds roms/ to every path itself, so point Folder above it, never at it.') }}</x-icon-note>
                     </ul>
-                </div>
+                </x-settings.card>
             </div>
         </div>
     </x-settings.layout>

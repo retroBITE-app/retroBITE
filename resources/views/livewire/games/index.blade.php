@@ -278,22 +278,34 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             // achievements_possible is denormalised onto ra_progress. Safe for
             // the paginator's count because ra_progress is unique on
             // (user_id, ra_game_id), so it cannot multiply rows.
-            ->leftJoin('ra_progress', fn ($join) => $join
-                ->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
-                ->where('ra_progress.user_id', '=', $userId))
+            ->leftJoin('ra_progress', function ($join) use ($userId) {
+                return $join
+                    ->on('ra_progress.ra_game_id', '=', 'games.retroachievements_id')
+                    ->where('ra_progress.user_id', '=', $userId);
+            })
             // Qualified from here down, because the join makes a bare column
             // name one added column away from being ambiguous at runtime.
-            ->when($this->query !== '', fn ($q) => $q->search($this->query))
-            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
+            ->when($this->query !== '', function ($q) {
+                return $q->search($this->query);
+            })
+            ->when($this->consoleKey !== '', function ($q) {
+                return $q->forConsole($this->consoleKey);
+            })
             // Matched as one of the comma-separated parts rather than with a
             // LIKE, or picking "Action" would also pull in every "Action /
             // Adventure" the provider spells as its own genre.
-            ->when($this->genre !== '', fn ($q) => $q->whereRaw(
-                "FIND_IN_SET(?, REPLACE(REPLACE(games.genre, ' ,', ','), ', ', ',')) > 0",
-                [$this->genre],
-            ))
-            ->when($this->players !== '', fn ($q) => $q->where('games.players', $this->players))
-            ->when($this->minRating !== '', fn ($q) => $q->where('games.rating', '>=', (int) $this->minRating))
+            ->when($this->genre !== '', function ($q) {
+                return $q->whereRaw(
+                    "FIND_IN_SET(?, REPLACE(REPLACE(games.genre, ' ,', ','), ', ', ',')) > 0",
+                    [$this->genre],
+                );
+            })
+            ->when($this->players !== '', function ($q) {
+                return $q->where('games.players', $this->players);
+            })
+            ->when($this->minRating !== '', function ($q) {
+                return $q->where('games.rating', '>=', (int) $this->minRating);
+            })
             ->when($this->identified !== '', function ($q) {
                 return $this->identified === 'identified'
                     ? $q->where('games.status', GameStatus::Matched)
@@ -301,26 +313,32 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             })
             // Both for the cards: the cover comes out of the media relation in
             // memory, and the size is a sum rather than every file loaded.
-            ->with(['media' => fn ($q) => $q->ofKind(MediaKind::Cover)])
+            ->with(['media' => function ($q) {
+                return $q->ofKind(MediaKind::Cover);
+            }])
             ->withSum('files as size_bytes_sum', 'size_bytes')
             // Read by blockedFromLookup(), which otherwise runs a files query
             // per row — twenty-four extra selects on a page of placeholders.
-            ->withCount(['files as identifiable_files_count' => fn ($q) => $q->identifiable()->present()])
-            ->tap(fn ($q) => match ($this->sort) {
-                // `rating IS NULL` first puts the unrated last rather than
-                // ahead of everything, which is what DESC alone does on
-                // MariaDB. The retroBite rank breaks the ties the way the
-                // game page counts them, then title for a rank not yet worked
-                // out, so a page of games that all scored 80 is in an order
-                // somebody can read.
-                'rating' => $q->orderByRaw('games.rating IS NULL, games.rating DESC, games.library_rank IS NULL, games.library_rank')->orderBy('games.title'),
-                // The provider sends either a bare year or an ISO date, so the
-                // string sorts chronologically as it stands. Empty counts with
-                // null: an unmatched game has '' rather than nothing at all,
-                // and both mean the same thing here.
-                'year' => $q->orderByRaw("games.release_date IS NULL OR games.release_date = '', games.release_date DESC")->orderBy('games.title'),
-                'newest' => $q->orderByDesc('games.created_at')->orderBy('games.title'),
-                default => $q->orderBy('games.title'),
+            ->withCount(['files as identifiable_files_count' => function ($q) {
+                return $q->identifiable()->present();
+            }])
+            ->tap(function ($q) {
+                return match ($this->sort) {
+                    // `rating IS NULL` first puts the unrated last rather than
+                    // ahead of everything, which is what DESC alone does on
+                    // MariaDB. The retroBite rank breaks the ties the way the
+                    // game page counts them, then title for a rank not yet worked
+                    // out, so a page of games that all scored 80 is in an order
+                    // somebody can read.
+                    'rating' => $q->orderByRaw('games.rating IS NULL, games.rating DESC, games.library_rank IS NULL, games.library_rank')->orderBy('games.title'),
+                    // The provider sends either a bare year or an ISO date, so the
+                    // string sorts chronologically as it stands. Empty counts with
+                    // null: an unmatched game has '' rather than nothing at all,
+                    // and both mean the same thing here.
+                    'year' => $q->orderByRaw("games.release_date IS NULL OR games.release_date = '', games.release_date DESC")->orderBy('games.title'),
+                    'newest' => $q->orderByDesc('games.created_at')->orderBy('games.title'),
+                    default => $q->orderBy('games.title'),
+                };
             })
             ->paginate(24);
     }
@@ -335,7 +353,9 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     public function consoles(): Collection
     {
         return Game::query()->distinct()->orderBy('console')->pluck('console')
-            ->map(fn (string $key) => Console::tryFrom($key))
+            ->map(function (string $key): ?Console {
+                return Console::tryFrom($key);
+            })
             ->filter()
             ->values();
     }
@@ -353,10 +373,18 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     public function filterValues(): Collection
     {
         return Game::query()
-            ->when($this->consoleKey !== '', fn ($q) => $q->forConsole($this->consoleKey))
-            ->where(fn ($q) => $q
-                ->where(fn ($q) => $q->whereNotNull('genre')->where('genre', '<>', ''))
-                ->orWhere(fn ($q) => $q->whereNotNull('players')->where('players', '<>', '')))
+            ->when($this->consoleKey !== '', function ($q) {
+                return $q->forConsole($this->consoleKey);
+            })
+            ->where(function ($q) {
+                return $q
+                    ->where(function ($q) {
+                        return $q->whereNotNull('genre')->where('genre', '<>', '');
+                    })
+                    ->orWhere(function ($q) {
+                        return $q->whereNotNull('players')->where('players', '<>', '');
+                    });
+            })
             ->distinct()
             ->get(['genre', 'players']);
     }
@@ -374,8 +402,12 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     {
         return $this->filterValues
             ->pluck('players')
-            ->filter(fn (mixed $players): bool => is_string($players) && $players !== '')
-            ->map(fn (string $players) => trim($players))
+            ->filter(function (mixed $players): bool {
+                return is_string($players) && $players !== '';
+            })
+            ->map(function (string $players): string {
+                return trim($players);
+            })
             ->filter()
             ->unique()
             ->sort(SORT_NATURAL)
@@ -396,9 +428,15 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
     {
         return $this->filterValues
             ->pluck('genre')
-            ->filter(fn (mixed $genre): bool => is_string($genre) && $genre !== '')
-            ->flatMap(fn (string $genre) => explode(',', $genre))
-            ->map(fn (string $genre) => trim($genre))
+            ->filter(function (mixed $genre): bool {
+                return is_string($genre) && $genre !== '';
+            })
+            ->flatMap(function (string $genre): array {
+                return explode(',', $genre);
+            })
+            ->map(function (string $genre): string {
+                return trim($genre);
+            })
             ->filter()
             ->unique()
             ->sort()
@@ -695,26 +733,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
              the hero for that reason. --}}
         <div class="relative">
         @if ($this->lockedTo !== null)
-            @if ($this->heroArt !== null)
-                {{-- Off centre vertically, as on the game page: key art
-                     puts its subject above the middle far more often than
-                     not, and dead centre cuts heads off. --}}
-                <div aria-hidden="true" class="absolute inset-0 bg-cover bg-[position:50%_28%]"
-                     style="background-image: url('{{ route('media.show', ['path' => $this->heroArt]) }}')"></div>
-            @else
-                {{-- A shelf with no artwork yet is most of a new library.
-                     The band keeps its height and its ground rather than
-                     collapsing to the plain heading it used to be. --}}
-                <div aria-hidden="true" class="absolute inset-0 bg-[linear-gradient(165deg,var(--color-raised),var(--color-sunken))]"></div>
-            @endif
-
-            <div aria-hidden="true" class="absolute inset-0 hero-fade-y"></div>
-
-            @if ($this->heroArt !== null)
-                @scanlines
-                    <div aria-hidden="true" class="scanlines absolute inset-0"></div>
-                @endscanlines
-            @endif
+            {{-- A shelf with no artwork yet is most of a new library: the
+                 band keeps its height and a ground of its own. --}}
+            <x-backdrop
+                :src="$this->heroArt !== null ? route('media.show', ['path' => $this->heroArt]) : null"
+                fade="hero-y"
+                fallback
+            />
         @endif
 
         @if ($this->lockedTo !== null)
@@ -750,14 +775,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
                     {{-- Hard right. Titles are found with Ctrl+K now. --}}
                     <flux:dropdown position="bottom" align="end" class="ml-auto">
-                        <button
-                            type="button"
-                            class="flex cursor-pointer items-center gap-1.75 rounded-lg border border-line-input bg-scrim/60 px-3 py-1.75 text-sm text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                        >
-                            <flux:icon.ellipsis-horizontal class="size-3.5" />
-                            <span class="max-sm:sr-only">{{ __('Actions') }}</span>
-                            <flux:icon.chevron-down class="size-[11px] text-fg-dim max-sm:hidden" />
-                        </button>
+                        <x-glass-button icon="ellipsis-horizontal" chevron compact>{{ __('Actions') }}</x-glass-button>
 
                         <flux:menu>
                             <flux:menu.item icon="arrow-path" wire:click="scanConsole">
@@ -901,38 +919,21 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                  shelf usually means. First, so the numbers stay
                                  together at the right edge. --}}
                             @if ($this->layoutLabel !== null)
-                                <div class="min-w-0">
-                                    <dt class="kicker text-fg-faint">{{ __('Layout') }}</dt>
-                                    <dd class="font-mono text-lg text-fg-bright max-sm:text-base">{{ $this->layoutLabel }}</dd>
-                                </div>
+                                <x-stat :label="__('Layout')" class="min-w-0">{{ $this->layoutLabel }}</x-stat>
                             @endif
 
-                            <div>
-                                <dt class="kicker text-fg-faint">{{ __('Games') }}</dt>
-                                <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ Number::format($this->consoleStats['games']) }}</dd>
-                            </div>
-
-                            <div>
-                                <dt class="kicker text-fg-faint">{{ __('Files') }}</dt>
-                                <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ Number::format($this->consoleStats['files']) }}</dd>
-                            </div>
-
-                            <div>
-                                <dt class="kicker text-fg-faint">{{ __('On disk') }}</dt>
-                                <dd class="font-mono text-lg text-fg-bright tabular-nums">{{ $this->consoleStats['size'] }}</dd>
-                            </div>
+                            <x-stat :label="__('Games')">{{ Number::format(Arr::get($this->consoleStats, 'games')) }}</x-stat>
+                            <x-stat :label="__('Files')">{{ Number::format(Arr::get($this->consoleStats, 'files')) }}</x-stat>
+                            <x-stat :label="__('On disk')">{{ Arr::get($this->consoleStats, 'size') }}</x-stat>
 
                             {{-- Only where the console has sets at all. A zero
                                  here would say nobody has unlocked anything,
                                  which is a different thing from there being
                                  nothing to unlock. --}}
-                            @if ($this->consoleStats['possible'] > 0)
-                                <div>
-                                    <dt class="kicker text-fg-faint">{{ __('Achievements') }}</dt>
-                                    <dd class="font-mono text-lg text-fg-bright tabular-nums">
-                                        {{ $this->consoleStats['unlocked'] }} / {{ $this->consoleStats['possible'] }}
-                                    </dd>
-                                </div>
+                            @if (Arr::get($this->consoleStats, 'possible') > 0)
+                                <x-stat :label="__('Achievements')">
+                                    <x-fraction :value="Arr::get($this->consoleStats, 'unlocked')" :of="Arr::get($this->consoleStats, 'possible')" />
+                                </x-stat>
                             @endif
                         </dl>
                     @endif
@@ -947,16 +948,13 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                  padding the layout used to supply is this band's own now, and
                  max-lg:pt-16 is what clears the floating hamburger that a
                  bleeding page has to get out of the way of itself. --}}
-            <div class="flex min-w-0 flex-wrap items-end justify-between gap-3 px-4 pt-6 max-lg:pt-16 lg:px-8 lg:pt-8">
-                <div class="min-w-0">
-                    <p class="kicker mb-1.5 text-fg-faint">{{ __('Library') }}</p>
-                    <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Games') }}</h1>
-                </div>
-
+            <x-page-header :kicker="__('Library')" :title="__('Games')" class="mb-0! min-w-0 px-4 pt-6 max-lg:pt-16 lg:px-8 lg:pt-8">
                 {{-- Beside the heading, where the console shelf has it in its
                      bar: out of the filter row on both pages alike. --}}
-                <x-search-field wire:model.live.debounce.300ms="query" class="w-full sm:max-w-64" />
-            </div>
+                <x-slot:actions>
+                    <x-search-field wire:model.live.debounce.300ms="query" class="w-64 max-w-full" />
+                </x-slot:actions>
+            </x-page-header>
         @endif
 
         {{-- The shelf runs full width: it adds a column as soon as another
@@ -1037,34 +1035,21 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
 
             {{-- The docs viewer's Preview / Markdown pill, with icons: amber
                  for the view in force, and one border round the pair. --}}
-            <div class="flex items-center gap-0.5 rounded-lg border border-line-input p-0.5 max-lg:ms-auto">
-                @foreach (['cards' => ['icon' => 'squares-2x2', 'label' => __('Show covers')], 'table' => ['icon' => 'list-bullet', 'label' => __('Show a list')]] as $mode => ['icon' => $icon, 'label' => $label])
-                    <button
-                        type="button"
-                        wire:click="setView('{{ $mode }}')"
-                        aria-pressed="{{ $this->viewMode === $mode ? 'true' : 'false' }}"
-                        aria-label="{{ $label }}"
-                        title="{{ $label }}"
-                        @class([
-                            'grid cursor-pointer place-items-center rounded-md px-2 py-1.25 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
-                            'bg-accent-tint/15 text-accent' => $this->viewMode === $mode,
-                            'text-fg-dim hover:bg-hover hover:text-fg' => $this->viewMode !== $mode,
-                        ])
-                    >
-                        <flux:icon :name="$icon" class="size-4" />
-                    </button>
-                @endforeach
-            </div>
+            <x-pill-choice
+                method="setView"
+                :value="$this->viewMode"
+                :label="__('View')"
+                :options="['cards' => __('Show covers'), 'table' => __('Show a list')]"
+                :icons="['cards' => 'squares-2x2', 'table' => 'list-bullet']"
+                class="max-lg:ms-auto"
+            />
         </div>
         </div>
         </div>
 
         <div @class(['flex w-full flex-col gap-6 px-4 lg:px-8', 'max-w-[1664px]' => $this->viewMode !== 'cards'])>
         @if ($this->games->isEmpty())
-            <div class="rounded-xl border border-dashed border-line-input px-6 py-10 text-center">
-                <p class="text-sm text-fg-soft">{{ __('Nothing matches that.') }}</p>
-                <p class="mt-1 text-sm text-fg-faint">{{ __('Scan a console to fill the library.') }}</p>
-            </div>
+            <x-empty-state :title="__('Nothing matches that.')" :hint="__('Scan a console to fill the library.')" />
         @elseif ($this->viewMode === 'cards')
             {{--
                 A minimum card width, set by the shape of the console's
@@ -1106,7 +1091,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 ])
                             >
                                 <span class="absolute top-4 left-4 rounded bg-scrim/80">
-                                    <x-conversion.check :state="$cardPicked ? 'on' : 'off'" />
+                                    <x-check :state="$cardPicked ? 'on' : 'off'" />
                                 </span>
                             </button>
                         @endif
@@ -1159,7 +1144,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                  so the same shelf looks different on page two; and truncate on
                  the title does nothing at all until the cell it sits in has a
                  width of its own. The title takes whatever is left. --}}
-            <div class="overflow-hidden rounded-xl border border-line">
+            <x-panel>
                 <table class="w-full table-fixed text-sm">
                     <colgroup>
                         <col class="w-20" />  {{-- cover: a 48px square and its gutter --}}
@@ -1192,7 +1177,6 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 // query above, and null for a game with no set.
                                 $rowPossible = (int) ($game->ra_achievements_possible ?? 0);
                                 $rowUnlocked = (int) (($hardcorePrimary ? $game->ra_unlocked_hardcore : $game->ra_unlocked) ?? 0);
-                                $rowPercent = $rowPossible > 0 ? (int) round($rowUnlocked / $rowPossible * 100) : 0;
 
                                 // Why each menu item cannot run, or null. Read
                                 // here rather than in the menu so the row pays
@@ -1229,26 +1213,19 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                 ])
                             >
                                 <td class="py-2 pl-4">
-                                    <div class="relative flex size-12 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-sunken">
-                                        @if ($picking)
-                                            <span class="absolute top-1 left-1 z-10 rounded bg-scrim/80">
-                                                <x-conversion.check :state="$rowPicked ? 'on' : 'off'" />
-                                            </span>
-                                        @endif
-
-                                        @if ($rowCover !== null)
-                                            <img
-                                                src="{{ $rowCover->url(App\Enums\ThumbnailSize::List) }}"
-                                                alt="{{ $game->title }}"
-                                                loading="lazy"
-                                                class="size-full object-contain"
-                                            />
-                                        @elseif ($rowConsole !== null)
-                                            <img src="{{ $rowConsole->fileIcon }}" alt="{{ $rowConsole->name }}" class="size-7 object-contain opacity-25" />
-                                        @else
-                                            <flux:icon.photo class="size-4 text-fg-faint" />
-                                        @endif
-                                    </div>
+                                    <x-cover-frame
+                                        :src="$rowCover?->url(App\Enums\ThumbnailSize::List)"
+                                        :console="$rowConsole"
+                                        :alt="$game->title"
+                                    >
+                                        <x-slot:overlay>
+                                            @if ($picking)
+                                                <span class="absolute top-1 left-1 z-10 rounded bg-scrim/80">
+                                                    <x-check :state="$rowPicked ? 'on' : 'off'" />
+                                                </span>
+                                            @endif
+                                        </x-slot:overlay>
+                                    </x-cover-frame>
                                 </td>
 
                                 <td class="px-4 py-2">
@@ -1277,15 +1254,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                              a set. The same bar and counts as the
                                              card, so the two views agree. --}}
                                         @if ($rowPossible > 0)
-                                            <div class="flex w-32 shrink-0 items-center gap-2">
-                                                <div class="h-1 flex-1 overflow-hidden rounded-sm bg-raised">
-                                                    <div class="h-full rounded-sm bg-accent-deep" style="width: {{ $rowPercent }}%"></div>
-                                                </div>
-                                                <span
-                                                    class="shrink-0 font-mono text-xs text-fg-dim tabular-nums"
-                                                    title="{{ $hardcorePrimary ? __('Hardcore achievements') : __('Achievements') }}"
-                                                >{{ $rowUnlocked }} / {{ $rowPossible }}</span>
-                                            </div>
+                                            <x-achievement-progress :unlocked="$rowUnlocked" :possible="$rowPossible" :hardcore="$hardcorePrimary" class="w-32 shrink-0" />
                                         @endif
                                     </div>
                                 </td>
@@ -1354,7 +1323,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                         @endforeach
                     </tbody>
                 </table>
-            </div>
+            </x-panel>
         @endif
 
         {{-- Outside the branch: the cards were the only view without it, so

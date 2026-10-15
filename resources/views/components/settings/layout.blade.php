@@ -32,7 +32,7 @@
 
     // From App\Support\Navigation, which the global search reads as well.
     $tabs = array_map(function (array $tab) use ($routeIs): array {
-        return ['label' => __($tab['label']), 'route' => $tab['route'], 'active' => $routeIs($tab['active'])];
+        return ['label' => __(Arr::get($tab, 'label')), 'route' => Arr::get($tab, 'route'), 'active' => $routeIs(Arr::get($tab, 'active'))];
     }, App\Support\Navigation::settings());
 @endphp
 

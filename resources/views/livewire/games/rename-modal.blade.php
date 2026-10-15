@@ -162,76 +162,62 @@ new class extends Component
     }
 }; ?>
 
-<div x-on:rename-files.window="$flux.modal('{{ $this::MODAL }}').show()">
+{{-- A plain root: x-modal's own wrapper is conditional, and a Livewire
+     root has to be the first element it renders. --}}
+<div>
     @php
         ['renames' => $renames, 'unchanged' => $unchanged, 'unread' => $unread, 'sets' => $sets] = $this->plan;
         $count = count($renames);
     @endphp
 
-    <flux:modal :name="$this::MODAL" class="w-full max-w-2xl">
-        <div class="flex flex-col gap-5">
-            <div>
-                <flux:heading size="lg">
-                    {{ $gameId === null ? __('Rename files on :console', ['console' => $this->target->name]) : __('Rename file') }}
-                </flux:heading>
-                <flux:text class="mt-1">
-                    {{ __('Adds the license ID in front of each file name, or takes it off again — OPL\'s older "SLES_503.86.Title.iso" form. OPL reads the license ID from the disc either way. The rest of the name is left as it is.') }}
-                </flux:text>
-            </div>
+    <x-modal
+        :name="$this::MODAL"
+        width="2xl"
+        event="rename-files"
+        :heading="$gameId === null ? __('Rename files on :console', ['console' => $this->target->name]) : __('Rename file')"
+        cancel="{{ __('Close') }}"
+    >
+        <x-slot:subheading>
+            {{ __('Adds the license ID in front of each file name, or takes it off again — OPL\'s older "SLES_503.86.Title.iso" form. OPL reads the license ID from the disc either way. The rest of the name is left as it is.') }}
+        </x-slot:subheading>
 
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <p class="kicker text-fg-dim">{{ __('License ID') }}</p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="kicker text-fg-faint">{{ __('License ID') }}</p>
 
-                <x-pill-choice model="mode" :value="$mode" :label="__('License ID')"
-                               :options="['add' => __('Add'), 'remove' => __('Remove')]" />
-            </div>
-
-            <div class="flex flex-col gap-3">
-                <p class="text-sm text-fg-soft">
-                    {{ $count > 0
-                        ? trans_choice(':count file will be renamed.|:count files will be renamed.', $count, ['count' => $count])
-                        : __('Nothing to rename.') }}
-                </p>
-
-                @if ($count > 0)
-                    <ul class="flex flex-col divide-y divide-line rounded-lg border border-line bg-sunken">
-                        @foreach (array_slice($renames, 0, 10) as ['from' => $from, 'to' => $to])
-                            <li class="flex flex-col gap-0.5 px-3 py-2 font-mono text-xs">
-                                <span class="truncate text-fg-faint" title="{{ $from }}">{{ $from }}</span>
-                                <span class="truncate text-fg-soft" title="{{ $to }}">→ {{ $to }}</span>
-                            </li>
-                        @endforeach
-                    </ul>
-
-                    @if ($count > 10)
-                        <p class="text-xs text-fg-faint">{{ trans_choice('and :count more.|and :count more.', $count - 10, ['count' => $count - 10]) }}</p>
-                    @endif
-                @endif
-
-                @if ($unchanged + $unread + $sets > 0)
-                    <ul class="flex flex-col gap-0.5 text-xs text-fg-faint">
-                        @if ($unchanged > 0)
-                            <li>{{ trans_choice(':count file is already named that way.|:count files are already named that way.', $unchanged, ['count' => $unchanged]) }}</li>
-                        @endif
-                        @if ($unread > 0)
-                            <li>{{ trans_choice(':count file has no license ID read yet — scan the folder first.|:count files have no license ID read yet — scan the folder first.', $unread, ['count' => $unread]) }}</li>
-                        @endif
-                        @if ($sets > 0)
-                            <li>{{ trans_choice(':count game is a cue/bin or multi-disc set, left alone because its sheet names the files.|:count games are cue/bin or multi-disc sets, left alone because their sheets name the files.', $sets, ['count' => $sets]) }}</li>
-                        @endif
-                    </ul>
-                @endif
-            </div>
-
-            <div class="flex items-center justify-end gap-2">
-                <flux:button variant="primary" icon="pencil-square" wire:click="apply" wire:loading.attr="disabled" wire:target="apply" :disabled="$count === 0">
-                    {{ trans_choice('Rename :count file|Rename :count files', $count, ['count' => $count]) }}
-                </flux:button>
-
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Close') }}</flux:button>
-                </flux:modal.close>
-            </div>
+            <x-pill-choice model="mode" :value="$mode" :label="__('License ID')"
+                           :options="['add' => __('Add'), 'remove' => __('Remove')]" />
         </div>
-    </flux:modal>
+
+        <x-preview-list
+            :total="$count"
+            :summary="$count > 0
+                ? trans_choice(':count file will be renamed.|:count files will be renamed.', $count, ['count' => $count])
+                : __('Nothing to rename.')"
+        >
+            @foreach (array_slice($renames, 0, 10) as ['from' => $from, 'to' => $to])
+                <li class="flex flex-col gap-0.5 px-3 py-2 font-mono text-xs">
+                    <span class="truncate text-fg-faint" title="{{ $from }}">{{ $from }}</span>
+                    <span class="truncate text-fg-soft" title="{{ $to }}">→ {{ $to }}</span>
+                </li>
+            @endforeach
+
+            <x-slot:notes>
+                @if ($unchanged > 0)
+                    <li>{{ trans_choice(':count file is already named that way.|:count files are already named that way.', $unchanged, ['count' => $unchanged]) }}</li>
+                @endif
+                @if ($unread > 0)
+                    <li>{{ trans_choice(':count file has no license ID read yet — scan the folder first.|:count files have no license ID read yet — scan the folder first.', $unread, ['count' => $unread]) }}</li>
+                @endif
+                @if ($sets > 0)
+                    <li>{{ trans_choice(':count game is a cue/bin or multi-disc set, left alone because its sheet names the files.|:count games are cue/bin or multi-disc sets, left alone because their sheets name the files.', $sets, ['count' => $sets]) }}</li>
+                @endif
+            </x-slot:notes>
+        </x-preview-list>
+
+        <x-slot:footer>
+            <flux:button variant="primary" icon="pencil-square" wire:click="apply" wire:loading.attr="disabled" wire:target="apply" :disabled="$count === 0">
+                {{ trans_choice('Rename :count file|Rename :count files', $count, ['count' => $count]) }}
+            </flux:button>
+        </x-slot:footer>
+    </x-modal>
 </div>

@@ -67,7 +67,9 @@ new class extends Component
         return Game::query()
             ->forConsole($this->console)
             ->where('status', GameStatus::Matched)
-            ->whereHas('files', fn ($query) => $query->present())
+            ->whereHas('files', function ($query) {
+                return $query->present();
+            })
             ->count();
     }
 
@@ -82,7 +84,9 @@ new class extends Component
         $latest = Transfer::query()
             ->with('destination')
             ->whereNotNull('batch_id')
-            ->whereHas('game', fn ($query) => $query->forConsole($this->console))
+            ->whereHas('game', function ($query) {
+                return $query->forConsole($this->console);
+            })
             ->latest('id')
             ->first();
 
@@ -194,20 +198,21 @@ new class extends Component
     @if ($watching !== null && ($sending = $this->progress) !== null)
         {{-- A console on its way to a share. Signalled per game copied, so
              no poll; a reconnect re-reads in case one was missed. --}}
-        <div x-data="{ stop: null, init() { this.stop = live.system('transfer', () => $wire.checkProgress()) }, destroy() { this.stop?.() } }"
-             class="mx-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-accent-tint/55 bg-accent-tint/10 px-5 py-3 lg:mx-8">
-            <flux:icon.arrow-path class="size-4 animate-spin text-accent" />
-            <p class="text-sm text-accent">{{ __('Sending :console to :name…', ['console' => $this->target->name, 'name' => $sending['destination']]) }}</p>
-            <p class="ml-auto font-mono text-xs text-accent">
-                {{ $sending['copied'] + $sending['failed'] }} / {{ $sending['total'] }}
-                @if ($sending['present'] > 0)
-                    · {{ __(':count already there', ['count' => $sending['present']]) }}
-                @endif
-                @if ($sending['failed'] > 0)
-                    · {{ trans_choice(':count failed|:count failed', $sending['failed'], ['count' => $sending['failed']]) }}
-                @endif
-            </p>
-        </div>
+        <x-live-system signal="transfer" call="checkProgress" class="mx-4 mt-4 lg:mx-8">
+            <x-notice tone="accent" busy>
+                {{ __('Sending :console to :name…', ['console' => $this->target->name, 'name' => $sending['destination']]) }}
+
+                <x-slot:count>
+                    {{ $sending['copied'] + $sending['failed'] }} / {{ $sending['total'] }}
+                    @if ($sending['present'] > 0)
+                        · {{ __(':count already there', ['count' => $sending['present']]) }}
+                    @endif
+                    @if ($sending['failed'] > 0)
+                        · {{ trans_choice(':count failed|:count failed', $sending['failed'], ['count' => $sending['failed']]) }}
+                    @endif
+                </x-slot:count>
+            </x-notice>
+        </x-live-system>
     @endif
 
     @if ($open)

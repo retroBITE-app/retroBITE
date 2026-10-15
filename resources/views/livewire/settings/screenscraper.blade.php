@@ -174,25 +174,19 @@ new #[Title('ScreenScraper')] class extends Component
 
     <x-settings.layout :show-tabs="! $onboarding" :heading="__('ScreenScraper')" :subheading="__('The account that identifies games and fetches artwork')">
         <x-slot name="actions">
-            <flux:button variant="primary" type="submit" form="screenscraper-settings">{{ $onboarding ? __('Continue') : __('Save') }}</flux:button>
+            <x-settings.save form="screenscraper-settings" :onboarding="$onboarding" />
         </x-slot>
 
         <form id="screenscraper-settings" wire:submit="save" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div @class(['flex flex-col gap-6', 'lg:col-span-6' => ! $onboarding, 'lg:col-span-12' => $onboarding])>
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <div class="mb-4 flex items-center gap-2.5">
-                        <flux:icon.magnifying-glass class="size-[17px] text-accent" />
-                        <p class="flex-1 text-sm text-fg-bright">{{ __('Account') }}</p>
-                        <span @class([
-                            'kicker rounded-md border px-1.75 py-0.75',
-                            'border-accent/40 text-accent' => $this->linked,
-                            'border-line-input text-fg-faint' => ! $this->linked,
-                        ])>{{ $this->linked ? __('Linked') : __('Not linked') }}</span>
-                    </div>
-
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('retroBITE identifies games against ScreenScraper and downloads its artwork. It works without an account, on a shared allowance that runs out quickly; a free account of your own raises it to 20 000 lookups a day.') }}
-                    </p>
+                <x-settings.card
+                    icon="magnifying-glass"
+                    :title="__('Account')"
+                    :description="__('retroBITE identifies games against ScreenScraper and downloads its artwork. It works without an account, on a shared allowance that runs out quickly; a free account of your own raises it to 20 000 lookups a day.')"
+                >
+                    <x-slot name="badge">
+                        <x-settings.linked-badge :linked="$this->linked" />
+                    </x-slot>
 
                     <div class="mb-4">
                         <flux:button size="xs" variant="ghost" icon-trailing="arrow-top-right-on-square"
@@ -206,71 +200,55 @@ new #[Title('ScreenScraper')] class extends Component
                                     :placeholder="__('The name on your profile')"
                                     :description="__('The login shown on your ScreenScraper profile, not the email address you sign in with. An email is accepted and then quietly ignored.')" />
 
-                        <flux:input wire:model="password" type="password" :label="__('Password')"
-                                    :placeholder="$this->hasPassword ? __('Stored — type to replace it') : __('Your ScreenScraper password')"
-                                    :description="__('Kept encrypted in the database and never shown again once saved.')" />
-
-                        @if ($this->hasPassword)
-                            <div>
-                                <flux:button size="xs" variant="danger" wire:click="forgetPassword" type="button">
-                                    {{ __('Remove stored password') }}
-                                </flux:button>
-                            </div>
-                        @endif
+                        <x-settings.secret-input
+                            model="password"
+                            :label="__('Password')"
+                            :stored="$this->hasPassword"
+                            :placeholder="__('Your ScreenScraper password')"
+                            forget="forgetPassword"
+                            :forget-label="__('Remove stored password')"
+                        />
                     </div>
-                </div>
+                </x-settings.card>
             </div>
 
             {{-- Nothing to read back on an install being set up. --}}
             @unless ($onboarding)
             <div class="flex flex-col gap-6 lg:col-span-6">
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-1 text-fg-faint">{{ __('Check the login') }}</p>
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('ScreenScraper does not refuse a login it does not recognise — it answers on the developer account instead, with a far smaller allowance, and every lookup looks the same either way. This asks it who it thinks is asking.') }}
-                    </p>
-
+                <x-settings.card
+                    :kicker="__('Check the login')"
+                    :description="__('ScreenScraper does not refuse a login it does not recognise — it answers on the developer account instead, with a far smaller allowance, and every lookup looks the same either way. This asks it who it thinks is asking.')"
+                >
                     <flux:button size="sm" variant="filled" type="button" wire:click="check"
                                  wire:loading.attr="disabled" wire:target="check">
                         {{ __('Check now') }}
                     </flux:button>
-                </div>
+                </x-settings.card>
 
-                <div class="rounded-xl border border-line bg-surface p-5">
-                    <p class="kicker mb-1 text-fg-faint">{{ __('Allowance') }}</p>
-                    <p class="mb-4 text-sm text-fg-soft">
-                        {{ __('Read back from the last answer the provider gave, so it is whatever it said rather than a number written down here.') }}
-                    </p>
-
+                <x-settings.card
+                    :kicker="__('Allowance')"
+                    :description="__('Read back from the last answer the provider gave, so it is whatever it said rather than a number written down here.')"
+                >
                     @if ($this->quota === null)
-                        <p class="text-sm text-fg-faint">{{ __('Nothing yet — it fills in the first time a lookup runs.') }}</p>
+                        <x-empty-state variant="inline" :title="__('Nothing yet — it fills in the first time a lookup runs.')" />
                     @else
                         <dl class="flex flex-col gap-2.5">
-                            <div class="flex items-baseline gap-3 border-b border-raised pb-2.5">
-                                <dt class="text-xs text-fg-soft">{{ __('Lookups today') }}</dt>
-                                <dd class="ml-auto font-mono text-xs text-fg-dim tabular-nums">
-                                    {{ $this->quota['requests_today'] }} / {{ $this->quota['max_requests_per_day'] }}
-                                </dd>
-                            </div>
+                            <x-kv-row :label="__('Lookups today')">
+                                <x-fraction :value="Arr::get($this->quota, 'requests_today')" :of="Arr::get($this->quota, 'max_requests_per_day')" />
+                            </x-kv-row>
 
                             {{-- Its own line because it is its own allowance,
                                  and the smaller of the two by a factor of ten:
                                  a library full of unrecognised dumps runs out
                                  of failures long before it runs out of lookups. --}}
-                            <div class="flex items-baseline gap-3 border-b border-raised pb-2.5">
-                                <dt class="text-xs text-fg-soft">{{ __('Failed lookups today') }}</dt>
-                                <dd class="ml-auto font-mono text-xs text-fg-dim tabular-nums">
-                                    {{ $this->quota['failed_today'] }} / {{ $this->quota['max_failed_per_day'] }}
-                                </dd>
-                            </div>
+                            <x-kv-row :label="__('Failed lookups today')">
+                                <x-fraction :value="Arr::get($this->quota, 'failed_today')" :of="Arr::get($this->quota, 'max_failed_per_day')" />
+                            </x-kv-row>
 
-                            <div class="flex items-baseline gap-3">
-                                <dt class="text-xs text-fg-soft">{{ __('Threads') }}</dt>
-                                <dd class="ml-auto font-mono text-xs text-fg-dim tabular-nums">{{ $this->quota['max_threads'] }}</dd>
-                            </div>
+                            <x-kv-row :label="__('Threads')">{{ Arr::get($this->quota, 'max_threads') }}</x-kv-row>
                         </dl>
                     @endif
-                </div>
+                </x-settings.card>
             </div>
             @endunless
         </form>

@@ -2,8 +2,8 @@
     'status',
 ])
 
+{{-- A one-off note handed over in the session, such as a password just
+     changed: in the accent, which is how this design marks what went well. --}}
 @if ($status)
-    <div {{ $attributes->merge(['class' => 'font-medium text-sm text-green-600']) }}>
-        {{ $status }}
-    </div>
+    <x-notice tone="accent" {{ $attributes }}>{{ $status }}</x-notice>
 @endif

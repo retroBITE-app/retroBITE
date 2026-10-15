@@ -160,113 +160,95 @@ new class extends Component
     }
 }; ?>
 
-<div x-on:upload-roms.window="$flux.modal('{{ $this::MODAL }}').show()">
-    <flux:modal :name="$this::MODAL" class="w-full max-w-2xl">
-        <div
-            x-data="romUpload(@js([
-                'extensions' => $this->extensions,
-                'excluded' => $this->excluded,
-                'destination' => (string) array_key_first($this->destinations),
-                'perGameFolders' => $this->perGameFolders,
-                'csrf' => csrf_token(),
-                'messages' => [
-                    'wrongType' => __('Not a file type :console plays.', ['console' => $this->target->name]),
-                    'excluded' => __('A file the library ignores.'),
-                    'failed' => __('The upload failed. Try it again.'),
-                    'cancelled' => __('Cancelled.'),
-                    'expired' => __('Your session has expired. Reload the page and try again.'),
-                ],
-            ]))"
-            class="flex flex-col gap-5"
-        >
-            <div>
-                <flux:heading size="lg">{{ __('Upload to :console', ['console' => $this->target->name]) }}</flux:heading>
-                <flux:text class="mt-1">
-                    {{ __('Files go where this console\'s layout reads games from. Run Scan folder afterwards to add them to the shelf.') }}
-                </flux:text>
-            </div>
+{{-- A plain root: x-modal's own wrapper is conditional, and a Livewire
+     root has to be the first element it renders. --}}
+<div>
+    <x-modal
+        :name="$this::MODAL"
+        width="2xl"
+        event="upload-roms"
+        :heading="__('Upload to :console', ['console' => $this->target->name])"
+        :subheading="__('Files go where this console\'s layout reads games from. Run Scan folder afterwards to add them to the shelf.')"
+        cancel="{{ __('Close') }}"
+        :x-data="'romUpload('.Illuminate\Support\Js::from([
+            'extensions' => $this->extensions,
+            'excluded' => $this->excluded,
+            'destination' => (string) array_key_first($this->destinations),
+            'perGameFolders' => $this->perGameFolders,
+            'csrf' => csrf_token(),
+            'messages' => [
+                'wrongType' => __('Not a file type :console plays.', ['console' => $this->target->name]),
+                'excluded' => __('A file the library ignores.'),
+                'failed' => __('The upload failed. Try it again.'),
+                'cancelled' => __('Cancelled.'),
+                'expired' => __('Your session has expired. Reload the page and try again.'),
+            ],
+        ]).')'"
+    >
+        {{-- A choice only where the layout offers one. Open PS2 Loader
+             splits DVD from CD images; every other layout reads the
+             console's own folder, and asking about that would be asking
+             nothing. --}}
+        @if (count($this->destinations) > 1)
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="kicker text-fg-faint">{{ __('Destination') }}</p>
 
-            {{-- A choice only where the layout offers one. Open PS2 Loader
-                 splits DVD from CD images; every other layout reads the
-                 console's own folder, and asking about that would be asking
-                 nothing. --}}
-            @if (count($this->destinations) > 1)
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <p class="kicker text-fg-dim">{{ __('Destination') }}</p>
-
-                    <div role="radiogroup" aria-label="{{ __('Destination') }}" class="flex shrink-0 items-center gap-0.5 rounded-lg border border-line-input p-0.5">
-                        @foreach ($this->destinations as $value => $label)
-                            <button
-                                type="button"
-                                role="radio"
-                                x-bind:aria-checked="destination === @js((string) $value) ? 'true' : 'false'"
-                                x-bind:disabled="running"
-                                x-on:click="destination = @js((string) $value)"
-                                class="cursor-pointer rounded-md px-2.75 py-1 font-mono text-xs transition-colors disabled:cursor-not-allowed"
-                                x-bind:class="destination === @js((string) $value)
-                                    ? 'bg-accent-tint/15 text-accent'
-                                    : 'text-fg-dim hover:bg-hover hover:text-fg'"
-                            >{{ $label }}</button>
-                        @endforeach
-                    </div>
-                </div>
-            @else
-                <p class="text-sm text-fg-muted">
-                    {{ __('Uploads to') }}
-                    <span class="font-mono text-fg-soft">{{ Arr::first($this->destinations) }}</span>
-                </p>
-            @endif
-
-            <label
-                class="grid cursor-pointer place-items-center gap-1 rounded-xl border border-dashed border-line-input px-6 py-8 text-center transition-colors hover:bg-hover"
-                x-on:dragover.prevent
-                x-on:drop.prevent="drop($event)"
-            >
-                <input
-                    type="file"
-                    multiple
-                    accept="{{ $this->accept }}"
-                    class="sr-only"
-                    x-bind:disabled="running"
-                    x-on:change="pick($event)"
+                <x-pill-choice
+                    alpine="destination"
+                    :options="$this->destinations"
+                    :label="__('Destination')"
+                    disabled="running"
+                    mono
                 />
+            </div>
+        @else
+            <p class="text-sm text-fg-muted">
+                {{ __('Uploads to') }}
+                <span class="font-mono text-fg-soft">{{ Arr::first($this->destinations) }}</span>
+            </p>
+        @endif
 
-                <flux:icon.arrow-up-tray class="size-6 text-fg-faint" />
+        <x-file-drop
+            :label="__('Choose or drop game files')"
+            :hint="implode(' · ', $this->extensions)"
+            :accept="$this->accept"
+            multiple
+            x-bind:disabled="running"
+            x-on:change="pick($event)"
+            x-on:dragover.prevent=""
+            x-on:drop.prevent="drop($event)"
+        />
 
-                <span class="text-sm text-fg-soft">{{ __('Choose or drop game files') }}</span>
-                <span class="font-mono text-xs text-fg-faint">{{ implode(' · ', $this->extensions) }}</span>
-            </label>
+        <template x-if="rejected.length > 0">
+            <ul class="flex flex-col gap-1 rounded-lg border border-danger/40 px-3.5 py-2.5 text-sm">
+                <template x-for="entry in rejected" :key="entry.name">
+                    <li class="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <span class="min-w-0 truncate font-mono text-xs text-fg-soft" x-text="entry.name"></span>
+                        <span class="text-xs text-danger" x-text="entry.message"></span>
+                    </li>
+                </template>
+            </ul>
+        </template>
 
-            <template x-if="rejected.length > 0">
-                <ul class="flex flex-col gap-1 rounded-lg border border-danger/40 px-3.5 py-2.5 text-sm">
-                    <template x-for="entry in rejected" :key="entry.name">
-                        <li class="flex flex-wrap items-baseline justify-between gap-x-3">
-                            <span class="min-w-0 truncate font-mono text-xs text-fg-soft" x-text="entry.name"></span>
-                            <span class="text-xs text-danger" x-text="entry.message"></span>
-                        </li>
-                    </template>
-                </ul>
-            </template>
-
-            {{-- One list per game folder where the layout files a game per
-                 folder, each headed by its folder's name, which can be changed
-                 before anything is sent; one plain list otherwise. --}}
-            <template x-for="group in groups" :key="group.folder">
-                <div x-show="group.entries.length > 0" class="flex flex-col gap-1.5">
-                    <template x-if="{{ $this->perGameFolders ? 'true' : 'false' }}">
-                        <label class="flex items-center gap-2">
-                            <flux:icon.folder class="size-4 shrink-0 text-fg-faint" />
-                            <span class="sr-only">{{ __('Game folder') }}</span>
-                            <input
-                                type="text"
-                                class="min-w-0 flex-1 rounded-md border border-line-input bg-sunken px-2.5 py-1 font-mono text-xs text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-deep"
-                                x-bind:value="group.folder"
-                                x-bind:disabled="running"
-                                x-on:change="renameGroup(group.folder, $event.target.value)"
-                            />
-                            <span class="shrink-0 font-mono text-xs text-fg-faint">/</span>
-                        </label>
-                    </template>
+        {{-- One list per game folder where the layout files a game per
+             folder, each headed by its folder's name, which can be changed
+             before anything is sent; one plain list otherwise. --}}
+        <template x-for="group in groups" :key="group.folder">
+            <div x-show="group.entries.length > 0" class="flex flex-col gap-1.5">
+                <template x-if="{{ $this->perGameFolders ? 'true' : 'false' }}">
+                    <label class="flex items-center gap-2">
+                        <flux:icon.folder class="size-4 shrink-0 text-fg-faint" />
+                        <span class="sr-only">{{ __('Game folder') }}</span>
+                        <input
+                            type="text"
+                            class="min-w-0 flex-1 rounded-md border border-line-input bg-sunken px-2.5 py-1 font-mono text-xs text-fg-soft focus-ring"
+                            x-bind:value="group.folder"
+                            x-bind:disabled="running"
+                            x-on:change="renameGroup(group.folder, $event.target.value)"
+                        />
+                        <span class="shrink-0 font-mono text-xs text-fg-faint">/</span>
+                    </label>
+                </template>
 
                 <ul class="flex max-h-72 flex-col divide-y divide-line overflow-y-auto rounded-lg border border-line">
                     <template x-for="entry in group.entries" :key="entry.key">
@@ -281,45 +263,35 @@ new class extends Component
                                     <span class="text-danger" x-show="entry.status === 'failed'">{{ __('Failed') }}</span>
                                     <span class="text-fg-dim" x-show="entry.status === 'cancelled'">{{ __('Cancelled') }}</span>
 
-                                    <button
-                                        type="button"
-                                        class="cursor-pointer text-fg-faint hover:text-fg"
+                                    <x-icon-button
+                                        icon="x-mark"
+                                        :label="__('Remove')"
+                                        size="sm"
                                         x-show="entry.status === 'queued' && ! running"
                                         x-on:click="remove(entry)"
-                                        aria-label="{{ __('Remove') }}"
-                                    >
-                                        <flux:icon.x-mark class="size-3.5" />
-                                    </button>
+                                    />
                                 </span>
                             </div>
 
-                            <div class="h-1 overflow-hidden rounded-full bg-line" x-show="entry.status === 'uploading'">
-                                <div class="h-full bg-accent transition-[width]" x-bind:style="'width: ' + percent(entry) + '%'"></div>
-                            </div>
+                            <x-progress-bar x-percent="percent(entry)" x-show="entry.status === 'uploading'" />
 
                             <p class="text-xs text-danger" x-show="entry.status === 'failed'" x-text="entry.message"></p>
                         </li>
                     </template>
                 </ul>
-                </div>
-            </template>
-
-            <div class="flex items-center justify-between gap-2">
-                <span class="font-mono text-xs text-fg-faint" x-show="running">{{ __('Keep this tab open until it finishes.') }}</span>
-                <span x-show="! running"></span>
-
-                <div class="flex items-center gap-2">
-                    <flux:button variant="ghost" x-show="settled && ! running" x-on:click="clearSettled()">{{ __('Clear') }}</flux:button>
-                    <flux:button variant="danger" x-show="running" x-on:click="stop()">{{ __('Stop') }}</flux:button>
-                    <flux:button variant="primary" icon="arrow-up-tray" x-show="! running" x-bind:disabled="queued === 0" x-on:click="start()">
-                        {{ __('Upload') }}
-                    </flux:button>
-
-                    <flux:modal.close>
-                        <flux:button variant="ghost">{{ __('Close') }}</flux:button>
-                    </flux:modal.close>
-                </div>
             </div>
-        </div>
-    </flux:modal>
+        </template>
+
+        <x-slot:footer-start>
+            <span class="font-mono text-xs text-fg-faint" x-show="running">{{ __('Keep this tab open until it finishes.') }}</span>
+        </x-slot:footer-start>
+
+        <x-slot:footer>
+            <flux:button variant="ghost" x-show="settled && ! running" x-on:click="clearSettled()">{{ __('Clear') }}</flux:button>
+            <flux:button variant="danger" x-show="running" x-on:click="stop()">{{ __('Stop') }}</flux:button>
+            <flux:button variant="primary" icon="arrow-up-tray" x-show="! running" x-bind:disabled="queued === 0" x-on:click="start()">
+                {{ __('Upload') }}
+            </flux:button>
+        </x-slot:footer>
+    </x-modal>
 </div>

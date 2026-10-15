@@ -1,9 +1,7 @@
 @if ($this->docs->isEmpty())
-    <div class="rounded-xl border border-dashed border-line-input px-4 py-8 text-center">
-        <p class="text-xs text-fg-faint">{{ __('No documents yet.') }}</p>
-    </div>
+    <x-empty-state :title="__('No documents yet.')" />
 @else
-    <div class="overflow-hidden rounded-xl border border-line">
+    <x-panel>
         @foreach ($this->docs as $doc)
             <button
                 type="button"
@@ -16,9 +14,7 @@
                 ])
             >
                 <div class="mb-1.5 flex items-center justify-between gap-2">
-                    <span class="rounded border border-line-input bg-sunken px-1.5 py-0.5 font-mono text-[0.625rem] tracking-kicker text-fg-dim uppercase">
-                        {{ $doc->console !== '' ? Str::upper($doc->console) : __('Doc') }}
-                    </span>
+                    <x-badge tone="muted" fill>{{ $doc->console !== '' ? Str::upper($doc->console) : __('Doc') }}</x-badge>
                     <span class="font-mono text-[0.625rem] text-fg-faint">
                         {{ $doc->updatedAt->diffForHumans(short: true, syntax: \Carbon\CarbonInterface::DIFF_ABSOLUTE) }}
                     </span>
@@ -35,5 +31,5 @@
                 @endif
             </button>
         @endforeach
-    </div>
+    </x-panel>
 @endif
