@@ -2136,6 +2136,16 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                             </flux:dropdown>
                         </div>
 
+                        {{-- What it was made out of, folded out right under the line that
+                             names it rather than below the card's own details. --}}
+                        @if ($sources !== [])
+                            <ul x-show="open" x-cloak class="flex flex-col gap-2">
+                                @foreach ($sources as $source)
+                                    <x-game-file.archived-card :row="$source" wire:key="source-{{ $id }}-{{ $source['id'] }}" />
+                                @endforeach
+                            </ul>
+                        @endif
+
                         {{-- The values to copy, in one recessed block so the hex lines up:
                              a PS3 image's key, to hand to someone with the same disc and
                              kept on record after decrypting; the checksum; and, since the
@@ -2159,13 +2169,6 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
 
                         <x-game-file.badges :row="$this->fileRows[$index]" class="border-t border-raised pt-3 text-fg-muted" />
 
-                        @if ($sources !== [])
-                            <ul x-show="open" x-cloak class="flex flex-col gap-2 border-t border-raised pt-3">
-                                @foreach ($sources as $source)
-                                    <x-game-file.archived-card :row="$source" wire:key="source-{{ $id }}-{{ $source['id'] }}" />
-                                @endforeach
-                            </ul>
-                        @endif
                     </li>
                 @endforeach
             </ul>
