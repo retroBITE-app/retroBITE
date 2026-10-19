@@ -177,3 +177,11 @@ it('renders a game file folder, and nothing for the console root', function () {
     expect($html)->toContain('font-mono text-xs break-all text-fg-faint mt-0.5')->toContain('Disc 1/sub');
     expect(trim($root))->toBe('');
 });
+
+it('renders the encrypted badge with its word, or the lock alone with the word for screen readers', function () {
+    $labelled = Blade::render('<x-decrypt.encrypted />');
+    $iconOnly = Blade::render('<x-decrypt.encrypted :label="false" />');
+
+    expect($labelled)->toContain('text-warn')->toContain('Encrypted')->not->toContain('sr-only');
+    expect($iconOnly)->toContain('text-warn')->toContain('<span class="sr-only">Encrypted</span>');
+});

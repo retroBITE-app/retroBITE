@@ -104,20 +104,22 @@
                 {{ Illuminate\Support\Number::fileSize((int) ($game->size_bytes_sum ?? 0), 1) }}
             </span>
 
-            {{-- Selected by the library list only, so ?? as above. --}}
-            @if ($game->has_encrypted_files ?? false)
-                <x-decrypt.encrypted />
-            @endif
-
             {{-- The far end of the region row, off the artwork entirely: on the
-                 page's own ground the fill alone carries it. ms-auto rather
-                 than a spacer, so it holds the right edge with or without a
-                 flag to its left. --}}
-            <x-rating-badge
-                :rating="$game->rating"
-                class="ms-auto"
-                title="{{ __('retroBite score :rating out of 100', ['rating' => $game->rating]) }}"
-            />
+                 page's own ground the fill alone carries the score. ms-auto
+                 rather than a spacer, so the group holds the right edge with
+                 or without a flag to its left, and the lock with or without a
+                 score beside it. --}}
+            <div class="ms-auto flex items-center gap-2">
+                {{-- Selected by the library list only, so ?? as above. --}}
+                @if ($game->has_encrypted_files ?? false)
+                    <x-decrypt.encrypted :label="false" />
+                @endif
+
+                <x-rating-badge
+                    :rating="$game->rating"
+                    title="{{ __('retroBite score :rating out of 100', ['rating' => $game->rating]) }}"
+                />
+            </div>
         </div>
 
         @if ($achievementsPossible > 0)

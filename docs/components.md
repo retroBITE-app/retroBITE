@@ -1371,13 +1371,17 @@ The lock beside a `DecryptState`: open, turning, shut, or none while nothing is 
 ### `x-decrypt.encrypted`
 
 The warn `x-badge` with a shut lock that marks a game on a shelf with an
-encrypted disc image. No props; the caller decides when, from `games.index`'s
+encrypted disc image. The caller decides when, from `games.index`'s
 `has_encrypted_files` (a `withExists`, never a query per card).
+
+| Prop | Type | Default | Meaning |
+|---|---|---|---|
+| `label` | bool | `true` | Show the word beside the lock. Off, the lock stands alone (the tooltip and a screen-reader label still name it) — the game card, where the row is too narrow for it |
 
 ```blade
 {{-- resources/views/components/game-card.blade.php --}}
 @if ($game->has_encrypted_files ?? false)
-    <x-decrypt.encrypted />
+    <x-decrypt.encrypted :label="false" />
 @endif
 ```
 
