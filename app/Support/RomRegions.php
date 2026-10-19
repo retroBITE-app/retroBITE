@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Support\Scanning\DumpName;
+
 /**
  * Which region a file is, as the provider's region codes.
  *
@@ -52,12 +54,10 @@ final class RomRegions
      */
     public static function fromFilename(string $filename): array
     {
-        preg_match_all('/\(([^)]*)\)/', pathinfo($filename, PATHINFO_FILENAME), $matches);
-
         $codes = [];
 
-        foreach ($matches[1] as $tag) {
-            $codes = [...$codes, ...self::fromTag(trim($tag))];
+        foreach (DumpName::roundTags($filename) as $tag) {
+            $codes = [...$codes, ...self::fromTag($tag)];
         }
 
         return array_values(array_unique($codes));

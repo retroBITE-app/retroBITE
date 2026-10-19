@@ -109,6 +109,8 @@
                 <x-decrypt.encrypted />
             @endif
 
+            <x-file-content :content="$game->extra_content ?? null" />
+
             {{-- The far end of the region row, off the artwork entirely: on the
                  page's own ground the fill alone carries it. ms-auto rather
                  than a spacer, so it holds the right edge with or without a

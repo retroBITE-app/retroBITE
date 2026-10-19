@@ -633,6 +633,7 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
      *     filename: string,
      *     folder: string,
      *     role: string,
+     *     contentType: App\Enums\FileContent|null,
      *     disc: string,
      *     size: string,
      *     format: string,
@@ -695,6 +696,9 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
             'filename' => $file->filename,
             'folder' => $this->subfolder($file),
             'role' => $file->role->label(),
+            // DLC or an update in place of the role: what is in the file
+            // matters more than that it is one image.
+            'contentType' => $file->content_type?->extra() ? $file->content_type : null,
             'disc' => $file->disc_number !== null ? (string) $file->disc_number : '—',
             'size' => $file->size_bytes !== null ? Number::fileSize($file->size_bytes, 1) : '—',
             'format' => Str::upper($file->extension),

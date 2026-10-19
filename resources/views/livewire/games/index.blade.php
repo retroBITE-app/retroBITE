@@ -2,6 +2,7 @@
 
 use App\Conversion\Converters;
 use App\Decryption\DiscKeys;
+use App\Enums\FileContent;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
 use App\Jobs\InspectGameFile;
@@ -12,6 +13,7 @@ use App\Jobs\WriteConsoleExports;
 use App\Models\AppSetting;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
+use App\Models\GameFile;
 use App\Models\Media;
 use App\Support\Console;
 use App\Support\MediaTypes;
@@ -330,6 +332,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                     return $meta->where('encrypted', true);
                 });
             }])
+            // The DLC / Update badge: what the game's files hold, where it is
+            // not the game itself. One value per game, one subquery for the page.
+            ->addSelect(['extra_content' => GameFile::query()
+                ->select('content_type')
+                ->whereColumn('game_files.game_id', 'games.id')
+                ->present()
+                ->whereIn('content_type', [FileContent::Dlc->value, FileContent::Update->value])
+                ->limit(1)])
             // For the row's Check decryption, on a shelf something decrypts.
             ->when($this->canDecrypt, function ($q) {
                 return $q->withCount(['files as decryptable_files_count' => function ($files) {
@@ -1306,6 +1316,7 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                                 @if ($game->has_encrypted_files)
                                                     <x-decrypt.encrypted />
                                                 @endif
+                                                <x-file-content :content="$game->extra_content" />
                                                 <span class="truncate">{{ $rowMeta === [] ? '—' : implode(' · ', $rowMeta) }}</span>
                                             </p>
                                         </div>

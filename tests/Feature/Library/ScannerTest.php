@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\FileArchiveReason;
+use App\Enums\FileContent;
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Exceptions\ScanAborted;
@@ -494,4 +495,20 @@ it('brings a returning file home to the identified game it was archived from', f
     expect(Game::query()->count())->toBe(1)
         ->and(GameFile::query()->sole()->id)->toBe($file->id)
         ->and(GameFile::query()->sole()->game_id)->toBe($file->game_id);
+});
+
+it('records what a file holds when its name says, and keeps what a toolbox read when it does not', function () {
+    put('snes/Some Game (USA) (Update).sfc');
+    put('snes/Other Game (USA).sfc');
+
+    scan('snes');
+
+    expect(GameFile::query()->where('filename', 'Some Game (USA) (Update).sfc')->sole()->content_type)->toBe(FileContent::Update)
+        ->and(GameFile::query()->where('filename', 'Other Game (USA).sfc')->sole()->content_type)->toBeNull();
+
+    // As a toolbox reading the disc would: a rescan finds no tag and leaves it.
+    GameFile::query()->where('filename', 'Other Game (USA).sfc')->update(['content_type' => FileContent::Dlc]);
+    scan('snes');
+
+    expect(GameFile::query()->where('filename', 'Other Game (USA).sfc')->sole()->content_type)->toBe(FileContent::Dlc);
 });

@@ -1381,6 +1381,21 @@ encrypted disc image. No props; the caller decides when, from `games.index`'s
 @endif
 ```
 
+### `x-file-content`
+
+What a game's files hold where it is not the game itself — DLC, an update —
+as an accent `x-badge` with `FileContent::icon()`, tooltip `hint()`. Renders
+nothing for a game or an unknown, so callers need no `@if`.
+
+| Prop | Type | Default | Meaning |
+|---|---|---|---|
+| `content` | FileContent\|string\|null | — | The enum, or its value as `games.index`'s `extra_content` subquery reads it |
+
+```blade
+{{-- resources/views/components/game-card.blade.php --}}
+<x-file-content :content="$game->extra_content ?? null" />
+```
+
 ### `x-docs.console-picker`
 
 The console a document is filed under, as chips; sets the parent's `console`
