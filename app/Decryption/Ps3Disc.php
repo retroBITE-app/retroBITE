@@ -16,6 +16,8 @@ use Illuminate\Support\Str;
  * game's ID reads the same either way; EBOOT.BIN sits in an encrypted one, and
  * starts with "SCE\0" only once it has been decrypted. That one sector is what
  * tells an encrypted image from a decrypted one, and what proves a key right.
+ * An add-on disc has no EBOOT.BIN; its LICDIR/LIC.DAT, which opens the
+ * encrypted range on game discs too, starts with "PS3LICDA" the same way.
  *
  * ps3dec copies sector 0 unchanged, so a decrypted image still carries its
  * region table: the table says where encryption was, not whether it still is.
@@ -24,10 +26,15 @@ final class Ps3Disc
 {
     private const SECTOR = 2048;
 
-    /** A decrypted EBOOT.BIN, as a signed executable, starts with this. */
-    private const EXECUTABLE = "SCE\0";
-
-    private const EBOOT = 'PS3_GAME/USRDIR/EBOOT.BIN';
+    /**
+     * Files in an encrypted range whose plain text starts the same on every disc,
+     * by path, tried in order: the signed executable, then the licence file an
+     * add-on disc carries in its place.
+     */
+    private const MARKERS = [
+        'PS3_GAME/USRDIR/EBOOT.BIN' => "SCE\0",
+        'PS3_GAME/LICDIR/LIC.DAT' => 'PS3LICDA',
+    ];
 
     private const PARAM_SFO = 'PS3_GAME/PARAM.SFO';
 
@@ -118,59 +125,76 @@ final class Ps3Disc
 
     /**
      * Whether the encrypted ranges still are; null when it cannot be told (no
-     * EBOOT.BIN in an encrypted range). No region table means nothing encrypted.
+     * marker file in an encrypted range). No region table means nothing encrypted.
      */
     public function encrypted(): ?bool
     {
         $ranges = $this->encryptedRanges();
 
         if ($ranges === []) {
-            return $this->find(self::EBOOT) !== null ? false : null;
+            return $this->hasMarker() ? false : null;
         }
 
-        $sector = $this->ebootSector($ranges);
+        $probe = $this->probe($ranges);
 
-        if ($sector === null) {
+        if ($probe === null) {
             return null;
         }
 
-        return ! Str::startsWith($this->read($sector, 1), self::EXECUTABLE);
+        return ! Str::startsWith($this->read(Arr::get($probe, 'sector'), 1), Arr::get($probe, 'magic'));
     }
 
-    /** Whether a disc key decrypts this image's EBOOT.BIN into an executable. */
+    /** Whether a disc key decrypts this image's marker file into its plain text. */
     public function keyMatches(string $key): bool
     {
-        $sector = $this->ebootSector($this->encryptedRanges());
+        $probe = $this->probe($this->encryptedRanges());
         $hex = DiscKeys::normalise($key);
 
-        if ($sector === null || $hex === null) {
+        if ($probe === null || $hex === null) {
             return false;
         }
 
+        $sector = Arr::get($probe, 'sector');
         $iv = str_repeat("\0", 12).pack('N', $sector);
         $plain = openssl_decrypt($this->read($sector, 1), 'aes-128-cbc', (string) hex2bin($hex), OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $iv);
 
-        return $plain !== false && Str::startsWith($plain, self::EXECUTABLE);
+        return $plain !== false && Str::startsWith($plain, Arr::get($probe, 'magic'));
     }
 
     /**
-     * EBOOT.BIN's first sector, when it lies in an encrypted range.
+     * The first marker file whose first sector lies in an encrypted range, and
+     * the plain text it starts with.
      *
      * @param  list<array{start: int, end: int}>  $ranges
+     * @return array{sector: int, magic: string}|null
      */
-    private function ebootSector(array $ranges): ?int
+    private function probe(array $ranges): ?array
     {
-        $sector = Arr::get($this->find(self::EBOOT) ?? [], 'lba');
+        foreach (self::MARKERS as $path => $magic) {
+            $sector = Arr::get($this->find($path) ?? [], 'lba');
 
-        if ($sector === null) {
-            return null;
+            if ($sector === null) {
+                continue;
+            }
+
+            $inside = collect($ranges)->contains(function (array $range) use ($sector): bool {
+                return $sector >= Arr::get($range, 'start') && $sector < Arr::get($range, 'end');
+            });
+
+            if ($inside) {
+                return ['sector' => (int) $sector, 'magic' => $magic];
+            }
         }
 
-        $inside = collect($ranges)->contains(function (array $range) use ($sector): bool {
-            return $sector >= Arr::get($range, 'start') && $sector < Arr::get($range, 'end');
-        });
+        return null;
+    }
 
-        return $inside ? (int) $sector : null;
+    /** Whether any marker file is on the disc at all, encrypted range or not. */
+    private function hasMarker(): bool
+    {
+        return collect(array_keys(self::MARKERS))->contains(function (string $path): bool {
+            return $this->find($path) !== null;
+        });
     }
 
     /**

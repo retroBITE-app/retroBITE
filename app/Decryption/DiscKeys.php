@@ -10,11 +10,13 @@ use App\Conversion\Converters;
 use App\Conversion\SourceSet;
 use App\Enums\DecryptState;
 use App\Exceptions\LibraryPathException;
+use App\Jobs\InspectGameFile;
 use App\Models\Conversion;
 use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\LibraryPath;
 use App\Support\Scanning\LibraryFolders;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -51,6 +53,31 @@ final class DiscKeys
             });
     }
 
+    /**
+     * The file extensions a console's decrypter reads; empty where nothing on
+     * Tools → Decrypt serves the console.
+     *
+     * @return list<string>
+     */
+    public function extensions(Console $console): array
+    {
+        return Converters::onPage($console, Converter::PAGE_DECRYPT)->first()?->from() ?? [];
+    }
+
+    /**
+     * A console's disc images on disk that its decrypter reads: what Tools →
+     * Decrypt lists and what a Check decryption over a console reads.
+     *
+     * @return Builder<GameFile>
+     */
+    public function images(Console $console): Builder
+    {
+        return GameFile::query()
+            ->present()
+            ->onConsole($console->key)
+            ->whereIn('extension', $this->extensions($console));
+    }
+
     /** Whether a key decrypts this file's disc: checked before a key is kept, and when one is found beside it. */
     public function fits(GameFile $file, string $key): bool
     {
@@ -58,16 +85,30 @@ final class DiscKeys
     }
 
     /**
+     * Whether the key beside a file decrypts its disc, null with no key there.
+     * Read off the disc every time: one sector, and a key put on record before
+     * keys were proven may not fit.
+     */
+    public function keyFits(GameFile $file): ?bool
+    {
+        $key = $this->onDisk($file);
+
+        return $key === null ? null : $this->fits($file, $key);
+    }
+
+    /**
      * Queue files for decryption, keys put on record first since decrypting
-     * deletes the .dkey. One nothing decrypts is counted as skipped, not thrown.
+     * deletes the .dkey. A key that does not fit is refused here, before any job
+     * exists, and counted apart; anything else nothing decrypts is skipped.
      *
      * @param  iterable<GameFile>  $files  with their game loaded
-     * @return array{queued: list<Conversion>, skipped: int}
+     * @return array{queued: list<Conversion>, skipped: int, wrong_key: int}
      */
     public function queueDecryption(iterable $files): array
     {
         $sets = [];
         $skipped = 0;
+        $wrongKey = 0;
 
         foreach ($files as $file) {
             $console = $file->game->console();
@@ -80,7 +121,12 @@ final class DiscKeys
                 continue;
             }
 
-            $this->record($file);
+            if ($this->onDisk($file) !== null && $this->record($file) === null) {
+                $wrongKey++;
+
+                continue;
+            }
+
             $sets[$converter->key()][] = $set;
         }
 
@@ -92,7 +138,7 @@ final class DiscKeys
             $skipped += (int) Arr::get($result, 'skipped');
         }
 
-        return ['queued' => $queued, 'skipped' => $skipped];
+        return ['queued' => $queued, 'skipped' => $skipped, 'wrong_key' => $wrongKey];
     }
 
     /**
@@ -165,14 +211,28 @@ final class DiscKeys
     }
 
     /**
-     * Put the key beside a file on record, so it is still known once
-     * decrypting has deleted it. Returns the key, or null when there is none.
+     * Put the key beside a file on record, so it is still known once decrypting
+     * has deleted it — only one that fits the disc, so the key on record is
+     * always a proven one. Returns that key, or null when there is none that fits.
      */
     public function record(GameFile $file): ?string
     {
         $key = $this->onDisk($file);
 
-        if ($key !== null && $key !== $file->meta?->disc_key) {
+        if ($key === null) {
+            return null;
+        }
+
+        if (! $this->fits($file, $key)) {
+            // Put on record before keys were proven: not one to show or hand on.
+            if ($key === $file->meta?->disc_key) {
+                $file->rememberMeta(['disc_key' => null]);
+            }
+
+            return null;
+        }
+
+        if ($key !== $file->meta?->disc_key) {
             $file->rememberMeta(['disc_key' => $key]);
         }
 
@@ -180,14 +240,32 @@ final class DiscKeys
     }
 
     /**
-     * Where a library file stands: queued, what the toolbox read of it, and whether its
-     * key is here. $decrypting from decrypting(), asked once for a whole list.
+     * Where a library file stands: queued, what the toolbox read of it, and whether the
+     * key beside it fits. $decrypting from decrypting(), asked once for a whole list.
      */
     public function state(GameFile $file, bool $decrypting = false): DecryptState
     {
         $encrypted = $file->meta?->encrypted;
 
-        return DecryptState::for($encrypted, $encrypted === true && $this->onDisk($file) !== null, $decrypting);
+        return DecryptState::for(
+            $encrypted,
+            $encrypted === true ? $this->keyFits($file) : null,
+            $decrypting,
+            $file->meta?->license_id !== null,
+        );
+    }
+
+    /**
+     * Read one file again now, rather than on the queue, and say where it stands:
+     * a Check pressed on one image wants its answer in the same click.
+     */
+    public function check(GameFile $file): DecryptState
+    {
+        (new InspectGameFile($file->id, force: true))->handle();
+
+        $file->unsetRelation('meta');
+
+        return $this->state($file, in_array($file->id, $this->decrypting([$file->id]), true));
     }
 
     /**

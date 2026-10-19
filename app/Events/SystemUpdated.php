@@ -37,6 +37,9 @@ final class SystemUpdated implements ShouldBroadcastNow
     /** A conversion has moved on: queued, further along, or over. */
     public const CONVERSION = 'conversion';
 
+    /** A console's toolbox read a file again: Tools → Decrypt's states may have moved. */
+    public const INSPECTED = 'inspected';
+
     public function __construct(public readonly string $what) {}
 
     public function broadcastOn(): PrivateChannel

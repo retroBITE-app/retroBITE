@@ -1,8 +1,10 @@
 <?php
 
 use App\Conversion\Converters;
+use App\Decryption\DiscKeys;
 use App\Enums\GameStatus;
 use App\Enums\MediaKind;
+use App\Jobs\InspectGameFile;
 use App\Jobs\MatchGame;
 use App\Jobs\ScanConsoleFolder;
 use App\Jobs\ScrapeGameMedia;
@@ -322,6 +324,18 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             ->withCount(['files as identifiable_files_count' => function ($q) {
                 return $q->identifiable()->present();
             }])
+            // The Encrypted badge: an image on disk the toolbox read as encrypted.
+            ->withExists(['files as has_encrypted_files' => function ($files) {
+                return $files->present()->whereHas('meta', function ($meta) {
+                    return $meta->where('encrypted', true);
+                });
+            }])
+            // For the row's Check decryption, on a shelf something decrypts.
+            ->when($this->canDecrypt, function ($q) {
+                return $q->withCount(['files as decryptable_files_count' => function ($files) {
+                    return $files->present()->whereIn('extension', app(DiscKeys::class)->extensions($this->lockedTo));
+                }]);
+            })
             ->tap(function ($q) {
                 return match ($this->sort) {
                     // `rating IS NULL` first puts the unrated last rather than
@@ -525,6 +539,18 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
         return $console !== null && ConsoleSourceFolder::has($console) && Converters::offersOn($console);
     }
 
+    /**
+     * Whether the shelf offers checking its disc images for decryption: a
+     * console in the library that Tools → Decrypt has a tab for.
+     */
+    #[Computed]
+    public function canDecrypt(): bool
+    {
+        $console = $this->lockedTo;
+
+        return $console !== null && ConsoleSourceFolder::has($console) && app(DiscKeys::class)->extensions($console) !== [];
+    }
+
     /** Whether the toolbox can file this console's loose games into folders of their own. */
     #[Computed]
     public function canOrganize(): bool
@@ -639,6 +665,31 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
             'console' => $console->name,
             'export' => Str::upper($export),
         ]));
+    }
+
+    /**
+     * Queue a decryption check of every disc image on this shelf, or of one
+     * game's: decrypted or not, and whether the key beside it fits.
+     */
+    public function checkDecryption(?int $gameId = null): void
+    {
+        $console = $this->lockedTo;
+
+        if ($console === null || ! $this->canDecrypt) {
+            return;
+        }
+
+        $ids = app(DiscKeys::class)->images($console)
+            ->when($gameId !== null, function ($q) use ($gameId) {
+                return $q->where('game_id', $gameId);
+            })
+            ->pluck('id');
+
+        $queued = InspectGameFile::queueFor($ids->all());
+
+        Flux::toast(text: $queued === 0
+            ? __('No disc image here that decrypts.')
+            : trans_choice(':count image queued for a check.|:count images queued for a check.', $queued, ['count' => $queued]));
     }
 
     /** Start ticking games to convert. */
@@ -827,6 +878,14 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                             @if ($this->canConvert)
                                 <flux:menu.item icon="arrows-right-left" wire:click="startPicking">
                                     {{ __('Convert games…') }}
+                                </flux:menu.item>
+                            @endif
+
+                            {{-- Every disc image: decrypted or not, and whether
+                                 the key beside it fits. Queued, one per image. --}}
+                            @if ($this->canDecrypt)
+                                <flux:menu.item icon="lock-closed" wire:click="checkDecryption">
+                                    {{ __('Check decryption') }}
                                 </flux:menu.item>
                             @endif
 
@@ -1243,8 +1302,11 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                             {{-- Always rendered, even empty: an absent
                                                  second line would make the row half a
                                                  height shorter than the one above it. --}}
-                                            <p class="truncate text-xs text-fg-dim" title="{{ implode(' · ', $rowMeta) }}">
-                                                {{ $rowMeta === [] ? '—' : implode(' · ', $rowMeta) }}
+                                            <p class="flex min-w-0 items-center gap-2 text-xs text-fg-dim" title="{{ implode(' · ', $rowMeta) }}">
+                                                @if ($game->has_encrypted_files)
+                                                    <x-decrypt.encrypted />
+                                                @endif
+                                                <span class="truncate">{{ $rowMeta === [] ? '—' : implode(' · ', $rowMeta) }}</span>
                                             </p>
                                         </div>
 
@@ -1307,6 +1369,17 @@ new #[Title('Games')] #[Layout('layouts::app', ['bleed' => true])] class extends
                                                          artwork the row never loaded. --}}
                                                     {{ $rowCover === null ? __('Fetch artwork') : __('Fetch artwork again') }}
                                                 </flux:menu.item>
+
+                                                @if ($this->canDecrypt)
+                                                    @php($rowDecryptBlocked = (int) $game->decryptable_files_count === 0 ? __('No disc image here that decrypts.') : null)
+
+                                                    <flux:menu.item icon="lock-closed"
+                                                                    :disabled="$rowDecryptBlocked !== null"
+                                                                    :title="$rowDecryptBlocked"
+                                                                    wire:click="checkDecryption({{ $game->id }})">
+                                                        {{ __('Check decryption') }}
+                                                    </flux:menu.item>
+                                                @endif
 
                                                 <flux:menu.separator />
 

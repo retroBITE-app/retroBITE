@@ -65,14 +65,14 @@ final class Ps3Decrypt extends Converter
         return [];
     }
 
-    /** One image, read as encrypted, with its key beside it. */
+    /** One image, read as encrypted, with a key beside it that fits the disc. */
     public function supports(SourceSet $set): bool
     {
         if ($set->isSet() || $set->file->meta?->encrypted !== true) {
             return false;
         }
 
-        return $this->keys->onDisk($set->file) !== null;
+        return $this->keys->keyFits($set->file) === true;
     }
 
     /**

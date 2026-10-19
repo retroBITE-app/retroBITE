@@ -45,7 +45,7 @@ new #[Title('Decrypt')] class extends Component
     #[Url(as: 'search', except: '')]
     public string $search = '';
 
-    /** @var list<int> file ids, Ready ones only */
+    /** @var list<int> file ids, in any state but Decrypting */
     public array $picked = [];
 
     /** A tab for every console some converter on this page decrypts. */
@@ -88,10 +88,7 @@ new #[Title('Decrypt')] class extends Component
         }
 
         $keys = app(DiscKeys::class);
-        $files = GameFile::query()
-            ->present()
-            ->onConsole($this->console->key)
-            ->whereIn('extension', $this->converter->from())
+        $files = $keys->images($this->console)
             ->with(['game', 'meta'])
             ->orderBy('path')
             ->get();
@@ -162,22 +159,42 @@ new #[Title('Decrypt')] class extends Component
     }
 
     /**
-     * The shown images that can be decrypted now, by id.
+     * The shown images that can be picked, by id: all but those being decrypted.
      *
      * @return list<int>
      */
     #[Computed]
-    public function ready(): array
+    public function pickable(): array
     {
-        return $this->shown
-            ->filter(function (array $image): bool {
-                return Arr::get($image, 'state') === DecryptState::Ready;
-            })
-            ->map(function (array $image): int {
-                return Arr::get($image, 'file')->id;
-            })
-            ->values()
-            ->all();
+        return $this->idsOf($this->shown, function (DecryptState $state): bool {
+            return $state !== DecryptState::Decrypting;
+        });
+    }
+
+    /**
+     * The picks that can be decrypted now: those whose key fits.
+     *
+     * @return list<int>
+     */
+    #[Computed]
+    public function pickedReady(): array
+    {
+        return array_values(array_intersect($this->picked, $this->idsOf($this->shown, function (DecryptState $state): bool {
+            return $state === DecryptState::Ready;
+        })));
+    }
+
+    /**
+     * The images a Check all reads: none read yet, read without an answer, or with a key that does not fit.
+     *
+     * @return list<int>
+     */
+    #[Computed]
+    public function unsettled(): array
+    {
+        return $this->idsOf($this->images, function (DecryptState $state): bool {
+            return in_array($state, [DecryptState::Unchecked, DecryptState::Unknown, DecryptState::WrongKey], true);
+        });
     }
 
     /** Another console: its own filter, search and picks. */
@@ -198,16 +215,16 @@ new #[Title('Decrypt')] class extends Component
         $this->picked = [];
     }
 
-    /** A pick the search hides is dropped, so Decrypt never acts on what is not on screen. */
+    /** A pick the search hides is dropped, so a bulk action never acts on what is not on screen. */
     public function updatedSearch(): void
     {
-        $this->picked = array_values(array_intersect($this->picked, $this->ready));
+        $this->picked = array_values(array_intersect($this->picked, $this->pickable));
     }
 
-    /** Pick or unpick one image; only one with its key can be picked. */
+    /** Pick or unpick one image, in any state but one already being decrypted. */
     public function toggle(int $id): void
     {
-        if (! in_array($id, $this->ready, true)) {
+        if (! in_array($id, $this->pickable, true)) {
             return;
         }
 
@@ -216,36 +233,82 @@ new #[Title('Decrypt')] class extends Component
             : [...$this->picked, $id];
     }
 
-    /** Pick every ready image shown, or none when they all are. */
+    /** Pick every image shown, or none when they all are. */
     public function toggleAll(): void
     {
-        $this->picked = count($this->picked) === count($this->ready) ? [] : $this->ready;
+        $this->picked = count($this->picked) === count($this->pickable) ? [] : $this->pickable;
     }
 
-    /** Read one image now rather than waiting for the next scan. */
-    public function check(int $id): void
+    /** Read one image now, and say what it found: the answer comes in the same click. */
+    public function check(int $id, DiscKeys $keys): void
     {
-        if ($this->images->contains(function (array $image) use ($id): bool {
+        $file = Arr::get($this->images->first(function (array $image) use ($id): bool {
             return Arr::get($image, 'file')->id === $id;
-        })) {
-            (new InspectGameFile($id, force: true))->handle();
+        }) ?? [], 'file');
+
+        if (! $file instanceof GameFile) {
+            return;
         }
 
+        ['variant' => $variant, 'text' => $text] = $keys->check($file)->afterCheck();
+        Flux::toast(variant: $variant, heading: $file->game->title, text: $text);
+
         $this->refreshImages();
     }
 
-    /** Read every image not read yet. A few sectors each, so done here. */
+    /** Queue a check of every image not settled yet; the list follows as each one lands. */
     public function checkAll(): void
     {
-        $this->images
-            ->filter(function (array $image): bool {
-                return Arr::get($image, 'state') === DecryptState::Unchecked;
-            })
-            ->each(function (array $image): void {
-                (new InspectGameFile(Arr::get($image, 'file')->id, force: true))->handle();
-            });
+        $this->queueChecks($this->unsettled);
+    }
 
-        $this->refreshImages();
+    /** Queue a check of every picked image. */
+    public function checkPicked(): void
+    {
+        $this->queueChecks($this->picked);
+        $this->picked = [];
+    }
+
+    /** Ask before decrypting the picks whose key fits; the others are left picked. */
+    public function decryptPicked(): void
+    {
+        if ($this->pickedReady === []) {
+            return;
+        }
+
+        $this->dispatch('decrypt-confirm', fileIds: $this->pickedReady);
+    }
+
+    /**
+     * Queue one check per file on the toolbox queue, and say how many.
+     *
+     * @param  list<int>  $ids
+     */
+    private function queueChecks(array $ids): void
+    {
+        $count = InspectGameFile::queueFor($ids);
+
+        Flux::toast(text: trans_choice(':count image queued for a check.|:count images queued for a check.', $count, ['count' => $count]));
+    }
+
+    /**
+     * The file ids of images in a state the test accepts.
+     *
+     * @param  Collection<int, array{file: GameFile, state: DecryptState}>  $images
+     * @param  callable(DecryptState): bool  $accepts
+     * @return list<int>
+     */
+    private function idsOf(Collection $images, callable $accepts): array
+    {
+        return $images
+            ->filter(function (array $image) use ($accepts): bool {
+                return $accepts(Arr::get($image, 'state'));
+            })
+            ->map(function (array $image): int {
+                return Arr::get($image, 'file')->id;
+            })
+            ->values()
+            ->all();
     }
 
     /** The confirm modal queued the picks: start the list afresh. */
@@ -256,16 +319,16 @@ new #[Title('Decrypt')] class extends Component
         $this->refreshImages();
     }
 
-    /** A key saved, a decryption done: the states have moved. */
+    /** A key saved, a check landed, a decryption done: the states have moved. */
     #[On('disc-key-saved')]
     public function refreshImages(): void
     {
-        unset($this->images, $this->counts, $this->shown, $this->ready);
-        $this->picked = array_values(array_intersect($this->picked, $this->ready));
+        unset($this->images, $this->counts, $this->shown, $this->pickable, $this->pickedReady, $this->unsettled);
+        $this->picked = array_values(array_intersect($this->picked, $this->pickable));
     }
 }; ?>
 
-<x-live-system signal="conversion" call="refreshImages" class="flex flex-col gap-6">
+<x-live-system :signal="['conversion', 'inspected']" call="refreshImages" class="flex flex-col gap-6">
     <x-page-header
         :kicker="__('Tools')"
         :title="__('Decrypt')"
@@ -306,64 +369,64 @@ new #[Title('Decrypt')] class extends Component
                 @endforeach
             </x-slot:header>
 
-            @if (Arr::get($this->counts, DecryptState::Unchecked->value, 0) > 0)
+            @if ($this->unsettled !== [])
                 <x-slot:actions>
-                    <flux:button size="xs" variant="ghost" icon="magnifying-glass" wire:click="checkAll">
-                        {{ __('Check unread') }}
+                    <flux:button size="xs" variant="ghost" icon="magnifying-glass" wire:click="checkAll" :title="__('Reads every image not settled yet: not checked, unknown, or with a key that does not fit.')">
+                        {{ __('Check all (:count)', ['count' => count($this->unsettled)]) }}
                     </flux:button>
                 </x-slot:actions>
             @endif
 
             <x-panel.header class="px-3.5! py-3!">
                 <x-pick-all
-                    :label="__('Pick every image that is ready')"
+                    :label="__('Pick every image shown')"
                     :state="match (true) {
                         $picked === [] => 'off',
-                        count($picked) === count($this->ready) => 'on',
+                        count($picked) === count($this->pickable) => 'on',
                         default => 'some',
                     }"
                     wire:click="toggleAll"
-                    :disabled="$this->ready === []"
+                    :disabled="$this->pickable === []"
                 />
 
                 <x-search-field wire:model.live.debounce.300ms="search" :placeholder="__('Search games, files or title IDs')" class="min-w-0 flex-1" />
 
-                <flux:button variant="primary" size="sm" icon="lock-open" x-on:click="$dispatch('decrypt-confirm', { fileIds: $wire.picked })" :disabled="$picked === [] || $this->missingTool !== null">
-                    {{ $picked === [] ? __('Decrypt') : __('Decrypt :count', ['count' => count($picked)]) }}
+                <flux:button size="sm" icon="magnifying-glass" wire:click="checkPicked" :disabled="$picked === []">
+                    {{ $picked === [] ? __('Check') : __('Check :count', ['count' => count($picked)]) }}
+                </flux:button>
+
+                {{-- Only the picks whose key fits: the rest stay picked, to check or key. --}}
+                <flux:button variant="primary" size="sm" icon="lock-open" wire:click="decryptPicked" :disabled="$this->pickedReady === [] || $this->missingTool !== null">
+                    {{ $this->pickedReady === [] ? __('Decrypt') : __('Decrypt :count', ['count' => count($this->pickedReady)]) }}
                 </flux:button>
             </x-panel.header>
 
             <ul class="max-h-[32rem] divide-y divide-line overflow-y-auto">
                 @forelse ($this->shown as ['file' => $file, 'state' => $state])
-                    @php($pickable = $state === DecryptState::Ready)
+                    @php($pickable = $state !== DecryptState::Decrypting)
                     @php($isPicked = in_array($file->id, $picked, true))
 
                     <li wire:key="image-{{ $file->id }}" @class([
                         'flex items-center gap-3 px-3.5 py-2.5 transition-colors',
                         'bg-accent-tint/10' => $isPicked,
                     ])>
-                        {{-- Only an image with its key can be decrypted. Without
-                             one, the box asks for the key rather than sitting
-                             there greyed out with no reason given. --}}
+                        {{-- Any state can be picked, to check; Decrypt then takes
+                             only the picks whose key fits. One being decrypted
+                             has nothing left to do. --}}
                         <button
                             type="button"
                             @if ($pickable)
                                 wire:click="toggle({{ $file->id }})"
                                 aria-pressed="{{ $isPicked ? 'true' : 'false' }}"
                                 aria-label="{{ __('Pick :file', ['file' => $file->filename]) }}"
-                            @elseif ($state === DecryptState::NeedsKey)
-                                x-on:click="$dispatch('disc-key', { fileId: {{ $file->id }} })"
-                                aria-label="{{ __('Add the key for :file', ['file' => $file->filename]) }}"
-                                title="{{ __('Add its disc key first: it cannot be decrypted without one.') }}"
                             @else
                                 disabled
                                 title="{{ $state->hint() }}"
                             @endif
                             @class([
                                 'shrink-0',
-                                'cursor-pointer' => $pickable || $state === DecryptState::NeedsKey,
-                                'opacity-40' => ! $pickable && $state === DecryptState::NeedsKey,
-                                'cursor-not-allowed opacity-30' => ! $pickable && $state !== DecryptState::NeedsKey,
+                                'cursor-pointer' => $pickable,
+                                'cursor-not-allowed opacity-30' => ! $pickable,
                             ])
                         >
                             <x-check :state="$isPicked ? 'on' : 'off'" />
@@ -385,11 +448,15 @@ new #[Title('Decrypt')] class extends Component
                         <x-decrypt.state :state="$state" />
 
                         <div class="flex w-24 shrink-0 justify-end">
-                            @if ($state === DecryptState::Unchecked)
+                            @if ($state->dashed())
                                 <flux:button size="xs" variant="ghost" wire:click="check({{ $file->id }})">{{ __('Check') }}</flux:button>
-                            @elseif (in_array($state, [DecryptState::NeedsKey, DecryptState::Ready], true))
+                            @elseif ($state->wantsKey() || $state === DecryptState::Ready)
                                 <flux:button size="xs" variant="ghost" icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $file->id }} })">
-                                    {{ $state === DecryptState::Ready ? __('Change key') : __('Add key') }}
+                                    {{ match ($state) {
+                                        DecryptState::Ready => __('Change key'),
+                                        DecryptState::WrongKey => __('Replace key'),
+                                        default => __('Add key'),
+                                    } }}
                                 </flux:button>
                             @endif
                         </div>
