@@ -31,9 +31,11 @@ final class Ps3Image
     private const ENCRYPTED_LAST = 33;
 
     /**
-     * Write one, encrypted with $key or left decrypted, and return its path.
+     * Write one, encrypted with $key or left decrypted, and return its path. With
+     * $licence and no $eboot it is an add-on disc: LICDIR/LIC.DAT opens the
+     * encrypted range where EBOOT.BIN would.
      */
-    public static function write(string $path, ?string $key = self::KEY, string $titleId = 'BLUS30538', bool $eboot = true): string
+    public static function write(string $path, ?string $key = self::KEY, string $titleId = 'BLUS30538', bool $eboot = true, bool $licence = false): string
     {
         $image = str_repeat("\0", self::SECTORS * self::SECTOR);
 
@@ -50,14 +52,23 @@ final class Ps3Image
         $sfo = self::paramSfo($titleId);
         $usrdir = $eboot ? self::record(self::ENCRYPTED_FIRST, 2 * self::SECTOR, 'EBOOT.BIN;1', false) : '';
 
+        $licdir = $licence ? self::record(24, self::SECTOR, 'LICDIR', true) : '';
+
         $image = self::put($image, 21 * self::SECTOR, self::record(21, self::SECTOR, "\0", true).self::record(20, self::SECTOR, "\1", true)
-            .self::record(22, strlen($sfo), 'PARAM.SFO;1', false).self::record(23, self::SECTOR, 'USRDIR', true));
+            .$licdir.self::record(22, strlen($sfo), 'PARAM.SFO;1', false).self::record(23, self::SECTOR, 'USRDIR', true));
         $image = self::put($image, 22 * self::SECTOR, $sfo);
         $image = self::put($image, 23 * self::SECTOR, self::record(23, self::SECTOR, "\0", true).self::record(21, self::SECTOR, "\1", true).$usrdir);
 
-        // EBOOT.BIN: a signed executable's magic, then something to decrypt.
+        if ($licence && ! $eboot) {
+            $image = self::put($image, 24 * self::SECTOR, self::record(24, self::SECTOR, "\0", true).self::record(21, self::SECTOR, "\1", true)
+                .self::record(self::ENCRYPTED_FIRST, 2 * self::SECTOR, 'LIC.DAT;1', false));
+        }
+
+        // EBOOT.BIN, or an add-on disc's LIC.DAT: its magic, then something to decrypt.
+        $magic = $eboot ? "SCE\0" : ($licence ? 'PS3LICDA' : '');
+
         for ($sector = self::ENCRYPTED_FIRST; $sector <= self::ENCRYPTED_LAST; $sector++) {
-            $plain = ($sector === self::ENCRYPTED_FIRST ? "SCE\0" : '').str_repeat(chr($sector), self::SECTOR);
+            $plain = ($sector === self::ENCRYPTED_FIRST ? $magic : '').str_repeat(chr($sector), self::SECTOR);
             $plain = substr($plain, 0, self::SECTOR);
 
             $image = self::put($image, $sector * self::SECTOR, $key === null ? $plain : self::encrypt($plain, $key, $sector));

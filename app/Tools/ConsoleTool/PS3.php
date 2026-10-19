@@ -35,15 +35,15 @@ final class PS3 extends ConsoleTools
             return [];
         }
 
-        $titleId = $disc->titleId();
+        // Encryption first: a decrypted disc needs no key, so none is looked for.
         $encrypted = $disc->encrypted();
-        $keys = app(DiscKeys::class);
-        $key = $encrypted === true ? $keys->onDisk($file) : null;
+        $titleId = $disc->titleId();
+        $key = $encrypted === true ? app(DiscKeys::class)->record($file) : null;
 
         return [
             ...($titleId !== null ? ['license_id' => $titleId] : []),
             ...($encrypted !== null ? ['encrypted' => $encrypted] : []),
-            ...($key !== null && $keys->fits($file, $key) ? ['disc_key' => $key] : []),
+            ...($key !== null ? ['disc_key' => $key] : []),
         ];
     }
 

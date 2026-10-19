@@ -3,12 +3,14 @@
 use App\Conversion\Tools;
 use App\Enums\ConversionStatus;
 use App\Enums\DecryptState;
+use App\Jobs\InspectGameFile;
 use App\Jobs\RunConversion;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Conversion;
 use App\Models\GameFile;
 use App\Models\User;
 use App\Support\Console;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
@@ -38,17 +40,25 @@ function ps3Image(string $title, DecryptState $state): GameFile
 {
     ConsoleSourceFolder::add(new Console('ps3'));
 
-    return Ps3Image::fileRow(
+    $file = Ps3Image::fileRow(
         test()->root,
         $title.' (USA).iso',
         match ($state) {
-            DecryptState::Unchecked => null,
+            DecryptState::Unchecked, DecryptState::Unknown => null,
             DecryptState::Decrypted => false,
             default => true,
         },
         $state === DecryptState::Ready,
         game: ['slug' => Str::slug($title)],
+        meta: $state === DecryptState::Unknown ? ['license_id' => 'BLUS30538'] : [],
     );
+
+    // A key file that is a key, just not this disc's.
+    if ($state === DecryptState::WrongKey) {
+        File::put(test()->root.'/ps3/'.$title.' (USA).dkey', str_repeat('0', 32)."\n");
+    }
+
+    return $file;
 }
 
 it('sits under Tools in the menu, and says so when no console it decrypts is in the library', function () {
@@ -102,17 +112,100 @@ it('reads an unread image on the spot', function () {
         ->and($file->fresh()?->meta?->license_id)->toBe('BLUS30538');
 });
 
-it('picks only images with their key, and clears the picks once the confirm has queued them', function () {
+it('picks images in any state, and clears the picks once the confirm has queued them', function () {
     $ready = ps3Image('Keyed', DecryptState::Ready);
     $locked = ps3Image('Locked', DecryptState::NeedsKey);
 
     Livewire::test('tools.decrypt')
         ->call('toggle', $locked->id)
+        ->assertSet('picked', [$locked->id])
+        ->call('toggleAll')
+        ->assertSet('picked', [$ready->id, $locked->id])
+        ->call('toggleAll')
         ->assertSet('picked', [])
         ->call('toggleAll')
-        ->assertSet('picked', [$ready->id])
         ->dispatch('decrypt-queued')
         ->assertSet('picked', []);
+});
+
+it('asks to decrypt only the picks whose key fits', function () {
+    $ready = ps3Image('Keyed', DecryptState::Ready);
+    $locked = ps3Image('Locked', DecryptState::NeedsKey);
+    $wrong = ps3Image('Wrong', DecryptState::WrongKey);
+
+    Livewire::test('tools.decrypt')
+        ->call('toggleAll')
+        ->assertSee('Decrypt 1')
+        ->assertSee('Check 3')
+        ->call('decryptPicked')
+        ->assertDispatched('decrypt-confirm', fileIds: [$ready->id])
+        ->assertSet('picked', [$ready->id, $locked->id, $wrong->id]);
+});
+
+it('queues one check per picked image, and one per image not settled for Check all', function () {
+    $ready = ps3Image('Keyed', DecryptState::Ready);
+    $fresh = ps3Image('Fresh', DecryptState::Unchecked);
+    $unknown = ps3Image('Odd', DecryptState::Unknown);
+    $wrong = ps3Image('Wrong', DecryptState::WrongKey);
+    ps3Image('Done', DecryptState::Decrypted);
+
+    Livewire::test('tools.decrypt')
+        ->call('toggle', $ready->id)
+        ->call('checkPicked')
+        ->assertDispatched('toast-show')
+        ->assertSet('picked', []);
+
+    Queue::assertPushed(InspectGameFile::class, function (InspectGameFile $job) use ($ready): bool {
+        return $job->fileId === $ready->id && $job->force;
+    });
+
+    Livewire::test('tools.decrypt')->call('checkAll');
+
+    $checked = collect(Queue::pushed(InspectGameFile::class))->map(function (InspectGameFile $job): int {
+        return $job->fileId;
+    })->all();
+
+    expect($checked)->toEqualCanonicalizing([$ready->id, $fresh->id, $unknown->id, $wrong->id]);
+});
+
+it('says what a check found, and that a disc could not be read when it could not', function () {
+    $file = ps3Image('Fresh', DecryptState::Unchecked);
+
+    Livewire::test('tools.decrypt')
+        ->call('check', $file->id)
+        ->assertDispatched('toast-show', function (string $name, array $params): bool {
+            return Arr::get($params, 'dataset.variant') === 'warning';
+        });
+
+    File::put($this->root.'/ps3/Fresh (USA).iso', random_bytes(64 * 2048));
+    $file->rememberMeta(['license_id' => null, 'encrypted' => null]);
+
+    Livewire::test('tools.decrypt')
+        ->call('check', $file->id)
+        ->assertDispatched('toast-show', function (string $name, array $params): bool {
+            return Arr::get($params, 'dataset.variant') === 'danger'
+                && Arr::get($params, 'slots.text') === 'Could not read this image as a PS3 disc.';
+        });
+});
+
+it('shows a key beside the image that does not fit as Wrong key, and offers to replace it', function () {
+    $file = ps3Image('Wrong', DecryptState::WrongKey);
+
+    Livewire::test('tools.decrypt')
+        ->assertSee('Wrong key')
+        ->assertSee('Replace key');
+
+    Livewire::test('games.show', ['game' => $file->game])
+        ->assertSee('Wrong key')
+        ->assertSee('Replace key');
+});
+
+it('says a disc read without an answer is Unknown, not Not checked', function () {
+    ps3Image('Odd', DecryptState::Unknown);
+
+    Livewire::test('tools.decrypt')
+        ->assertSee('Unknown')
+        ->assertSee('Check');
 });
 
 it('asks before decrypting, says the image is replaced and its key file deleted, and queues once', function () {

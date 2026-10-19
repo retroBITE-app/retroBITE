@@ -1357,7 +1357,7 @@ tooltip from `hint()`, lock from `x-decrypt.icon`.
 
 ### `x-decrypt.icon`
 
-The lock beside a `DecryptState`: open, turning, shut, or none while unchecked.
+The lock beside a `DecryptState`: open, turning, shut, or none while nothing is known (`dashed()`: unchecked or unknown).
 
 | Prop | Type | Default | Meaning |
 |---|---|---|---|
@@ -1366,6 +1366,19 @@ The lock beside a `DecryptState`: open, turning, shut, or none while unchecked.
 ```blade
 {{-- resources/views/components/game-file/badges.blade.php --}}
 <x-decrypt.icon :state="$decrypt" />
+```
+
+### `x-decrypt.encrypted`
+
+The warn `x-badge` with a shut lock that marks a game on a shelf with an
+encrypted disc image. No props; the caller decides when, from `games.index`'s
+`has_encrypted_files` (a `withExists`, never a query per card).
+
+```blade
+{{-- resources/views/components/game-card.blade.php --}}
+@if ($game->has_encrypted_files ?? false)
+    <x-decrypt.encrypted />
+@endif
 ```
 
 ### `x-docs.console-picker`

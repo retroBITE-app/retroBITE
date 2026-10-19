@@ -71,17 +71,21 @@ new class extends Component
     /** Queue them, once: the modal closes before a second click can land. */
     public function decrypt(DiscKeys $keys): void
     {
-        ['queued' => $queued, 'skipped' => $skipped] = $keys->queueDecryption($this->files);
+        ['queued' => $queued, 'skipped' => $skipped, 'wrong_key' => $wrongKey] = $keys->queueDecryption($this->files);
 
         Flux::modal(self::MODAL)->close();
         $this->fileIds = [];
 
-        Flux::toast(
-            variant: $queued === [] ? 'danger' : 'success',
-            text: $skipped === 0
-                ? trans_choice(':count image queued for decryption.|:count images queued for decryption.', count($queued), ['count' => count($queued)])
-                : __(':queued queued. :skipped could not be decrypted now: already in the queue, or without its key.', ['queued' => count($queued), 'skipped' => $skipped]),
-        );
+        // A wrong key is said apart: it is the one the user can fix, and the
+        // reason they would otherwise only learn from a failed run.
+        $text = match (true) {
+            $skipped === 0 && $wrongKey === 0 => trans_choice(':count image queued for decryption.|:count images queued for decryption.', count($queued), ['count' => count($queued)]),
+            $skipped === 0 => __(':queued queued. :wrong not queued: the key beside it does not fit the disc.', ['queued' => count($queued), 'wrong' => $wrongKey]),
+            $wrongKey === 0 => __(':queued queued. :skipped could not be decrypted now: already in the queue, or without its key.', ['queued' => count($queued), 'skipped' => $skipped]),
+            default => __(':queued queued. :wrong not queued: the key beside it does not fit the disc. :skipped more could not be decrypted now.', ['queued' => count($queued), 'wrong' => $wrongKey, 'skipped' => $skipped]),
+        };
+
+        Flux::toast(variant: $queued === [] ? 'danger' : 'success', text: $text);
 
         $this->dispatch('conversion-queued');
         $this->dispatch('decrypt-queued');

@@ -11,6 +11,8 @@ use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
 use App\Enums\DecryptState;
 use App\Enums\FileArchiveReason;
+use App\Events\GameUpdated;
+use App\Events\SystemUpdated;
 use App\Exceptions\ConversionFailed;
 use App\Exceptions\LibraryPathException;
 use App\Jobs\InspectGameFile;
@@ -21,10 +23,12 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\Console;
 use App\Support\LibraryPath;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Process\FakeProcessDescription;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
@@ -492,4 +496,84 @@ it('refuses to queue a file that already has a conversion waiting or running', f
         $queue->add($set, 'ps3-decrypt', []);
     })->toThrow(ConversionFailed::class)
         ->and($queue->addMany([$set], 'ps3-decrypt', []))->toMatchArray(['queued' => [], 'skipped' => 1]);
+});
+
+it('reads an add-on disc, which has no EBOOT.BIN, by its LIC.DAT', function () {
+    $encrypted = Ps3Disc::open(Ps3Image::write($this->root.'/addon.iso', eboot: false, licence: true));
+    $decrypted = Ps3Disc::open(Ps3Image::write($this->root.'/addon-plain.iso', null, eboot: false, licence: true));
+
+    expect($encrypted?->encrypted())->toBeTrue()
+        ->and($encrypted?->keyMatches(Ps3Image::KEY))->toBeTrue()
+        ->and($encrypted?->keyMatches(str_repeat('0', 32)))->toBeFalse()
+        ->and($decrypted?->encrypted())->toBeFalse();
+});
+
+it('refuses to queue a decryption whose key does not fit, before any job exists', function () {
+    config()->set('decrypters.tools.ps3dec.path', '/bin/true');
+    $file = ps3Game(key: false);
+    File::put($this->root.'/ps3/Game (USA).dkey', str_repeat('0', 32));
+
+    $keys = app(DiscKeys::class);
+    $result = $keys->queueDecryption([$file->load('game')]);
+
+    expect(Arr::get($result, 'queued'))->toBe([])
+        ->and(Arr::get($result, 'wrong_key'))->toBe(1)
+        ->and(Converters::make('ps3-decrypt')?->supports(SourceSet::fromFile($file)))->toBeFalse()
+        ->and($keys->state($file))->toBe(DecryptState::WrongKey)
+        ->and(Conversion::query()->count())->toBe(0);
+    Queue::assertNotPushed(RunConversion::class);
+});
+
+it('puts only a key that fits on record, and takes back one recorded before keys were proven', function () {
+    $file = ps3Game(key: false);
+    File::put($this->root.'/ps3/Game (USA).dkey', str_repeat('0', 32));
+    $file->rememberMeta(['disc_key' => str_repeat('0', 32)]);
+
+    $keys = app(DiscKeys::class);
+
+    expect($keys->record($file))->toBeNull()
+        ->and($file->fresh()?->meta?->disc_key)->toBeNull();
+
+    File::put($this->root.'/ps3/Game (USA).dkey', Ps3Image::KEY);
+
+    expect($keys->record($file))->toBe(Ps3Image::KEY)
+        ->and($file->fresh()?->meta?->disc_key)->toBe(Ps3Image::KEY)
+        ->and($keys->state($file->fresh()))->toBe(DecryptState::Ready);
+});
+
+it('never asks a decrypted image for a key, whatever lies beside it', function () {
+    $file = ps3Game(encrypted: false, key: false);
+    File::put($this->root.'/ps3/Game (USA).dkey', str_repeat('0', 32));
+
+    (new InspectGameFile($file->id, force: true))->handle();
+
+    expect(app(DiscKeys::class)->state($file->fresh()))->toBe(DecryptState::Decrypted)
+        ->and($file->fresh()?->meta?->disc_key)->toBeNull();
+});
+
+it('reads again after a scan an encrypted disc that has gained a key file, and nothing else already read', function () {
+    $keyed = ps3Game('Keyed (USA).iso', key: false);
+    ps3Game('Locked (USA).iso', key: false);
+    File::put($this->root.'/ps3/Keyed (USA).dkey', Ps3Image::KEY);
+
+    expect(InspectGameFile::queueAwaiting('ps3'))->toBe(1);
+
+    Queue::assertPushed(InspectGameFile::class, function (InspectGameFile $job) use ($keyed): bool {
+        return $job->fileId === $keyed->id && $job->force;
+    });
+});
+
+it('is one job per file while one is waiting, and says on the live channels when it has read one', function () {
+    $file = ps3Game();
+    $job = new InspectGameFile($file->id, force: true);
+
+    expect($job)->toBeInstanceOf(ShouldBeUnique::class)
+        ->and($job->uniqueId())->toBe('inspect:'.$file->id);
+
+    Event::fake([GameUpdated::class, SystemUpdated::class]);
+    $job->handle();
+
+    Event::assertDispatched(GameUpdated::class, function (GameUpdated $event) use ($file): bool {
+        return $event->gameId === $file->game_id && $event->what === GameUpdated::INSPECTED;
+    });
 });

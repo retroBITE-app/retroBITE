@@ -30,6 +30,9 @@ final class GameUpdated implements ShouldBroadcastNow
     /** A transfer to a network share moved on: a file copied, or the whole of it done or failed. */
     public const TRANSFER = 'transfer';
 
+    /** A console's toolbox read one of its files again: its serial, its encryption, its key. */
+    public const INSPECTED = 'inspected';
+
     /** A job for this game gave up. Every wait on the page checks again. */
     public const FAILED = 'failed';
 

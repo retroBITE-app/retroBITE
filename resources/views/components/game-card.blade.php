@@ -104,6 +104,11 @@
                 {{ Illuminate\Support\Number::fileSize((int) ($game->size_bytes_sum ?? 0), 1) }}
             </span>
 
+            {{-- Selected by the library list only, so ?? as above. --}}
+            @if ($game->has_encrypted_files ?? false)
+                <x-decrypt.encrypted />
+            @endif
+
             {{-- The far end of the region row, off the artwork entirely: on the
                  page's own ground the fill alone carries it. ms-auto rather
                  than a spacer, so it holds the right edge with or without a

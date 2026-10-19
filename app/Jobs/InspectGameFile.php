@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Decryption\DiscKeys;
+use App\Events\GameUpdated;
+use App\Events\SystemUpdated;
 use App\Models\GameFile;
 use App\Support\Console;
+use App\Support\LiveUpdates;
 use App\Support\RomRegions;
+use App\Support\Scanning\LibraryFolders;
 use App\Tools\ConsoleTools;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
@@ -26,8 +33,12 @@ use Illuminate\Support\Facades\Log;
  * Deliberately not chained to identification. ScreenScraper has no serial
  * parameter, so nothing learned here can improve a lookup, and coupling the two
  * would put a four-gigabyte read behind the scraper queue for no gain.
+ *
+ * On the PS3 it is also the whole of checking a disc for Tools → Decrypt: is it
+ * decrypted, and if not, does the key beside it fit. One per file at a time, so
+ * a second Check while the first is waiting is the same job.
  */
-class InspectGameFile implements ShouldQueue
+class InspectGameFile implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -39,11 +50,20 @@ class InspectGameFile implements ShouldQueue
 
     public int $tries = 2;
 
+    /** As long as one can run, so a lock left by a dead worker frees itself. */
+    public int $uniqueFor = 900;
+
     public function __construct(
         public readonly int $fileId,
         public readonly bool $force = false,
     ) {
         $this->onQueue('toolbox');
+    }
+
+    /** One inspection per file waiting at a time, forced or not. */
+    public function uniqueId(): string
+    {
+        return 'inspect:'.$this->fileId;
     }
 
     public function handle(): void
@@ -103,6 +123,31 @@ class InspectGameFile implements ShouldQueue
         if ($region !== null && $region !== $file->region) {
             $file->update(['region' => $region]);
         }
+
+        LiveUpdates::game($file->game_id, GameUpdated::INSPECTED);
+        LiveUpdates::soon(SystemUpdated::INSPECTED);
+    }
+
+    /**
+     * Queue a fresh inspection of each file, read already or not: a Check from
+     * Tools → Decrypt or a game list. Returns how many were queued.
+     *
+     * On the scan's queue rather than the toolbox's: a decryption check reads a
+     * few sectors, belongs with reading the folder, and shows under Scanning in
+     * the sidebar's Activity rather than behind a loader export.
+     *
+     * @param  iterable<int>  $fileIds
+     */
+    public static function queueFor(iterable $fileIds): int
+    {
+        $count = 0;
+
+        foreach ($fileIds as $id) {
+            self::dispatch($id, true)->onQueue('default');
+            $count++;
+        }
+
+        return $count;
     }
 
     /**
@@ -142,6 +187,36 @@ class InspectGameFile implements ShouldQueue
             self::dispatch($id, $force);
         }
 
-        return $files->count();
+        $keyed = $force ? 0 : self::queueKeyed($console, $extensions, $files->all());
+
+        return $files->count() + $keyed;
+    }
+
+    /**
+     * An encrypted disc read before, with a key file beside it and none on record:
+     * a .dkey dropped in over the share since. Read again, so it is proven or
+     * shown as wrong before anyone presses Decrypt.
+     *
+     * @param  array<int, string>  $extensions
+     * @param  array<mixed>  $queued  ids already queued by the caller
+     */
+    private static function queueKeyed(string $console, array $extensions, array $queued): int
+    {
+        $keys = app(DiscKeys::class);
+
+        $files = GameFile::query()
+            ->onConsole($console)
+            ->present()
+            ->whereIn('extension', $extensions)
+            ->whereKeyNot($queued)
+            ->whereHas('meta', function (Builder $meta): void {
+                $meta->where('encrypted', true)->whereNull('disc_key');
+            })
+            ->get()
+            ->filter(function (GameFile $file) use ($keys): bool {
+                return $keys->keyFiles(LibraryFolders::pathOf($file)) !== [];
+            });
+
+        return self::queueFor($files->modelKeys());
     }
 }

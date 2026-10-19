@@ -418,6 +418,26 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
     }
 
     /**
+     * Read one of this game's disc images again now and say what was found:
+     * decrypted or not, and whether the key beside it fits. A few sectors.
+     */
+    public function checkDecryption(int $fileId, DiscKeys $keys): void
+    {
+        $file = $this->files->first(function (GameFile $file) use ($fileId): bool {
+            return $file->id === $fileId && $file->isPresent() && $this->decryptable($file);
+        });
+
+        if ($file === null) {
+            return;
+        }
+
+        ['variant' => $variant, 'text' => $text] = $keys->check($file)->afterCheck();
+        Flux::toast(variant: $variant, heading: $file->filename, text: $text);
+
+        unset($this->fileRows);
+    }
+
+    /**
      * The network shares this game can be sent to.
      *
      * @return EloquentCollection<int, Destination>
@@ -1669,10 +1689,18 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
         }"
     ></div>
 
-    {{-- A decryption of one of its files starting or ending, so its badge and
-         buttons follow the queue. --}}
+    {{-- A decryption of one of its files starting or ending, or a check of
+         one landing from a game list, so its badge and buttons follow. --}}
     @if (collect($this->fileRows)->whereNotNull('decrypt')->isNotEmpty())
         <x-live-system signal="conversion" call="discKeySaved" hidden />
+        <div
+            hidden
+            x-data="{
+                stop: null,
+                init() { this.stop = live.game(@js($game->id), (what) => ['inspected', 'reconnect'].includes(what) && this.$wire.discKeySaved()) },
+                destroy() { this.stop?.() },
+            }"
+        ></div>
     @endif
 
     {{-- Hero: the backdrop runs to the edges and the detail block is pulled up
@@ -2107,11 +2135,27 @@ new #[Title('Game')] #[Layout('layouts::app', ['bleed' => true])] class extends 
                                              :aria-label="__('Actions for :file', ['file' => $filename])" />
 
                                 <flux:menu>
+                                    {{-- Decrypted or not, and whether the key beside it
+                                         fits: read now, and said in a toast. --}}
+                                    @if ($decrypt !== null && $decrypt !== DecryptState::Decrypting)
+                                        <flux:menu.item icon="lock-closed" wire:click="checkDecryption({{ $id }})">
+                                            {{ __('Check decryption') }}
+                                        </flux:menu.item>
+
+                                        @unless ($decrypt->wantsKey() || $decrypt === DecryptState::Ready)
+                                            <flux:menu.separator />
+                                        @endunless
+                                    @endif
+
                                     {{-- The key and the decrypt it unlocks, offered only
                                          while there is something left to do with them. --}}
-                                    @if (in_array($decrypt, [DecryptState::NeedsKey, DecryptState::Ready], true))
+                                    @if ($decrypt !== null && ($decrypt->wantsKey() || $decrypt === DecryptState::Ready))
                                         <flux:menu.item icon="key" x-on:click="$dispatch('disc-key', { fileId: {{ $id }} })">
-                                            {{ $decrypt === DecryptState::Ready ? __('Change key') : __('Add key') }}
+                                            {{ match ($decrypt) {
+                                                DecryptState::Ready => __('Change key'),
+                                                DecryptState::WrongKey => __('Replace key'),
+                                                default => __('Add key'),
+                                            } }}
                                         </flux:menu.item>
 
                                         @if ($decrypt === DecryptState::Ready)
