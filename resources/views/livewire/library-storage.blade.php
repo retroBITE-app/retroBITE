@@ -64,7 +64,7 @@ new class extends Component
             down to the account row, which this block has no border to make.
         --}}
         <x-slot:summary>
-            <x-quota-bar :used="$storage?->used ?? 0" :max="$storage?->total() ?? 0" class="mt-2 mb-3.5" />
+            <x-quota-bar :used="$storage?->used ?? 0" :max="$storage?->total() ?? 0" :label="__('Library storage used')" class="mt-2 mb-3.5" />
         </x-slot:summary>
     </x-sidebar.meter>
 </x-live-system>

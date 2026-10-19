@@ -185,25 +185,27 @@ A thin track and its fill. Use for any "how far along"; not hand-written
 | `xPercent` | ?string | `null` | Alpine expression for the width when the browser owns the number (`x-percent="…"`) |
 | `tone` | string | `accent` | `accent`, `warn`, `danger` |
 | `size` | string | `sm` | `xs` (3px), `sm` (`h-1`), `md` (`h-1.5`) |
+| `label` | ?string | `null` | `aria-label` — what the bar measures. Pass one wherever `percent` or `xPercent` is set: a progressbar needs a name |
 
 ```blade
 {{-- resources/views/livewire/games/upload-modal.blade.php --}}
-<x-progress-bar x-percent="percent(entry)" x-show="entry.status === 'uploading'" />
+<x-progress-bar x-percent="percent(entry)" :label="__('Upload progress')" x-show="entry.status === 'uploading'" />
 ```
 
 ### `x-quota-bar`
 
 An allowance as an `x-progress-bar` that turns warn from 75% and danger from 90%.
-A `max` of 0 means "no limit reported": an empty track.
+A `max` of 0 means "no limit reported": an empty track, with no progressbar role and no value.
 
 | Prop | Type | Default | Meaning |
 |---|---|---|---|
 | `used` | int | — | Spent |
 | `max` | int | — | Allowance; 0 = unknown |
+| `label` | ?string | `null` | Passed on as the bar's `label` |
 
 ```blade
 {{-- resources/views/livewire/library-storage.blade.php --}}
-<x-quota-bar :used="$storage?->used ?? 0" :max="$storage?->total() ?? 0" class="mt-2 mb-3.5" />
+<x-quota-bar :used="$storage?->used ?? 0" :max="$storage?->total() ?? 0" :label="__('Library storage used')" class="mt-2 mb-3.5" />
 ```
 
 ### `x-fraction`

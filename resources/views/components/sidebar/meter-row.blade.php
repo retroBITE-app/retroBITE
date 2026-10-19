@@ -18,6 +18,6 @@
     @if (isset($bar))
         {{ $bar }}
     @elseif ($percent !== null)
-        <x-progress-bar :percent="$percent" class="mt-1" />
+        <x-progress-bar :percent="$percent" :label="$label" class="mt-1" />
     @endif
 </div>

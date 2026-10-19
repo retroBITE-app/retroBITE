@@ -104,7 +104,7 @@ new class extends Component
                     : __('No account set. Scanning works; identifying does not.') }}
             </p>
         @else
-            <x-quota-bar :used="$requests['used']" :max="$requests['max']" class="mt-2" />
+            <x-quota-bar :used="$requests['used']" :max="$requests['max']" :label="__('ScreenScraper requests')" class="mt-2" />
 
             {{--
                 Load shedding at the far end. This is the whole reason to look
@@ -130,7 +130,7 @@ new class extends Component
             @endif
 
             <x-slot:bar>
-                <x-quota-bar :used="$failed['used']" :max="$failed['max']" class="mt-1" />
+                <x-quota-bar :used="$failed['used']" :max="$failed['max']" :label="__('Failed requests')" class="mt-1" />
             </x-slot:bar>
         </x-sidebar.meter-row>
 

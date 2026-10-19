@@ -273,7 +273,7 @@ new class extends Component
                                 </span>
                             </div>
 
-                            <x-progress-bar x-percent="percent(entry)" x-show="entry.status === 'uploading'" />
+                            <x-progress-bar x-percent="percent(entry)" :label="__('Upload progress')" x-show="entry.status === 'uploading'" />
 
                             <p class="text-xs text-danger" x-show="entry.status === 'failed'" x-text="entry.message"></p>
                         </li>

@@ -225,7 +225,7 @@
                     <span class="shrink-0 text-xs text-fg-faint" x-text="`+${$store.usb.waiting} ` + @js(__('waiting'))"></span>
                 </template>
             </p>
-            <x-progress-bar size="md" x-percent="$store.usb.percent($store.usb.active)" />
+            <x-progress-bar size="md" x-percent="$store.usb.percent($store.usb.active)" :label="__('Copy progress')" />
             <p class="mt-2 flex justify-between gap-3 text-xs text-fg-faint">
                 <span class="truncate font-mono" x-text="$store.usb.active.current"></span>
                 <span class="shrink-0 font-mono" x-text="$store.usb.active.phase === 'checking'

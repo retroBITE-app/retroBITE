@@ -258,6 +258,7 @@ new class extends Component
                                     <x-progress-bar
                                         :percent="(int) $conversion->progress"
                                         :tone="$conversion->status === ConversionStatus::Failed ? 'danger' : 'accent'"
+                                        :label="__('Conversion progress')"
                                         class="flex-1"
                                     />
                                     <span class="w-9 text-right font-mono text-xs text-fg-faint">{{ (int) $conversion->progress }}%</span>

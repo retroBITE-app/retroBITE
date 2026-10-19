@@ -36,6 +36,6 @@
     @endif
 
     @if ($percent !== null)
-        <dd class="mt-2.5"><x-progress-bar :percent="$percent" size="xs" /></dd>
+        <dd class="mt-2.5"><x-progress-bar :percent="$percent" :label="$label" size="xs" /></dd>
     @endif
 </div>

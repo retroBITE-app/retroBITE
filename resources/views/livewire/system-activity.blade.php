@@ -154,7 +154,7 @@ new class extends Component
     <x-slot:summary>
         <x-live-system :signal="['activity', 'conversion']" call="$refresh" class="hidden" />
 
-        <x-progress-bar :percent="$total->percent()" class="mt-2" />
+        <x-progress-bar :percent="$total->percent()" :label="__('Queued work')" class="mt-2" />
     </x-slot:summary>
 
     {{--

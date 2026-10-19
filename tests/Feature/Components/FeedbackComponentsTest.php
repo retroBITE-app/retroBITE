@@ -121,17 +121,30 @@ it('renders a progress bar clamped to its track, or bound to an Alpine expressio
         ->toContain('x-bind:style="\'width:\' + (progress) + \'%\'"')
         ->toContain('x-bind:aria-valuenow="Math.round(progress)"')
         ->not->toContain('x-percent');
+
+    expect(Blade::render('<x-progress-bar :percent="40" label="Upload progress" />'))
+        ->toContain('aria-label="Upload progress"')
+        ->not->toMatch('/\slabel="/');
+
+    expect(Blade::render('<x-progress-bar label="Upload progress" />'))
+        ->not->toContain('role="progressbar"')
+        ->not->toContain('aria-label');
 });
 
 it('renders a quota bar through the progress bar, coloured by how much is spent', function () {
-    expect(Blade::render('<x-quota-bar :used="50" :max="100" class="mt-1" />'))
+    expect(Blade::render('<x-quota-bar :used="50" :max="100" label="Requests" class="mt-1" />'))
         ->toContain('role="progressbar"')
+        ->toContain('aria-label="Requests"')
         ->toContain('bg-accent-deep')
         ->toContain('mt-1');
 
     expect(Blade::render('<x-quota-bar :used="80" :max="100" />'))->toContain('bg-warn');
     expect(Blade::render('<x-quota-bar :used="95" :max="100" />'))->toContain('bg-danger');
-    expect(Blade::render('<x-quota-bar :used="5" :max="0" />'))->toContain('style="width: 0%"');
+    expect(Blade::render('<x-quota-bar :used="5" :max="0" label="Requests" />'))
+        ->toContain('style="width: 0%"')
+        ->toContain('bg-accent-deep')
+        ->not->toContain('role="progressbar"')
+        ->not->toContain('aria-valuenow');
 });
 
 it('renders a fraction with the whole quieter than the count', function () {
