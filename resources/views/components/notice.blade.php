@@ -9,10 +9,10 @@
 {{-- A banner over a list or inside a modal: something to know, something
      wrong, or something running. Busy leads with the turning arrow, the one
      place it stands for waiting; a count, such as files sent so far, sits at
-     the far end. The note is the small print under the message. Small is
+     the far end, or on a line of its own on a narrow screen. The note is the small print under the message. Small is
      for a narrow column such as the sidebar. --}}
 <div {{ $attributes->class([
-    'flex items-start border',
+    'flex flex-wrap items-start border',
     'gap-2.5 rounded-lg px-4 py-3 text-sm' => $size !== 'sm',
     'gap-1.5 rounded-md px-2 py-1.5 text-xs' => $size === 'sm',
     'border-line-input bg-sunken text-fg-soft' => $tone === 'neutral',
@@ -35,6 +35,6 @@
     </div>
 
     @if ($count !== null)
-        <span class="ml-auto shrink-0 font-mono text-xs">{{ $count }}</span>
+        <span class="w-full max-w-full font-mono text-xs sm:ml-auto sm:w-auto sm:shrink-0">{{ $count }}</span>
     @endif
 </div>

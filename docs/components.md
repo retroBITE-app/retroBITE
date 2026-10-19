@@ -107,7 +107,7 @@ something running. Not for a field error (`flux:error`).
 | `tone` | string | `neutral` | `neutral`, `accent`, `warn`, `danger` |
 | `icon` | ?string | `null` | Leading micro icon |
 | `busy` | bool | `false` | Leading spinning `arrow-path` (replaces `icon`) |
-| `count` | ?string | `null` | Mono figure at the far end, e.g. `3 / 10` |
+| `count` | ?string | `null` | Mono figure at the far end, e.g. `3 / 10`; a line of its own below `sm` |
 | `size` | string | `md` | `sm` for a narrow column such as the sidebar |
 
 Slots: default = message; `note` = small print under it (`mt-1 text-xs opacity-80`).

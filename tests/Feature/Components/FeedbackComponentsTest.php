@@ -59,11 +59,12 @@ it('renders a notice in its tone, with a note, a count and a busy spinner', func
     $html = Blade::render('<x-notice tone="warn" count="2 / 5" x-on:click="hide">Message<x-slot:note>Small print</x-slot:note></x-notice>');
 
     expect($html)
+        ->toContain('flex flex-wrap items-start border')
         ->toContain('border-warn/40 bg-warn/10 text-warn')
         ->toContain('Message')
         ->toContain('mt-1 text-xs opacity-80')
         ->toContain('Small print')
-        ->toContain('ml-auto shrink-0 font-mono text-xs')
+        ->toContain('w-full max-w-full font-mono text-xs sm:ml-auto sm:w-auto sm:shrink-0')
         ->toContain('2 / 5')
         ->toContain('x-on:click="hide"');
 
