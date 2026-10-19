@@ -104,7 +104,7 @@ new class extends Component
                     </div>
                 @empty
                     @if ($ready)
-                        <p class="px-2 py-8 text-center text-sm text-fg-faint">{{ __('Nothing matches “:term”.', ['term' => trim($term)]) }}</p>
+                        <x-empty-state variant="inline" :title="__('Nothing matches “:term”.', ['term' => trim($term)])" />
                     @else
                         <div class="flex justify-center py-8">
                             <flux:icon.loading class="size-5 text-fg-faint" />
@@ -114,9 +114,9 @@ new class extends Component
             </div>
 
             <div class="flex items-center justify-end gap-4 border-t border-line px-4 py-2.5 text-xs text-fg-faint">
-                <span><kbd class="font-sans text-fg-dim">↑↓</kbd> {{ __('move') }}</span>
-                <span><kbd class="font-sans text-fg-dim">↵</kbd> {{ __('open') }}</span>
-                <span><kbd class="font-sans text-fg-dim">esc</kbd> {{ __('close') }}</span>
+                <span><x-kbd keys="↑↓" /> {{ __('move') }}</span>
+                <span><x-kbd keys="↵" /> {{ __('open') }}</span>
+                <span><x-kbd keys="esc" /> {{ __('close') }}</span>
             </div>
         </div>
     </flux:modal>

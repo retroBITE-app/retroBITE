@@ -2,6 +2,7 @@
 
 use App\Resources\ConsoleResource;
 use App\Support\ConsoleOverrides;
+use App\Support\MediaRegions;
 use App\Support\TransferRegions;
 use Flux\Flux;
 use Illuminate\Support\Arr;
@@ -58,13 +59,15 @@ new #[Title('Console settings')] class extends Component
                 // Brand as well as name, so "sega" finds the Mega Drive.
                 return str_contains(mb_strtolower($console->name.' '.$console->brand.' '.$console->key), $needle);
             })
-            ->map(fn (ConsoleResource $console): array => [
-                'key' => $console->key,
-                'name' => (string) $console->name,
-                'brand' => (string) $console->brand,
-                'icon' => (string) $console->icon,
-                'overridden' => ConsoleOverrides::has($console->key),
-            ])
+            ->map(function (ConsoleResource $console): array {
+                return [
+                    'key' => $console->key,
+                    'name' => (string) $console->name,
+                    'brand' => (string) $console->brand,
+                    'icon' => (string) $console->icon,
+                    'overridden' => ConsoleOverrides::has($console->key),
+                ];
+            })
             ->values();
     }
 
@@ -96,6 +99,17 @@ new #[Title('Console settings')] class extends Component
             })
             ->values()
             ->all();
+    }
+
+    /** The library's region order in words, for a console that keeps to it. */
+    #[Computed]
+    public function libraryOrder(): string
+    {
+        return collect(TransferRegions::order())
+            ->map(function (string $code): string {
+                return MediaRegions::label($code) ?? $code;
+            })
+            ->join(', ');
     }
 
     /** How many consoles differ from their config file. Gates the reset control. */
@@ -211,9 +225,13 @@ new #[Title('Console settings')] class extends Component
     private function listOf(string $field): array
     {
         return array_values(array_filter(array_map(
-            fn (string $code): string => mb_strtolower(trim($code)),
-            explode(',', (string) ($this->fields[$field] ?? '')),
-        ), fn (string $code): bool => $code !== ''));
+            function (string $code): string {
+                return mb_strtolower(trim($code));
+            },
+            explode(',', (string) Arr::get($this->fields, $field, '')),
+        ), function (string $code): bool {
+            return $code !== '';
+        }));
     }
 
     /** Put every console back, dropping the stored overrides wholesale. */
@@ -275,9 +293,7 @@ new #[Title('Console settings')] class extends Component
         </x-slot>
 
         @if ($this->consoles->isEmpty())
-            <div class="rounded-xl border border-dashed border-line-input px-6 py-12 text-center">
-                <p class="text-sm text-fg-soft">{{ __('No console matches that.') }}</p>
-            </div>
+            <x-empty-state :title="__('No console matches that.')" />
         @else
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 @foreach ($this->consoles as ['key' => $key, 'name' => $name, 'brand' => $brand, 'icon' => $icon, 'overridden' => $overridden])
@@ -286,7 +302,7 @@ new #[Title('Console settings')] class extends Component
                         wire:key="console-{{ $key }}"
                         wire:click="edit('{{ $key }}')"
                         @class([
-                            'flex cursor-pointer items-center gap-4 rounded-xl border bg-surface p-4 text-left transition-colors hover:border-line-input hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+                            'flex cursor-pointer items-center gap-4 rounded-xl border bg-surface p-4 text-left transition-colors hover:border-accent-tint/55 hover:bg-hover focus-ring',
                             'border-accent-tint/55' => $overridden,
                             'border-line' => ! $overridden,
                         ])
@@ -300,9 +316,7 @@ new #[Title('Console settings')] class extends Component
                         </div>
 
                         @if ($overridden)
-                            <span class="shrink-0 rounded-full border border-accent-tint/55 bg-accent-tint/10 px-2 py-0.5 text-xs text-accent-light">
-                                {{ __('Edited') }}
-                            </span>
+                            <x-badge tone="accent" fill>{{ __('Edited') }}</x-badge>
                         @endif
                     </button>
                 @endforeach
@@ -311,14 +325,11 @@ new #[Title('Console settings')] class extends Component
 
         <flux:modal :name="$this::MODAL" wire:close="closeEdit" class="w-full max-w-2xl">
             @if ($this->editingConsole !== null)
-                <form wire:submit="save" class="flex flex-col gap-5">
-                    <div>
-                        <flux:heading size="lg">{{ $this->editingConsole->name }}</flux:heading>
-                        <flux:text class="mt-2">
-                            {{ __('An empty field falls back to what the console file ships, shown as its placeholder.') }}
-                        </flux:text>
-                    </div>
-
+                <x-modal.content
+                    submit="save"
+                    :heading="$this->editingConsole->name"
+                    :subheading="__('An empty field falls back to what the console file ships, shown as its placeholder.')"
+                >
                     <div class="grid gap-4 sm:grid-cols-2" data-field-grid>
                         {{-- A cell of its own per field, rather than a class on the
                              input: flux:input forwards class to the control, and
@@ -333,16 +344,15 @@ new #[Title('Console settings')] class extends Component
                                     {{-- An order, so sorted rather than typed: the
                                          same list as the library's, under
                                          Settings → Destinations. --}}
-                                    <flux:field>
-                                        <flux:label>{{ __($label) }}</flux:label>
-                                        @if (filled($description))
-                                            <flux:description>{{ __($description) }}</flux:description>
-                                        @endif
-
+                                    <x-field
+                                        :label="__($label)"
+                                        :description="filled($description) ? __($description) : null"
+                                        name="fields.{{ $field }}"
+                                    >
                                         @if ($regions === [])
                                             <div class="flex items-center justify-between gap-3 rounded-lg border border-line-input bg-sunken px-3 py-2">
                                                 <p class="min-w-0 text-sm text-fg-soft">
-                                                    {{ __('The library\'s order: :regions', ['regions' => collect(TransferRegions::order())->map(fn (string $code): string => App\Support\MediaRegions::label($code) ?? $code)->join(', ')]) }}
+                                                    {{ __('The library\'s order: :regions', ['regions' => $this->libraryOrder]) }}
                                                 </p>
                                                 <flux:button size="xs" variant="subtle" type="button" wire:click="ownRegionOrder">
                                                     {{ __('Set its own') }}
@@ -356,9 +366,7 @@ new #[Title('Console settings')] class extends Component
                                                 </flux:button>
                                             </div>
                                         @endif
-
-                                        <flux:error name="fields.{{ $field }}" />
-                                    </flux:field>
+                                    </x-field>
                                 @elseif ($type === 'choice')
                                     {{-- Empty is "as the console file says", like an
                                          empty text field; it names what that is. --}}
@@ -385,22 +393,19 @@ new #[Title('Console settings')] class extends Component
                         @endforeach
                     </div>
 
-                    <div class="flex items-center justify-between gap-3">
-                        <div>
-                            @if ($this->editingOverridden)
-                                <flux:button type="button" size="sm" variant="subtle" wire:click="restore"
-                                             wire:confirm="{{ __('Put :console back to its shipped settings?', ['console' => $this->editingConsole->name]) }}">
-                                    {{ __('Reset to default') }}
-                                </flux:button>
-                            @endif
-                        </div>
+                    <x-slot name="footerStart">
+                        @if ($this->editingOverridden)
+                            <flux:button type="button" size="sm" variant="subtle" wire:click="restore"
+                                         wire:confirm="{{ __('Put :console back to its shipped settings?', ['console' => $this->editingConsole->name]) }}">
+                                {{ __('Reset to default') }}
+                            </flux:button>
+                        @endif
+                    </x-slot>
 
-                        <div class="flex items-center gap-2">
-                            <flux:button type="button" variant="ghost" wire:click="closeEdit">{{ __('Cancel') }}</flux:button>
-                            <flux:button type="submit" variant="primary">{{ __('Save') }}</flux:button>
-                        </div>
-                    </div>
-                </form>
+                    <x-slot name="footer">
+                        <flux:button type="submit" variant="primary">{{ __('Save') }}</flux:button>
+                    </x-slot>
+                </x-modal.content>
             @endif
         </flux:modal>
     </x-settings.layout>

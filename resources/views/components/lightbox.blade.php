@@ -86,35 +86,14 @@
             role="dialog"
             aria-modal="true"
         >
-            <button
-                type="button"
-                x-on:click="close()"
-                aria-label="{{ __('Close') }}"
-                class="absolute top-4 right-4 cursor-pointer rounded-lg border border-line-bright bg-surface/80 p-2 text-fg-dim transition-colors hover:text-fg"
-            >
-                <flux:icon.x-mark class="size-5" />
-            </button>
+            <x-glass-button icon-only icon="x-mark" :label="__('Close')" x-on:click="close()" class="absolute top-4 right-4" />
 
             <template x-if="shots.length > 1">
-                <button
-                    type="button"
-                    x-on:click="step(-1)"
-                    aria-label="{{ __('Previous image') }}"
-                    class="absolute left-4 cursor-pointer rounded-lg border border-line-bright bg-surface/80 p-2 text-fg-dim transition-colors hover:text-fg"
-                >
-                    <flux:icon.chevron-left class="size-6" />
-                </button>
+                <x-glass-button icon-only icon="chevron-left" :label="__('Previous image')" x-on:click="step(-1)" class="absolute left-4" />
             </template>
 
             <template x-if="shots.length > 1">
-                <button
-                    type="button"
-                    x-on:click="step(1)"
-                    aria-label="{{ __('Next image') }}"
-                    class="absolute right-4 cursor-pointer rounded-lg border border-line-bright bg-surface/80 p-2 text-fg-dim transition-colors hover:text-fg"
-                >
-                    <flux:icon.chevron-right class="size-6" />
-                </button>
+                <x-glass-button icon-only icon="chevron-right" :label="__('Next image')" x-on:click="step(1)" class="absolute right-4" />
             </template>
 
             <figure class="grid max-h-full max-w-full justify-items-center gap-3" x-on:click.stop>

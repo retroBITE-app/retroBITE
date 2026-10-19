@@ -7,8 +7,8 @@ use App\Services\DocLibrary;
 use App\Services\DocLinks;
 use App\Support\DocPath;
 use Flux\Flux;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -74,7 +74,9 @@ new class extends Component
     {
         return app(DocLibrary::class)
             ->suggestedCategories()
-            ->map(fn (string $name): array => ['value' => $name, 'label' => $name])
+            ->map(function (string $name): array {
+                return ['value' => $name, 'label' => $name];
+            })
             ->all();
     }
 
@@ -140,94 +142,54 @@ new class extends Component
         </flux:modal.trigger>
     @endif
 
-    <flux:modal :name="$this::MODAL" class="w-full max-w-lg">
-        <form wire:submit="create" class="space-y-5">
-            <div>
-                <flux:heading size="lg">{{ __('New doc') }}</flux:heading>
-                <p class="mt-0.5 font-mono text-xs text-fg-faint">{{ config('settings.docs_path') }}</p>
-            </div>
+    <x-modal :name="$this::MODAL" submit="create" :heading="__('New doc')" :subheading="config('settings.docs_path')" mono>
+        <flux:input wire:model.live.debounce.250ms="title" :label="__('Title')" autofocus />
 
-            <flux:input wire:model.live.debounce.250ms="title" :label="__('Title')" autofocus />
+        <x-field-group :label="__('Console')">
+            <x-docs.console-picker :selected="$console" />
 
-            <div>
-                <p class="kicker mb-2 text-fg-faint">{{ __('Console') }}</p>
+            <flux:error name="console" />
+        </x-field-group>
 
-                <x-docs.console-picker :selected="$console" />
-
-                <flux:error name="console" />
-            </div>
-
-            <div>
-                <p class="kicker mb-2 text-fg-faint">{{ __('Category') }}</p>
-
-                @if ($coiningCategory)
-                    <flux:input wire:model="category" size="sm" :placeholder="__('modding')" autofocus />
-                @else
-                    <div class="flex flex-wrap gap-1.5">
-                        @foreach ($this->categories as ['value' => $value, 'label' => $label])
-                            <button
-                                type="button"
-                                wire:key="category-{{ $value }}"
-                                wire:click="$set('category', @js($category === $value ? '' : $value))"
-                                @class([
-                                    'cursor-pointer rounded-lg border px-2.5 py-1 font-mono text-xs transition-colors',
-                                    'border-accent-tint/55 bg-accent-tint/10 text-accent' => $category === $value,
-                                    'border-line-input text-fg-dim hover:bg-hover hover:text-fg' => $category !== $value,
-                                ])
-                            >{{ $label }}</button>
-                        @endforeach
-
-                        <button
-                            type="button"
-                            wire:click="$set('coiningCategory', true)"
-                            class="cursor-pointer rounded-lg border border-dashed border-accent-tint/55 px-2.5 py-1 font-mono text-xs text-accent transition-colors hover:bg-accent-tint/10"
-                        >{{ __('+ New tag') }}</button>
-                    </div>
-                @endif
-
-                <flux:error name="category" />
-            </div>
-
-            <div>
-                <p class="kicker mb-2 text-fg-faint">{{ __('Start from') }}</p>
-
-                <div class="grid gap-1.5">
-                    @foreach (DocTemplate::cases() as $option)
-                        <button
-                            type="button"
-                            wire:key="template-{{ $option->value }}"
-                            wire:click="$set('template', @js($option->value))"
-                            @class([
-                                'cursor-pointer rounded-lg border px-3.5 py-2.5 text-left transition-colors',
-                                'border-accent-tint/55 bg-accent-tint/10' => $template === $option->value,
-                                'border-line-input hover:bg-hover' => $template !== $option->value,
-                            ])
-                        >
-                            <span @class([
-                                'block text-sm',
-                                'text-accent' => $template === $option->value,
-                                'text-fg-soft' => $template !== $option->value,
-                            ])>{{ $option->label() }}</span>
-                            <span class="mt-0.5 block text-xs text-fg-faint">{{ $option->description() }}</span>
-                        </button>
+        <x-field-group :label="__('Category')">
+            @if ($coiningCategory)
+                <flux:input wire:model="category" size="sm" :placeholder="__('modding')" autofocus />
+            @else
+                <div class="flex flex-wrap gap-1.5">
+                    @foreach ($this->categories as ['value' => $value, 'label' => $label])
+                        <x-chip
+                            mono
+                            :active="$category === $value"
+                            wire:key="category-{{ $value }}"
+                            wire:click="$set('category', {{ Js::from($category === $value ? '' : $value) }})"
+                        >{{ $label }}</x-chip>
                     @endforeach
+
+                    <x-chip dashed mono wire:click="$set('coiningCategory', true)">{{ __('+ New tag') }}</x-chip>
                 </div>
-            </div>
+            @endif
 
-            <div>
-                <p class="kicker mb-2 text-fg-faint">{{ __('Writes to') }}</p>
-                <p class="rounded-lg border border-line-input bg-sunken px-3 py-2 font-mono text-xs text-fg-dim">
-                    {{ $this->destination }}
-                </p>
-            </div>
+            <flux:error name="category" />
+        </x-field-group>
 
-            <div class="flex justify-end gap-2">
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
-                </flux:modal.close>
-
-                <flux:button type="submit" variant="primary">{{ __('Create doc') }}</flux:button>
+        <x-field-group :label="__('Start from')">
+            <div class="grid gap-1.5">
+                @foreach (DocTemplate::cases() as $option)
+                    <x-option-card
+                        :active="$template === $option->value"
+                        :label="$option->label()"
+                        :description="$option->description()"
+                        wire:key="template-{{ $option->value }}"
+                        wire:click="$set('template', {{ Js::from($option->value) }})"
+                    />
+                @endforeach
             </div>
-        </form>
-    </flux:modal>
+        </x-field-group>
+
+        <x-path-preview :value="$this->destination" />
+
+        <x-slot:footer>
+            <flux:button type="submit" variant="primary">{{ __('Create doc') }}</flux:button>
+        </x-slot:footer>
+    </x-modal>
 </div>

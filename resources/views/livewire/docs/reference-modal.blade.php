@@ -38,11 +38,19 @@ new class extends Component
     #[Computed]
     public function existing(): Collection
     {
-        return Collection::make(explode("\n", (string) Str::after($this->body, self::HEADING)))
-            ->map(fn (string $line): string => trim($line))
-            ->takeWhile(fn (string $line): bool => ! Str::startsWith($line, '## '))
-            ->filter(fn (string $line): bool => preg_match('/^\d+\.\s/', $line) === 1)
-            ->map(fn (string $line): string => trim((string) preg_replace('/^\d+\.\s*/', '', $line)))
+        return collect(explode("\n", (string) Str::after($this->body, self::HEADING)))
+            ->map(function (string $line): string {
+                return trim($line);
+            })
+            ->takeWhile(function (string $line): bool {
+                return ! Str::startsWith($line, '## ');
+            })
+            ->filter(function (string $line): bool {
+                return preg_match('/^\d+\.\s/', $line) === 1;
+            })
+            ->map(function (string $line): string {
+                return trim((string) preg_replace('/^\d+\.\s*/', '', $line));
+            })
             ->values();
     }
 
@@ -83,50 +91,41 @@ new class extends Component
         <flux:button size="xs" variant="ghost" icon="link">{{ __('Reference') }}</flux:button>
     </flux:modal.trigger>
 
-    <flux:modal :name="$this::MODAL" class="w-full max-w-lg">
-        <form wire:submit="append" class="space-y-5">
-            <div>
-                <flux:heading size="lg">{{ __('Add reference') }}</flux:heading>
-                <p class="mt-0.5 font-mono text-xs text-fg-faint">
-                    {{ __('appended under :heading', ['heading' => $this::HEADING]) }}
-                </p>
-            </div>
+    <x-modal
+        :name="$this::MODAL"
+        submit="append"
+        :heading="__('Add reference')"
+        :subheading="__('appended under :heading', ['heading' => $this::HEADING])"
+        mono
+    >
+        <flux:input wire:model="title" :label="__('Title')" :placeholder="__('Sony service manual')" />
+        <flux:input wire:model="url" :label="__('URL')" placeholder="https://" />
+        <flux:input wire:model="note" :label="__('Note')" :placeholder="__('Pinout on page 42')" />
 
-            <flux:input wire:model="title" :label="__('Title')" :placeholder="__('Sony service manual')" />
-            <flux:input wire:model="url" :label="__('URL')" placeholder="https://" />
-            <flux:input wire:model="note" :label="__('Note')" :placeholder="__('Pinout on page 42')" />
+        @if ($this->existing->isNotEmpty())
+            <x-field-group :label="__('Already in this doc')">
+                <ol class="grid gap-1">
+                    @foreach ($this->existing as $reference)
+                        <li
+                            wire:key="reference-{{ $loop->index }}"
+                            class="flex items-baseline gap-2 rounded-lg border border-line-input bg-sunken px-3 py-2"
+                        >
+                            <span class="font-mono text-xs text-fg-faint">{{ $loop->iteration }}</span>
+                            <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ $reference }}</span>
+                        </li>
+                    @endforeach
+                </ol>
+            </x-field-group>
+        @endif
 
-            @if ($this->existing->isNotEmpty())
-                <div>
-                    <p class="kicker mb-2 text-fg-faint">{{ __('Already in this doc') }}</p>
+        <x-slot:footerStart>
+            <span class="kicker text-fg-faint">
+                {{ trans_choice(':count reference|:count references', $this->existing->count(), ['count' => $this->existing->count()]) }}
+            </span>
+        </x-slot:footerStart>
 
-                    <ol class="grid gap-1">
-                        @foreach ($this->existing as $reference)
-                            <li
-                                wire:key="reference-{{ $loop->index }}"
-                                class="flex items-baseline gap-2 rounded-lg border border-line-input bg-sunken px-3 py-2"
-                            >
-                                <span class="font-mono text-xs text-fg-faint">{{ $loop->iteration }}</span>
-                                <span class="min-w-0 flex-1 truncate text-sm text-fg-soft">{{ $reference }}</span>
-                            </li>
-                        @endforeach
-                    </ol>
-                </div>
-            @endif
-
-            <div class="flex items-center justify-between gap-2">
-                <span class="kicker text-fg-faint">
-                    {{ trans_choice(':count reference|:count references', $this->existing->count(), ['count' => $this->existing->count()]) }}
-                </span>
-
-                <div class="flex gap-2">
-                    <flux:modal.close>
-                        <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
-                    </flux:modal.close>
-
-                    <flux:button type="submit" variant="primary">{{ __('Append') }}</flux:button>
-                </div>
-            </div>
-        </form>
-    </flux:modal>
+        <x-slot:footer>
+            <flux:button type="submit" variant="primary">{{ __('Append') }}</flux:button>
+        </x-slot:footer>
+    </x-modal>
 </div>

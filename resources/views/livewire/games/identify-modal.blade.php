@@ -272,87 +272,83 @@ new class extends Component
 };
 ?>
 
-<div x-on:identify-game.window="$flux.modal('{{ $this::MODAL }}').show(); $wire.open()">
-    <flux:modal :name="$this::MODAL" wire:close="closed" class="w-full max-w-2xl">
-        <div class="flex flex-col gap-5">
-            <div>
-                <flux:heading size="lg">{{ __('Identify game') }}</flux:heading>
-                @if ($this->file !== null)
-                    <p class="mt-0.5 truncate font-mono text-xs text-fg-faint">{{ $this->file->filename }}</p>
-                @endif
-            </div>
+{{-- A plain root: x-modal's own wrapper is conditional, and a Livewire
+     root has to be the first element it renders. --}}
+<div>
+    <x-modal
+        :name="$this::MODAL"
+        width="2xl"
+        event="identify-game"
+        then="$wire.open()"
+        wire:close="closed"
+        :heading="__('Identify game')"
+        :subheading="$this->file?->filename"
+        mono
+        cancel="{{ __('Close') }}"
+    >
+        <form wire:submit="lookup" class="flex gap-2">
+            <flux:input wire:model="search" icon="magnifying-glass" :placeholder="__('e.g. Super Mario Sunshine')" class="flex-1" />
+            <flux:button type="submit">{{ __('Search') }}</flux:button>
+        </form>
 
-            <form wire:submit="lookup" class="flex gap-2">
-                <flux:input wire:model="search" icon="magnifying-glass" :placeholder="__('e.g. Super Mario Sunshine')" class="flex-1" />
-                <flux:button type="submit">{{ __('Search') }}</flux:button>
-            </form>
-
-            <div wire:loading.flex wire:target="open, lookup" class="items-center justify-center gap-2 py-6 text-sm text-fg-soft">
-                <flux:icon.loading class="size-4" />
-                {{ __('Searching ScreenScraper…') }}
-            </div>
-
-            <div wire:loading.remove wire:target="open, lookup" class="flex flex-col gap-5">
-                @if ($hashingFileId !== null && $watching)
-                    <x-live-wait :game="$gameId" on="hashed" check="checkHash" :since="$hashingSince" :timeout="$this::HASH_WAIT_SECONDS"
-                                 class="flex items-center gap-2 rounded-lg border border-line-input bg-sunken px-3 py-2 text-sm text-fg-soft">
-                        <flux:icon.loading class="size-3.5 text-fg-muted" />
-                        {{ __('Hashing file for an exact match…') }}
-                    </x-live-wait>
-                @endif
-
-                @if ($md5Match !== null)
-                    <section>
-                        <div class="mb-2 flex items-center gap-2">
-                            <span class="size-1.5 rounded-full bg-accent shadow-glow" aria-hidden="true"></span>
-                            <h3 class="kicker text-accent">{{ __('Exact MD5 match') }}</h3>
-                        </div>
-                        <button type="button" wire:click="assign({{ (int) Arr::get($md5Match, 'provider_id') }})" wire:loading.attr="disabled" wire:target="assign"
-                                class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-accent-tint/40 bg-accent-tint/6 px-3 py-2.5 text-left transition-colors hover:bg-accent-tint/10 disabled:cursor-wait">
-                            <span class="min-w-0 flex-1">
-                                <span class="block truncate text-sm text-fg-bright">{{ Arr::get($md5Match, 'title') ?? __('(no title)') }}</span>
-                                <span class="mt-0.5 block font-mono text-xs text-fg-dim">{{ $this->detailLine($md5Match) }}</span>
-                                <span class="mt-0.5 block truncate text-sm text-fg-faint">{{ $this->studioLine($md5Match) }}</span>
-                            </span>
-                        </button>
-                    </section>
-                @endif
-
-                @if ($candidates !== [])
-                    <section>
-                        <h3 class="mb-2 kicker text-fg-faint">
-                            {{ __('Name matches') }} <span class="text-fg-dim">({{ count($candidates) }})</span>
-                        </h3>
-                        <div class="-mx-2 max-h-96 overflow-y-auto px-2">
-                            @foreach ($candidates as $candidate)
-                                @php(['provider_id' => $providerId, 'title' => $title, 'rom_name' => $romName] = $candidate)
-                                <button type="button" wire:key="candidate-{{ $providerId }}"
-                                        wire:click="assign({{ (int) $providerId }})" wire:loading.attr="disabled" wire:target="assign"
-                                        class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover disabled:cursor-wait">
-                                    <span class="min-w-0 flex-1">
-                                        <span class="block truncate text-sm text-fg-bright">{{ $title ?? __('(no title)') }}</span>
-                                        <span class="mt-0.5 block font-mono text-xs text-fg-dim">{{ $this->detailLine($candidate) }}</span>
-                                        @if ($romName)
-                                            <span class="mt-0.5 block truncate font-mono text-xs text-fg-faint">{{ $romName }}</span>
-                                        @endif
-                                    </span>
-                                </button>
-                            @endforeach
-                        </div>
-                    </section>
-                @elseif ($searched && $md5Match === null)
-                    <p class="rounded-lg border border-dashed border-line-input px-4 py-6 text-center text-sm text-fg-faint">
-                        {{ __('No matches found. Try searching with a different title.') }}
-                    </p>
-                @endif
-            </div>
-
-            <div class="flex items-center justify-between gap-2">
-                <span class="font-mono text-xs text-fg-faint">{{ __('Powered by ScreenScraper.fr') }}</span>
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Close') }}</flux:button>
-                </flux:modal.close>
-            </div>
+        <div wire:loading.flex wire:target="open, lookup" class="items-center justify-center gap-2 py-6 text-sm text-fg-soft">
+            <flux:icon.loading class="size-4" />
+            {{ __('Searching ScreenScraper…') }}
         </div>
-    </flux:modal>
+
+        <div wire:loading.remove wire:target="open, lookup" class="flex flex-col gap-5">
+            @if ($hashingFileId !== null && $watching)
+                <x-live-wait :game="$gameId" on="hashed" check="checkHash" :since="$hashingSince" :timeout="$this::HASH_WAIT_SECONDS">
+                    <x-notice busy>{{ __('Hashing file for an exact match…') }}</x-notice>
+                </x-live-wait>
+            @endif
+
+            @if ($md5Match !== null)
+                <section>
+                    <div class="mb-2 flex items-center gap-2">
+                        <span class="size-1.5 rounded-full bg-accent shadow-glow" aria-hidden="true"></span>
+                        <h3 class="kicker text-accent">{{ __('Exact MD5 match') }}</h3>
+                    </div>
+                    <button type="button" wire:click="assign({{ (int) Arr::get($md5Match, 'provider_id') }})" wire:loading.attr="disabled" wire:target="assign"
+                            class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-accent-tint/40 bg-accent-tint/6 px-3 py-2.5 text-left transition-colors hover:bg-accent-tint/10 disabled:cursor-wait">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm text-fg-bright">{{ Arr::get($md5Match, 'title') ?? __('(no title)') }}</span>
+                            <span class="mt-0.5 block font-mono text-xs text-fg-dim">{{ $this->detailLine($md5Match) }}</span>
+                            <span class="mt-0.5 block truncate text-sm text-fg-faint">{{ $this->studioLine($md5Match) }}</span>
+                        </span>
+                    </button>
+                </section>
+            @endif
+
+            @if ($candidates !== [])
+                <section>
+                    <h3 class="mb-2 kicker text-fg-faint">
+                        {{ __('Name matches') }} <span class="text-fg-dim">({{ count($candidates) }})</span>
+                    </h3>
+                    <div class="-mx-2 max-h-96 overflow-y-auto px-2">
+                        @foreach ($candidates as $candidate)
+                            @php(['provider_id' => $providerId, 'title' => $title, 'rom_name' => $romName] = $candidate)
+                            <button type="button" wire:key="candidate-{{ $providerId }}"
+                                    wire:click="assign({{ (int) $providerId }})" wire:loading.attr="disabled" wire:target="assign"
+                                    class="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover disabled:cursor-wait">
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm text-fg-bright">{{ $title ?? __('(no title)') }}</span>
+                                    <span class="mt-0.5 block font-mono text-xs text-fg-dim">{{ $this->detailLine($candidate) }}</span>
+                                    @if ($romName)
+                                        <span class="mt-0.5 block truncate font-mono text-xs text-fg-faint">{{ $romName }}</span>
+                                    @endif
+                                </span>
+                            </button>
+                        @endforeach
+                    </div>
+                </section>
+            @elseif ($searched && $md5Match === null)
+                <x-empty-state :title="__('No matches found. Try searching with a different title.')" />
+            @endif
+        </div>
+
+        <x-slot:footer-start>
+            <span class="font-mono text-xs text-fg-faint">{{ __('Powered by ScreenScraper.fr') }}</span>
+        </x-slot:footer-start>
+    </x-modal>
 </div>

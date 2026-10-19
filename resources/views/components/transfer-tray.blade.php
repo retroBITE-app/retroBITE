@@ -66,9 +66,7 @@
 
                 <template x-if="job.state === 'running'">
                     <div class="mt-2">
-                        <div class="h-1.5 overflow-hidden rounded-sm bg-raised">
-                            <div class="h-full rounded-sm bg-accent-deep transition-[width] duration-300" x-bind:style="`width: ${$store.usb.percent(job)}%`"></div>
-                        </div>
+                        <x-progress-bar size="md" x-percent="$store.usb.percent(job)" :label="__('Copy progress')" />
                         <p class="mt-1.5 font-mono text-xs text-fg-faint" x-show="job.phase === 'checking'"
                            x-text="@js(__('Checking what the drive has')) + ` · ${job.checked} / ${job.checking}`"></p>
                         <p class="mt-1.5 font-mono text-xs text-fg-faint" x-show="job.phase === 'copying'"

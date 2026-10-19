@@ -15,27 +15,21 @@
                     <span class="font-mono text-xs text-fg-faint" aria-hidden="true">└</span>
                 @endif
                 <x-game-file.name :filename="$row['filename']" class="text-sm font-medium text-fg-soft" />
-                <span class="shrink-0 rounded-md border border-dashed border-line-strong px-2 py-0.5 font-mono text-xs text-fg-faint">
-                    {{ __('Archived') }} · {{ $row['reason'] }}
-                </span>
+                <x-badge size="sm" tone="muted" dashed>{{ __('Archived') }} · {{ $row['reason'] }}</x-badge>
             </div>
 
-            @if ($row['folder'] !== '')
-                <p class="mt-1 font-mono text-xs break-all text-fg-faint">{{ $row['folder'] }}</p>
-            @endif
+            <x-game-file.folder :path="$row['folder']" class="mt-1" />
         </div>
 
         {{-- Forgetting is the one thing to do with a file that is gone. --}}
-        <button
-            type="button"
+        <x-icon-button
+            icon="archive-box-x-mark"
+            :label="__('Forget :file', ['file' => $row['filename']])"
+            tone="danger"
             wire:click="forgetFile({{ $row['id'] }})"
             wire:confirm="{{ __('Forget :file? Its checksums and what the provider said of it go too.', ['file' => $row['filename']]) }}"
-            aria-label="{{ __('Forget :file', ['file' => $row['filename']]) }}"
-            title="{{ __('Forget') }}"
-            class="-mt-1 -mr-1.5 shrink-0 cursor-pointer rounded-md p-1.5 text-fg-faint transition-colors hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-        >
-            <flux:icon.archive-box-x-mark class="size-4" />
-        </button>
+            class="-mt-1 -mr-1"
+        />
     </div>
 
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 rounded-md border border-line bg-sunken/60 px-3 py-2">

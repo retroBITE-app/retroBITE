@@ -91,10 +91,7 @@ new #[Title('User settings')] class extends Component
         {{-- Two forms rather than one: the two halves save independently, and a
              typo in a password must not cost somebody the name they just typed. --}}
         <form wire:submit="updateProfileInformation" class="grid w-full grid-cols-1 gap-6 lg:grid-cols-12">
-            <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-12">
-                <p class="kicker mb-1 text-fg-faint">{{ __('Profile') }}</p>
-                <p class="mb-4 text-sm text-fg-soft">{{ __('Your name and email address.') }}</p>
-
+            <x-settings.card class="lg:col-span-12" :kicker="__('Profile')" :description="__('Your name and email address.')">
                 {{-- Two fields that belong to one another, so they sit on one row
                      rather than each running the width of the pane. --}}
                 <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -110,16 +107,11 @@ new #[Title('User settings')] class extends Component
                         <flux:button variant="primary" type="submit">{{ __('Save') }}</flux:button>
                     </div>
                 </div>
-            </div>
+            </x-settings.card>
         </form>
 
         <form method="POST" wire:submit="updatePassword" class="mt-6 grid w-full grid-cols-1 gap-6 lg:grid-cols-12">
-            <div class="rounded-xl border border-line bg-surface p-5 lg:col-span-12">
-                <p class="kicker mb-1 text-fg-faint">{{ __('Password') }}</p>
-                <p class="mb-4 text-sm text-fg-soft">
-                    {{ __('Use a long, random password. Changing it needs the one you sign in with today.') }}
-                </p>
-
+            <x-settings.card class="lg:col-span-12" :kicker="__('Password')" :description="__('Use a long, random password. Changing it needs the one you sign in with today.')">
                 {{-- The current password proves who is asking; the new one and its
                      confirmation are the change. A row each, so they read that way. --}}
                 <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -162,7 +154,7 @@ new #[Title('User settings')] class extends Component
                         <flux:button variant="primary" type="submit" data-test="update-password-button">{{ __('Save') }}</flux:button>
                     </div>
                 </div>
-            </div>
+            </x-settings.card>
         </form>
     </x-settings.layout>
 </section>

@@ -99,68 +99,53 @@ new class extends Component
     }
 }; ?>
 
-<div class="flex flex-col gap-5">
-    @php($console = App\Support\Console::tryFrom($console))
+@php($console = App\Support\Console::tryFrom($console))
 
-    <div>
-        <flux:heading size="lg">{{ __('How is the folder arranged?') }}</flux:heading>
-        <flux:text class="mt-2">
-            {{ __('This is how :console\'s files sit on disk. It changes what is read as a game and what is skipped.', [
-                'console' => $console?->name ?? $this->console,
-            ]) }}
-        </flux:text>
-
-        {{-- Said here because choosing a layout writes to somebody's drive
-             without asking again. The second sentence is the one that matters:
-             "creates folders" is a fair thing to read as "moves my ISOs into
-             them", and nothing here moves anything. --}}
-        <flux:text class="mt-1.5 text-fg-faint">
-            {{ __('Any folders the layout needs are created if they are not already there. Nothing existing is moved or renamed.') }}
-        </flux:text>
-    </div>
+<x-modal.content
+    :heading="__('How is the folder arranged?')"
+    :subheading="__('This is how :console\'s files sit on disk. It changes what is read as a game and what is skipped.', [
+        'console' => $console?->name ?? $this->console,
+    ])"
+    :cancel="false"
+>
+    {{-- Said here because choosing a layout writes to somebody's drive
+         without asking again. The second sentence is the one that matters:
+         "creates folders" is a fair thing to read as "moves my ISOs into
+         them", and nothing here moves anything. --}}
+    <flux:text class="text-fg-faint">
+        {{ __('Any folders the layout needs are created if they are not already there. Nothing existing is moved or renamed.') }}
+    </flux:text>
 
     <div class="grid gap-1.5">
         @foreach ($this->layouts as ['value' => $value, 'label' => $label, 'description' => $description])
-            <button
-                type="button"
+            <x-option-card
                 wire:key="layout-{{ $value }}"
-                wire:click="$set('layout', @js($value))"
-                @class([
-                    'cursor-pointer rounded-lg border px-3.5 py-2.5 text-left transition-colors',
-                    'border-accent-tint/55 bg-accent-tint/10' => $layout === $value,
-                    'border-line-input hover:bg-hover' => $layout !== $value,
-                ])
+                wire:click="$set('layout', '{{ $value }}')"
+                :active="$layout === $value"
+                :label="$label"
+                :description="$description"
             >
-                <span class="flex items-center gap-2">
-                    <span @class([
-                        'text-sm',
-                        'text-accent' => $layout === $value,
-                        'text-fg-soft' => $layout !== $value,
-                    ])>{{ $label }}</span>
-
-                    {{-- Which one the console is read as today, so changing it
-                         says what is being changed from. Absent while adding a
-                         console: nothing is in force yet. --}}
-                    @if ($this->current === $value)
-                        <span class="rounded-md border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[10px] tracking-kicker text-fg-muted uppercase">
-                            {{ __('Current') }}
-                        </span>
-                    @endif
-                </span>
-                <span class="mt-0.5 block text-xs text-fg-faint">{{ $description }}</span>
-            </button>
+                {{-- Which one the console is read as today, so changing it
+                     says what is being changed from. Absent while adding a
+                     console: nothing is in force yet. --}}
+                @if ($this->current === $value)
+                    <x-slot:badge>
+                        <x-badge>{{ __('Current') }}</x-badge>
+                    </x-slot:badge>
+                @endif
+            </x-option-card>
         @endforeach
     </div>
 
     <flux:error name="layout" />
 
-    <div class="flex justify-end gap-2">
-        <flux:button size="sm" variant="ghost" wire:click="$dispatch('layout-cancelled')">
+    <x-slot:footer>
+        <flux:button variant="ghost" wire:click="$dispatch('layout-cancelled')">
             {{ __('Back') }}
         </flux:button>
 
-        <flux:button size="sm" variant="primary" wire:click="choose" :disabled="$this->layouts === []">
+        <flux:button variant="primary" wire:click="choose" :disabled="$this->layouts === []">
             {{ $editing ? __('Save layout') : __('Add console') }}
         </flux:button>
-    </div>
-</div>
+    </x-slot:footer>
+</x-modal.content>

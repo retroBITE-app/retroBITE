@@ -79,7 +79,7 @@ test('the console picker leads with the library and keeps the rest behind Show a
 
     expect($html)->toContain(__('Show all consoles'))
         ->and($html)->toContain(__('No console'))
-        ->and($html)->toMatch('/wire:key="console-snes"(?:(?!x-show).)*?>snes</s')
+        ->and($html)->toMatch('/wire:key="console-snes"(?:(?!x-show).)*?>\s*snes\s*</s')
         ->and($html)->toMatch('/x-show="all"[^>]*wire:key="console-gc"/s');
 });
 

@@ -88,46 +88,37 @@ new class extends Component
     }
 }; ?>
 
-<div x-on:decrypt-confirm.window="$flux.modal('{{ $this::MODAL }}').show(); $wire.open($event.detail.fileIds)">
-    <flux:modal :name="$this::MODAL" class="w-full max-w-lg">
-        <div class="flex flex-col gap-5">
-            <flux:heading size="lg">
-                {{ trans_choice('Decrypt this image?|Decrypt :count images?', $this->files->count(), ['count' => $this->files->count()]) }}
-            </flux:heading>
-
-            @if ($this->files->isNotEmpty())
-                <ul class="space-y-1">
-                    @foreach ($this->files->take($this::LISTED) as $file)
-                        <li wire:key="confirm-{{ $file->id }}" class="flex items-center gap-2">
-                            <span class="min-w-0 truncate font-mono text-xs text-fg-soft">{{ $file->filename }}</span>
-                            @if (in_array($file->id, $this->decrypting, true))
-                                <x-decrypt.state :state="DecryptState::Decrypting" />
-                            @endif
-                        </li>
-                    @endforeach
-                    @if ($this->files->count() > $this::LISTED)
-                        <li class="text-xs text-fg-faint">{{ __('and :count more', ['count' => $this->files->count() - $this::LISTED]) }}</li>
+<x-modal
+    :name="$this::MODAL"
+    event="decrypt-confirm"
+    then="$wire.open($event.detail.fileIds)"
+    :heading="trans_choice('Decrypt this image?|Decrypt :count images?', $this->files->count(), ['count' => $this->files->count()])"
+>
+    @if ($this->files->isNotEmpty())
+        <x-preview-list :total="$this->files->count()" :limit="$this::LISTED">
+            @foreach ($this->files->take($this::LISTED) as $file)
+                <li wire:key="confirm-{{ $file->id }}" class="flex items-center gap-2 px-3 py-2">
+                    <span class="min-w-0 truncate font-mono text-xs text-fg-soft">{{ $file->filename }}</span>
+                    @if (in_array($file->id, $this->decrypting, true))
+                        <x-decrypt.state :state="DecryptState::Decrypting" />
                     @endif
-                </ul>
-            @endif
+                </li>
+            @endforeach
+        </x-preview-list>
+    @endif
 
-            <div class="space-y-2 text-sm text-fg-muted">
-                <p>{{ __('The decrypted image replaces the encrypted one, under the same name. The encrypted image is gone afterwards.') }}</p>
-                <p>{{ __('The .dkey beside it is deleted too: left there, ps3netsrv would decrypt the decrypted image again. The key itself stays on record and is shown on the game\'s page.') }}</p>
-                <p class="text-warn">{{ __('This cannot be undone.') }}</p>
-                @if ($this->decrypting !== [])
-                    <p>{{ trans_choice('One of these is already being decrypted and is left as it is.|:count of these are already being decrypted and are left as they are.', count($this->decrypting), ['count' => count($this->decrypting)]) }}</p>
-                @endif
-            </div>
+    <div class="space-y-2 text-sm text-fg-muted">
+        <p>{{ __('The decrypted image replaces the encrypted one, under the same name. The encrypted image is gone afterwards.') }}</p>
+        <p>{{ __('The .dkey beside it is deleted too: left there, ps3netsrv would decrypt the decrypted image again. The key itself stays on record and is shown on the game\'s page.') }}</p>
+        <p class="text-warn">{{ __('This cannot be undone.') }}</p>
+        @if ($this->decrypting !== [])
+            <p>{{ trans_choice('One of these is already being decrypted and is left as it is.|:count of these are already being decrypted and are left as they are.', count($this->decrypting), ['count' => count($this->decrypting)]) }}</p>
+        @endif
+    </div>
 
-            <div class="flex justify-end gap-2">
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
-                </flux:modal.close>
-                <flux:button variant="danger" icon="lock-open" wire:click="decrypt" wire:loading.attr="disabled" :disabled="$this->files->count() === count($this->decrypting)">
-                    {{ __('Decrypt') }}
-                </flux:button>
-            </div>
-        </div>
-    </flux:modal>
-</div>
+    <x-slot:footer>
+        <flux:button variant="danger" icon="lock-open" wire:click="decrypt" wire:loading.attr="disabled" :disabled="$this->files->count() === count($this->decrypting)">
+            {{ __('Decrypt') }}
+        </flux:button>
+    </x-slot:footer>
+</x-modal>

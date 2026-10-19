@@ -209,30 +209,20 @@ new class extends Component
     }
 }; ?>
 
-<div
-    x-data="{
-        stop: null,
-        init() { this.stop = live.system('conversion', () => $wire.refreshQueue()) },
-        destroy() { this.stop?.() },
-    }"
->
-    <section class="rounded-xl border border-line bg-surface">
-        <div class="flex items-center justify-between gap-3 border-b border-line px-4 py-2">
-            <p class="kicker text-fg-faint">{{ __('Queue') }}</p>
+<x-live-system signal="conversion" call="refreshQueue">
+    <x-panel as="section" :title="__('Queue')">
+        <x-slot:actions>
+            <p class="font-mono text-xs text-fg-faint">
+                {{ trans_choice(':count conversion runs at a time|:count conversions run at a time', (int) config('converters.concurrency'), ['count' => (int) config('converters.concurrency')]) }}
+            </p>
 
-            <div class="flex items-center gap-3">
-                <p class="font-mono text-xs text-fg-faint">
-                    {{ trans_choice(':count conversion runs at a time|:count conversions run at a time', (int) config('converters.concurrency'), ['count' => (int) config('converters.concurrency')]) }}
-                </p>
-
-                <flux:button size="xs" variant="ghost" icon="archive-box-x-mark" wire:click="clearFinished">
-                    {{ __('Clear finished') }}
-                </flux:button>
-            </div>
-        </div>
+            <flux:button size="xs" variant="ghost" icon="archive-box-x-mark" wire:click="clearFinished">
+                {{ __('Clear finished') }}
+            </flux:button>
+        </x-slot:actions>
 
         @if ($this->queue->isEmpty())
-            <p class="px-4 py-8 text-center text-sm text-fg-faint">{{ __('Nothing queued.') }}</p>
+            <x-empty-state variant="inline" :title="__('Nothing queued.')" />
         @else
             <ul class="divide-y divide-line">
                 @foreach ($this->queue as $conversion)
@@ -255,16 +245,9 @@ new class extends Component
                                 @endif
                             </div>
 
-                            <span @class([
-                                'shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] tracking-kicker uppercase',
-                                'border-accent-tint/55 text-accent' => $conversion->status->active(),
-                                'border-line-strong text-fg-muted' => in_array($conversion->status, [ConversionStatus::Queued, ConversionStatus::Cancelled], true),
-                                'border-success/55 bg-success/15 text-success' => $conversion->status === ConversionStatus::Done,
-                                'border-danger/60 text-danger' => $conversion->status === ConversionStatus::Failed,
-                            ])>
+                            <x-badge :tone="$conversion->status->tone()" :fill="$conversion->status === ConversionStatus::Done">
                                 {{ $conversion->status->label() }}
-                            </span>
-
+                            </x-badge>
 
                             {{-- Once done there is nothing left to measure, so the
                                  bar goes and the time it took stands alone. --}}
@@ -272,12 +255,12 @@ new class extends Component
                                 <span class="font-mono text-[10px] leading-none tracking-kicker text-fg-faint uppercase">{{ $this->timingFor($conversion) }}</span>
 
                                 <div @class(['flex items-center gap-2', 'hidden' => $conversion->status === ConversionStatus::Done])>
-                                    <div class="h-1 flex-1 overflow-hidden rounded-sm bg-raised">
-                                        <div
-                                            @class(['h-full rounded-sm transition-[width] duration-300', 'bg-accent-deep' => $conversion->status !== ConversionStatus::Failed, 'bg-danger' => $conversion->status === ConversionStatus::Failed])
-                                            style="width: {{ (int) $conversion->progress }}%"
-                                        ></div>
-                                    </div>
+                                    <x-progress-bar
+                                        :percent="(int) $conversion->progress"
+                                        :tone="$conversion->status === ConversionStatus::Failed ? 'danger' : 'accent'"
+                                        :label="__('Conversion progress')"
+                                        class="flex-1"
+                                    />
                                     <span class="w-9 text-right font-mono text-xs text-fg-faint">{{ (int) $conversion->progress }}%</span>
                                 </div>
                             </div>
@@ -324,5 +307,5 @@ new class extends Component
                 @endforeach
             </ul>
         @endif
-    </section>
-</div>
+    </x-panel>
+</x-live-system>

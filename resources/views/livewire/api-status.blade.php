@@ -77,99 +77,72 @@ new class extends Component
     this column: one line that is both the label and the number, rather than a
     section title spending a row of its own on the word "APIs".
 --}}
-<div
-    x-data="{
-        open: $persist(false).as('sidebar.scraper'),
-        stop: null,
-        init() { this.stop = live.system('quota', () => this.$wire.$refresh()) },
-        destroy() { this.stop?.() },
-    }"
+<x-sidebar.meter
+    :label="__('Scraper')"
+    :toggle-label="__('Show the failed-lookup allowance')"
+    :disabled="$quota === null"
+    x-data="{ open: $persist(false).as('sidebar.scraper') }"
     class="mb-3 border-b border-line pb-3"
 >
-    <button
-        type="button"
-        x-on:click="open = ! open"
-        x-bind:aria-expanded="open"
-        @disabled($quota === null)
-        aria-label="{{ __('Show the failed-lookup allowance') }}"
-        class="flex w-full cursor-pointer items-baseline justify-between gap-2 text-fg-muted transition-colors not-disabled:hover:text-fg-soft disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-    >
-        <span class="kicker">{{ __('Scraper') }}</span>
+    <x-slot:figure>
+        @if ($requests === null)
+            <span class="text-fg-faint">{{ __('—') }}</span>
+        @elseif ($requests['max'] > 0)
+            <x-fraction :value="Number::format($requests['used'])" :of="Number::format($requests['max'])" />
+        @else
+            <span class="text-fg-faint">{{ __('not reported') }}</span>
+        @endif
+    </x-slot:figure>
 
-        <span class="flex items-baseline gap-1.5 font-mono text-xs whitespace-nowrap">
-            @if ($requests === null)
-                <span class="text-fg-faint">{{ __('—') }}</span>
-            @elseif ($requests['max'] > 0)
-                {{ Number::format($requests['used']) }}
-                <span class="text-fg-faint">/ {{ Number::format($requests['max']) }}</span>
+    <x-slot:summary>
+        <x-live-system signal="quota" call="$refresh" class="hidden" />
+
+        @if ($quota === null)
+            <p class="mt-1.5 text-xs leading-snug text-fg-faint">
+                {{ $scraperAccount
+                    ? __('Not asked yet — figures appear after the first lookup.')
+                    : __('No account set. Scanning works; identifying does not.') }}
+            </p>
+        @else
+            <x-quota-bar :used="$requests['used']" :max="$requests['max']" :label="__('ScreenScraper requests')" class="mt-2" />
+
+            {{--
+                Load shedding at the far end. This is the whole reason to look
+                before starting a scan, so it stays on screen rather than folding
+                away with the second allowance.
+            --}}
+            @if ($closed)
+                <x-notice tone="warn" icon="exclamation-triangle" size="sm" class="mt-2">
+                    {{ $quota['closed_for_leechers']
+                        ? __('Turning away accounts that only download.')
+                        : __('Closed to non-members right now.') }}
+                </x-notice>
+            @endif
+        @endif
+    </x-slot:summary>
+
+    @if ($quota !== null)
+        <x-sidebar.meter-row :label="__('Failed')">
+            @if ($failed['max'] > 0)
+                <x-fraction :value="Number::format($failed['used'])" :of="Number::format($failed['max'])" />
             @else
                 <span class="text-fg-faint">{{ __('not reported') }}</span>
             @endif
 
-            @if ($quota !== null)
-                <flux:icon.chevron-down
-                    class="size-3 shrink-0 self-center text-fg-faint transition-transform duration-200"
-                    x-bind:class="open && '-rotate-180'"
-                />
-            @endif
-        </span>
-    </button>
-
-    @if ($quota === null)
-        <p class="mt-1.5 text-xs leading-snug text-fg-faint">
-            {{ $scraperAccount
-                ? __('Not asked yet — figures appear after the first lookup.')
-                : __('No account set. Scanning works; identifying does not.') }}
-        </p>
-    @else
-        <x-quota-bar :used="$requests['used']" :max="$requests['max']" class="mt-2" />
+            <x-slot:bar>
+                <x-quota-bar :used="$failed['used']" :max="$failed['max']" :label="__('Failed requests')" class="mt-1" />
+            </x-slot:bar>
+        </x-sidebar.meter-row>
 
         {{--
-            Load shedding at the far end. This is the whole reason to look
-            before starting a scan, so it stays on screen rather than folding
-            away with the second allowance.
+            The snapshot is written when a response arrives and never
+            ages by itself. Without this, a figure from yesterday reads
+            as today's.
         --}}
-        @if ($closed)
-            <p class="mt-2 flex items-start gap-1.5 rounded-md border border-warn/45 bg-warn/10 px-2 py-1.5 text-xs leading-snug text-warn">
-                <flux:icon.exclamation-triangle variant="micro" class="mt-px size-3.5 shrink-0" />
-                <span>{{ $quota['closed_for_leechers']
-                    ? __('Turning away accounts that only download.')
-                    : __('Closed to non-members right now.') }}</span>
+        @if ($quota['recorded_at'] !== '')
+            <p class="font-mono text-[11px] leading-none text-fg-faint" title="{{ $quota['recorded_at'] }}">
+                {{ __('read :ago', ['ago' => \Illuminate\Support\Carbon::parse($quota['recorded_at'])->diffForHumans(short: true)]) }}
             </p>
         @endif
-
-        {{-- Plain x-show rather than x-collapse: this component re-renders
-             on a timer, and morphing a subtree whose inline height the
-             collapse plugin owns is a flicker at exactly the moment
-             somebody is watching the figures move. --}}
-        <div x-show="open" x-cloak>
-            <div class="mt-2.5">
-                <div class="flex items-baseline justify-between gap-2 text-xs">
-                    <span class="text-fg-faint">{{ __('Failed') }}</span>
-
-                    <span class="font-mono whitespace-nowrap text-fg-dim">
-                        @if ($failed['max'] > 0)
-                            {{ Number::format($failed['used']) }}
-                            <span class="text-fg-faint">/ {{ Number::format($failed['max']) }}</span>
-                        @else
-                            <span class="text-fg-faint">{{ __('not reported') }}</span>
-                        @endif
-                    </span>
-                </div>
-
-                <x-quota-bar :used="$failed['used']" :max="$failed['max']" class="mt-1" />
-
-                {{--
-                    The snapshot is written when a response arrives and never
-                    ages by itself. Without this, a figure from yesterday reads
-                    as today's.
-                --}}
-                @if ($quota['recorded_at'] !== '')
-                    <p class="mt-2 font-mono text-[11px] leading-none text-fg-faint" title="{{ $quota['recorded_at'] }}">
-                        {{ __('read :ago', ['ago' => \Illuminate\Support\Carbon::parse($quota['recorded_at'])->diffForHumans(short: true)]) }}
-                    </p>
-                @endif
-            </div>
-        </div>
     @endif
-</div>
+</x-sidebar.meter>

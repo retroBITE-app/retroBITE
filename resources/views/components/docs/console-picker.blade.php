@@ -23,48 +23,39 @@
         : $all->partition(function (App\Resources\ConsoleResource $console) use ($library, $selected): bool {
             return $library->contains($console->key) || $console->key === $selected;
         });
-
-    $chip = 'cursor-pointer rounded-lg border px-2.5 py-1 font-mono text-xs uppercase transition-colors';
-    $on = 'border-accent-tint/55 bg-accent-tint/10 text-accent';
-    $off = 'border-line-input text-fg-dim hover:bg-hover hover:text-fg';
 @endphp
 
 <div x-data="{ all: false }" class="flex flex-wrap gap-1.5">
-    <button
-        type="button"
-        wire:key="{{ $keyPrefix }}-none"
-        wire:click="$set('console', '')"
-        @class([$chip, 'normal-case', $on => $selected === '', $off => $selected !== ''])
-    >{{ __('No console') }}</button>
+    <x-chip :active="$selected === ''" wire:key="{{ $keyPrefix }}-none" wire:click="$set('console', '')">{{ __('No console') }}</x-chip>
 
     @foreach ($first as $option)
-        <button
-            type="button"
+        <x-chip
+            mono
+            :active="$selected === $option->key"
             wire:key="{{ $keyPrefix }}-{{ $option->key }}"
-            wire:click="$set('console', @js($selected === $option->key ? '' : $option->key))"
-            title="{{ $option->name }}"
-            @class([$chip, $on => $selected === $option->key, $off => $selected !== $option->key])
-        >{{ $option->key }}</button>
+            wire:click="$set('console', {{ Js::from($selected === $option->key ? '' : $option->key) }})"
+            :title="$option->name"
+            class="uppercase"
+        >{{ $option->key }}</x-chip>
     @endforeach
 
     @if ($rest->isNotEmpty())
         @foreach ($rest as $option)
-            <button
-                type="button"
+            <x-chip
+                mono
                 x-show="all"
                 x-cloak
                 wire:key="{{ $keyPrefix }}-{{ $option->key }}"
-                wire:click="$set('console', @js($option->key))"
-                title="{{ $option->name }}"
-                class="{{ $chip }} {{ $off }}"
-            >{{ $option->key }}</button>
+                wire:click="$set('console', {{ Js::from($option->key) }})"
+                :title="$option->name"
+                class="uppercase"
+            >{{ $option->key }}</x-chip>
         @endforeach
 
-        <button
-            type="button"
+        <x-chip
+            dashed
             x-on:click="all = ! all"
-            class="cursor-pointer rounded-lg border border-dashed border-line-bright px-2.5 py-1 text-xs text-fg-dim transition-colors hover:bg-hover hover:text-fg"
-            x-text="all ? @js(__('Show fewer')) : @js(__('Show all consoles'))"
-        >{{ __('Show all consoles') }}</button>
+            x-text="all ? {{ Js::from(__('Show fewer')) }} : {{ Js::from(__('Show all consoles')) }}"
+        >{{ __('Show all consoles') }}</x-chip>
     @endif
 </div>

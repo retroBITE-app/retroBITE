@@ -29,11 +29,11 @@
                 x-data
                 x-on:click="$dispatch('open-global-search')"
                 aria-keyshortcuts="Control+K Meta+K"
-                class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-line-input bg-ground/60 px-2.75 py-1.5 text-sm text-fg-dim transition-colors hover:border-line-bright hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-line-input bg-ground/60 px-2.75 py-1.5 text-sm text-fg-dim transition-colors hover:border-line-bright hover:text-fg-soft focus-ring"
             >
                 <flux:icon.magnifying-glass class="size-3.5" />
                 <span class="flex-1 text-left">{{ __('Search') }}</span>
-                <kbd aria-hidden="true" class="font-sans text-xs">⌘K</kbd>
+                <x-kbd keys="⌘K" aria-hidden="true" />
             </button>
 
             @php($installed = App\Models\ConsoleSourceFolder::arranged($gameCounts))
@@ -73,19 +73,13 @@
                                     {{-- A game is inside its console now, so its page lights the console too. --}}
                                     @php($isCurrent = request()->routeIs('consoles.games', 'games.show') && request()->route('console') === $console->key)
 
-                                    <a
-                                        href="{{ route('consoles.games', ['console' => $console->key]) }}"
+                                    <x-sidebar.sub-item
+                                        :href="route('consoles.games', ['console' => $console->key])"
+                                        :current="$isCurrent"
+                                        :image="$console->icon"
+                                        :count="Illuminate\Support\Arr::get($gameCounts, $console->key, 0)"
                                         wire:navigate
-                                        @class([
-                                            'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
-                                            'bg-accent-tint/13 text-accent shadow-rail' => $isCurrent,
-                                            'text-fg-cool hover:bg-hover hover:text-fg' => ! $isCurrent,
-                                        ])
-                                    >
-                                        <img src="{{ $console->icon }}" alt="" class="size-4 shrink-0 object-contain" />
-                                        <span class="truncate">{{ $console->name }}</span>
-                                        <span class="ms-auto font-mono text-xs text-fg-faint">{{ Illuminate\Support\Arr::get($gameCounts, $console->key, 0) }}</span>
-                                    </a>
+                                    >{{ $console->name }}</x-sidebar.sub-item>
                                 @endforeach
                             @endforeach
                         </div>
@@ -109,18 +103,7 @@
                     @foreach (App\Support\Navigation::tools() as ['label' => $label, 'route' => $route, 'icon' => $icon])
                         @php($isCurrent = request()->routeIs($route))
 
-                        <a
-                            href="{{ route($route) }}"
-                            wire:navigate
-                            @class([
-                                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
-                                'bg-accent-tint/13 text-accent shadow-rail' => $isCurrent,
-                                'text-fg-cool hover:bg-hover hover:text-fg' => ! $isCurrent,
-                            ])
-                        >
-                            <flux:icon :icon="$icon" class="size-4 shrink-0" />
-                            <span class="truncate">{{ __($label) }}</span>
-                        </a>
+                        <x-sidebar.sub-item :href="route($route)" :current="$isCurrent" :icon="$icon" wire:navigate>{{ __($label) }}</x-sidebar.sub-item>
                     @endforeach
                 </flux:sidebar.group>
 
@@ -164,7 +147,7 @@
                             type="submit"
                             data-test="logout-button"
                             aria-label="{{ __('Log out') }}"
-                            class="cursor-pointer rounded text-fg-dim transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                            class="cursor-pointer rounded text-fg-dim transition-colors hover:text-fg focus-ring"
                         >
                             <flux:icon.arrow-right-start-on-rectangle variant="micro" />
                         </button>
@@ -188,7 +171,7 @@
             x-on:click="$dispatch('flux-sidebar-toggle')"
             aria-label="{{ __('Toggle sidebar') }}"
             data-sidebar-toggle
-            class="fixed top-4 left-4 z-30 grid h-10 w-10 place-items-center rounded-lg border border-line-bright bg-surface/90 text-fg-soft backdrop-blur-sm transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep lg:hidden"
+            class="fixed top-4 left-4 z-30 grid h-10 w-10 place-items-center rounded-lg border border-line-bright bg-surface/90 text-fg-soft backdrop-blur-sm transition-colors hover:text-fg focus-ring lg:hidden"
         >
             <flux:icon.bars-2 class="size-5" />
         </button>

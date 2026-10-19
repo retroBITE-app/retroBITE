@@ -53,9 +53,7 @@
         @csrf
 
         @if ($errors->any())
-            <p role="alert" class="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
-                {{ $errors->first() }}
-            </p>
+            <x-notice tone="danger" role="alert">{{ $errors->first() }}</x-notice>
         @endif
 
         <x-auth-session-status class="text-center" :status="session('status')" />
@@ -83,13 +81,8 @@
             viewable
         />
 
-        <button
-            type="submit"
-            data-test="login-button"
-            class="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-accent-tint/55 bg-accent-tint/10 px-4 py-3 text-base text-accent transition-colors hover:bg-accent-tint/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-        >
-            <flux:icon.arrow-right-end-on-rectangle variant="micro" />
+        <x-cta-button icon="arrow-right-end-on-rectangle" data-test="login-button">
             {{ __('Sign in') }}
-        </button>
+        </x-cta-button>
     </form>
 </x-layouts::auth>

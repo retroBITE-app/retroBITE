@@ -4,6 +4,7 @@ use App\Enums\ConversionStatus;
 use App\Models\Conversion;
 use App\Support\ExportProgress;
 use App\Support\SystemActivity;
+use Illuminate\Support\Arr;
 use Livewire\Component;
 
 /**
@@ -101,7 +102,9 @@ new class extends Component
     private function exports(): array
     {
         $running = ExportProgress::all();
-        $done = array_sum(array_map(fn (array $export): int => min($export['done'], $export['total']), $running));
+        $done = array_sum(array_map(function (array $export): int {
+            return min(Arr::get($export, 'done'), Arr::get($export, 'total'));
+        }, $running));
         $total = array_sum(array_column($running, 'total'));
 
         return [
@@ -111,7 +114,6 @@ new class extends Component
             'percent' => $total > 0 ? (int) round(100 * $done / $total) : 0,
         ];
     }
-
 }; ?>
 
 {{--
@@ -120,117 +122,74 @@ new class extends Component
     scan started from the command line or the nightly schedule shows up too,
     and an idle page asks the database nothing at all.
 --}}
-<div
-    x-data="{
-        open: $persist(false).as('sidebar.activity'),
-        stop: null,
-        init() {
-            const refresh = () => this.$wire.$refresh()
-            const stops = [live.system('activity', refresh), live.system('conversion', refresh)]
-            this.stop = () => stops.forEach((stop) => stop?.())
-        },
-        destroy() { this.stop?.() },
-    }"
+@php($total = $activity->total())
+@php(['at' => $convertingAt, 'total' => $convertingTotal, 'percent' => $convertingPercent] = $converting ?? ['at' => 0, 'total' => 0, 'percent' => 0])
+@php(['busy' => $exportsBusy, 'done' => $exportsDone, 'total' => $exportsTotal, 'percent' => $exportsPercent] = $exports)
+
+<x-sidebar.meter
+    :label="__('Activity')"
+    :toggle-label="__('Show each queue on its own')"
+    x-data="{ open: $persist(false).as('sidebar.activity') }"
     class="mb-3 border-b border-line pb-3"
 >
-    @php($total = $activity->total())
-
-    <button
-        type="button"
-        x-on:click="open = ! open"
-        x-bind:aria-expanded="open"
-        aria-label="{{ __('Show each queue on its own') }}"
-        class="flex w-full cursor-pointer items-baseline justify-between gap-2 text-fg-muted transition-colors hover:text-fg-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-    >
-        <span class="kicker">{{ __('Activity') }}</span>
-
-        <span class="flex items-baseline gap-1.5 font-mono text-xs whitespace-nowrap">
-            @if ($activity->busy())
-                {{-- size-3.5 rather than size-4: it sits on a text-xs baseline
-                     and the larger glyph overhangs the row in a column this
-                     narrow. --}}
-                <flux:icon.arrow-path class="size-3.5 shrink-0 self-center animate-spin text-accent" />
-                <span class="text-accent">{{ $total->remaining() }}</span>
-            @else
-                {{-- Kept rather than collapsed, so the footer does not jump the
-                     moment a scan starts. Idle is also an answer. --}}
-                <span class="text-fg-faint">{{ __('idle') }}</span>
-            @endif
-
-            <flux:icon.chevron-down
-                class="size-3 shrink-0 self-center text-fg-faint transition-transform duration-200"
-                x-bind:class="open && '-rotate-180'"
-            />
-        </span>
-    </button>
+    <x-slot:figure>
+        @if ($activity->busy())
+            {{-- size-3.5 rather than size-4: it sits on a text-xs baseline
+                 and the larger glyph overhangs the row in a column this
+                 narrow. --}}
+            <flux:icon.arrow-path class="size-3.5 shrink-0 self-center animate-spin text-accent" />
+            <span class="text-accent">{{ $total->remaining() }}</span>
+        @else
+            {{-- Kept rather than collapsed, so the footer does not jump the
+                 moment a scan starts. Idle is also an answer. --}}
+            <span class="text-fg-faint">{{ __('idle') }}</span>
+        @endif
+    </x-slot:figure>
 
     {{--
         Every queue in one bar, measured against the deepest they have been
         since they last emptied, so a page opened mid-run starts at zero and
         climbs rather than inventing a total.
     --}}
-    <div class="mt-2 h-1 overflow-hidden rounded-sm bg-raised">
-        <div
-            class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
-            style="width: {{ $total->percent() }}%"
-        ></div>
-    </div>
+    <x-slot:summary>
+        <x-live-system :signal="['activity', 'conversion']" call="$refresh" class="hidden" />
+
+        <x-progress-bar :percent="$total->percent()" :label="__('Queued work')" class="mt-2" />
+    </x-slot:summary>
 
     {{--
         Every queue, not only the busy ones. A row at zero is worth its line:
         unfolded, this list is also the only place the interface says what
         kinds of work exist at all, and it would be a strange control that
         answered nothing on an idle system.
-
-        Plain x-show rather than x-collapse: this component re-renders on a
-        timer, and morphing a subtree whose inline height the collapse plugin
-        owns is a flicker at exactly the moment somebody is watching the
-        figures move.
     --}}
-    <div x-show="open" x-cloak>
-        <div class="mt-2.5 flex flex-col gap-2">
-            @php(['at' => $convertingAt, 'total' => $convertingTotal, 'percent' => $convertingPercent] = $converting ?? ['at' => 0, 'total' => 0, 'percent' => 0])
+    @foreach ($activity->all() as $queue)
+        @php($writing = $queue->key === 'toolbox' && $exportsBusy)
+        @php($convertingHere = $queue->key === 'conversion' && $converting !== null)
 
-            @foreach ($activity->all() as $queue)
-                <div wire:key="activity-{{ $queue->key }}">
-                    <div class="flex items-baseline justify-between gap-2 text-xs">
-                        <span class="truncate text-fg-faint">{{ __($queue->label) }}</span>
-
-                        @php($writing = $queue->key === 'toolbox' && $exports['busy'])
-                        @php($convertingHere = $queue->key === 'conversion' && $converting !== null)
-
-                        {{-- A quiet queue keeps its row but gives up the
-                             brighter figure, so the busy ones are still the
-                             ones the eye lands on. --}}
-                        <span @class(['font-mono whitespace-nowrap', 'text-fg-dim' => $queue->busy() || $writing || $convertingHere, 'text-fg-faint' => ! $queue->busy() && ! $writing && ! $convertingHere])>
-                            @if ($writing)
-                                {{-- Files written out of files to write, where
-                                     the other rows count jobs left. --}}
-                                {{ $exports['done'] }}<span class="text-fg-faint">/{{ $exports['total'] }}</span>
-                            @elseif ($convertingHere)
-                                {{-- The conversion being worked on out of the batch, and how far the
-                                     batch is: a running disc moves the percent before
-                                     it moves the count. --}}
-                                {{ $convertingAt }}<span class="text-fg-faint">/{{ $convertingTotal }} · </span>{{ $convertingPercent }}<span class="text-fg-faint">%</span>
-                            @elseif ($queue->waiting())
-                                {{-- Everything left is scheduled for later: a
-                                     spent allowance, not a stuck queue. --}}
-                                <span class="text-fg-faint">{{ __('waiting') }}</span>
-                            @endif
-                            @unless ($writing || $convertingHere)
-                                {{ $queue->remaining() }}
-                            @endunless
-                        </span>
-                    </div>
-
-                    <div class="mt-1 h-1 overflow-hidden rounded-sm bg-raised">
-                        <div
-                            class="h-full rounded-sm bg-accent-deep transition-[width] duration-300"
-                            style="width: {{ $writing ? $exports['percent'] : ($convertingHere ? $convertingPercent : $queue->percent()) }}%"
-                        ></div>
-                    </div>
-                </div>
-            @endforeach
-        </div>
-    </div>
-</div>
+        <x-sidebar.meter-row
+            wire:key="activity-{{ $queue->key }}"
+            :label="__($queue->label)"
+            :percent="$writing ? $exportsPercent : ($convertingHere ? $convertingPercent : $queue->percent())"
+            :quiet="! $queue->busy() && ! $writing && ! $convertingHere"
+        >
+            @if ($writing)
+                {{-- Files written out of files to write, where
+                     the other rows count jobs left. --}}
+                <x-fraction :value="$exportsDone" :of="$exportsTotal" />
+            @elseif ($convertingHere)
+                {{-- The conversion being worked on out of the batch, and how far the
+                     batch is: a running disc moves the percent before
+                     it moves the count. --}}
+                <x-fraction :value="$convertingAt" :of="$convertingTotal" /> <span class="text-fg-faint">·</span> {{ $convertingPercent }}%
+            @elseif ($queue->waiting())
+                {{-- Everything left is scheduled for later: a
+                     spent allowance, not a stuck queue. --}}
+                <span class="text-fg-faint">{{ __('waiting') }}</span>
+            @endif
+            @unless ($writing || $convertingHere)
+                {{ $queue->remaining() }}
+            @endunless
+        </x-sidebar.meter-row>
+    @endforeach
+</x-sidebar.meter>

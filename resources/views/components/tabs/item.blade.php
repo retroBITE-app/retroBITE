@@ -11,7 +11,7 @@
 
 @php
     $classes = [
-        'flex shrink-0 cursor-pointer items-center gap-2 pb-2.75 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep',
+        'flex shrink-0 cursor-pointer items-center gap-2 pb-2.75 text-sm whitespace-nowrap transition-colors focus-ring',
         'text-fg-bright shadow-underline' => $active,
         'text-fg-muted hover:text-fg-soft' => ! $active,
     ];

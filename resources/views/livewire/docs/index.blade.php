@@ -130,14 +130,18 @@ new #[Title('Documents')] class extends Component
         $library = app(DocLibrary::class);
 
         return $library->consoles()
-            ->map(fn (string $key): array => [
-                'value' => DocLibrary::consoleFilter($key),
-                'label' => ConsoleResource::make($key)?->name ?? $key,
-            ])
-            ->concat($library->categories()->map(fn (string $name): array => [
-                'value' => DocLibrary::categoryFilter($name),
-                'label' => Str::headline($name),
-            ]))
+            ->map(function (string $key): array {
+                return [
+                    'value' => DocLibrary::consoleFilter($key),
+                    'label' => ConsoleResource::make($key)?->name ?? $key,
+                ];
+            })
+            ->concat($library->categories()->map(function (string $name): array {
+                return [
+                    'value' => DocLibrary::categoryFilter($name),
+                    'label' => Str::headline($name),
+                ];
+            }))
             ->values();
     }
 
@@ -313,55 +317,54 @@ new #[Title('Documents')] class extends Component
 
 {{-- docsRail: whether the list beside the open document is shown. --}}
 <section class="w-full" x-data="docsRail">
-    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-            <p class="kicker mb-1.5 text-fg-faint">
-                {{ __('Knowledge base') }} · {{ trans_choice(':count doc|:count docs', $this->docs->count(), ['count' => $this->docs->count()]) }}
-            </p>
-            <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Documents') }}</h1>
-        </div>
-
-        <div class="flex items-center gap-2">
+    <x-page-header
+        :kicker="__('Knowledge base').' · '.trans_choice(':count doc|:count docs', $this->docs->count(), ['count' => $this->docs->count()])"
+        :title="__('Documents')"
+    >
+        <x-slot:actions>
             <x-search-field wire:model.live.debounce.300ms="query" :placeholder="__('Search notes')" class="w-64" />
 
             <x-docs.rail-toggle />
 
             <livewire:docs.import-modal />
             <livewire:docs.new-doc-modal />
-        </div>
-    </div>
+        </x-slot:actions>
+    </x-page-header>
 
     @if ($this->chips->isNotEmpty())
         <div class="mb-5 flex flex-wrap gap-1.5">
-            <button
-                type="button"
-                wire:click="$set('filter', '')"
-                @class([
-                    'cursor-pointer rounded-lg border px-2.75 py-1 text-xs transition-colors',
-                    'border-accent-tint/55 bg-accent-tint/10 text-accent' => $filter === '',
-                    'border-line-input text-fg-dim hover:bg-hover hover:text-fg' => $filter !== '',
-                ])
-            >{{ __('All') }}</button>
+            <x-chip :active="$filter === ''" wire:click="$set('filter', '')">{{ __('All') }}</x-chip>
 
             @foreach ($this->chips as ['value' => $value, 'label' => $label])
-                <button
-                    type="button"
-                    wire:click="$set('filter', @js($value))"
+                <x-chip
+                    :active="$filter === $value"
+                    wire:click="$set('filter', {{ Js::from($value) }})"
                     wire:key="chip-{{ $value }}"
-                    @class([
-                        'cursor-pointer rounded-lg border px-2.75 py-1 text-xs transition-colors',
-                        'border-accent-tint/55 bg-accent-tint/10 text-accent' => $filter === $value,
-                        'border-line-input text-fg-dim hover:bg-hover hover:text-fg' => $filter !== $value,
-                    ])
-                >{{ $label }}</button>
+                >{{ $label }}</x-chip>
             @endforeach
         </div>
     @endif
 
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div class="min-w-0 flex-1 rounded-xl border border-line bg-surface">
-            @include('livewire.docs.partials.viewer')
-        </div>
+        @php($doc = $this->current())
+
+        {{-- With no document open, the empty state stands where it would. --}}
+        @if ($doc === null)
+            <x-empty-state
+                icon="book-open"
+                class="min-w-0 flex-1"
+                :title="$this->docs->isEmpty() && $query === '' && $filter === ''
+                    ? __('Repairs, mods and setup notes, written as markdown files on disk.')
+                    : __('Nothing matches that.')"
+                :hint="$this->docs->isEmpty() && $query === '' && $filter === ''
+                    ? __('Create the first one to get started.')
+                    : __('Try a different search or filter.')"
+            />
+        @else
+            <x-panel class="min-w-0 flex-1">
+                @include('livewire.docs.partials.viewer')
+            </x-panel>
+        @endif
 
         <aside x-show="rail" class="w-full shrink-0 lg:w-[19rem]">
             @include('livewire.docs.partials.rail')

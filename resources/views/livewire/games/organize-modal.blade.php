@@ -146,66 +146,51 @@ new class extends Component
     }
 }; ?>
 
-<div x-on:organize-games.window="$flux.modal('{{ $this::MODAL }}').show()">
+{{-- A plain root: x-modal's own wrapper is conditional, and a Livewire
+     root has to be the first element it renders. --}}
+<div>
     @php
         ['moves' => $moves, 'filed' => $filed, 'unnamed' => $unnamed] = $this->plan;
         $count = count($moves);
     @endphp
 
-    <flux:modal :name="$this::MODAL" class="w-full max-w-2xl">
-        <div class="flex flex-col gap-5">
-            <div>
-                <flux:heading size="lg">{{ __('Organize :console into game folders', ['console' => $this->target->name]) }}</flux:heading>
-                <flux:text class="mt-1">
-                    {{ __('Moves each game that sits loose in the folder into a folder of its own, named for its title — a cue with its bins, or a playlist and its discs, together. Games already in a folder are left where they are.') }}
-                </flux:text>
-            </div>
+    <x-modal
+        :name="$this::MODAL"
+        width="2xl"
+        event="organize-games"
+        :heading="__('Organize :console into game folders', ['console' => $this->target->name])"
+        :subheading="__('Moves each game that sits loose in the folder into a folder of its own, named for its title — a cue with its bins, or a playlist and its discs, together. Games already in a folder are left where they are.')"
+        cancel="{{ __('Close') }}"
+    >
+        <x-preview-list
+            :total="$count"
+            :summary="$count > 0
+                ? trans_choice(':count game will be moved.|:count games will be moved.', $count, ['count' => $count])
+                : __('Nothing to move.')"
+        >
+            @foreach (array_slice($moves, 0, 10) as ['title' => $title, 'folder' => $folder, 'files' => $files])
+                <li class="flex items-baseline justify-between gap-3 px-3 py-2">
+                    <span class="truncate text-sm text-fg-soft" title="{{ $title }}">{{ $title }}</span>
+                    <span class="shrink-0 font-mono text-xs text-fg-faint">
+                        → {{ $folder }}/ · {{ trans_choice(':count file|:count files', $files, ['count' => $files]) }}
+                    </span>
+                </li>
+            @endforeach
 
-            <div class="flex flex-col gap-3">
-                <p class="text-sm text-fg-soft">
-                    {{ $count > 0
-                        ? trans_choice(':count game will be moved.|:count games will be moved.', $count, ['count' => $count])
-                        : __('Nothing to move.') }}
-                </p>
-
-                @if ($count > 0)
-                    <ul class="flex flex-col divide-y divide-line rounded-lg border border-line bg-sunken">
-                        @foreach (array_slice($moves, 0, 10) as ['title' => $title, 'folder' => $folder, 'files' => $files])
-                            <li class="flex items-baseline justify-between gap-3 px-3 py-2">
-                                <span class="truncate text-sm text-fg-soft" title="{{ $title }}">{{ $title }}</span>
-                                <span class="shrink-0 font-mono text-xs text-fg-faint">
-                                    → {{ $folder }}/ · {{ trans_choice(':count file|:count files', $files, ['count' => $files]) }}
-                                </span>
-                            </li>
-                        @endforeach
-                    </ul>
-
-                    @if ($count > 10)
-                        <p class="text-xs text-fg-faint">{{ trans_choice('and :count more.|and :count more.', $count - 10, ['count' => $count - 10]) }}</p>
-                    @endif
+            <x-slot:notes>
+                @if ($filed > 0)
+                    <li>{{ trans_choice(':count game is already in a folder.|:count games are already in folders.', $filed, ['count' => $filed]) }}</li>
                 @endif
-
-                @if ($filed + $unnamed > 0)
-                    <ul class="flex flex-col gap-0.5 text-xs text-fg-faint">
-                        @if ($filed > 0)
-                            <li>{{ trans_choice(':count game is already in a folder.|:count games are already in folders.', $filed, ['count' => $filed]) }}</li>
-                        @endif
-                        @if ($unnamed > 0)
-                            <li>{{ trans_choice(':count game has no title a folder could be named for.|:count games have no title a folder could be named for.', $unnamed, ['count' => $unnamed]) }}</li>
-                        @endif
-                    </ul>
+                @if ($unnamed > 0)
+                    <li>{{ trans_choice(':count game has no title a folder could be named for.|:count games have no title a folder could be named for.', $unnamed, ['count' => $unnamed]) }}</li>
                 @endif
-            </div>
+            </x-slot:notes>
+        </x-preview-list>
 
-            <div class="flex items-center justify-end gap-2">
-                <flux:button variant="primary" icon="folder-open" wire:click="apply" wire:loading.attr="disabled" wire:target="apply" :disabled="$count === 0">
-                    {{ trans_choice('Move :count game|Move :count games', $count, ['count' => $count]) }}
-                </flux:button>
-
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Close') }}</flux:button>
-                </flux:modal.close>
-            </div>
-        </div>
-    </flux:modal>
+        <x-slot:footer>
+            <flux:button variant="primary" icon="folder-open" wire:click="apply" wire:loading.attr="disabled" wire:target="apply" :disabled="$count === 0">
+                {{ trans_choice('Move :count game|Move :count games', $count, ['count' => $count]) }}
+            </flux:button>
+        </x-slot:footer>
+    </x-modal>
 </div>

@@ -192,7 +192,9 @@ new #[Title('Consoles')] class extends Component
         $needle = trim(mb_strtolower($this->search));
 
         return Console::all()
-            ->reject(fn (Console $console) => ConsoleSourceFolder::has($console))
+            ->reject(function (Console $console): bool {
+                return ConsoleSourceFolder::has($console);
+            })
             ->filter(function (Console $console) use ($needle): bool {
                 return $console->matches($needle);
             })
@@ -223,7 +225,9 @@ new #[Title('Consoles')] class extends Component
     {
         return LibraryFolders::available(
             ConsoleSourceFolder::consoles()
-                ->map(fn (Console $console) => ConsoleSourceFolder::pathFor($console))
+                ->map(function (Console $console): ?string {
+                    return ConsoleSourceFolder::pathFor($console);
+                })
                 ->filter()
                 ->all()
         );
@@ -712,29 +716,18 @@ new #[Title('Consoles')] class extends Component
 
 {{-- Re-rendered when MeasureLibrary lands a count: the cards read the stored
      figures and nothing here touches the disk. --}}
-<section
-    class="w-full"
-    x-data="{
-        stop: null,
-        init() { this.stop = live.system('storage', () => this.$wire.$refresh()) },
-        destroy() { this.stop?.() },
-    }"
->
+<x-live-system signal="storage" call="$refresh" as="section" class="w-full">
     <div class="flex flex-col gap-6">
-        <div class="flex flex-wrap items-end justify-between gap-4">
-            <div class="min-w-0">
-                <p class="kicker mb-1.5 text-fg-faint">{{ __('Library') }}</p>
-                <h1 class="text-display font-medium tracking-display text-fg-bright">{{ __('Consoles') }}</h1>
+        <x-page-header :kicker="__('Library')" :title="__('Consoles')" class="mb-0!">
+            <x-slot:meta>
                 @if ($this->added->isNotEmpty())
-                    <p class="mt-1.5 font-mono text-xs text-fg-dim">
-                        {{ trans_choice('{1} :count console|[0,*] :count consoles', $this->totals['consoles'], ['count' => Illuminate\Support\Number::format($this->totals['consoles'])]) }}
-                        · {{ trans_choice('{1} :count game|[0,*] :count games', $this->totals['games'], ['count' => Illuminate\Support\Number::format($this->totals['games'])]) }}
-                        · {{ __(':size on disk', ['size' => $this->totals['size']]) }}
-                    </p>
+                    {{ trans_choice('{1} :count console|[0,*] :count consoles', $this->totals['consoles'], ['count' => Illuminate\Support\Number::format($this->totals['consoles'])]) }}
+                    · {{ trans_choice('{1} :count game|[0,*] :count games', $this->totals['games'], ['count' => Illuminate\Support\Number::format($this->totals['games'])]) }}
+                    · {{ __(':size on disk', ['size' => $this->totals['size']]) }}
                 @endif
-            </div>
+            </x-slot:meta>
 
-            <div class="flex items-center gap-2">
+            <x-slot:actions>
                 <flux:button size="sm" variant="subtle" icon="arrow-path" wire:click="measureLibrary">
                     {{ __('Count files') }}
                 </flux:button>
@@ -742,19 +735,18 @@ new #[Title('Consoles')] class extends Component
                 <flux:button size="sm" variant="primary" icon="plus" wire:click="openAdd">
                     {{ __('Add console') }}
                 </flux:button>
-            </div>
-        </div>
+            </x-slot:actions>
+        </x-page-header>
 
         @if ($this->added->isEmpty())
-            <div class="rounded-xl border border-dashed border-line-input px-6 py-12 text-center">
-                <p class="text-sm text-fg-soft">{{ __('Your library is empty.') }}</p>
-                <p class="mt-1 text-sm text-fg-faint">
-                    {{ __('Add the consoles you want to see. A folder on disk does not put one here by itself.') }}
-                </p>
-                <flux:button size="sm" variant="primary" icon="plus" class="mt-5" wire:click="openAdd">
+            <x-empty-state
+                :title="__('Your library is empty.')"
+                :hint="__('Add the consoles you want to see. A folder on disk does not put one here by itself.')"
+            >
+                <flux:button size="sm" variant="primary" icon="plus" wire:click="openAdd">
                     {{ __('Add console') }}
                 </flux:button>
-            </div>
+            </x-empty-state>
         @else
             {{-- One section per group from Settings → UI, each its own grid
                  under a heading; ungrouped is a single section without one. --}}
@@ -785,7 +777,7 @@ new #[Title('Consoles')] class extends Component
                                         href="{{ route('consoles.games', ['console' => $row['console']->key]) }}"
                                         wire:navigate
                                         aria-label="{{ $row['console']->name }}"
-                                        class="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
+                                        class="absolute inset-0 z-10 rounded-xl focus-ring"
                                     ></a>
 
                                     {{-- One of the best-rated games' key art, masked into the
@@ -793,23 +785,13 @@ new #[Title('Consoles')] class extends Component
                                          would show as a seam against the card's surface. Tall
                                          enough to run on under the icon row, which is pulled
                                          up over it by the same amount the band grew. --}}
-                                    <div aria-hidden="true" class="art-fade-b pointer-events-none relative h-40 shrink-0">
-                                        <div class="absolute inset-0 bg-cover bg-[position:50%_28%] opacity-70 transition-opacity group-hover:opacity-90"
-                                             style="background-image: url('{{ $row['backdrop'] }}')"></div>
-                                        @scanlines
-                                            <div class="scanlines absolute inset-0"></div>
-                                        @endscanlines
+                                    <div class="relative h-40 shrink-0">
+                                        <x-backdrop :src="$row['backdrop']" fade="art-b" class="opacity-70 transition-opacity group-hover:opacity-90" />
                                     </div>
 
                                     <div class="absolute top-2.5 right-2.5 z-20">
                                         <flux:dropdown position="bottom" align="end">
-                                            <button
-                                                type="button"
-                                                aria-label="{{ __('Actions for :console', ['console' => $row['console']->name]) }}"
-                                                class="grid size-8 cursor-pointer place-items-center rounded-lg border border-line-input bg-scrim/60 text-fg-soft backdrop-blur-sm transition-colors hover:border-line-bright hover:text-fg-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep"
-                                            >
-                                                <flux:icon.ellipsis-horizontal class="size-4" />
-                                            </button>
+                                            <x-glass-button icon-only :label="__('Actions for :console', ['console' => $row['console']->name])" />
 
                                             <flux:menu>
                                                 @php
@@ -939,24 +921,12 @@ new #[Title('Consoles')] class extends Component
                                         name, so a tidy console stays quiet.
                                     --}}
                                     <dl class="flex flex-wrap gap-x-6 gap-y-3 px-4 pt-6 pb-4">
-                                        <div>
-                                            <dt class="kicker text-fg-faint">{{ __('Games') }}</dt>
-                                            <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['identified']) }}</dd>
-                                        </div>
+                                        <x-stat :label="__('Games')">{{ Illuminate\Support\Number::format($row['identified']) }}</x-stat>
                                         @if ($row['unidentified'] > 0)
-                                            <div>
-                                                <dt class="kicker text-fg-faint">{{ __('Unidentified') }}</dt>
-                                                <dd class="mt-1 font-mono text-lg tabular-nums text-warn">{{ Illuminate\Support\Number::format($row['unidentified']) }}</dd>
-                                            </div>
+                                            <x-stat :label="__('Unidentified')" tone="warn">{{ Illuminate\Support\Number::format($row['unidentified']) }}</x-stat>
                                         @endif
-                                        <div>
-                                            <dt class="kicker text-fg-faint">{{ __('Files') }}</dt>
-                                            <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ Illuminate\Support\Number::format($row['files']) }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="kicker text-fg-faint">{{ __('On disk') }}</dt>
-                                            <dd class="mt-1 font-mono text-lg tabular-nums text-fg-bright">{{ $row['size'] }}</dd>
-                                        </div>
+                                        <x-stat :label="__('Files')">{{ Illuminate\Support\Number::format($row['files']) }}</x-stat>
+                                        <x-stat :label="__('On disk')">{{ $row['size'] }}</x-stat>
                                     </dl>
 
                                     <p class="mt-auto flex items-center gap-1.5 truncate border-t border-line px-4 py-2.5 text-xs text-fg-faint">
@@ -979,19 +949,17 @@ new #[Title('Consoles')] class extends Component
         @if (! $modalOpen)
             {{-- Closed: nothing to send. See $modalOpen. --}}
         @elseif ($step === 'console')
-            <div class="flex flex-col gap-4">
-                <div>
-                    <flux:heading size="lg">{{ __('Add a console') }}</flux:heading>
-                    <flux:text class="mt-2">{{ __('Only the ones you add appear in your library.') }}</flux:text>
-                </div>
+            <x-modal.content
+                :heading="__('Add a console')"
+                :subheading="__('Only the ones you add appear in your library.')"
+                :cancel="false"
+            >
 
                 <flux:input wire:model.live.debounce.200ms="search" icon="magnifying-glass"
                             :placeholder="__('Search by name or brand')" size="sm" autofocus />
 
                 @if ($this->choices->isEmpty())
-                    <p class="rounded-lg border border-dashed border-line-input px-4 py-6 text-center text-sm text-fg-faint">
-                        {{ $search === '' ? __('Every console is already in your library.') : __('Nothing matches that.') }}
-                    </p>
+                    <x-empty-state variant="inline" :title="$search === '' ? __('Every console is already in your library.') : __('Nothing matches that.')" />
                 @else
                     <div class="-mx-2 max-h-96 overflow-y-auto px-2">
                         @foreach ($this->choices as $console)
@@ -1005,13 +973,13 @@ new #[Title('Consoles')] class extends Component
                                 </span>
                                 @if (isset($this->present[$console->folder]))
                                     {{-- Its folder is already there, so adding it asks nothing. --}}
-                                    <flux:badge size="sm" color="green">{{ __('Folder found') }}</flux:badge>
+                                    <x-badge tone="accent">{{ __('Folder found') }}</x-badge>
                                 @endif
                             </button>
                         @endforeach
                     </div>
                 @endif
-            </div>
+            </x-modal.content>
         @elseif ($step === 'layout')
             <livewire:consoles.choose-layout
                 :console="$adding"
@@ -1020,16 +988,14 @@ new #[Title('Consoles')] class extends Component
             />
         @else
             @php($console = App\Support\Console::tryFrom($adding))
-            <div class="flex flex-col gap-5">
-                <div>
-                    <flux:heading size="lg">{{ __('Where are the ROMs?') }}</flux:heading>
-                    <flux:text class="mt-2">
-                        {{ __('There is no :folder folder yet. Make one, or point :console at a folder that is already there.', [
-                            'folder' => $console?->folder ?? $adding,
-                            'console' => $console?->name ?? $adding,
-                        ]) }}
-                    </flux:text>
-                </div>
+            <x-modal.content
+                :heading="__('Where are the ROMs?')"
+                :subheading="__('There is no :folder folder yet. Make one, or point :console at a folder that is already there.', [
+                    'folder' => $console?->folder ?? $adding,
+                    'console' => $console?->name ?? $adding,
+                ])"
+                :cancel="false"
+            >
 
                 {{-- Config already knows what the folder is called, so offer it
                      rather than send somebody off to make it over the share.
@@ -1052,13 +1018,13 @@ new #[Title('Consoles')] class extends Component
 
                 <flux:error name="chosenFolder" />
 
-                <div class="flex justify-end gap-2">
-                    <flux:button size="sm" variant="ghost" wire:click="$set('step', 'console')">{{ __('Back') }}</flux:button>
-                    <flux:button size="sm" variant="primary" wire:click="useFolder" :disabled="$this->folders->isEmpty()">
+                <x-slot:footer>
+                    <flux:button variant="ghost" wire:click="$set('step', 'console')">{{ __('Back') }}</flux:button>
+                    <flux:button variant="primary" wire:click="useFolder" :disabled="$this->folders->isEmpty()">
                         {{ __('Use this folder') }}
                     </flux:button>
-                </div>
-            </div>
+                </x-slot:footer>
+            </x-modal.content>
         @endif
     </flux:modal>
-</section>
+</x-live-system>

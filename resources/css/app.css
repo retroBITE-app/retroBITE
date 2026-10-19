@@ -465,6 +465,14 @@
 }
 
 /*
+ * The keyboard focus outline every hand-written control wears, so a button
+ * and a link tabbed to look alike. Pointer clicks do not draw it.
+ */
+@utility focus-ring {
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-deep;
+}
+
+/*
  * The cover shelf: as many columns as fit a card at --shelf-min, set at the
  * call site by the console's cover shape, and never fewer than two. Fluid
  * rather than a column count per breakpoint, so a row fills any width and a

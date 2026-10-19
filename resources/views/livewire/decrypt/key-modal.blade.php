@@ -85,62 +85,56 @@ new class extends Component
     }
 }; ?>
 
-<div x-on:disc-key.window="$flux.modal('{{ $this::MODAL }}').show(); $wire.open($event.detail.fileId)">
-    <flux:modal :name="$this::MODAL" class="w-full max-w-lg">
-        <form wire:submit="save" class="flex flex-col gap-5">
-            <div>
-                <flux:heading size="lg">{{ __('Add disc key') }}</flux:heading>
-                @if ($this->file !== null)
-                    <p class="mt-0.5 truncate font-mono text-xs text-fg-faint">{{ $this->file->filename }}</p>
-                @endif
-            </div>
+<x-modal
+    :name="$this::MODAL"
+    event="disc-key"
+    then="$wire.open($event.detail.fileId)"
+    submit="save"
+    :heading="__('Add disc key')"
+    :subheading="$this->file?->filename"
+    mono
+>
+    <flux:text>
+        {{ __('Each encrypted PS3 disc has its own key, published on the disc\'s Redump page as 32 hex digits or a .dkey file. It is checked against this disc, then kept beside the image where ps3netsrv finds it.') }}
+    </flux:text>
 
-            <flux:text>
-                {{ __('Each encrypted PS3 disc has its own key, published on the disc\'s Redump page as 32 hex digits or a .dkey file. It is checked against this disc, then kept beside the image where ps3netsrv finds it.') }}
-            </flux:text>
+    <flux:input
+        wire:model="key"
+        :label="__('Disc key')"
+        placeholder="0123456789ABCDEF0123456789ABCDEF"
+        autocomplete="off"
+        spellcheck="false"
+        class="font-mono"
+    />
 
-            <flux:input
-                wire:model="key"
-                :label="__('Disc key')"
-                placeholder="0123456789ABCDEF0123456789ABCDEF"
-                autocomplete="off"
-                spellcheck="false"
-                class="font-mono"
-            />
+    {{-- Read here rather than uploaded: a key file is 32 characters of
+         hex, or the same 16 bytes raw, and only the key is sent. --}}
+    <div
+        x-data="{
+            read(event) {
+                const file = event.target.files[0];
+                event.target.value = '';
 
-            {{-- Read here rather than uploaded: a key file is 32 characters of
-                 hex, or the same 16 bytes raw, and only the key is sent. --}}
-            <div
-                x-data="{
-                    read(event) {
-                        const file = event.target.files[0];
-                        event.target.value = '';
+                if (! file || file.size > 256) {
+                    return;
+                }
 
-                        if (! file || file.size > 256) {
-                            return;
-                        }
+                file.arrayBuffer().then(function (buffer) {
+                    const bytes = new Uint8Array(buffer);
+                    const text = new TextDecoder().decode(bytes).trim();
+                    // Hex text is 32 characters: 16 bytes is the key raw.
+                    $wire.set('key', bytes.length === 16 ? Array.from(bytes, function (byte) { return byte.toString(16).padStart(2, '0'); }).join('') : text);
+                });
+            },
+        }"
+    >
+        <input type="file" accept=".dkey,.key" class="sr-only" x-ref="keyFile" x-on:change="read($event)" />
+        <flux:button size="sm" variant="ghost" icon="document-arrow-up" x-on:click="$refs.keyFile.click()">
+            {{ __('Load a .dkey file') }}
+        </flux:button>
+    </div>
 
-                        file.arrayBuffer().then(function (buffer) {
-                            const bytes = new Uint8Array(buffer);
-                            const text = new TextDecoder().decode(bytes).trim();
-                            // Hex text is 32 characters: 16 bytes is the key raw.
-                            $wire.set('key', bytes.length === 16 ? Array.from(bytes, function (byte) { return byte.toString(16).padStart(2, '0'); }).join('') : text);
-                        });
-                    },
-                }"
-            >
-                <input type="file" accept=".dkey,.key" class="sr-only" x-ref="keyFile" x-on:change="read($event)" />
-                <flux:button size="sm" variant="ghost" icon="document-arrow-up" x-on:click="$refs.keyFile.click()">
-                    {{ __('Load a .dkey file') }}
-                </flux:button>
-            </div>
-
-            <div class="flex justify-end gap-2">
-                <flux:modal.close>
-                    <flux:button variant="ghost">{{ __('Cancel') }}</flux:button>
-                </flux:modal.close>
-                <flux:button type="submit" variant="primary" icon="key">{{ __('Check and save') }}</flux:button>
-            </div>
-        </form>
-    </flux:modal>
-</div>
+    <x-slot:footer>
+        <flux:button type="submit" variant="primary" icon="key">{{ __('Check and save') }}</flux:button>
+    </x-slot:footer>
+</x-modal>
