@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\FileContent;
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Exceptions\ScanAborted;
@@ -538,12 +539,17 @@ final class LibraryScanner
             }
         }
 
+        // What the name says the file holds, only when it says: left out
+        // otherwise, so a rescan never wipes what a toolbox read off the disc.
+        $content = FileContent::fromName(basename($relative));
+
         $file = GameFile::query()->updateOrCreate(['path' => $relative], [
             'game_id' => $game->id,
             'filename' => basename($relative),
             'extension' => $this->extension($relative),
             'size_bytes' => $size,
             'role' => $role,
+            ...($content !== null ? ['content_type' => $content] : []),
             'disc_number' => $disc,
             'parent_id' => $parentId,
             // A file that is back is no longer missing. Its checksum and

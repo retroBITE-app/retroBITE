@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Decryption;
 
+use App\Enums\FileContent;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
@@ -18,6 +19,8 @@ use Illuminate\Support\Str;
  * tells an encrypted image from a decrypted one, and what proves a key right.
  * An add-on disc has no EBOOT.BIN; its LICDIR/LIC.DAT, which opens the
  * encrypted range on game discs too, starts with "PS3LICDA" the same way.
+ * What it carries instead is PKGDIR, whose own PARAM.SFO is category DP:
+ * packages of additional content to install, which is what tells it from a game.
  *
  * ps3dec copies sector 0 unchanged, so a decrypted image still carries its
  * region table: the table says where encryption was, not whether it still is.
@@ -32,11 +35,17 @@ final class Ps3Disc
      * add-on disc carries in its place.
      */
     private const MARKERS = [
-        'PS3_GAME/USRDIR/EBOOT.BIN' => "SCE\0",
+        self::EBOOT => "SCE\0",
         'PS3_GAME/LICDIR/LIC.DAT' => 'PS3LICDA',
     ];
 
+    /** A game's executable: where it is, the disc is a game. */
+    private const EBOOT = 'PS3_GAME/USRDIR/EBOOT.BIN';
+
     private const PARAM_SFO = 'PS3_GAME/PARAM.SFO';
+
+    /** An add-on disc's package list, category DP (disc package) where it is one. */
+    private const PKG_SFO = 'PS3_GAME/PKGDIR/PARAM.SFO';
 
     /**
      * The most of a PARAM.SFO read. A real one is a kilobyte or two; its size
@@ -109,18 +118,38 @@ final class Ps3Disc
     /** The disc's title ID from PARAM.SFO, e.g. "BLUS30538"; null when there is none to read. */
     public function titleId(): ?string
     {
-        $entry = $this->find(self::PARAM_SFO);
+        $sfo = $this->sfo(self::PARAM_SFO);
+        $value = $sfo !== null ? $this->sfoValue($sfo, 'TITLE_ID') : null;
 
+        return $value !== null && Str::isMatch('/^[A-Z]{4}\d{5}$/', $value) ? $value : null;
+    }
+
+    /**
+     * What the disc holds: a game when it has the executable, DLC when in its
+     * place it carries packages of additional content; null when it says neither.
+     */
+    public function content(): ?FileContent
+    {
+        if ($this->find(self::EBOOT) !== null) {
+            return FileContent::Game;
+        }
+
+        $sfo = $this->sfo(self::PKG_SFO);
+
+        return $sfo !== null && $this->sfoValue($sfo, 'CATEGORY') === 'DP' ? FileContent::Dlc : null;
+    }
+
+    /** A PARAM.SFO's bytes by its path on the disc, or null for none, or one too big to be one. */
+    private function sfo(string $path): ?string
+    {
+        $entry = $this->find($path);
         $size = (int) Arr::get($entry ?? [], 'size', 0);
 
         if ($entry === null || $size < 20 || $size > self::MAX_SFO) {
             return null;
         }
 
-        $sfo = substr($this->read((int) Arr::get($entry, 'lba'), intdiv($size + self::SECTOR - 1, self::SECTOR)), 0, $size);
-        $value = $this->sfoValue($sfo, 'TITLE_ID');
-
-        return $value !== null && Str::isMatch('/^[A-Z]{4}\d{5}$/', $value) ? $value : null;
+        return substr($this->read((int) Arr::get($entry, 'lba'), intdiv($size + self::SECTOR - 1, self::SECTOR)), 0, $size);
     }
 
     /**

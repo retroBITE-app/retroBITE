@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FileContent;
 use App\Jobs\InspectGameFile;
 use App\Models\ConsoleSourceFolder;
 use App\Models\Game;
@@ -110,4 +111,22 @@ it('marks a game with an encrypted image on the shelf, as a card and as a row', 
     })->all();
 
     expect($flags)->toBe(['Locked' => true, 'Plain' => false]);
+});
+
+it('says DLC on the file card and the shelf for an add-on disc, and nothing for a game', function () {
+    $addOn = Ps3Image::fileRow($this->root, 'Extra (Europe) (Add-On Disc).iso', key: false, file: ['content_type' => FileContent::Dlc]);
+    Ps3Image::fileRow($this->root, 'Plain (USA).iso', encrypted: false, key: false);
+
+    Livewire::test('games.show', ['game' => $addOn->game])
+        ->assertSee('DLC')
+        ->assertSee('Extra content for the base game');
+
+    $page = Livewire::test('games.index', ['console' => 'ps3']);
+    $page->assertSee('DLC');
+
+    $extras = collect($page->instance()->games->items())->mapWithKeys(function (Game $game): array {
+        return [$game->title => $game->extra_content];
+    })->all();
+
+    expect($extras)->toBe(['Extra (Europe)' => 'dlc', 'Plain' => null]);
 });

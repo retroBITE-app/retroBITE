@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Fakes;
 
+use App\Enums\FileContent;
 use App\Enums\FileRole;
 use App\Models\Game;
 use App\Models\GameFile;
@@ -33,9 +34,10 @@ final class Ps3Image
     /**
      * Write one, encrypted with $key or left decrypted, and return its path. With
      * $licence and no $eboot it is an add-on disc: LICDIR/LIC.DAT opens the
-     * encrypted range where EBOOT.BIN would.
+     * encrypted range where EBOOT.BIN would; $pkgdir adds the package list,
+     * category DP, that says it is one.
      */
-    public static function write(string $path, ?string $key = self::KEY, string $titleId = 'BLUS30538', bool $eboot = true, bool $licence = false): string
+    public static function write(string $path, ?string $key = self::KEY, string $titleId = 'BLUS30538', bool $eboot = true, bool $licence = false, bool $pkgdir = false): string
     {
         $image = str_repeat("\0", self::SECTORS * self::SECTOR);
 
@@ -49,13 +51,21 @@ final class Ps3Image
         $image = self::put($image, 20 * self::SECTOR, self::record(20, self::SECTOR, "\0", true).self::record(20, self::SECTOR, "\1", true)
             .self::record(21, self::SECTOR, 'PS3_GAME', true));
 
-        $sfo = self::paramSfo($titleId);
+        $sfo = self::paramSfo(['TITLE_ID' => $titleId]);
         $usrdir = $eboot ? self::record(self::ENCRYPTED_FIRST, 2 * self::SECTOR, 'EBOOT.BIN;1', false) : '';
 
         $licdir = $licence ? self::record(24, self::SECTOR, 'LICDIR', true) : '';
+        $pkg = self::paramSfo(['CATEGORY' => 'DP']);
+        $pkgdirRecord = $pkgdir ? self::record(25, self::SECTOR, 'PKGDIR', true) : '';
 
         $image = self::put($image, 21 * self::SECTOR, self::record(21, self::SECTOR, "\0", true).self::record(20, self::SECTOR, "\1", true)
-            .$licdir.self::record(22, strlen($sfo), 'PARAM.SFO;1', false).self::record(23, self::SECTOR, 'USRDIR', true));
+            .$licdir.self::record(22, strlen($sfo), 'PARAM.SFO;1', false).$pkgdirRecord.self::record(23, self::SECTOR, 'USRDIR', true));
+
+        if ($pkgdir) {
+            $image = self::put($image, 25 * self::SECTOR, self::record(25, self::SECTOR, "\0", true).self::record(21, self::SECTOR, "\1", true)
+                .self::record(26, strlen($pkg), 'PARAM.SFO;1', false));
+            $image = self::put($image, 26 * self::SECTOR, $pkg);
+        }
         $image = self::put($image, 22 * self::SECTOR, $sfo);
         $image = self::put($image, 23 * self::SECTOR, self::record(23, self::SECTOR, "\0", true).self::record(21, self::SECTOR, "\1", true).$usrdir);
 
@@ -86,7 +96,7 @@ final class Ps3Image
      * @param  string  $root  the test's library root
      * @param  array<string, mixed>  $file  more columns for the file row
      * @param  array<string, mixed>  $game  more columns for the game row
-     * @param  array{license_id?: string|null, video_mode?: string|null, disc_key?: string|null}  $meta  more disc facts
+     * @param  array{license_id?: string|null, video_mode?: string|null, disc_key?: string|null, }  $meta  more disc facts
      */
     public static function fileRow(string $root, string $name, ?bool $encrypted = true, bool $key = true, array $file = [], array $game = [], array $meta = []): GameFile
     {
@@ -105,6 +115,8 @@ final class Ps3Image
                 'extension' => 'iso',
                 'size_bytes' => filesize($path),
                 'role' => FileRole::Rom,
+                // The disc written is a game's, with its EBOOT.BIN, as a toolbox would have read.
+                'content_type' => FileContent::Game,
                 ...$file,
             ]);
     }
@@ -119,16 +131,27 @@ final class Ps3Image
             .$id.str_repeat("\0", $length - 33 - strlen($id));
     }
 
-    /** A PARAM.SFO holding a TITLE_ID and nothing else. */
-    private static function paramSfo(string $titleId): string
+    /**
+     * A PARAM.SFO of string values, by key: a disc's TITLE_ID, a package list's CATEGORY.
+     *
+     * @param  array<string, string>  $values
+     */
+    private static function paramSfo(array $values): string
     {
-        $keys = "TITLE_ID\0\0\0\0";
-        $value = str_pad($titleId."\0", 16, "\0");
-        $keysAt = 20 + 16;
+        $index = '';
+        $keys = '';
+        $data = '';
 
-        return "\0PSF".pack('VVVV', 0x0101, $keysAt, $keysAt + strlen($keys), 1)
-            .pack('vvVVV', 0, 0x0204, strlen($titleId) + 1, 16, 0)
-            .$keys.$value;
+        foreach ($values as $key => $value) {
+            $index .= pack('vvVVV', strlen($keys), 0x0204, strlen($value) + 1, 16, strlen($data));
+            $keys .= $key."\0";
+            $data .= str_pad($value."\0", 16, "\0");
+        }
+
+        $keys = str_pad($keys, (int) ceil(strlen($keys) / 4) * 4, "\0");
+        $keysAt = 20 + strlen($index);
+
+        return "\0PSF".pack('VVVV', 0x0101, $keysAt, $keysAt + strlen($keys), count($values)).$index.$keys.$data;
     }
 
     /** One sector encrypted the way a Redump dump is: AES-128-CBC, the sector number as IV. */

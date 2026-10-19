@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\FileArchiveReason;
+use App\Enums\FileContent;
 use App\Enums\FileRole;
 use App\Support\RetroAchievements\FileFingerprint;
 use Database\Factories\GameFileFactory;
@@ -50,7 +51,8 @@ use Illuminate\Support\Collection;
  * @property int|null $ra_hash_size
  * @property int|null $ra_hash_mtime
  * @property Carbon|null $ra_hashed_at
- * @property FileRole $role
+ * @property FileRole $role how the file is built: an image, a cuesheet, a track, a playlist
+ * @property FileContent|null $content_type what it holds: a game, DLC or an update; null until its name or its disc says
  * @property int|null $disc_number
  * @property string|null $region
  * @property int|null $scrapes how many times the provider has had this very dump scraped; null for one it does not know
@@ -71,7 +73,7 @@ use Illuminate\Support\Collection;
  */
 #[Fillable([
     'game_id', 'path', 'filename', 'extension', 'size_bytes', 'crc', 'md5',
-    'sha1', 'hashed_at', 'role', 'disc_number', 'region', 'scrapes', 'provider_flags',
+    'sha1', 'hashed_at', 'role', 'content_type', 'disc_number', 'region', 'scrapes', 'provider_flags',
     'parent_id', 'source_id', 'missing_since', 'archived_reason', 'ra_hash', 'ra_hash_size',
     'ra_hash_mtime', 'ra_hashed_at',
 ])]
@@ -89,6 +91,7 @@ class GameFile extends Model
     {
         return [
             'role' => FileRole::class,
+            'content_type' => FileContent::class,
             'size_bytes' => 'integer',
             'disc_number' => 'integer',
             'scrapes' => 'integer',

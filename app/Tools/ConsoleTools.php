@@ -195,15 +195,24 @@ abstract class ConsoleTools
      * Everything this toolbox can read out of one file.
      *
      * Keys map onto game_file_meta columns (GameFile::rememberMeta()), but
-     * region, which is game_files'. An empty array means nothing was
+     * region and content_type (App\Enums\FileContent's value), which are game_files'. An empty array means nothing was
      * learned, which is an ordinary answer for a file that is not what it
      * looked like. Takes the file rather than reading one off the chain
      * because it is a public entry point and its caller has just asked
      * handles() about the same file.
      *
-     * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string, encrypted?: bool, disc_key?: string}
+     * @return array{license_id?: string, cover_id?: string, region?: string, video_mode?: string, encrypted?: bool, disc_key?: string, content_type?: string}
      */
     abstract public function inspect(GameFile $file): array;
+
+    /**
+     * Whether inspect() can tell what a file holds (FileContent): false here,
+     * so a scan does not read a console's files again for an answer it never gives.
+     */
+    public function readsContent(): bool
+    {
+        return false;
+    }
 
     /**
      * Files this toolbox can write back into the console's folder.

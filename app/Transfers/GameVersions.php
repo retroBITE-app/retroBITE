@@ -8,6 +8,7 @@ use App\Models\Game;
 use App\Models\GameFile;
 use App\Support\RomRegions;
 use App\Support\Scanning\DiscOrder;
+use App\Support\Scanning\DumpName;
 use App\Support\TransferRegions;
 use Illuminate\Support\Str;
 
@@ -190,7 +191,6 @@ final class GameVersions
         ))));
         $known = array_filter(array_map(fn (GameFile $file): ?int => $file->scrapes, $version), fn (?int $scrapes): bool => $scrapes !== null);
         $scrapes = $known !== [] ? max($known) : -1;
-        preg_match_all('/\(([^)]*)\)|\[([^\]]*)\]/', pathinfo($root->filename, PATHINFO_FILENAME), $matches, PREG_SET_ORDER);
 
         $unwanted = array_intersect($flags, self::UNWANTED_PROVIDER_FLAGS) !== [] ? 1 : 0;
         $regionRank = count($chain) + 1;
@@ -203,16 +203,13 @@ final class GameVersions
         }
         $others = 0;
 
-        foreach ($matches as $match) {
-            $round = trim($match[1] ?? '');
-            $square = trim($match[2] ?? '');
-
+        foreach (DumpName::squareTags($root->filename) as $square) {
             if ($square !== '') {
                 $unwanted = max($unwanted, (int) preg_match(self::UNWANTED_FLAG, $square));
-
-                continue;
             }
+        }
 
+        foreach (DumpName::roundTags($root->filename) as $round) {
             if (preg_match(self::UNWANTED, $round)) {
                 $unwanted = 1;
 

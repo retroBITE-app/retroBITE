@@ -42,7 +42,15 @@
         </x-game-file.badge>
     @endforeach
 
-    <x-game-file.badge :archived="$archived" :tip="__('Role')">{{ $row['role'] }}</x-game-file.badge>
+    {{-- DLC or an update says so where the role would: a game's own file says Game. --}}
+    @if (Arr::get($row, 'contentType') !== null)
+        <x-game-file.badge :archived="$archived" :tone="$archived ? null : 'accent'" :tip="$row['contentType']->hint()">
+            <flux:icon :icon="$row['contentType']->icon()" variant="micro" class="size-3" />
+            <span>{{ $row['contentType']->label() }}</span>
+        </x-game-file.badge>
+    @else
+        <x-game-file.badge :archived="$archived" :tip="__('Role')">{{ $row['role'] }}</x-game-file.badge>
+    @endif
 
     @if ($row['disc'] !== '—')
         <x-game-file.badge :archived="$archived" :tip="__('Disc number')">{{ __('Disc :number', ['number' => $row['disc']]) }}</x-game-file.badge>

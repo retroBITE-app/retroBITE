@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Decryption\DiscKeys;
+use App\Enums\FileContent;
 use App\Events\GameUpdated;
 use App\Events\SystemUpdated;
 use App\Models\GameFile;
@@ -15,7 +16,6 @@ use App\Support\Scanning\LibraryFolders;
 use App\Tools\ConsoleTools;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
@@ -120,9 +120,13 @@ class InspectGameFile implements ShouldBeUnique, ShouldQueue
         // as every other region on a file is.
         $region = $file->region ?? RomRegions::fromName(Arr::get($facts, 'region'));
 
-        if ($region !== null && $region !== $file->region) {
-            $file->update(['region' => $region]);
-        }
+        // What the disc says it holds wins over what its name said.
+        $content = FileContent::tryFrom((string) Arr::get($facts, 'content_type'));
+
+        $file->update(array_filter([
+            'region' => $region !== $file->region ? $region : null,
+            'content_type' => $content !== $file->content_type ? $content : null,
+        ]));
 
         LiveUpdates::game($file->game_id, GameUpdated::INSPECTED);
         LiveUpdates::soon(SystemUpdated::INSPECTED);
@@ -187,34 +191,41 @@ class InspectGameFile implements ShouldBeUnique, ShouldQueue
             self::dispatch($id, $force);
         }
 
-        $keyed = $force ? 0 : self::queueKeyed($console, $extensions, $files->all());
+        $stale = $force ? 0 : self::queueStale($consoleObject, $extensions, $files->all());
 
-        return $files->count() + $keyed;
+        return $files->count() + $stale;
     }
 
     /**
-     * An encrypted disc read before, with a key file beside it and none on record:
-     * a .dkey dropped in over the share since. Read again, so it is proven or
-     * shown as wrong before anyone presses Decrypt.
+     * Files read before that are worth reading again: an encrypted disc with a key
+     * file beside it and none on record — a .dkey dropped in over the share since,
+     * proven or shown as wrong before anyone presses Decrypt — and, where the
+     * toolbox can tell, one whose content is still unknown.
      *
      * @param  array<int, string>  $extensions
      * @param  array<mixed>  $queued  ids already queued by the caller
      */
-    private static function queueKeyed(string $console, array $extensions, array $queued): int
+    private static function queueStale(Console $console, array $extensions, array $queued): int
     {
         $keys = app(DiscKeys::class);
+        $readsContent = ConsoleTools::for($console)?->readsContent() ?? false;
 
         $files = GameFile::query()
-            ->onConsole($console)
+            ->onConsole($console->key)
             ->present()
             ->whereIn('extension', $extensions)
             ->whereKeyNot($queued)
-            ->whereHas('meta', function (Builder $meta): void {
-                $meta->where('encrypted', true)->whereNull('disc_key');
-            })
+            ->whereHas('meta')
+            ->with('meta')
             ->get()
-            ->filter(function (GameFile $file) use ($keys): bool {
-                return $keys->keyFiles(LibraryFolders::pathOf($file)) !== [];
+            ->filter(function (GameFile $file) use ($keys, $readsContent): bool {
+                if ($readsContent && $file->content_type === null) {
+                    return true;
+                }
+
+                return $file->meta?->encrypted === true
+                    && $file->meta->disc_key === null
+                    && $keys->keyFiles(LibraryFolders::pathOf($file)) !== [];
             });
 
         return self::queueFor($files->modelKeys());

@@ -11,6 +11,7 @@ use App\Enums\ConversionFailure;
 use App\Enums\ConversionStatus;
 use App\Enums\DecryptState;
 use App\Enums\FileArchiveReason;
+use App\Enums\FileContent;
 use App\Events\GameUpdated;
 use App\Events\SystemUpdated;
 use App\Exceptions\ConversionFailed;
@@ -575,5 +576,47 @@ it('is one job per file while one is waiting, and says on the live channels when
 
     Event::assertDispatched(GameUpdated::class, function (GameUpdated $event) use ($file): bool {
         return $event->gameId === $file->game_id && $event->what === GameUpdated::INSPECTED;
+    });
+});
+
+it('tells a game disc from an add-on disc, and says nothing about what is not a disc', function () {
+    $game = Ps3Disc::open(Ps3Image::write($this->root.'/game.iso'));
+    $addOn = Ps3Disc::open(Ps3Image::write($this->root.'/addon.iso', eboot: false, licence: true, pkgdir: true));
+    $bare = Ps3Disc::open(Ps3Image::write($this->root.'/bare.iso', eboot: false, licence: true));
+    File::put($this->root.'/noise.iso', random_bytes(64 * 2048));
+
+    expect($game?->content())->toBe(FileContent::Game)
+        ->and($addOn?->content())->toBe(FileContent::Dlc)
+        ->and($addOn?->titleId())->toBe('BLUS30538')
+        ->and($bare?->content())->toBeNull()
+        ->and(Ps3Disc::open($this->root.'/noise.iso')?->content())->toBeNull();
+});
+
+it('writes what the disc holds onto the file, over what its name said', function () {
+    $file = ps3Game('Game (USA) (Update).iso');
+    $file->update(['content_type' => FileContent::Update]);
+    Ps3Image::write($this->root.'/ps3/Game (USA) (Update).iso', eboot: false, licence: true, pkgdir: true);
+
+    (new InspectGameFile($file->id, force: true))->handle();
+
+    expect($file->fresh()?->content_type)->toBe(FileContent::Dlc);
+});
+
+it('reads again after a scan a disc whose content is unknown, on a console that can tell, and not on one that cannot', function () {
+    $unknown = ps3Game('Unknown (USA).iso', key: false);
+    $unknown->update(['content_type' => null]);
+    ps3Game('Known (USA).iso', key: false);
+
+    ConsoleSourceFolder::add(new Console('ps2'));
+    GameFile::factory()
+        ->for(Game::factory()->forConsole('ps2')->create())
+        ->withMeta(['license_id' => 'SLES_503.86'])
+        ->create(['path' => 'ps2/Game.iso', 'filename' => 'Game.iso', 'extension' => 'iso']);
+
+    expect(InspectGameFile::queueAwaiting('ps3'))->toBe(1)
+        ->and(InspectGameFile::queueAwaiting('ps2'))->toBe(0);
+
+    Queue::assertPushed(InspectGameFile::class, function (InspectGameFile $job) use ($unknown): bool {
+        return $job->fileId === $unknown->id;
     });
 });
