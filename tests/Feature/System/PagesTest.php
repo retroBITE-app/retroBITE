@@ -33,7 +33,7 @@ it('names every queue, including the ones with nothing in them', function () {
 
     expect($labels)->toBe([
         'Scanning', 'Identifying', 'Hashing', 'Artwork', 'Thumbnails', 'Achievements', 'Progress', 'Toolbox',
-        'Toolbox - Conversion',
+        'Toolbox - Conversion', 'Transfers',
     ]);
 });
 

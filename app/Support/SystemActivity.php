@@ -56,6 +56,7 @@ final class SystemActivity
         'progress' => ['label' => 'Progress', 'queues' => ['ra-progress']],
         'toolbox' => ['label' => 'Toolbox', 'queues' => ['toolbox']],
         'conversion' => ['label' => 'Toolbox - Conversion', 'queues' => ['toolbox-conversion']],
+        'transfer' => ['label' => 'Transfers', 'queues' => ['transfer']],
     ];
 
     /** @param  array<string, QueueActivity>  $queues */
