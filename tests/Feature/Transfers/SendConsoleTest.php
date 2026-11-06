@@ -3,6 +3,7 @@
 use App\Enums\FileRole;
 use App\Enums\GameStatus;
 use App\Enums\TransferFailure;
+use App\Events\GameUpdated;
 use App\Jobs\FileTransferJob;
 use App\Jobs\PlanConsoleTransfer;
 use App\Models\ConsoleSourceFolder;
@@ -18,6 +19,7 @@ use App\Transfers\SendToShare;
 use App\Transfers\Smb\ShareClient;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -232,4 +234,46 @@ it('stops the whole send in the plan when the share cannot be written, and says 
 
     expect(Transfer::query()->pluck('status')->unique()->all())->toBe([Transfer::FAILED])
         ->and(Transfer::query()->pluck('failure')->unique()->all())->toBe([TransferFailure::Unwritable]);
+});
+
+it('tells each game page the send is done once the list has been written', function () {
+    $statuses = [];
+
+    Event::listen(GameUpdated::class, function (GameUpdated $event) use (&$statuses): void {
+        if ($event->what === GameUpdated::TRANSFER) {
+            $statuses[$event->gameId][] = Transfer::query()->where('game_id', $event->gameId)->value('status');
+        }
+    });
+
+    $aerostar = gbGame('Aerostar', ['Aerostar (World).zip' => 'a']);
+    $tetris = gbGame('Tetris', ['Tetris (World).zip' => 't']);
+
+    app(SendToShare::class)->sendConsole('gb', app(BatoceraTarget::class), $this->destination);
+
+    // A game page open through a console's send waits on its own game's
+    // signal and reads nothing else, and a game is not done until its entry
+    // is in the list: the copy's own signals all say it is still running.
+    expect(end($statuses[$aerostar->id]))->toBe(Transfer::DONE)
+        ->and(end($statuses[$tetris->id]))->toBe(Transfer::DONE);
+});
+
+it('writes one list for a console of more games than it reads at a time', function () {
+    File::ensureDirectoryExists(consoleShareFile('roms/gb'));
+    File::put(consoleShareFile('roms/gb/gamelist.xml'), '<?xml version="1.0"?><gameList><game><path>./Mine.zip</path><name>Mine</name></game></gameList>');
+
+    // Past the hundred games WriteTransferGamelist holds at once, so the
+    // send is merged into one list over several passes rather than read
+    // whole — which is what a console of a thousand games used to do, in a
+    // job that then had two minutes to do it in.
+    foreach (range(1, 120) as $number) {
+        gbGame('Game '.$number, ['Game '.$number.' (World).zip' => 'rom'.$number]);
+    }
+
+    app(SendToShare::class)->sendConsole('gb', app(BatoceraTarget::class), $this->destination);
+
+    $gamelist = File::get(consoleShareFile('roms/gb/gamelist.xml'));
+
+    expect(substr_count($gamelist, '<game>'))->toBe(121)
+        ->and($gamelist)->toContain('<path>./Mine.zip</path>', '<path>./Game 1 (World).zip</path>', '<path>./Game 120 (World).zip</path>')
+        ->and(Transfer::query()->pluck('status')->unique()->all())->toBe([Transfer::DONE]);
 });

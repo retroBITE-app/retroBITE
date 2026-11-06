@@ -39,6 +39,51 @@ abstract class GamelistTarget implements TransferTarget
     use ChoosesOptions;
 
     /**
+     * Which game everything below was worked out for.
+     *
+     * One game is asked the same questions a dozen times over a send: the
+     * plan wants its layout, so do its playlist, each of the versions it
+     * replaces — twice, loose and in a folder — and its entry in the game
+     * list. Each answer walks the game's files through GameVersions and
+     * builds a Console out of config once per file, and each artwork slot
+     * sorts the whole media collection again. None of it changes while the
+     * game does not.
+     *
+     * Only ever the game in hand. Keeping every game's would hold a
+     * console's worth of files and artwork in memory, which is the thing
+     * WriteTransferGamelist reads them a chunk at a time to avoid; every
+     * caller here asks all its questions about one game before the next.
+     */
+    private ?int $memoised = null;
+
+    /** @var array<string, list<GameFile>> */
+    private array $memoFiles = [];
+
+    /** @var array<string, array{paths: array<int, string>, playlist: array{folder: string, path: string, discs: list<string>}|null}> */
+    private array $memoLayouts = [];
+
+    /** @var array<string, Media|null> */
+    private array $memoArtwork = [];
+
+    /** @var list<list<GameFile>>|null */
+    private ?array $memoOtherVersions = null;
+
+    /** The console's folder in the library; '' for a game whose console is gone. */
+    private ?string $memoFolder = null;
+
+    /**
+     * A target carrying another transfer's choices has worked nothing out.
+     *
+     * {@see ChoosesOptions::withOptions()} clones, and the choices decide
+     * the region order a version is chosen by: the same game answers
+     * differently under them.
+     */
+    public function __clone(): void
+    {
+        $this->forgetGame(null);
+    }
+
+    /**
      * The artwork this target sends, by a name of its own: the provider media
      * types that can fill it, most preferred first, and the gamelist.xml tag
      * that points at it — none for a front-end that finds artwork by its file
@@ -282,6 +327,18 @@ abstract class GamelistTarget implements TransferTarget
      */
     private function otherVersions(Game $game): array
     {
+        $this->forGame($game);
+
+        return $this->memoOtherVersions ??= $this->otherVersionsOf($game);
+    }
+
+    /**
+     * The same, worked out rather than remembered.
+     *
+     * @return list<list<GameFile>>
+     */
+    private function otherVersionsOf(Game $game): array
+    {
         $chosen = $this->filesOf($game);
         $ids = array_map(fn (GameFile $file): int => $file->id, $chosen);
 
@@ -406,10 +463,53 @@ abstract class GamelistTarget implements TransferTarget
      */
     private function filesOf(Game $game, ?array $version = null): array
     {
-        $files = $version ?? GameVersions::preferred($game, chain: $this->regionChain($game->console()));
-        usort($files, fn (GameFile $a, GameFile $b): int => $a->path <=> $b->path);
+        $this->forGame($game);
+        $key = $this->versionKey($version);
 
-        return $files;
+        if (! isset($this->memoFiles[$key])) {
+            $files = $version ?? GameVersions::preferred($game, chain: $this->regionChain($game->console()));
+            usort($files, fn (GameFile $a, GameFile $b): int => $a->path <=> $b->path);
+
+            $this->memoFiles[$key] = $files;
+        }
+
+        return $this->memoFiles[$key];
+    }
+
+    /**
+     * Drop what was worked out for the game before this one.
+     *
+     * @see $memoised
+     */
+    private function forGame(Game $game): void
+    {
+        if ($this->memoised !== $game->id) {
+            $this->forgetGame($game->id);
+        }
+    }
+
+    private function forgetGame(?int $game): void
+    {
+        $this->memoised = $game;
+        $this->memoFiles = [];
+        $this->memoLayouts = [];
+        $this->memoArtwork = [];
+        $this->memoOtherVersions = null;
+        $this->memoFolder = null;
+    }
+
+    /**
+     * What tells one of a game's versions from another in the memo: the
+     * files it is, or 'sent' for the one this transfer chooses, which is
+     * worked out rather than passed in.
+     *
+     * @param  list<GameFile>|null  $version
+     */
+    private function versionKey(?array $version): string
+    {
+        return $version === null
+            ? 'sent'
+            : implode(',', array_map(fn (GameFile $file): int => $file->id, $version));
     }
 
     /**
@@ -467,6 +567,20 @@ abstract class GamelistTarget implements TransferTarget
      * @return array{paths: array<int, string>, playlist: array{folder: string, path: string, discs: list<string>}|null}
      */
     private function layout(Game $game, ?array $version = null, bool $loose = false): array
+    {
+        $this->forGame($game);
+
+        return $this->memoLayouts[$this->versionKey($version).($loose ? ':loose' : '')]
+            ??= $this->layoutOf($game, $version, $loose);
+    }
+
+    /**
+     * The same, worked out rather than remembered.
+     *
+     * @param  list<GameFile>|null  $version  another version's files; none for the one sent
+     * @return array{paths: array<int, string>, playlist: array{folder: string, path: string, discs: list<string>}|null}
+     */
+    private function layoutOf(Game $game, ?array $version = null, bool $loose = false): array
     {
         $files = $this->filesOf($game, $version);
         $paths = [];
@@ -582,12 +696,49 @@ abstract class GamelistTarget implements TransferTarget
      */
     private function relative(Game $game, GameFile $file): ?string
     {
-        $console = $game->console();
-        $folder = $console !== null ? trim((string) ConsoleSourceFolder::pathFor($console), '/') : '';
+        $folder = $this->consoleFolder($game);
 
         return $folder !== '' && str_starts_with($file->path, $folder.'/')
             ? substr($file->path, strlen($folder) + 1)
             : null;
+    }
+
+    /**
+     * Where this game's console keeps its files, '' for a console that is no
+     * longer configured. Asked once a file by relative(), and a Console is
+     * twenty reads of config to build.
+     */
+    private function consoleFolder(Game $game): string
+    {
+        $this->forGame($game);
+
+        if ($this->memoFolder === null) {
+            $console = $game->console();
+            $this->memoFolder = $console !== null ? trim((string) ConsoleSourceFolder::pathFor($console), '/') : '';
+        }
+
+        return $this->memoFolder;
+    }
+
+    /**
+     * The best artwork the game has of these types.
+     *
+     * Each slot of each target asks for its own, and the answer sorts every
+     * piece of artwork the game holds; a send asks the same question for
+     * every version it might replace as well as the one it sends.
+     *
+     * @param  list<string>  $types
+     */
+    private function artworkOf(Game $game, array $types): ?Media
+    {
+        $this->forGame($game);
+        $key = implode(',', $types);
+
+        if (! array_key_exists($key, $this->memoArtwork)) {
+            $this->memoArtwork[$key] = $game->artworkOfTypes($types);
+        }
+
+        return $this->memoArtwork[$key];
     }
 
     /**
@@ -616,7 +767,7 @@ abstract class GamelistTarget implements TransferTarget
                 continue;
             }
 
-            $media = $game->artworkOfTypes($types);
+            $media = $this->artworkOf($game, $types);
 
             if ($media !== null) {
                 $found[$bySlot ? $slot : $this->artworkPath($system, $slot, $primary, $media)] = $media;

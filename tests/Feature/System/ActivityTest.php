@@ -39,6 +39,14 @@ it('folds the two hashing queues into one row, because the same workers serve bo
         ->and($active[0]->remaining())->toBe(3);
 });
 
+it('calls the transfer queue by its name, like every other kind of work', function () {
+    queueRow('transfer');
+
+    // Sending games is work the sidebar names, not an unknown queue falling
+    // through to the row below: a send showed up there as a bare "transfer".
+    expect(SystemActivity::current()->active()[0]->label)->toBe('Transfers');
+});
+
 it('counts a queue nobody listed rather than dropping it', function () {
     queueRow('something-new');
 
