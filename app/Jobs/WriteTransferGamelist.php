@@ -286,7 +286,15 @@ class WriteTransferGamelist implements ShouldQueue
                 }
 
                 $share->replace($destination, $bytes);
-                $listed[$folder][basename($destination)] = true;
+
+                // Into a listing that has been read, and no other: a
+                // playlist is written without isThere() being asked —
+                // rewritesExtra() is always true for one — so a name set on
+                // a folder nobody has listed would stand in for the listing
+                // and everything already there would read as absent.
+                if (isset($listed[$folder])) {
+                    $listed[$folder][basename($destination)] = true;
+                }
             }
         }
     }
@@ -365,14 +373,14 @@ class WriteTransferGamelist implements ShouldQueue
                 'updated_at' => now(),
             ]);
 
-            // One game sent from its page: that page is waiting on it. A
-            // console's worth is not — nobody has a thousand game pages
-            // open, and a signal apiece is the burst LiveUpdates warns
-            // about. The console page follows the send by the system signal.
-            if ($this->console === []) {
-                foreach ($transfers as $transfer) {
-                    LiveUpdates::game($transfer->game_id, GameUpdated::TRANSFER);
-                }
+            // A game is not done until its entry is in the list, and this
+            // is where that is said. A game page open through a console's
+            // send waits on its own game's signal and reads nothing else,
+            // so a console's games have to be told as well as one sent from
+            // its page — FileTransferJob says the same as it copies, and
+            // signalBatch() is what the console page follows.
+            foreach ($transfers as $transfer) {
+                LiveUpdates::game($transfer->game_id, GameUpdated::TRANSFER);
             }
         }
 
