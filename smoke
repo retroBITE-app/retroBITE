@@ -67,6 +67,8 @@ cat > "$override" <<'YAML'
 services:
   retrobite-web:
     container_name: !reset null
+    environment:
+      APP_ENV: local
   retrobite-db:
     container_name: !reset null
 YAML
