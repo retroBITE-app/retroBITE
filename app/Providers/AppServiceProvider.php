@@ -23,7 +23,6 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -155,21 +154,5 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null,
         );
-
-        /**
-         * Write https into every absolute URL in production — route(), url(),
-         * asset() and Vite's tags alike.
-         *
-         * A proxy that terminates TLS without sending X-Forwarded-Proto is
-         * invisible to TrustProxies: the request reaches PHP as plain http,
-         * and the links come out http:// on an https page, where the browser
-         * blocks them as mixed content.
-         *
-         * This overrides the request and APP_URL both, so an install served
-         * over plain http wants TLS in front of it.
-         */
-        if (app()->isProduction()) {
-            URL::forceScheme('https');
-        }
     }
 }
